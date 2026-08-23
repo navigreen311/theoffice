@@ -116,6 +116,8 @@ Keep them genuinely excellent; a weak exemplar propagates.
   each step's justification.
 - `db/versions/0003_hash_chain.py` — a migration whose docstring explains the three
   decisions that each prevent a specific silent failure.
+- `broker/manifest.py` — a table in the docstring showing every case and its outcome,
+  and a sentence saying why the asymmetry between two of them is deliberate.
 - `tests/contract/test_call_path.py` — tests written the way that can actually fail,
   with the reasoning in the docstring.
 

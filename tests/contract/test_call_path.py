@@ -37,6 +37,19 @@ from tests.contract.conftest import (
 pytestmark = [requires_db, pytest.mark.db, pytest.mark.asyncio]
 
 
+@pytest.fixture(autouse=True)
+def _declared_in_manifest(request):
+    """Phase 1 added a manifest gate ahead of everything these tests exercise.
+
+    These are call-path mechanics tests, not manifest tests - an undeclared module
+    would stop every one of them at a gate they are not about. Declaring by default
+    keeps each test failing for its own reason. The manifest itself is covered in
+    test_governance.py.
+    """
+    if "granted_agent" in request.fixturenames:
+        request.getfixturevalue("declare_module")(required=True)
+
+
 async def test_granted_agent_reaches_forge_and_is_named_in_the_ledger(
     office, stub_forge, agent_ctx, granted_agent, app_dsn
 ):

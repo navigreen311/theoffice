@@ -21,14 +21,14 @@ from broker.db import connection
 _INSERT = """
 INSERT INTO agent_call_ledger (
     call_id, trace_id, office_agent_id, venture_id, shift_id,
-    forge_id, module_id, api_version,
+    forge_id, module_id, api_version, task_id,
     ts_start, ts_end, latency_ms, status_code,
     tokens_in, tokens_out, usd_cost,
     trust_tier_at_call, compliance_flags_active, data_types_touched,
     idempotency_key, manifest_match, forge_side_ref, payload_hash
 ) VALUES (
     %(call_id)s, %(trace_id)s, %(office_agent_id)s, %(venture_id)s, %(shift_id)s,
-    %(forge_id)s, %(module_id)s, %(api_version)s,
+    %(forge_id)s, %(module_id)s, %(api_version)s, %(task_id)s,
     %(ts_start)s, %(ts_end)s, %(latency_ms)s, %(status_code)s,
     %(tokens_in)s, %(tokens_out)s, %(usd_cost)s,
     %(trust_tier_at_call)s, %(compliance_flags_active)s, %(data_types_touched)s,
@@ -62,6 +62,7 @@ async def write_call(**fields: Any) -> None:
     """Append one ledger row. Missing optional fields default to NULL."""
     params: dict[str, Any] = {
         "shift_id": None,
+        "task_id": None,
         "ts_end": None,
         "latency_ms": None,
         "status_code": None,
@@ -72,9 +73,9 @@ async def write_call(**fields: Any) -> None:
         "data_types_touched": [],
         "idempotency_key": None,
         "forge_side_ref": None,
-        # Phase 1 computes this properly from the venture Forge Manifest. Until a
-        # Pack exists there is nothing to reconcile against, so calls are recorded
-        # as declared_only rather than claiming a reconciliation that never ran.
+        # Set by the manifest check (broker/manifest.py). Defaulted here only so a
+        # caller that bypasses governance still produces a row rather than an error -
+        # such a row is itself a finding.
         "manifest_match": "declared_only",
     }
     params.update(fields)

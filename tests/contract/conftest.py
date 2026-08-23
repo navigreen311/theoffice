@@ -121,6 +121,10 @@ def registered_forge(admin: psycopg.Connection) -> Iterator[tuple[str, str]]:
 
 def _drop_forge(conn: psycopg.Connection, forge_id: str) -> None:
     with conn.cursor() as cur:
+        # These reference (forge_id, module_id) and must go first. The autouse
+        # governance wipe tears down AFTER this fixture, so it cannot be relied on.
+        cur.execute("DELETE FROM venture_forge_manifest WHERE forge_id = %s", (forge_id,))
+        cur.execute("DELETE FROM proposal WHERE forge_id = %s", (forge_id,))
         cur.execute("DELETE FROM agent_forge_grant WHERE forge_id = %s", (forge_id,))
         cur.execute("DELETE FROM forge_tenant_credential WHERE forge_id = %s", (forge_id,))
         cur.execute("DELETE FROM forge_module_registry WHERE forge_id = %s", (forge_id,))
@@ -188,3 +192,175 @@ def audit_events(dsn: str, trace_id: uuid.UUID) -> list[str]:
             (trace_id,),
         )
         return [r[0] for r in cur.fetchall()]
+
+
+# ---------------------------------------------------------------- Phase 1 fixtures
+
+@pytest.fixture(autouse=True)
+def _clean_governance(admin: psycopg.Connection) -> Iterator[None]:
+    """Governance tables are shared state; a leftover row silently changes a verdict.
+
+    Truncated before AND after: before, so a previous failure cannot poison this
+    test; after, so this test cannot poison the next one.
+    """
+    _wipe(admin)
+    yield
+    _wipe(admin)
+
+
+def _wipe(conn: psycopg.Connection) -> None:
+    with conn.cursor() as cur:
+        # agent_call_ledger is the budget ladder's only input. A row left by an
+        # earlier test is spend this test never made, and it silently changes which
+        # rung fires - a test that passes for the wrong reason, or fails for one.
+        cur.execute("ALTER TABLE agent_call_ledger DISABLE TRIGGER ALL")
+        cur.execute("DELETE FROM agent_call_ledger")
+        cur.execute("ALTER TABLE agent_call_ledger ENABLE TRIGGER ALL")
+        cur.execute("ALTER TABLE audit_log DISABLE TRIGGER audit_log_append_only")
+        cur.execute("DELETE FROM audit_log")
+        cur.execute("ALTER TABLE audit_log ENABLE TRIGGER audit_log_append_only")
+        cur.execute("DELETE FROM revocation")
+        cur.execute("DELETE FROM venture_forge_manifest")
+        cur.execute("DELETE FROM proposal")
+        cur.execute("DELETE FROM rate_limit_bucket")
+        cur.execute("DELETE FROM venture_budget")
+        cur.execute("ALTER TABLE incident DISABLE TRIGGER ALL")
+        cur.execute("DELETE FROM incident")
+        cur.execute("ALTER TABLE incident ENABLE TRIGGER ALL")
+    conn.commit()
+
+
+@pytest.fixture
+def declare_module(
+    admin: psycopg.Connection, granted_agent: tuple[uuid.UUID, str, str],
+    agent_ctx: AgentContext,
+):
+    """Declare the module in the venture manifest. Default is *not* declared.
+
+    Undeclared-by-default is deliberate: a test that forgets to declare gets a
+    ManifestViolation rather than a silent pass.
+    """
+    _, forge_id, module_id = granted_agent
+
+    def _declare(*, required: bool = True, criticality: str = "soft") -> None:
+        with admin.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO venture_forge_manifest
+                  (venture_id, forge_id, module_id, is_required, criticality)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (venture_id, forge_id, module_id)
+                DO UPDATE SET is_required = EXCLUDED.is_required
+                """,
+                (agent_ctx.venture_id, forge_id, module_id, required, criticality),
+            )
+        admin.commit()
+
+    return _declare
+
+
+@pytest.fixture
+def set_bucket(admin: psycopg.Connection):
+    """Pin a token bucket to an exact state, so rate-limit tests are not timing races."""
+
+    def _set(key: str, *, tokens: float, max_tokens: float, rps: float) -> None:
+        with admin.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO rate_limit_bucket
+                  (bucket_key, tokens, max_tokens, refill_per_second, last_refill)
+                VALUES (%s, %s, %s, %s, now())
+                ON CONFLICT (bucket_key) DO UPDATE
+                SET tokens = EXCLUDED.tokens,
+                    max_tokens = EXCLUDED.max_tokens,
+                    refill_per_second = EXCLUDED.refill_per_second,
+                    last_refill = now()
+                """,
+                (key, tokens, max_tokens, rps),
+            )
+        admin.commit()
+
+    return _set
+
+
+@pytest.fixture
+def set_budget(admin: psycopg.Connection, agent_ctx: AgentContext):
+    def _set(
+        *, per_task, per_agent_daily, monthly, soft_pct: int = 80,
+        hard_action: str = "pause",
+    ) -> None:
+        with admin.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO venture_budget
+                  (venture_id, monthly_usd_cap, soft_cap_pct, hard_cap_action,
+                   per_agent_usd_daily_cap, per_task_usd_ceiling)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (venture_id) DO UPDATE
+                SET monthly_usd_cap = EXCLUDED.monthly_usd_cap,
+                    soft_cap_pct = EXCLUDED.soft_cap_pct,
+                    hard_cap_action = EXCLUDED.hard_cap_action,
+                    per_agent_usd_daily_cap = EXCLUDED.per_agent_usd_daily_cap,
+                    per_task_usd_ceiling = EXCLUDED.per_task_usd_ceiling,
+                    hard_cap_reversed_at = NULL
+                """,
+                (agent_ctx.venture_id, monthly, soft_pct, hard_action,
+                 per_agent_daily, per_task),
+            )
+        admin.commit()
+
+    return _set
+
+
+@pytest.fixture
+def spend(
+    admin: psycopg.Connection, granted_agent: tuple[uuid.UUID, str, str],
+    agent_ctx: AgentContext,
+):
+    """Write a historical ledger row carrying cost, so the ladder has spend to read."""
+    agent_id, forge_id, module_id = granted_agent
+
+    def _spend(*, task_id: str, usd) -> None:
+        with admin.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO agent_call_ledger
+                  (call_id, trace_id, office_agent_id, venture_id, forge_id, module_id,
+                   api_version, task_id, ts_start, usd_cost, trust_tier_at_call,
+                   manifest_match, payload_hash)
+                VALUES (%s, %s, %s, %s, %s, %s, '2.1.0', %s, now(), %s,
+                        'auto_execute', 'required', 'seed')
+                """,
+                (str(uuid.uuid4()), str(uuid.uuid4()), agent_id, agent_ctx.venture_id,
+                 forge_id, module_id, task_id, usd),
+            )
+        admin.commit()
+
+    return _spend
+
+
+@pytest.fixture
+def incidents_for(admin: psycopg.Connection):
+    def _get(venture_id: str) -> list[tuple[str, str]]:
+        with admin.cursor() as cur:
+            cur.execute(
+                "SELECT severity, kind FROM incident WHERE venture_id = %s "
+                "ORDER BY raised_at",
+                (venture_id,),
+            )
+            return [(r[0], r[1]) for r in cur.fetchall()]
+
+    return _get
+
+
+@pytest.fixture
+def audit_events_for(admin: psycopg.Connection):
+    def _get(actor_id: uuid.UUID) -> list[str]:
+        with admin.cursor() as cur:
+            cur.execute(
+                "SELECT event_type FROM audit_log WHERE actor_id = %s ORDER BY audit_id",
+                (actor_id,),
+            )
+            return [r[0] for r in cur.fetchall()]
+
+    return _get

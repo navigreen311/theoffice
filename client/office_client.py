@@ -12,18 +12,32 @@ useful than pretending otherwise.
 Order of operations is the design. Each step exists because doing it later, or
 not at all, loses something specific:
 
-  1. trace_id            correlates Village -> Office -> Forge
-  2. resolve grant       live; a revoked agent's NEXT call fails, not its next session
-  3. idempotency key     derived, so a retry is recognisable as a retry
-  4. at_most_once guard  these are never auto-retried; escalate instead
-  5. AUDIT WRITE         BEFORE the Forge is touched; fail closed if flagged
-  6. execute             broker presents the tenant credential, stamps the agent
-  7. ledger write        always - success, Forge error, or unreachable
+   1. trace_id            correlates Village -> Office -> Forge
+   2. resolve grant       live; identity active, grant live, both certs present
+   3. revocation scopes   live; agent x module | agent | venture | forge
+   4. manifest check      required | declared_only | UNDECLARED
+   5. budget ladder       per-task | per-agent daily | soft | hard
+   6. effective tier      grant tier, downgraded engagement-wide if soft-capped
+   7. trust tier gate     below auto_execute -> proposal, and no Forge call
+   8. rate limit          per-agent AND per-Forge; both must admit
+   9. idempotency key     derived, so a retry is recognisable as a retry
+  10. at_most_once guard  these are never auto-retried; escalate instead
+  11. AUDIT WRITE         BEFORE the Forge is touched; fail closed if flagged
+  12. execute             broker presents the tenant credential, stamps the agent
+  13. ledger write        always - success, Forge error, or unreachable
 
-Phase 1 inserts manifest check, trust-tier enforcement and rate limiting between
-steps 2 and 5. `trust_tier` is already recorded in the ledger so that enforcement
-arrives with history behind it - but recording is not enforcing, and nothing here
-yet stops a `propose`-tier agent from executing.
+Why this order and not another:
+
+  - Revocation precedes everything, so a revoked agent spends no rate-limit token
+    and triggers no budget query. A kill switch that consumes resources on the way
+    to refusing is not much of a kill switch.
+  - The manifest check precedes the tier gate, because calling an undeclared module
+    is a violation regardless of what tier the caller holds.
+  - Budget precedes the tier gate, because the soft cap *changes* the effective
+    tier. Reversing them would let an auto_execute call slip through in the window
+    where the venture had already crossed its soft cap.
+  - Rate limiting is last of the gates, so refusals that cost nothing to detect
+    happen before the one that mutates a bucket.
 """
 
 from __future__ import annotations
@@ -36,11 +50,17 @@ from typing import Any
 
 import httpx
 
-from broker import audit, ledger
+from broker import audit, budget, ledger, limits, manifest, proposals, revocation
 from broker.config import get_settings
 from broker.credentials import CredentialResolver, build_resolver
 from broker.db import connection
-from broker.errors import AuditUnavailable, EscalateToHuman, ForgeUnreachable, OfficeError
+from broker.errors import (
+    AuditUnavailable,
+    EscalateToHuman,
+    ForgeUnreachable,
+    OfficeError,
+    RequiresApproval,
+)
 from broker.executor import ForgeResponse, execute
 from broker.grants import ResolvedGrant, resolve_grant
 
@@ -63,6 +83,7 @@ class CallResult:
     body: Any
     latency_ms: int
     idempotency_key: str
+    manifest_match: str
 
 
 class OfficeClient:
@@ -104,7 +125,15 @@ class OfficeClient:
             await self._audit_refusal(exc, agent_ctx, trace_id, forge_id, module_id)
             raise
 
-        # 3. Derived, so the same task+module+payload always yields the same key.
+        # 3-8. Governance. Every refusal below is audited by its own handler and
+        # raises a named type, so an operator sees which gate stopped the call.
+        try:
+            manifest_match = await self._govern(grant, agent_ctx, trace_id, payload)
+        except OfficeError as exc:
+            await self._audit_refusal(exc, agent_ctx, trace_id, forge_id, module_id)
+            raise
+
+        # 9. Derived, so the same task+module+payload always yields the same key.
         idem_key = ledger.idempotency_key(agent_ctx.task_id, module_id, payload)
 
         # 4. at_most_once endpoints are never auto-retried. Master prompt Part 16.
@@ -149,6 +178,7 @@ class OfficeClient:
                 idem_key=idem_key,
                 ts_start=ts_start,
                 response=None,
+                manifest_match=manifest_match,
             )
             await self._audit_refusal(exc, agent_ctx, trace_id, forge_id, module_id)
             raise
@@ -162,6 +192,7 @@ class OfficeClient:
             idem_key=idem_key,
             ts_start=ts_start,
             response=response,
+            manifest_match=manifest_match,
         )
 
         return CallResult(
@@ -171,9 +202,89 @@ class OfficeClient:
             body=response.body,
             latency_ms=response.latency_ms,
             idempotency_key=idem_key,
+            manifest_match=manifest_match,
         )
 
     # ---------------------------------------------------------------- internals
+
+    async def _govern(
+        self,
+        grant: ResolvedGrant,
+        agent_ctx: AgentContext,
+        trace_id: uuid.UUID,
+        payload: Any,
+    ) -> str:
+        """Steps 3-8. Returns the ledger `manifest_match` verdict.
+
+        Raises the specific gate's error when a gate refuses. `RequiresApproval`
+        is raised rather than returned so that a caller cannot mistake an absent
+        Forge response for a successful one - a proposal was created, the action
+        did not happen, and those must not look alike.
+        """
+        async with connection() as conn:
+            # 3. Revocation - before anything that costs a token or a query.
+            await revocation.check_revocations(
+                conn,
+                office_agent_id=agent_ctx.office_agent_id,
+                forge_id=grant.forge_id,
+                module_id=grant.module_id,
+                venture_id=agent_ctx.venture_id,
+            )
+
+            # 4. Manifest. Raises on UNDECLARED; returns declared_only or required.
+            manifest_result = await manifest.check(
+                conn,
+                venture_id=agent_ctx.venture_id,
+                forge_id=grant.forge_id,
+                module_id=grant.module_id,
+                office_agent_id=agent_ctx.office_agent_id,
+                trace_id=trace_id,
+            )
+
+            # 5. Budget ladder. Raises on a halting rung.
+            budget_state = await budget.evaluate(
+                conn,
+                venture_id=agent_ctx.venture_id,
+                office_agent_id=agent_ctx.office_agent_id,
+                task_id=agent_ctx.task_id,
+            )
+
+            # 6/7. Effective tier, then the gate.
+            soft_capped = bool(budget_state and budget_state.soft_capped)
+            tier = proposals.effective_tier(grant.trust_tier, soft_capped=soft_capped)
+
+            if tier != proposals.AUTO_EXECUTE:
+                proposal_id = await proposals.submit(
+                    conn,
+                    office_agent_id=agent_ctx.office_agent_id,
+                    venture_id=agent_ctx.venture_id,
+                    forge_id=grant.forge_id,
+                    module_id=grant.module_id,
+                    task_id=agent_ctx.task_id,
+                    trust_tier=tier,
+                    payload=payload,
+                    payload_hash=ledger.payload_hash(payload),
+                    idempotency_key=ledger.idempotency_key(
+                        agent_ctx.task_id, grant.module_id, payload
+                    ),
+                    trace_id=trace_id,
+                )
+                raise RequiresApproval(
+                    f"trust tier {tier!r} requires human approval; a proposal was created",
+                    proposal_id,
+                    forge_id=grant.forge_id,
+                    module_id=grant.module_id,
+                    declared_tier=grant.trust_tier,
+                    effective_tier=tier,
+                    soft_capped=soft_capped,
+                )
+
+        # 8. Rate limit last of the gates: it mutates a bucket, and the refusals
+        # above cost nothing to detect.
+        await limits.acquire(
+            office_agent_id=agent_ctx.office_agent_id, forge_id=grant.forge_id
+        )
+        return manifest_result.match
 
     async def _audit_intent(
         self,
@@ -257,6 +368,7 @@ class OfficeClient:
         idem_key: str,
         ts_start: datetime,
         response: ForgeResponse | None,
+        manifest_match: str,
     ) -> None:
         ts_end = datetime.now(UTC)
         await ledger.write_call(
@@ -279,6 +391,8 @@ class OfficeClient:
             idempotency_key=idem_key,
             forge_side_ref=response.forge_side_ref if response else None,
             payload_hash=ledger.payload_hash(payload),
+            task_id=agent_ctx.task_id,
+            manifest_match=manifest_match,
         )
 
     async def aclose(self) -> None:

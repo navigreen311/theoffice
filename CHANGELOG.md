@@ -44,7 +44,29 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - 20 contract tests against an in-process stub Forge. 62 tests total.
   - `ruff` and strict `mypy` wired into `bootstrap.sh` as gates.
 
+- **Phase 1 — governance in the path.** Every guardrail Phase 0 recorded is now enforced.
+  - **Four revocation scopes** (`agent_module` | `agent` | `venture` | `forge`), each
+    with a required authority, checked live on every call. A separate table, so a
+    venture-wide stop covers grants issued after it. Reinstatement requires the same
+    authority plus a named human and a documented reason.
+  - **Forge Manifest reconciliation.** `required` proceeds; `declared_only` proceeds
+    with a HIGH `in_use_not_required` incident and a throttle; `UNDECLARED` is blocked
+    with a HIGH incident and a throttle.
+  - **Trust-tier enforcement.** `propose` and `suggest` create a proposal and make no
+    Forge call. Proposal decisions name a human and record `review_seconds`;
+    sub-5-second approvals raise a MEDIUM `rubber_stamp_approval` incident.
+  - **Rate limiting.** Postgres token buckets, per agent and per Forge, both must
+    admit. Throttles extend but never shorten.
+  - **Budget ladder.** Per-task ceiling, per-agent daily cap, soft cap (downgrades
+    `auto_execute` to `propose` engagement-wide) and hard cap (Ivan-only reversal).
+  - `incident` table, append-only.
+  - 31 governance tests; 93 total.
+
 ### Changed
+- **Second blueprint gap:** Part 12 mandates a per-task USD ceiling, but
+  `agent_call_ledger` carries no task identifier and `idempotency_key` is a one-way
+  hash that cannot be grouped by task. Per-task spend was not computable as specified.
+  `task_id` added in migration 0006. The blueprint should be amended.
 - **Blueprint J4 superseded:** CapitalForge bridges first, not CRE Forge (Ivan's
   decision). Consequence: Gate 0 blocks a Greenstone-first Phase 3 until CRE Forge is
   also bridged.

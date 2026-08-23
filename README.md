@@ -19,8 +19,9 @@ exists to make the first ones true.
 | 0.4 | Broker — grant resolution, credentials, execution | **Done** |
 | 0.5 | Client library — the mandatory call path | **Done** |
 | 0.6 | Network policy | Blocked — needs the deployment target |
-| 0.7 | Revocation | After 0.4 |
-| 0.8 | **First real authenticated call** | The milestone |
+| 0.7 | Revocation — four scopes | **Done** |
+| 0.8 | **First real authenticated call** | The milestone — needs Forge access |
+| **1** | **Governance in the path** | **Done** — 93 tests |
 
 ## Quick start
 
@@ -70,6 +71,7 @@ docs/
 - `PROJECT_RULEBOOK.md` — the governing methodology
 - `docs/ledger.md` — how append-only and the hash chain actually work
 - `docs/call-path.md` — the broker, the client library, and why the order matters
+- `docs/governance.md` — revocation scopes, manifest, trust tiers, limits, budget
 - `docs/reference/` — what The Office is, and what gets built in what order
 
 ## Security

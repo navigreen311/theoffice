@@ -92,3 +92,63 @@ class ForgeUnreachable(OfficeError):
 
     audit_event = "call_failed_forge_unreachable"
     status_code = 502
+
+
+class Revoked(OfficeError):
+    """An active revocation covers this call.
+
+    Carries the scope, because "your grant was revoked" and "the whole Forge is
+    revoked" call for different responses from the agent's operator.
+    """
+
+    audit_event = "call_refused_revoked"
+
+
+class ManifestViolation(OfficeError):
+    """The module is not in the venture's Forge Manifest at all.
+
+    Blocked rather than merely recorded: a call to something nobody declared is
+    the case the manifest exists to catch.
+    """
+
+    audit_event = "call_refused_undeclared_module"
+
+
+class RequiresApproval(OfficeError):
+    """Trust tier is below auto_execute; a proposal was created instead.
+
+    Not a failure. The agent asked to act, the tier said a human decides, and a
+    proposal now exists. It is an exception because the call did not happen and
+    the caller must not treat an absent Forge response as a successful one.
+    """
+
+    audit_event = "call_deferred_to_proposal"
+    status_code = 202
+
+    def __init__(self, message: str, proposal_id: object, **context: object) -> None:
+        super().__init__(message, proposal_id=str(proposal_id), **context)
+        self.proposal_id = proposal_id
+
+
+class RateLimited(OfficeError):
+    """Per-agent or per-Forge token bucket is empty."""
+
+    audit_event = "call_refused_rate_limited"
+    status_code = 429
+
+
+class BudgetExceeded(OfficeError):
+    """A rung of the Part 12 cost ladder stopped this call."""
+
+    audit_event = "call_refused_budget_exceeded"
+    status_code = 402
+
+
+class NotAuthorized(OfficeError):
+    """The actor lacks the authority for this governance action.
+
+    Distinct from NotGranted: that is an agent without a grant, this is a human
+    without the role - e.g. a venture operator attempting a Forge-wide revocation.
+    """
+
+    audit_event = "governance_action_refused_not_authorized"

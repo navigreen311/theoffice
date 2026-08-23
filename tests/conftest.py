@@ -130,8 +130,14 @@ def seed_agent(admin: psycopg.Connection) -> Iterator[uuid.UUID]:
     admin.commit()
     yield agent_id
     with admin.cursor() as cur:
+        # Everything that references the identity, before the identity itself.
         cur.execute("DELETE FROM agent_forge_grant WHERE office_agent_id = %s", (agent_id,))
         cur.execute("DELETE FROM shift_assignment WHERE office_agent_id = %s", (agent_id,))
+        for table in ("revocation", "proposal"):
+            cur.execute(
+                f"DELETE FROM {table} WHERE office_agent_id = %s",
+                (agent_id,),
+            )
         cur.execute("DELETE FROM office_agent_identity WHERE office_agent_id = %s", (agent_id,))
     admin.commit()
 
