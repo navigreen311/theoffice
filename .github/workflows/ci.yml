@@ -1,6 +1,6 @@
 name: CI
 
-# Five jobs, and the one that matters most is `tests` — because most of this
+# Six jobs, and the one that matters most is `tests` — because most of this
 # repository's controls ARE tests. The write-surface pin, the SimForge no-read-path
 # check, the persona-body scan and the validator meta-test are not documentation about
 # controls; they are the enforcement. Until now they only fired when somebody remembered
@@ -12,9 +12,10 @@ name: CI
 # would not fail the run — it would report a tidy green over several hundred tests that
 # never executed. So `tests` refuses to pass if anything skipped.
 #
-# Not run here: `scripts/console-smoke.sh`. It kills listeners with `netstat`/`taskkill`
-# and is Windows-only today. Saying so is better than a job that quietly does less than
-# its name claims.
+# The `smoke` job is the second half of that. `next build` passing is not evidence the
+# app runs: the revocation page compiled, type-checked and threw at render because a
+# React 19 hook does not exist in React 18. Only a real request found it, and until now
+# only on one machine.
 
 on:
   push:
@@ -267,13 +268,78 @@ jobs:
 
       # `next build` passing is not evidence the app runs — a React 19 hook in a React
       # 18 app compiled, type-checked and threw at render. It is still worth running,
-      # because it catches the other half. The half it cannot catch is what
-      # `scripts/console-smoke.sh` is for, and that script does not run on Linux yet.
+      # because it catches the other half. The half it cannot catch is the `smoke` job.
       - name: Build
         run: npm run build
 
       - name: Lint
         run: npm run lint
+
+
+  # -------------------------------------------------------------------- smoke
+  smoke:
+    name: Smoke - the console actually renders
+    runs-on: ubuntu-latest
+
+    # The most expensive job here, and the only one that answers the question the
+    # others cannot: does a real request to a real server return a real page.
+    #
+    # `console` proves the code compiles and type-checks. This proves it renders, that
+    # an unauthenticated request redirects rather than serving a page, that the bearer
+    # token stays out of the HTML, and that a persona body reaches no rendered page. A
+    # compiled bundle can fail every one of those.
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: theoffice
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: console/package-lock.json
+
+      - name: Install python
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Install node
+        working-directory: console
+        run: npm ci
+
+      - name: Migrations
+        run: python -m alembic upgrade head
+
+      # No .env on a runner. The script reads one when it exists and falls back to the
+      # environment when it does not, which is why these are the workflow-level values
+      # and not a file written by a step.
+      - name: Smoke
+        run: ./scripts/console-smoke.sh
+
+      # The script tears down its own servers and deletes its scratch directory, so
+      # there is nothing to upload on success. On failure it has already printed the
+      # relevant log tail itself - a wait that times out dumps the server log rather
+      # than leaving somebody to guess which of thirty checks went first.
 
   # ------------------------------------------------------------------ secrets
   secrets:
