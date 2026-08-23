@@ -14,7 +14,6 @@ import pytest_asyncio
 
 from broker.config import get_settings
 from broker.credentials import Credential
-from broker.db import close_pool
 from client.office_client import AgentContext, OfficeClient
 from tests.contract.stub_forge import StubForge
 
@@ -48,13 +47,6 @@ def _configure_broker_env() -> Iterator[None]:
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
-
-
-@pytest_asyncio.fixture(autouse=True)
-async def _reset_pool() -> AsyncIterator[None]:
-    """Close the pool between tests so a cached connection never spans one."""
-    yield
-    await close_pool()
 
 
 @pytest.fixture
@@ -489,3 +481,57 @@ def _certified_by_default(request):
     """
     if "granted_agent" in request.fixturenames:
         request.getfixturevalue("certified_agent")
+
+
+# ---------------------------------------------------------------- Phase 3.3 fixtures
+
+@pytest.fixture(autouse=True)
+def _clean_shifts(admin: psycopg.Connection) -> Iterator[None]:
+    with admin.cursor() as cur:
+        cur.execute("DELETE FROM agent_working_memory")
+        cur.execute("DELETE FROM shift_assignment")
+    admin.commit()
+    yield
+    with admin.cursor() as cur:
+        cur.execute("DELETE FROM agent_working_memory")
+        cur.execute("DELETE FROM shift_assignment")
+    admin.commit()
+
+
+@pytest.fixture
+def on_shift(admin: psycopg.Connection, _clean_shifts: None):
+    """Put an agent on shift for a venture, from an hour ago to seven hours hence."""
+
+    def _assign(agent_id: uuid.UUID, venture_id: str) -> uuid.UUID:
+        shift_id = uuid.uuid4()
+        with admin.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO shift_assignment
+                  (shift_id, office_agent_id, venture_id, shift_start, shift_end,
+                   assigned_by)
+                VALUES (%s, %s, %s, now() - interval '1 hour',
+                        now() + interval '7 hours', %s)
+                """,
+                (str(shift_id), agent_id, venture_id, str(uuid.uuid4())),
+            )
+        admin.commit()
+        return shift_id
+
+    return _assign
+
+
+@pytest.fixture(autouse=True)
+def _on_shift_by_default(request):
+    """Any test using `agent_ctx` also gets a matching shift assignment.
+
+    Phase 3.3 made the call path require the call's venture to match the agent's open
+    shift. Earlier phases' tests are about the other gates, not about shift boundaries
+    - without this they would all stop at a gate they are not testing.
+
+    Tests that ARE about the boundary assign their own shifts explicitly and are
+    written to work whatever this fixture did.
+    """
+    if "agent_ctx" in request.fixturenames and "granted_agent" in request.fixturenames:
+        ctx = request.getfixturevalue("agent_ctx")
+        request.getfixturevalue("on_shift")(ctx.office_agent_id, ctx.venture_id)

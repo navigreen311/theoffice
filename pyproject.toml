@@ -41,6 +41,9 @@ select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
 # them NotGrantedError, which is noise on a class whose only job is to be caught
 # by name.
 "broker/errors.py" = ["N818"]
+# broker/shifts.py defines three more domain refusals for the same reason:
+# `raise ShiftBlocked(...)` and `raise OffShift(...)` say what happened.
+"broker/shifts.py" = ["N818"]
 
 [tool.mypy]
 python_version = "3.11"

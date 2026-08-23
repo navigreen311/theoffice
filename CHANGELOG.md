@@ -114,11 +114,33 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - `Position.lifecycle_stages_owned` added (schema divergence #3).
   - 76 golden tests; 274 total.
 
+- **Phase 3, increment 3 - shift assignment and the verified PHI flush.** The temporal
+  wall, which existed only as a column comment.
+  - `agent_working_memory` with `data_classification` NOT NULL and no default: tagged
+    at write time, never inferred at flush time.
+  - `flush_phi()` destroys `phi` and `recording` rows, re-counts to verify, and records
+    before/after evidence. Attempted and verified are separate columns.
+  - **A failed flush blocks the next assignment**, in `assign_shift` - the one function
+    that creates them.
+  - `rotate()` performs the Part 7.5 boundary in order and stops at a failed flush
+    without creating a new shift.
+  - Runs regardless of certification state; a revoked agent still flushes.
+  - **Gate 3a in the call path**: a call whose venture is not the agent's on-shift
+    venture is refused, closing the mid-shift-switch hole the schema could not see.
+  - A test asserts `OfficeClient` exposes nothing that could skip a boundary.
+  - 293 tests total.
+
 ### Changed
 - **Second blueprint gap:** Part 12 mandates a per-task USD ceiling, but
   `agent_call_ledger` carries no task identifier and `idempotency_key` is a one-way
   hash that cannot be grouped by task. Per-task spend was not computable as specified.
   `task_id` added in migration 0006. The blueprint should be amended.
+- **Connection-pool lifecycle.** `open_pool()` recreates a pool that has been closed;
+  handing back a closed pool raised at the point of use rather than the point of
+  closing, turning a lifecycle mistake into a failure in unrelated code. The per-test
+  reset fixture moved to the root conftest - it existed in two directories and not in
+  the two others that use the pool, so those left one bound to a dead loop and the next
+  suite's first test paid for it.
 - **Cross-Forge appointment bug.** 5.2 assumed one Forge per position and checked every
   module against it, so a position operating modules on two Forges came back
   unfillable - as valid JSON describing a venture with nobody in it. Found by reading a

@@ -15,6 +15,7 @@ not at all, loses something specific:
    1. trace_id            correlates Village -> Office -> Forge
    2. resolve grant       live; identity active, grant live, both certs present
    3. revocation scopes   live; agent x module | agent | venture | forge
+  3a. shift boundary      the call's venture must be the agent's on-shift venture
    4. manifest check      required | declared_only | UNDECLARED
    5. budget ladder       per-task | per-agent daily | soft | hard
    6. effective tier      grant tier, downgraded engagement-wide if soft-capped
@@ -31,6 +32,12 @@ Why this order and not another:
   - Revocation precedes everything, so a revoked agent spends no rate-limit token
     and triggers no budget query. A kill switch that consumes resources on the way
     to refusing is not much of a kill switch.
+  - The shift check follows revocation and precedes everything else: a revoked agent
+    should be told it is revoked rather than told it is on the wrong shift, but
+    serving the wrong venture is a boundary violation whatever the module is. This is
+    what makes "one venture per agent per shift" enforceable rather than declarative -
+    the schema forbids overlapping shifts, but nothing else stops an agent holding two
+    ventures' grants from serving both inside one shift.
   - The manifest check precedes the tier gate, because calling an undeclared module
     is a violation regardless of what tier the caller holds.
   - Budget precedes the tier gate, because the soft cap *changes* the effective
@@ -50,7 +57,16 @@ from typing import Any
 
 import httpx
 
-from broker import audit, budget, ledger, limits, manifest, proposals, revocation
+from broker import (
+    audit,
+    budget,
+    ledger,
+    limits,
+    manifest,
+    proposals,
+    revocation,
+    shifts,
+)
 from broker.config import get_settings
 from broker.credentials import CredentialResolver, build_resolver
 from broker.db import connection
@@ -94,11 +110,17 @@ class OfficeClient:
         *,
         http: httpx.AsyncClient | None = None,
         resolver: CredentialResolver | None = None,
+        enforce_shift: bool = True,
     ) -> None:
         settings = get_settings()
         self._http = http or httpx.AsyncClient()
         self._resolver = resolver or build_resolver(settings.credential_backend)
         self._timeout = settings.forge_timeout_seconds
+        # Shift enforcement is on by default and is not something an agent can turn
+        # off - there is no runtime path to this flag. It exists so tests that predate
+        # shift assignment, and callers operating outside the shift system entirely,
+        # can be explicit about it rather than silently exempt.
+        self._enforce_shift = enforce_shift
 
     async def call(
         self,
@@ -230,6 +252,16 @@ class OfficeClient:
                 module_id=grant.module_id,
                 venture_id=agent_ctx.venture_id,
             )
+
+            # 3a. One venture per agent per shift, locked. Enforced here because a
+            # grant scoped to a venture does not by itself stop an agent from serving
+            # that venture during a shift assigned to a different one.
+            if self._enforce_shift:
+                await shifts.assert_on_shift_for(
+                    conn,
+                    office_agent_id=agent_ctx.office_agent_id,
+                    venture_id=agent_ctx.venture_id,
+                )
 
             # 4. Manifest. Raises on UNDECLARED; returns declared_only or required.
             manifest_result = await manifest.check(

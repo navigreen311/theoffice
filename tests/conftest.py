@@ -15,10 +15,13 @@ Tests that mix them up are the easy way to ship a false green here.
 
 import os
 import uuid
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 
 import psycopg
 import pytest
+import pytest_asyncio
+
+from broker.db import close_pool
 
 ADMIN_DSN = os.environ.get("OFFICE_ADMIN_DSN")
 APP_DSN = os.environ.get("OFFICE_APP_DSN")
@@ -132,6 +135,10 @@ def seed_agent(admin: psycopg.Connection) -> Iterator[uuid.UUID]:
     with admin.cursor() as cur:
         # Everything that references the identity, before the identity itself.
         cur.execute("DELETE FROM agent_forge_grant WHERE office_agent_id = %s", (agent_id,))
+        # Working memory references the shift, so it must go before the shift does.
+        cur.execute(
+            "DELETE FROM agent_working_memory WHERE office_agent_id = %s", (agent_id,)
+        )
         cur.execute("DELETE FROM shift_assignment WHERE office_agent_id = %s", (agent_id,))
         for table in ("revocation", "proposal"):
             cur.execute(
@@ -185,3 +192,22 @@ def tail_gap(conn: psycopg.Connection) -> int:
         row = cur.fetchone()
     assert row is not None
     return int(row[0])
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _reset_connection_pool() -> AsyncIterator[None]:
+    """Close the broker connection pool after every test, everywhere.
+
+    The pool is a process-level global, and pytest-asyncio gives each test its own
+    event loop - so a pooled connection created in one test's loop is invalid in the
+    next. Resetting it per test is the only reliable answer.
+
+    This lives in the ROOT conftest rather than per-directory because it has to apply
+    to *every* suite. It was originally per-directory, and `tests/validator` and
+    `tests/golden` use the pool without one: they left a pool bound to a dead loop,
+    and the first test of the next suite failed with an error about a closed loop that
+    had nothing to do with it. A cleanup that only some directories perform is worse
+    than none, because the failure lands somewhere else.
+    """
+    yield
+    await close_pool()

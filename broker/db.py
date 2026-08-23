@@ -24,11 +24,22 @@ def _dsn() -> str:
 
 
 async def open_pool() -> AsyncConnectionPool:
+    """Return the process pool, creating it if absent or already closed.
+
+    The closed check matters: a pool that has been closed is not None, and handing
+    one back raises `PoolClosed` at the point of use rather than at the point of
+    closing. That turns a lifecycle mistake into a failure in unrelated code, which
+    is exactly how it presented - two isolation tests failing only when the whole
+    suite ran together.
+    """
     global _pool
-    if _pool is None:
-        s = get_settings()
+    if _pool is None or _pool.closed:
+        settings = get_settings()
         _pool = AsyncConnectionPool(
-            _dsn(), min_size=s.pool_min_size, max_size=s.pool_max_size, open=False
+            _dsn(),
+            min_size=settings.pool_min_size,
+            max_size=settings.pool_max_size,
+            open=False,
         )
         await _pool.open(wait=True)
     return _pool
