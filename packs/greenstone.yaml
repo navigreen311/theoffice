@@ -84,6 +84,7 @@ positions_required:
     compliance_flags_in_scope: [tsr_disclosure_required]
     headcount: 3
     trust_tier_ceiling: auto_execute
+    lifecycle_stages_owned: [Source, Qualify]
 
   - position_title: Deal Underwriter
     reports_to: venture_operator
@@ -98,6 +99,7 @@ positions_required:
     # Deliberately below auto_execute: an underwriting number that is wrong by 10%
     # is an assignment that does not close, and there is no automated check for it.
     trust_tier_ceiling: propose
+    lifecycle_stages_owned: [Underwrite, Contract]
 
   - position_title: Buyer Network Manager
     reports_to: venture_operator
@@ -110,6 +112,7 @@ positions_required:
     compliance_flags_in_scope: [recording_consent_required]
     headcount: 2
     trust_tier_ceiling: propose
+    lifecycle_stages_owned: [Assign, Close]
 
 capacity_demand:
   agent_days_per_week: 35

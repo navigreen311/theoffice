@@ -128,3 +128,65 @@ rubber stamp waiting to happen.
 
 The seven generators (increment 2). Shift assignment and PHI flush (increment 3). The
 Pack Editor UI (Part 17).
+
+---
+
+# Phase 3, increment 2 — The Seven Generators — PLAN
+
+Master prompt Part 5. **Deterministic transformers: same Pack in, same artifacts out.**
+No LLM anywhere in this increment — structural generation must be reproducible, and
+`tests/golden/` snapshot-asserts every artifact so any diff fails CI.
+
+| # | Generator | In | Out |
+|---|---|---|---|
+| 5.1 | Role Definition | Pack | positions fully specified, implied compliance flags resolved |
+| 5.2 | Appointment | positions + roster + certification | named agents + the three capacity numbers |
+| 5.3 | Workflow | lifecycle_stages + positions | ordered steps, each naming a module, a flag and an escalation |
+| 5.4 | Task Ledger | Workflow + Appointments | tasks with tier, SLA, volume, idempotency class + projected approvals per human |
+| 5.5 | Curriculum | Pack + Workflow + Appointments + Instructions | Scenario Pack with coverage denominators |
+| 5.6 | Forge Manifest | bindings + Workflow + Task Ledger | BOM + three-way reconciliation |
+| 5.7 | Runtime Config | all above | idempotent deployment; re-run = identical state |
+
+## Schema divergence #3 — `lifecycle_stages_owned` on Position
+
+Generator 5.3 is specified as `In: lifecycle_stages. Out: [step table]`, and every step
+must name a **position**, a **module**, a **compliance flag or explicit NONE**, and an
+**escalation path**.
+
+Schema v3 carries lifecycle stages on the service line and modules on the position, but
+**nothing maps a position to a stage.** Without that mapping the generator can only
+guess — distributing positions across stages by index, or string-matching duty text.
+Both are deterministic and both produce a nonsense workflow, which is worse than
+failing: a plausible-looking workflow nobody can trace is exactly the defect class the
+blueprint's test strategy calls out.
+
+So `Position` gains `lifecycle_stages_owned: list[str]`, defaulting to every stage.
+Recorded here rather than silently added. **The blueprint should be amended** — this is
+the third such gap, after the partitioned-table PK and the ledger's missing `task_id`.
+
+## Determinism rules
+
+- No `uuid4` in any artifact. `grant_id` and `task_id` are **UUIDv5** derived from their
+  natural key, which also makes 5.7's idempotency structural rather than a code path.
+- No wall-clock timestamps inside artifacts.
+- Every collection sorted by an explicit key, never by dict or query order.
+- Candidate agents ordered by `(agent_name, office_agent_id)` — a stable tiebreak, so
+  two runs against the same roster appoint the same agents.
+
+## Acceptance tests
+
+| # | Test | Asserts |
+|---|---|---|
+| G1 | every generator is byte-identical across two runs | determinism |
+| G2 | golden snapshots match | regression |
+| G3 | 5.1 derives implied compliance flags the author omitted | it does real work |
+| G4 | 5.2 never appoints an uncertified agent | Part 5.2, absolute |
+| G5 | 5.2 reports all three capacity numbers on a shortfall | §7.2 |
+| G6 | 5.2 flags a shortfall rather than auto-rejecting or lowering the bar | §7.3 |
+| G7 | every workflow step names a module, a flag-or-NONE, and an escalation | 5.3 |
+| G8 | 5.4 projects daily approvals per human role | 5.4 required output |
+| G9 | 5.5 states a coverage denominator for every dimension | "report the denominator" |
+| G10 | 5.6 `REQUIRED_NOT_DECLARED` fails the Pack | 5.6 |
+| G11 | 5.6 `hard` + `module_gap` cannot provision | 5.6 |
+| G12 | 5.7 run twice → identical state, zero duplicate rows | idempotency |
+| G13 | 5.7 consumes the Manifest, not the Pack | 5.7, stated explicitly |

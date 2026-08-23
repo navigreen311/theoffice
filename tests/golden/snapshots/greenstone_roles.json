@@ -1,0 +1,98 @@
+{
+  "positions": [
+    {
+      "declared_compliance_flags": [
+        "tsr_disclosure_required"
+      ],
+      "duties": [
+        "Source off-market candidates from public records and owner outreach",
+        "Pull comparable sales and rent rolls",
+        "Produce a first-pass value estimate"
+      ],
+      "effective_compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "forge_modules_operated": [
+        "comp_analysis",
+        "place_call",
+        "property_lookup"
+      ],
+      "headcount": 3,
+      "implied_compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "lifecycle_stages_owned": [
+        "Source",
+        "Qualify"
+      ],
+      "position_title": "Acquisition Analyst",
+      "reports_to": "venture_operator",
+      "source_department": "Research & Market Intelligence",
+      "trust_tier_ceiling": "auto_execute"
+    },
+    {
+      "declared_compliance_flags": [
+        "recording_consent_required"
+      ],
+      "duties": [
+        "Maintain the vetted buyer list and their stated criteria",
+        "Match a contracted deal to buyers by fit",
+        "Circulate the assignment package"
+      ],
+      "effective_compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "forge_modules_operated": [
+        "buyer_match",
+        "generate_loi",
+        "place_call",
+        "transcribe_call"
+      ],
+      "headcount": 2,
+      "implied_compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "lifecycle_stages_owned": [
+        "Assign",
+        "Close"
+      ],
+      "position_title": "Buyer Network Manager",
+      "reports_to": "venture_operator",
+      "source_department": "Client Success & Operations",
+      "trust_tier_ceiling": "propose"
+    },
+    {
+      "declared_compliance_flags": [],
+      "duties": [
+        "Build the underwriting model for a qualified candidate",
+        "Set the maximum allowable offer",
+        "Flag title and zoning risk"
+      ],
+      "effective_compliance_flags": [
+        "tsr_disclosure_required"
+      ],
+      "forge_modules_operated": [
+        "comp_analysis",
+        "underwrite_deal"
+      ],
+      "headcount": 2,
+      "implied_compliance_flags": [
+        "tsr_disclosure_required"
+      ],
+      "lifecycle_stages_owned": [
+        "Underwrite",
+        "Contract"
+      ],
+      "position_title": "Deal Underwriter",
+      "reports_to": "venture_operator",
+      "source_department": "Finance & Administration",
+      "trust_tier_ceiling": "propose"
+    }
+  ],
+  "unresolved_modules": [],
+  "venture_id": "greenstone"
+}

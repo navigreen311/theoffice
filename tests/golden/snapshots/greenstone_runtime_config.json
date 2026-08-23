@@ -1,0 +1,295 @@
+{
+  "blocked_reason": null,
+  "budget": {
+    "monthly_usd_cap": 4000.0,
+    "per_agent_usd_daily_cap": 25.0,
+    "per_task_usd_ceiling": 6.0,
+    "soft_cap_pct": 80.0
+  },
+  "compliance_flags": [
+    "recording_consent_required",
+    "tsr_disclosure_required"
+  ],
+  "environment": "sandbox",
+  "grants": [
+    {
+      "forge_id": "cre-forge",
+      "grant_id": "f1384b1d-b87d-53ec-9268-29baf53a1fe8",
+      "module_id": "comp_analysis",
+      "office_agent_id": "11111111-1111-5111-8111-111111111111",
+      "trust_tier": "auto_execute"
+    },
+    {
+      "forge_id": "cre-forge",
+      "grant_id": "36de09cf-24c3-5cb4-9ff3-6d0b7a6121d3",
+      "module_id": "property_lookup",
+      "office_agent_id": "11111111-1111-5111-8111-111111111111",
+      "trust_tier": "auto_execute"
+    },
+    {
+      "forge_id": "voiceforge",
+      "grant_id": "fbcedde7-095b-5c5b-bfd8-a46392d0f46a",
+      "module_id": "place_call",
+      "office_agent_id": "11111111-1111-5111-8111-111111111111",
+      "trust_tier": "auto_execute"
+    },
+    {
+      "forge_id": "cre-forge",
+      "grant_id": "197fa3ae-641f-5924-8fd1-3489eb6621b8",
+      "module_id": "comp_analysis",
+      "office_agent_id": "22222222-2222-5222-8222-222222222222",
+      "trust_tier": "auto_execute"
+    },
+    {
+      "forge_id": "cre-forge",
+      "grant_id": "46155161-f870-5d6e-bfe8-9fcd03ab0688",
+      "module_id": "property_lookup",
+      "office_agent_id": "22222222-2222-5222-8222-222222222222",
+      "trust_tier": "auto_execute"
+    },
+    {
+      "forge_id": "voiceforge",
+      "grant_id": "a0852fad-fa86-5eb9-91b6-b1bf500651ef",
+      "module_id": "place_call",
+      "office_agent_id": "22222222-2222-5222-8222-222222222222",
+      "trust_tier": "auto_execute"
+    },
+    {
+      "forge_id": "cre-forge",
+      "grant_id": "5ef2a7b0-e845-5aaf-9013-058042b8294f",
+      "module_id": "comp_analysis",
+      "office_agent_id": "33333333-3333-5333-8333-333333333333",
+      "trust_tier": "auto_execute"
+    },
+    {
+      "forge_id": "cre-forge",
+      "grant_id": "9b21b656-efbc-559b-93b8-7fb4b54988a4",
+      "module_id": "property_lookup",
+      "office_agent_id": "33333333-3333-5333-8333-333333333333",
+      "trust_tier": "auto_execute"
+    },
+    {
+      "forge_id": "voiceforge",
+      "grant_id": "ccd0b9e0-5660-5fb9-b661-40d2ba1d0e7f",
+      "module_id": "place_call",
+      "office_agent_id": "33333333-3333-5333-8333-333333333333",
+      "trust_tier": "auto_execute"
+    },
+    {
+      "forge_id": "cre-forge",
+      "grant_id": "5313caa3-7bb8-56ce-8a88-908f60715973",
+      "module_id": "comp_analysis",
+      "office_agent_id": "44444444-4444-5444-8444-444444444444",
+      "trust_tier": "propose"
+    },
+    {
+      "forge_id": "cre-forge",
+      "grant_id": "402c7f31-bcbf-5be9-906e-8ca47ddd0795",
+      "module_id": "underwrite_deal",
+      "office_agent_id": "44444444-4444-5444-8444-444444444444",
+      "trust_tier": "propose"
+    },
+    {
+      "forge_id": "cre-forge",
+      "grant_id": "3eb1a41d-3b96-5598-81a7-026352821948",
+      "module_id": "comp_analysis",
+      "office_agent_id": "55555555-5555-5555-8555-555555555555",
+      "trust_tier": "propose"
+    },
+    {
+      "forge_id": "cre-forge",
+      "grant_id": "3fa12710-1c86-5be5-bfd4-fc9443669ab2",
+      "module_id": "underwrite_deal",
+      "office_agent_id": "55555555-5555-5555-8555-555555555555",
+      "trust_tier": "propose"
+    },
+    {
+      "forge_id": "cre-forge",
+      "grant_id": "fdb8bc79-f7e5-592d-a71b-0cb42b14c756",
+      "module_id": "buyer_match",
+      "office_agent_id": "66666666-6666-5666-8666-666666666666",
+      "trust_tier": "propose"
+    },
+    {
+      "forge_id": "cre-forge",
+      "grant_id": "ffbddb12-79b8-5f2f-8073-32edae32d232",
+      "module_id": "generate_loi",
+      "office_agent_id": "66666666-6666-5666-8666-666666666666",
+      "trust_tier": "propose"
+    },
+    {
+      "forge_id": "voiceforge",
+      "grant_id": "47a54732-3559-5af7-83d9-563e82effe53",
+      "module_id": "place_call",
+      "office_agent_id": "66666666-6666-5666-8666-666666666666",
+      "trust_tier": "propose"
+    },
+    {
+      "forge_id": "voiceforge",
+      "grant_id": "ac0fbe63-4877-5113-807d-787c68ccf69d",
+      "module_id": "transcribe_call",
+      "office_agent_id": "66666666-6666-5666-8666-666666666666",
+      "trust_tier": "propose"
+    },
+    {
+      "forge_id": "cre-forge",
+      "grant_id": "2dbdcf9a-79e9-555e-954a-710ef5b8d79f",
+      "module_id": "buyer_match",
+      "office_agent_id": "77777777-7777-5777-8777-777777777777",
+      "trust_tier": "propose"
+    },
+    {
+      "forge_id": "cre-forge",
+      "grant_id": "8a0196d0-d875-5be6-bc2f-e9c5de844377",
+      "module_id": "generate_loi",
+      "office_agent_id": "77777777-7777-5777-8777-777777777777",
+      "trust_tier": "propose"
+    },
+    {
+      "forge_id": "voiceforge",
+      "grant_id": "e4e29201-df9b-51c3-bde4-1c4681bf4a1b",
+      "module_id": "place_call",
+      "office_agent_id": "77777777-7777-5777-8777-777777777777",
+      "trust_tier": "propose"
+    },
+    {
+      "forge_id": "voiceforge",
+      "grant_id": "7f180599-7ff0-56b0-89e6-3814d3d11d84",
+      "module_id": "transcribe_call",
+      "office_agent_id": "77777777-7777-5777-8777-777777777777",
+      "trust_tier": "propose"
+    }
+  ],
+  "manifest_rows": [
+    {
+      "criticality": "hard",
+      "declared": true,
+      "forge_id": "cre-forge",
+      "module_gap": false,
+      "module_id": "buyer_match",
+      "required": true,
+      "required_by": [
+        "task Buyer Network Manager",
+        "workflow step 11",
+        "workflow step 15"
+      ]
+    },
+    {
+      "criticality": "hard",
+      "declared": true,
+      "forge_id": "cre-forge",
+      "module_gap": false,
+      "module_id": "comp_analysis",
+      "required": true,
+      "required_by": [
+        "task Acquisition Analyst",
+        "task Deal Underwriter",
+        "workflow step 1",
+        "workflow step 4",
+        "workflow step 7",
+        "workflow step 9"
+      ]
+    },
+    {
+      "criticality": "hard",
+      "declared": true,
+      "forge_id": "simforge",
+      "module_gap": false,
+      "module_id": "gate_result",
+      "required": false,
+      "required_by": []
+    },
+    {
+      "criticality": "hard",
+      "declared": true,
+      "forge_id": "cre-forge",
+      "module_gap": false,
+      "module_id": "generate_loi",
+      "required": true,
+      "required_by": [
+        "task Buyer Network Manager",
+        "workflow step 12",
+        "workflow step 16"
+      ]
+    },
+    {
+      "criticality": "soft",
+      "declared": true,
+      "forge_id": "voiceforge",
+      "module_gap": false,
+      "module_id": "place_call",
+      "required": true,
+      "required_by": [
+        "task Acquisition Analyst",
+        "task Buyer Network Manager",
+        "workflow step 13",
+        "workflow step 17",
+        "workflow step 2",
+        "workflow step 5"
+      ]
+    },
+    {
+      "criticality": "hard",
+      "declared": true,
+      "forge_id": "cre-forge",
+      "module_gap": false,
+      "module_id": "property_lookup",
+      "required": true,
+      "required_by": [
+        "task Acquisition Analyst",
+        "workflow step 3",
+        "workflow step 6"
+      ]
+    },
+    {
+      "criticality": "hard",
+      "declared": true,
+      "forge_id": "simforge",
+      "module_gap": false,
+      "module_id": "run_scenario_pack",
+      "required": false,
+      "required_by": []
+    },
+    {
+      "criticality": "soft",
+      "declared": true,
+      "forge_id": "voiceforge",
+      "module_gap": false,
+      "module_id": "transcribe_call",
+      "required": true,
+      "required_by": [
+        "task Buyer Network Manager",
+        "workflow step 14",
+        "workflow step 18"
+      ]
+    },
+    {
+      "criticality": "hard",
+      "declared": true,
+      "forge_id": "cre-forge",
+      "module_gap": false,
+      "module_id": "underwrite_deal",
+      "required": true,
+      "required_by": [
+        "task Deal Underwriter",
+        "workflow step 10",
+        "workflow step 8"
+      ]
+    }
+  ],
+  "rate_limits": {
+    "cre-forge": {
+      "burst": 10.0,
+      "max_rps": 4.0
+    },
+    "simforge": {
+      "burst": 3.0,
+      "max_rps": 1.0
+    },
+    "voiceforge": {
+      "burst": 5.0,
+      "max_rps": 2.0
+    }
+  },
+  "venture_id": "greenstone"
+}

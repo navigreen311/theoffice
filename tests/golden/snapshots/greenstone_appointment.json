@@ -1,0 +1,113 @@
+{
+  "appointments": [
+    {
+      "appointed": [
+        {
+          "agent_name": "Ada Sourcing",
+          "certified_modules": [
+            "comp_analysis",
+            "place_call",
+            "property_lookup"
+          ],
+          "certified_tier": "auto_execute",
+          "department": "Research & Market Intelligence",
+          "office_agent_id": "11111111-1111-5111-8111-111111111111"
+        },
+        {
+          "agent_name": "Bram Records",
+          "certified_modules": [
+            "comp_analysis",
+            "place_call",
+            "property_lookup"
+          ],
+          "certified_tier": "auto_execute",
+          "department": "Research & Market Intelligence",
+          "office_agent_id": "22222222-2222-5222-8222-222222222222"
+        },
+        {
+          "agent_name": "Cleo Comps",
+          "certified_modules": [
+            "comp_analysis",
+            "place_call",
+            "property_lookup"
+          ],
+          "certified_tier": "auto_execute",
+          "department": "Research & Market Intelligence",
+          "office_agent_id": "33333333-3333-5333-8333-333333333333"
+        }
+      ],
+      "headcount_required": 3,
+      "position_title": "Acquisition Analyst",
+      "requires_certification": [],
+      "unfilled": 0
+    },
+    {
+      "appointed": [
+        {
+          "agent_name": "Faye Buyers",
+          "certified_modules": [
+            "buyer_match",
+            "generate_loi",
+            "place_call",
+            "transcribe_call"
+          ],
+          "certified_tier": "propose",
+          "department": "Client Success & Operations",
+          "office_agent_id": "66666666-6666-5666-8666-666666666666"
+        },
+        {
+          "agent_name": "Gil Network",
+          "certified_modules": [
+            "buyer_match",
+            "generate_loi",
+            "place_call",
+            "transcribe_call"
+          ],
+          "certified_tier": "propose",
+          "department": "Client Success & Operations",
+          "office_agent_id": "77777777-7777-5777-8777-777777777777"
+        }
+      ],
+      "headcount_required": 2,
+      "position_title": "Buyer Network Manager",
+      "requires_certification": [],
+      "unfilled": 0
+    },
+    {
+      "appointed": [
+        {
+          "agent_name": "Dorian Model",
+          "certified_modules": [
+            "comp_analysis",
+            "underwrite_deal"
+          ],
+          "certified_tier": "propose",
+          "department": "Finance & Administration",
+          "office_agent_id": "44444444-4444-5444-8444-444444444444"
+        },
+        {
+          "agent_name": "Esme Ledger",
+          "certified_modules": [
+            "comp_analysis",
+            "underwrite_deal"
+          ],
+          "certified_tier": "propose",
+          "department": "Finance & Administration",
+          "office_agent_id": "55555555-5555-5555-8555-555555555555"
+        }
+      ],
+      "headcount_required": 2,
+      "position_title": "Deal Underwriter",
+      "requires_certification": [],
+      "unfilled": 0
+    }
+  ],
+  "capacity": {
+    "certified_and_free": 7,
+    "certified_but_allocated": 0,
+    "produced_not_yet_certified": 0
+  },
+  "escalation": "No shortfall. All positions filled by certified agents.",
+  "shortfall": false,
+  "venture_id": "greenstone"
+}

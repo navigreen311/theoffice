@@ -98,11 +98,31 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - 65 validator tests: every FAIL rule has both a must-fail and a must-pass fixture,
     plus a meta-test that fails the build if a rule ships without one. 247 tests total.
 
+- **Phase 3, increment 2 - the seven generators.** Deterministic transformers with
+  golden snapshots; no LLM anywhere in `generators/`.
+  - 5.1 Role Definition derives implied compliance flags from the module registry.
+  - 5.2 Appointment: never fills a position uncertified, names the specific shortfall
+    reason per candidate, reports all three capacity numbers.
+  - 5.3 Workflow: every step names a module, a flag or explicit NONE, and an escalation.
+  - 5.4 Task Ledger: projected daily approvals per human role.
+  - 5.5 Curriculum: domain and operation scenarios kept separate, coverage denominators
+    on every dimension, operation scenarios bound to the instruction content hash.
+  - 5.6 Forge Manifest: three-way reconciliation with four mismatch handlers.
+  - 5.7 Runtime Config: consumes the Manifest not the Pack; idempotent by construction
+    via UUIDv5 keys.
+  - **Gate 4.5** capacity re-check against real Task Ledger output, resolving V24.
+  - `Position.lifecycle_stages_owned` added (schema divergence #3).
+  - 76 golden tests; 274 total.
+
 ### Changed
 - **Second blueprint gap:** Part 12 mandates a per-task USD ceiling, but
   `agent_call_ledger` carries no task identifier and `idempotency_key` is a one-way
   hash that cannot be grouped by task. Per-task spend was not computable as specified.
   `task_id` added in migration 0006. The blueprint should be amended.
+- **Cross-Forge appointment bug.** 5.2 assumed one Forge per position and checked every
+  module against it, so a position operating modules on two Forges came back
+  unfillable - as valid JSON describing a venture with nobody in it. Found by reading a
+  golden snapshot. Module-to-Forge is now resolved from the registry throughout.
 - **V22 semantics corrected.** The rule compared scenario coverage against compliance
   *framework names*, but "compliance flag" means the `runtime_flag` everywhere else in
   the system. The framework name never appears at runtime, so the rule was

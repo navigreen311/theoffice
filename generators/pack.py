@@ -110,6 +110,16 @@ class Position(Strict):
     compliance_flags_in_scope: list[str]
     headcount: int = Field(ge=1)
     trust_tier_ceiling: TrustTier
+    lifecycle_stages_owned: list[str] = Field(default_factory=list)
+    """Which lifecycle stages this position acts in. Empty means all of them.
+
+    Schema divergence #3, recorded in docs/plans/. Generator 5.3 must emit a step
+    naming a position, a module, a flag and an escalation for each stage - and schema
+    v3 as specified maps stages to service lines and modules to positions, but nothing
+    maps a position to a stage. Without this the generator can only guess, and a
+    plausible-looking workflow nobody can trace is worse than none. The blueprint
+    should be amended.
+    """
 
 
 class CapacityDemand(Strict):

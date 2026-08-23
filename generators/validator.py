@@ -577,3 +577,77 @@ def rule_severity(rule_id: str) -> Severity:
         if rid == rule_id:
             return severity
     raise KeyError(rule_id)
+
+
+# ------------------------------------------------------------------------ Gate 4.5
+
+async def validate_gate_4_5(
+    pack: BusinessPack, task_ledger: Any, appointment: Any
+) -> ValidationReport:
+    """Gate 4.5 — capacity and budget feasibility, against real generator output.
+
+    V13 runs at Gate 2 with only the Pack to estimate from: headcount times a
+    conservative per-agent-day factor. The Task Ledger, produced at Gate 3, computes
+    the actual projected approvals per human role from the real workflow.
+
+    **The two can disagree by an order of magnitude, and the Gate 2 estimate is the
+    optimistic one.** Greenstone passes V13 at Gate 2 and fails it here. That is not a
+    bug in either: Gate 2 cannot see a workflow that does not exist yet, which is
+    precisely why the blueprint puts a second capacity check after the generators run.
+
+    V24 also resolves here — unfilled positions are appointment output, so Gate 2
+    reported it NOT_RUN.
+    """
+    report = ValidationReport()
+
+    unfilled = [
+        f"{a.position_title} ({a.unfilled} of {a.headcount_required})"
+        for a in appointment.appointments
+        if a.unfilled
+    ]
+    report.results.append(
+        RuleResult(
+            "V24", Severity.FAIL,
+            Verdict.FAIL if unfilled else Verdict.PASS,
+            f"unfilled positions: {_join(unfilled)}" if unfilled
+            else "every position is filled by a certified agent",
+        )
+    )
+
+    coverage_by_role: dict[str, float] = {}
+    review_minutes_by_role: dict[str, float] = {}
+    for human in pack.human_capacity:
+        coverage_by_role[human.role] = (
+            coverage_by_role.get(human.role, 0.0)
+            + human.coverage_hours * 60 * UTILISATION_FACTOR
+        )
+        review_minutes_by_role.setdefault(human.role, human.median_review_minutes)
+
+    overloaded = []
+    for role, approvals in sorted(task_ledger.projected_daily_approvals.items()):
+        needed = approvals * review_minutes_by_role.get(role, 5.0)
+        available = coverage_by_role.get(role, 0.0)
+        if needed > available:
+            overloaded.append(
+                f"{role}: {approvals} approvals x "
+                f"{review_minutes_by_role.get(role, 5.0):g} min = {needed:.0f} minutes "
+                f"against {available:.0f} available"
+            )
+
+    report.results.append(
+        RuleResult(
+            "V13", Severity.FAIL,
+            Verdict.FAIL if overloaded else Verdict.PASS,
+            (
+                "approval volume exceeds human capacity - "
+                + "; ".join(overloaded)
+                + ". Trust tiers become decorative above this. Fix by raising a "
+                "trust-tier ceiling, adding reviewer coverage, or reducing scope - "
+                "not by lowering the utilisation factor."
+            )
+            if overloaded
+            else "projected approvals fit within reviewer capacity",
+        )
+    )
+
+    return report
