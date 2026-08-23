@@ -24,3 +24,7 @@ coverage/
 .coverage
 htmlcov/
 *.egg-info/
+backups/
+!backups/.gitkeep
+deploy/*.env
+!deploy/example.env
