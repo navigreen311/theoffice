@@ -28,19 +28,23 @@ from broker.credentials import (
 )
 from broker.errors import CredentialUnavailable
 
-SECRET = "capitalforge-tenant-token-value"
+# Named so it is obviously not a credential, and valued so the committed-secrets gate
+# can tell. It flagged the first version of this line, which was named SECRET - that is
+# exactly the shape the check exists to find, and widening the allowlist to accommodate
+# a test fixture is how a scanner stops catching the real thing.
+FIXTURE_VALUE = "vault-fixture-value-not-a-secret"
 REF = "vault://secret/forges/capitalforge#token"
 
 KV2_OK = {
     "data": {
-        "data": {"token": SECRET, "other": "unrelated"},
+        "data": {"token": FIXTURE_VALUE, "other": "unrelated"},
         "metadata": {"version": 3},
     }
 }
 
 # KV v1 answers with the value at `data`, not `data.data`. A resolver that reached for
 # `data` and got a dict of secrets would return one of them by accident.
-KV1_SHAPE = {"data": {"token": SECRET}}
+KV1_SHAPE = {"data": {"token": FIXTURE_VALUE}}
 
 
 def stub_vault(handler) -> httpx.MockTransport:
@@ -79,7 +83,7 @@ async def test_it_reads_a_kv2_secret(patch_client):
     resolver = VaultCredentialResolver("https://vault.invalid:8200", "s.roottoken")
     credential = await resolver.resolve(REF)
 
-    assert credential.reveal() == SECRET
+    assert credential.reveal() == FIXTURE_VALUE
     assert seen["url"] == "https://vault.invalid:8200/v1/secret/data/forges/capitalforge"
     assert seen["token"] == "s.roottoken"
 
@@ -226,7 +230,7 @@ async def test_a_resolved_credential_still_prints_redacted(patch_client):
     credential = await resolver.resolve(REF)
 
     assert isinstance(credential, Credential)
-    assert SECRET not in repr(credential)
-    assert SECRET not in f"{credential}"
-    assert SECRET not in str(credential)
-    assert credential.reveal() == SECRET
+    assert FIXTURE_VALUE not in repr(credential)
+    assert FIXTURE_VALUE not in f"{credential}"
+    assert FIXTURE_VALUE not in str(credential)
+    assert credential.reveal() == FIXTURE_VALUE
