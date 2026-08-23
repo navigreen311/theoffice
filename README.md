@@ -1,5 +1,7 @@
 # The Office
 
+[![CI](https://github.com/navigreen311/theoffice/actions/workflows/ci.yml/badge.svg)](https://github.com/navigreen311/theoffice/actions/workflows/ci.yml)
+
 The layer that gives each Village agent its own revocable identity, lets that agent
 operate Forges on its own initiative on behalf of a named venture, and records and
 governs every such action.
@@ -60,7 +62,31 @@ psql "$OFFICE_ADMIN_DSN" -c "SELECT * FROM audit_log_verify_chain()"
 .venv/Scripts/python -m broker serve --port 8080        # the Operations API
 cd console && npm run dev                               # the console on :3000
 ./scripts/console-smoke.sh                              # both, verified end to end
+.venv/Scripts/python scripts/seed_dev_world.py          # bridged Forges + a certified roster
 ```
+
+## CI
+
+`.github/workflows/ci.yml`. Five jobs: **lint and types** (ruff, strict mypy,
+shellcheck), **tests** (Postgres 16 service, migrations, the full suite), **migrations
+are reversible** (up/down/up/down/up, then one head), **console** (vitest, tsc, build,
+eslint), and **no committed secrets**.
+
+Two of those need explaining, because both exist to close a way this repository can go
+green while proving nothing.
+
+**`tests` refuses to pass if anything skipped.** Every database test is guarded by
+`requires_db`, which *skips* when the DSNs are unset. With the service container
+misconfigured, `pytest` reports `103 passed, 324 skipped` and **exits 0** — a green tick
+over 324 assertions that never ran. The job parses the JUnit report and fails on any
+skip, because the suite has no legitimately skipped test.
+
+**`console` lints with `--max-warnings=0`.** `next lint` exits 0 on warnings, so a lint
+step without that flag reports success over every warning it just printed.
+
+`scripts/console-smoke.sh` is **not** in CI: it kills listeners with `netstat` and
+`taskkill` and is Windows-only today. Run it locally before shipping a console change —
+`next build` passing is not evidence the app renders.
 
 ## Layout
 

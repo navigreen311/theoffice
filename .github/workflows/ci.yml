@@ -1,0 +1,318 @@
+name: CI
+
+# Five jobs, and the one that matters most is `tests` — because most of this
+# repository's controls ARE tests. The write-surface pin, the SimForge no-read-path
+# check, the persona-body scan and the validator meta-test are not documentation about
+# controls; they are the enforcement. Until now they only fired when somebody remembered
+# to run them locally.
+#
+# The specific failure this workflow is built to prevent is a **false green**, and this
+# codebase has a ready-made way to produce one: every database test is guarded by
+# `requires_db`, which SKIPS when the DSNs are unset. A misconfigured Postgres service
+# would not fail the run — it would report a tidy green over several hundred tests that
+# never executed. So `tests` refuses to pass if anything skipped.
+#
+# Not run here: `scripts/console-smoke.sh`. It kills listeners with `netstat`/`taskkill`
+# and is Windows-only today. Saying so is better than a job that quietly does less than
+# its name claims.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
+
+  # Throwaway credentials for an ephemeral service container that lives for the length
+  # of one job and listens only on the runner's loopback. These are not secrets and
+  # putting them in Actions secrets would buy nothing while making a fresh clone unable
+  # to run its own CI. The rule they do not break: no real credential is ever committed.
+  OFFICE_APP_PASSWORD: ci-office-app-not-a-secret
+  OFFICE_ADMIN_DSN: postgresql://postgres:postgres@127.0.0.1:5432/theoffice
+  OFFICE_APP_DSN: postgresql://office_app:ci-office-app-not-a-secret@127.0.0.1:5432/theoffice
+
+  # The stub Forge is in-process. This exists so the env-backed credential resolver has
+  # something to resolve, and is never a real token.
+  STUB_FORGE_TOKEN: stub-forge-test-token
+
+jobs:
+  # --------------------------------------------------------------------- lint
+  lint:
+    name: Lint and types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Ruff
+        run: python -m ruff check .
+
+      # Same three packages bootstrap.sh checks. `tests/` is deliberately outside strict
+      # mypy: the fixtures are untyped by convention and annotating them would be noise
+      # on code whose contract is the assertion it makes.
+      - name: Mypy (strict)
+        run: python -m mypy broker client generators
+
+      # The shell scripts are load-bearing — bootstrap.sh is how anybody stands this up,
+      # and console-smoke.sh is the only thing that proves the console renders.
+      - name: Shellcheck
+        run: shellcheck scripts/*.sh
+
+  # -------------------------------------------------------------------- tests
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        # PostgreSQL 16 is the blueprint target. Local development runs 17.9; pinning
+        # the target here means a version-specific regression surfaces in CI rather
+        # than at deployment.
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: theoffice
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      # Migration 0002 creates the office_app role from OFFICE_APP_PASSWORD, so the
+      # runtime DSN above only resolves after this step.
+      - name: Migrations
+        run: python -m alembic upgrade head
+
+      - name: Ledger partitions
+        # bootstrap.sh does this for local development. A DEFAULT partition exists, so
+        # nothing breaks without them — which is exactly why CI should create them too:
+        # otherwise CI silently exercises a different storage layout from every
+        # developer machine.
+        run: |
+          python - <<'PY'
+          import psycopg, os
+          with psycopg.connect(os.environ["OFFICE_ADMIN_DSN"]) as conn:
+              with conn.cursor() as cur:
+                  cur.execute(
+                      "SELECT ensure_ledger_partition(date_trunc('month', now())::date)"
+                  )
+                  cur.execute(
+                      "SELECT ensure_ledger_partition("
+                      "  (date_trunc('month', now()) + interval '1 month')::date)"
+                  )
+              conn.commit()
+          print("ledger partitions ensured")
+          PY
+
+      - name: Pytest
+        run: python -m pytest -q --junitxml=pytest-results.xml
+
+      - name: Refuse a green run that skipped the database suite
+        # THE POINT OF THIS JOB. `requires_db` skips every database test when the DSNs
+        # are unset or wrong, and a skipped test is reported as a pass by every summary
+        # anybody looks at. A broken service container would turn several hundred real
+        # assertions into a green tick, and nothing in the output would say so.
+        #
+        # Zero skips is the correct threshold rather than a lenient one: the suite has
+        # no legitimately skipped test, so any skip is a configuration failure.
+        if: always()
+        run: |
+          python - <<'PY'
+          import sys, xml.etree.ElementTree as ET
+
+          tree = ET.parse("pytest-results.xml")
+          suite = tree.getroot().find("testsuite") or tree.getroot()
+          total = int(suite.get("tests", 0))
+          skipped = int(suite.get("skipped", 0))
+          failures = int(suite.get("failures", 0))
+          errors = int(suite.get("errors", 0))
+
+          print(f"{total} tests, {skipped} skipped, {failures} failed, {errors} errored")
+
+          problems = []
+          if total == 0:
+              problems.append("no tests ran at all")
+          if skipped:
+              problems.append(
+                  f"{skipped} test(s) skipped. Every database test is guarded by "
+                  "requires_db, so a skip here means the Postgres service was not "
+                  "reachable and this run proved nothing."
+              )
+          if failures or errors:
+              problems.append(f"{failures} failure(s), {errors} error(s)")
+
+          if problems:
+              print("REFUSING TO PASS: " + "; ".join(problems), file=sys.stderr)
+              sys.exit(1)
+          PY
+
+  # --------------------------------------------------------------- migrations
+  migrations:
+    name: Migrations are reversible
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: theoffice
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      # Every migration in this repository claims to be reversible and several commit
+      # messages say so. A claim nobody exercises is a claim, and the day it matters is
+      # the day a deployment needs to go backwards under pressure.
+      #
+      # Round trip twice: a downgrade that leaves a function, trigger or grant behind
+      # usually fails on the SECOND upgrade rather than the first.
+      - name: Up, down, up, down, up
+        run: |
+          python -m alembic upgrade head
+          python -m alembic downgrade base
+          python -m alembic upgrade head
+          python -m alembic downgrade base
+          python -m alembic upgrade head
+          python -m alembic current
+
+      - name: Head is a single revision
+        # Two heads means someone branched the migration chain, which produces a
+        # database whose schema depends on the order Alembic happened to pick.
+        run: |
+          heads="$(python -m alembic heads | grep -c '(head)' || true)"
+          if [ "$heads" -ne 1 ]; then
+            echo "expected exactly one migration head, found $heads" >&2
+            python -m alembic heads
+            exit 1
+          fi
+          echo "one head"
+
+  # ------------------------------------------------------------------ console
+  console:
+    name: Console
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: console
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: console/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Vitest
+        run: npm test
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # `next build` passing is not evidence the app runs — a React 19 hook in a React
+      # 18 app compiled, type-checked and threw at render. It is still worth running,
+      # because it catches the other half. The half it cannot catch is what
+      # `scripts/console-smoke.sh` is for, and that script does not run on Linux yet.
+      - name: Build
+        run: npm run build
+
+      - name: Lint
+        run: npm run lint
+
+  # ------------------------------------------------------------------ secrets
+  secrets:
+    name: No committed secrets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The operating contract for this project says a real secret is never printed or
+      # committed, and that credential_ref stores a vault path rather than a value. That
+      # is a rule a human enforces in review today, which means it is enforced until the
+      # review that is in a hurry.
+      #
+      # Deliberately narrow: it looks for a committed .env and for assignments that look
+      # like real values rather than placeholders. A broad entropy scanner would fire on
+      # every content hash in the golden snapshots and be switched off within a week.
+      - name: No .env is committed
+        run: |
+          if git ls-files --error-unmatch .env >/dev/null 2>&1; then
+            echo "REFUSING: .env is tracked. It holds real credentials." >&2
+            exit 1
+          fi
+          echo "no .env in the index"
+
+      - name: Credential-shaped assignments outside the example file
+        run: |
+          pattern='(PASSWORD|TOKEN|SECRET|API_KEY)[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9/+_-]{16,}'
+          if matches="$(grep -rInE "$pattern" \
+                --exclude-dir=.git \
+                --exclude-dir=node_modules \
+                --exclude-dir=.next \
+                --exclude-dir=.venv \
+                --exclude-dir=__pycache__ \
+                --exclude=package-lock.json \
+                --exclude=ci.yml \
+                . | grep -vE 'YOUR_[A-Z_]+_HERE|stub-forge-test-token|not-a-secret')"; then
+            echo "REFUSING: credential-shaped values found." >&2
+            echo "$matches" >&2
+            echo "Use a YOUR_..._HERE placeholder, or a vault ref." >&2
+            exit 1
+          fi
+          echo "no credential-shaped assignments"

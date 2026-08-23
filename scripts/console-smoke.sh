@@ -31,7 +31,11 @@ fail() { printf '  FAIL %s\n' "$1"; FAILURES=$((FAILURES + 1)); }
 kill_port() {
   local port="$1" pid
   pid="$(netstat -ano 2>/dev/null | grep ":$port " | grep LISTENING | awk '{print $5}' | head -1 || true)"
-  [ -n "$pid" ] && taskkill //PID "$pid" //F >/dev/null 2>&1 || true
+  # Not `[ -n "$pid" ] && taskkill ... || true`: in that form the `|| true` also
+  # swallows a failure of the test itself, which reads as if-then-else and is not.
+  if [ -n "$pid" ]; then
+    taskkill //PID "$pid" //F >/dev/null 2>&1 || true
+  fi
 }
 
 cleanup() {
