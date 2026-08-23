@@ -131,3 +131,53 @@ export const SEVERITY_CLASS: Record<Severity, string> = {
   critical: "bg-critical/15 text-critical border-critical/50 font-semibold",
   neutral: "bg-neutral-100 text-neutral-600 border-neutral-300",
 };
+
+/**
+ * Part 14's rubber-stamp threshold, surfaced in the UI rather than only enforced
+ * after the fact.
+ *
+ * The API raises a MEDIUM incident when an approval lands in under five seconds. A
+ * screen that shows a one-click Approve next to a collapsed payload will generate those
+ * incidents by design — it bypasses nothing, and produces exactly the outcome the
+ * control exists to prevent.
+ *
+ * Naming the number on screen is not enforcement. It is the difference between a screen
+ * that cooperates with a control and one that quietly erodes it.
+ */
+export const RUBBER_STAMP_SECONDS = 5;
+
+/** Whether a decision was fast enough to be flagged as a rubber stamp. */
+export function isRubberStamp(reviewSeconds: number | null | undefined): boolean {
+  return reviewSeconds !== null && reviewSeconds !== undefined
+    ? reviewSeconds < RUBBER_STAMP_SECONDS
+    : false;
+}
+
+/**
+ * The three capacity numbers (§7.2). Refuses to render a partial set.
+ *
+ * "One number hides the state": free alone looks like a hiring problem, add allocated
+ * and it is a scheduling problem, add uncertified and it is a SimForge backlog. A helper
+ * that quietly dropped a missing field would reintroduce exactly that.
+ */
+export function capacityTriple(input: {
+  certified_and_free?: number;
+  certified_but_allocated?: number;
+  produced_not_yet_certified?: number;
+}): { label: string; value: number }[] {
+  const keys = [
+    ["certified_and_free", "Certified and free"],
+    ["certified_but_allocated", "Certified, allocated elsewhere"],
+    ["produced_not_yet_certified", "Produced, not yet certified"],
+  ] as const;
+
+  return keys.map(([key, label]) => {
+    const value = input[key];
+    if (typeof value !== "number") {
+      throw new Error(
+        `capacity is missing ${key}; all three numbers are reported together because one hides the state`,
+      );
+    }
+    return { label, value };
+  });
+}

@@ -29,7 +29,8 @@ exists to make the first ones true.
 | **4.1** | **Continuous verification: 4 sweeps + control health** | **Done** |
 | **4.2** | **Human identity + Operations API** | **Done** - 337 tests |
 | **4.3** | **Next.js console - 5 of 14 screens** | **Done** - 337 py + 12 ts tests |
-| 4.4 | Remaining nine console screens | Next |
+| **4.4** | **Console screens 6-11 of 14** | **Done** - 337 py + 18 ts tests |
+| 4.5 | Pack store, provisioning pipeline, 4 missing knowledge bases | Blocked on backend |
 
 ## Quick start
 

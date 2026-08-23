@@ -99,7 +99,7 @@ for _ in $(seq 1 40); do
 done
 say "listening on $CONSOLE_PORT"
 
-ROUTES="/ /agents /audit /forge-map /revocations"
+ROUTES="/ /agents /audit /forge-map /revocations /ventures /proposals /instructions"
 
 step "Unauthenticated routes redirect"
 for path in $ROUTES; do
@@ -135,6 +135,37 @@ for path in $ROUTES; do
   fi
 done
 say "no route leaked the token"
+
+step "Parameterised routes render"
+# Ids come from the API, not from scraping the HTML. The first version of this grepped
+# the page for /ventures/<slug> and matched a Next.js chunk filename, then reported a
+# pass for a venture that does not exist. A check that can pass for the wrong reason is
+# worse than no check.
+API_AUTH="Authorization: Bearer $TOKEN"
+
+AGENT_ID="$(curl -s -H "$API_AUTH" "http://127.0.0.1:$API_PORT/api/agents"   | grep -o '"office_agent_id": *"[^"]*"' | head -1 | grep -o '[0-9a-f-]\{36\}' || true)"
+if [ -n "$AGENT_ID" ]; then
+  code="$(curl -s -b "$COOKIE_JAR" -o /dev/null -w '%{http_code}'     "http://127.0.0.1:$CONSOLE_PORT/agents/$AGENT_ID")"
+  if [ "$code" = "200" ]; then say "/agents/$AGENT_ID -> 200"; else fail "/agents/$AGENT_ID returned $code"; fi
+else
+  say "no agents in the registry; /agents/[id] not exercised"
+fi
+
+VENTURE="$(curl -s -H "$API_AUTH" "http://127.0.0.1:$API_PORT/api/ventures"   | grep -o '"venture_id": *"[^"]*"' | head -1 | sed 's/.*: *"//; s/"$//' || true)"
+if [ -n "$VENTURE" ]; then
+  code="$(curl -s -b "$COOKIE_JAR" -o /dev/null -w '%{http_code}'     "http://127.0.0.1:$CONSOLE_PORT/ventures/$VENTURE")"
+  if [ "$code" = "200" ]; then say "/ventures/$VENTURE -> 200"; else fail "/ventures/$VENTURE returned $code"; fi
+else
+  say "no ventures registered; /ventures/[id] not exercised"
+fi
+
+# A venture that does not exist must 404 rather than render zeroes that look like data.
+code="$(curl -s -b "$COOKIE_JAR" -o /dev/null -w '%{http_code}'   "http://127.0.0.1:$CONSOLE_PORT/ventures/definitely-not-a-venture")"
+if [ "$code" = "404" ]; then
+  say "unknown venture -> 404"
+else
+  fail "unknown venture returned $code; an empty dashboard for a mistyped venture is indistinguishable from a real one that has not started"
+fi
 
 step "Unverified controls render as unverified"
 curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT/" > /tmp/office-home.html

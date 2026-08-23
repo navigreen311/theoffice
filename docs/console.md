@@ -54,9 +54,61 @@ quiet incident list means nothing if the check producing it is stale.
 | **Revocation Controls** (`/revocations`) | four scopes with their blast radius stated next to the control |
 | **Forge Map** (`/forge-map`) | Declared × Required × In-Use, pending Gate 15 dispositions first |
 | **Audit Log Explorer** (`/audit`) | filters; chain status shown above the entries |
+| **Venture Directory** (`/ventures`) | engagements on the Village, not Villages |
+| **Venture Dashboard** (`/ventures/[id]`) | the three capacity numbers, readiness gates, Forge usage |
+| **Agent Identity & Grants** (`/agents/[id]`) | grants, per-Forge migration status, recent shifts |
+| **Approval queue** (`/proposals`) | the screen that can erode a control without bypassing it |
+| **Instruction authoring** (`/instructions`) | index + version, diff, staleness, certification impact |
 
-Nine remain (Pack Editor, Provisioning Console, Venture Directory, Venture Dashboard,
-Shift & Capacity, KB Manager, Instruction authoring, Readiness Gate, Compliance detail).
+Three remain, and **none of them are buildable yet**:
+
+| Screen | Blocked by |
+|---|---|
+| **Pack Editor** | Packs are YAML files on disk. There is no Pack store, no persistence, no versioning — an editor over a file the server cannot see is a text box. |
+| **Provisioning Console** | Gates 3–11 are functions nobody has wired to a request. Running seven generators, holding artifacts for Gate 4 review, then applying is a backend increment. |
+| **Knowledge Base Manager** | Part 6 names five knowledge bases. **One exists.** The other four would be empty promises with a UI on top. |
+
+A screen over nothing is worse than an absent screen, because it implies the thing
+exists.
+
+## The risk increment 3 adds
+
+Increment 2's risk was a UI that *misrepresents* state. This one is sharper:
+
+> **A UI can make a control easy to defeat without bypassing it.**
+
+The approval queue is the example. Part 14 requires rubber-stamp detection precisely
+because approving is the easy path, and a queue with a one-click **Approve** next to a
+collapsed payload is a rubber-stamp machine — every approval authorised, audited,
+counted, and producing exactly the outcome the control exists to prevent.
+
+So `/proposals`:
+
+- shows the **full payload expanded by default**, never behind a disclosure;
+- names the five-second threshold **on screen**, with a live counter next to the button;
+- requires a reason to reject, because "no" without one returns nothing the agent can
+  learn from;
+- does **not** disable the button for five seconds — that trains people to wait five
+  seconds. Showing the number they are about to be measured against gives them a reason
+  to read.
+
+None of this is enforcement. The API decides, and it computes `review_seconds` from
+`created_at` in the database so a client cannot report a review time it did not take.
+This is the difference between a screen that cooperates with a control and one that
+quietly erodes it.
+
+## Two findings from the smoke run
+
+**A venture that does not exist rendered a dashboard.** Ventures are engagements derived
+from grants, manifest rows and budgets rather than a table, so any string produced a page
+full of zeroes — and zeroes for a mistyped venture look exactly like zeroes for a real
+one that has not started. `/ventures/[venture]` now `notFound()`s unless the venture
+appears in the directory, and the smoke script asserts a 404.
+
+**A smoke check passed for the wrong reason.** The parameterised-route check scraped the
+HTML for `/ventures/<slug>` and matched a Next.js chunk filename, then reported a pass
+against a venture that did not exist. It now asks the API for real ids. A check that can
+pass for the wrong reason is worse than no check.
 
 **The console does not pre-check your authority.** The API checks it twice — role
 strength for the scope, and whether you operate that venture — and the console reports

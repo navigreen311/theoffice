@@ -176,6 +176,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     the cookie is httpOnly and that no page leaks the token, then tears down.
   - shadcn primitives hand-written; its init CLI is interactive and would hang.
 
+- **Console, increment 3 - six more screens.** Venture Directory, Venture Dashboard
+  (three capacity numbers + readiness gates), Agent Identity & Grants detail,
+  Approval queue, Instruction authoring index and detail (versions, diff, staleness,
+  certification impact).
+  - Two new read routes: `GET /api/forges` and the instruction diff. The write
+    surface is unchanged and still pinned at seven routes.
+  - The approval queue is built so it does not erode the rubber-stamp control:
+    payload expanded by default, threshold named on screen with a live counter,
+    reason required to reject. Enforcement stays in the API.
+  - **Pack Editor, Provisioning Console and KB Manager are deliberately not built** -
+    each needs backend that does not exist, and a screen over nothing implies the
+    thing exists.
+  - 18 console tests; 337 python tests.
+
 ### Changed
 - **Second blueprint gap:** Part 12 mandates a per-task USD ceiling, but
   `agent_call_ledger` carries no task identifier and `idempotency_key` is a one-way
@@ -187,6 +201,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   reset fixture moved to the root conftest - it existed in two directories and not in
   the two others that use the pool, so those left one bound to a dead loop and the next
   suite's first test paid for it.
+- **A venture that did not exist rendered a dashboard of zeroes**, indistinguishable
+  from a real venture that had not started. `/ventures/[venture]` now 404s unless the
+  venture appears in the directory.
+- **A smoke check passed for the wrong reason** - it scraped HTML for a venture slug
+  and matched a Next.js chunk filename. It now asks the API for real ids.
 - **React 19 hook in a React 18 project.** `/revocations` used `useActionState`,
   which does not exist in React 18.3.1. `tsc --noEmit` and `next build` both passed;
   the page threw at render. Now `useFormState` from react-dom. A green build is not

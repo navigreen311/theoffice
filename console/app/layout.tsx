@@ -10,7 +10,10 @@ export const metadata: Metadata = {
 
 const NAV = [
   { href: "/", label: "Compliance" },
+  { href: "/ventures", label: "Ventures" },
   { href: "/agents", label: "Agents" },
+  { href: "/proposals", label: "Approvals" },
+  { href: "/instructions", label: "Instructions" },
   { href: "/revocations", label: "Revocation" },
   { href: "/forge-map", label: "Forge Map" },
   { href: "/audit", label: "Audit" },

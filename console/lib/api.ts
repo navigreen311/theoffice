@@ -184,3 +184,115 @@ export type ForgeMap = {
   dispositions: DispositionRow[];
   pending_dispositions: DispositionRow[];
 };
+
+export type ModuleRow = {
+  module_id: string;
+  is_mutating: boolean;
+  idempotency_support: string;
+  compliance_flags_implied: string[];
+  has_instructions: boolean;
+  instruction_version: string | null;
+  version_sensitivity: string | null;
+};
+
+export type ForgeRow = {
+  forge_id: string;
+  display_name: string;
+  api_version: string;
+  credential_mode: string;
+  health_status: string;
+  modules: ModuleRow[];
+};
+
+export type Capacity = {
+  venture_id: string;
+  certified_and_free: number;
+  certified_but_allocated: number;
+  produced_not_yet_certified: number;
+  total_considered: number;
+  note: string;
+};
+
+export type Gates = {
+  venture_id: string;
+  gate_15_pending_dispositions: number;
+  signoffs: { gate: string; signatures: number }[];
+  unassignable_grants: number;
+};
+
+export type GrantRow = {
+  grant_id: string;
+  forge_id: string;
+  module_id: string;
+  venture_id: string;
+  trust_tier: string;
+  is_assignable: boolean;
+  revoked_at: string | null;
+  unit_a_state: string | null;
+  certified_tier: string | null;
+};
+
+export type AgentDetail = {
+  identity: {
+    office_agent_id: string;
+    agent_name: string;
+    department: string;
+    status: string;
+    village_agent_ref: string;
+    revocation_reason: string | null;
+  };
+  grants: GrantRow[];
+  forge_migration_status: {
+    forge_id: string;
+    credential_mode: string;
+    health_status: string;
+  }[];
+  recent_shifts: {
+    shift_id: string;
+    venture_id: string;
+    shift_start: string;
+    shift_end: string;
+    flush_verified: boolean;
+  }[];
+};
+
+export type InstructionDetail = {
+  forge_id: string;
+  module_id: string;
+  live: {
+    instruction_version: string;
+    forge_api_version: string;
+    version_sensitivity: string;
+    content_hash: string;
+    content: Record<string, unknown>;
+  } | null;
+  versions: {
+    instruction_version: string;
+    forge_api_version: string;
+    version_sensitivity: string;
+    content_hash: string;
+    authored_at: string;
+    superseded_at: string | null;
+  }[];
+  certification_states: Record<string, number>;
+};
+
+export type InstructionDiff = {
+  changed: string[];
+  added: string[];
+  removed: string[];
+};
+
+export type Proposal = {
+  proposal_id: string;
+  office_agent_id: string;
+  venture_id: string;
+  forge_id: string;
+  module_id: string;
+  task_id: string;
+  trust_tier: string;
+  payload: Record<string, unknown>;
+  status: string;
+  created_at: string;
+  review_seconds: string | null;
+};

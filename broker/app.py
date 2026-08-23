@@ -489,6 +489,73 @@ async def instruction_detail(
     }
 
 
+@app.get("/api/forges")
+async def list_forges(conn: DB, _me: ME) -> list[dict[str, Any]]:
+    """Forge registry with modules, and whether each has authored instructions.
+
+    The instruction-authoring screen has no other way to know what it can author for,
+    and "which modules are missing instructions" is the question that screen exists to
+    answer - a module with none can never be certified, so its position can never be
+    filled.
+    """
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            """
+            SELECT r.forge_id, r.display_name, r.api_version, r.credential_mode,
+                   r.health_status,
+                   COALESCE(
+                     json_agg(
+                       json_build_object(
+                         'module_id', m.module_id,
+                         'is_mutating', m.is_mutating,
+                         'idempotency_support', m.idempotency_support,
+                         'compliance_flags_implied', m.compliance_flags_implied,
+                         'has_instructions', i.module_id IS NOT NULL,
+                         'instruction_version', i.instruction_version,
+                         'version_sensitivity', i.version_sensitivity
+                       ) ORDER BY m.module_id
+                     ) FILTER (WHERE m.module_id IS NOT NULL),
+                     '[]'
+                   ) AS modules
+            FROM forge_registry r
+            LEFT JOIN forge_module_registry m ON m.forge_id = r.forge_id
+            LEFT JOIN forge_operating_instruction i
+                   ON i.forge_id = m.forge_id AND i.module_id = m.module_id
+                  AND i.superseded_at IS NULL
+            GROUP BY r.forge_id, r.display_name, r.api_version, r.credential_mode,
+                     r.health_status
+            ORDER BY r.forge_id
+            """
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+@app.get("/api/instructions/{forge_id}/{module_id}/diff")
+async def instruction_diff(
+    forge_id: str,
+    module_id: str,
+    from_version: str,
+    to_version: str,
+    conn: DB,
+    _me: ME,
+) -> dict[str, Any]:
+    """Section-level diff between two instruction versions.
+
+    Section-level rather than line-level because the question an author and a reviewer
+    actually ask is "did the never-do list change", and a line diff buries that answer
+    in reformatting.
+    """
+    try:
+        result = await instructions.diff(
+            conn, forge_id=forge_id, module_id=module_id,
+            from_version=from_version, to_version=to_version,
+        )
+    except instructions.InstructionError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"forge_id": forge_id, "module_id": module_id,
+            "from_version": from_version, "to_version": to_version, **result}
+
+
 # ============================================================== write: actions
 
 class RevokeRequest(BaseModel):

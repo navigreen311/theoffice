@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  capacityTriple,
   compareTiers,
   controlSeverity,
   incidentSeverity,
   isHealthy,
+  isRubberStamp,
   relativeAge,
 } from "./severity";
 
@@ -94,5 +96,57 @@ describe("relative age", () => {
 
   it("does not crash on a malformed timestamp", () => {
     expect(relativeAge("not-a-date")).toBe("unknown");
+  });
+});
+
+describe("rubber-stamp threshold", () => {
+  it("flags a decision faster than the threshold", () => {
+    // V4 - Part 14. Naming the number on screen is what makes the control something
+    // the UI cooperates with rather than something it quietly erodes.
+    expect(isRubberStamp(2)).toBe(true);
+    expect(isRubberStamp(4.9)).toBe(true);
+  });
+
+  it("does not flag a considered decision", () => {
+    expect(isRubberStamp(5)).toBe(false);
+    expect(isRubberStamp(120)).toBe(false);
+  });
+
+  it("does not flag an undecided proposal", () => {
+    // A pending proposal has no review time. Treating null as "fast" would flag every
+    // item in the queue before anybody touched it.
+    expect(isRubberStamp(null)).toBe(false);
+    expect(isRubberStamp(undefined)).toBe(false);
+  });
+});
+
+describe("capacity triple", () => {
+  it("returns all three numbers in a fixed order", () => {
+    // V5 - one number hides the state: free alone looks like a hiring problem, add
+    // allocated and it is scheduling, add uncertified and it is a SimForge backlog.
+    const result = capacityTriple({
+      certified_and_free: 2,
+      certified_but_allocated: 9,
+      produced_not_yet_certified: 14,
+    });
+    expect(result.map((r) => r.value)).toEqual([2, 9, 14]);
+    expect(result[0].label).toContain("free");
+    expect(result[1].label).toContain("allocated");
+    expect(result[2].label).toContain("not yet certified");
+  });
+
+  it("refuses to render a partial set rather than quietly dropping one", () => {
+    expect(() =>
+      capacityTriple({ certified_and_free: 2, certified_but_allocated: 9 }),
+    ).toThrow(/produced_not_yet_certified/);
+  });
+
+  it("renders zeroes rather than treating them as missing", () => {
+    const result = capacityTriple({
+      certified_and_free: 0,
+      certified_but_allocated: 0,
+      produced_not_yet_certified: 0,
+    });
+    expect(result.map((r) => r.value)).toEqual([0, 0, 0]);
   });
 });

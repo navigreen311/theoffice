@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { Badge, Card, Cell, Row, Table } from "@/components/ui";
@@ -46,7 +47,14 @@ export default async function AgentsPage() {
           );
           return (
             <Row key={agent.office_agent_id}>
-              <Cell>{agent.agent_name}</Cell>
+              <Cell>
+                <Link
+                  href={`/agents/${agent.office_agent_id}`}
+                  className="font-medium text-neutral-900 underline underline-offset-2"
+                >
+                  {agent.agent_name}
+                </Link>
+              </Cell>
               <Cell>{agent.department}</Cell>
               <Cell>
                 <Badge severity={agent.status === "active" ? "ok" : "bad"}>
