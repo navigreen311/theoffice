@@ -34,7 +34,7 @@ from tests.contract.conftest import (
     ledger_rows,
 )
 
-pytestmark = [requires_db, pytest.mark.db, pytest.mark.asyncio]
+pytestmark = [requires_db, pytest.mark.db]
 
 
 @pytest.fixture(autouse=True)

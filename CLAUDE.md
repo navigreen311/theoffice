@@ -118,6 +118,9 @@ Keep them genuinely excellent; a weak exemplar propagates.
   decisions that each prevent a specific silent failure.
 - `broker/manifest.py` — a table in the docstring showing every case and its outcome,
   and a sentence saying why the asymmetry between two of them is deliberate.
+- `tests/golden/test_no_read_path.py` — a test suite that explains why each of its three
+  parts exists and what defeats each one alone. Includes a deliberately leaky stub, so
+  the check is provably not vacuous.
 - `tests/contract/test_call_path.py` — tests written the way that can actually fail,
   with the reasoning in the docstring.
 

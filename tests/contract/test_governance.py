@@ -28,7 +28,7 @@ from broker.errors import (
 )
 from tests.conftest import requires_db
 
-pytestmark = [requires_db, pytest.mark.db, pytest.mark.asyncio]
+pytestmark = [requires_db, pytest.mark.db]
 
 IVAN = uuid.uuid4()
 
@@ -80,13 +80,13 @@ async def test_each_revocation_scope_blocks_the_next_call(
     [("venture", "venture_operator"), ("forge", "venture_operator"),
      ("forge", "compliance_officer")],
 )
-async def test_revocation_requires_the_right_authority(scope, insufficient_role):
+def test_revocation_requires_the_right_authority(scope, insufficient_role):
     """G5 — a venture operator cannot revoke a Forge out from under everyone."""
     with pytest.raises(NotAuthorized):
         revocation.assert_authority(scope, insufficient_role)
 
 
-async def test_stronger_role_may_act_at_a_weaker_scope():
+def test_stronger_role_may_act_at_a_weaker_scope():
     """Ivan revoking one grant is not an authority error."""
     revocation.assert_authority("agent_module", "ivan")
     revocation.assert_authority("agent", "compliance_officer")
@@ -338,8 +338,7 @@ async def test_sub_five_second_approval_raises_a_governance_flag(
     assert ("MEDIUM", "rubber_stamp_approval") in incidents_for(agent_ctx.venture_id)
 
 
-@pytest.mark.filterwarnings("ignore::pytest.PytestWarning")
-async def test_effective_tier_downgrades_auto_execute_when_soft_capped():
+def test_effective_tier_downgrades_auto_execute_when_soft_capped():
     """The soft cap is a tier change, not a separate gate (Part 12)."""
     assert proposals.effective_tier("auto_execute", soft_capped=False) == "auto_execute"
     assert proposals.effective_tier("auto_execute", soft_capped=True) == "propose"

@@ -1,0 +1,70 @@
+{
+  "_README": [
+    "Every field SimForge may return to The Office, enumerated with a purpose.",
+    "",
+    "Master prompt Part 10.1: The Office may not read the held-out set. The obligation",
+    "is structural, not procedural - there is no read path to build, only one never to",
+    "build. Because Green Companies operates both sides of this boundary,",
+    "self-attestation is the weakest possible enforcement, so this manifest is checked",
+    "by a machine on every build rather than asserted by either party.",
+    "",
+    "ADDING A FIELD HERE IS A REVIEWABLE ACT. tests/golden/test_no_read_path.py fails",
+    "the build when a response carries a field this file does not name. If that test is",
+    "failing, the question is not how to make it pass - it is whether the new field can",
+    "carry scenario content.",
+    "",
+    "Rule of thumb: The Office is entitled to learn WHETHER an agent passed and by how",
+    "much against what threshold. It is not entitled to learn WHY, because a rich",
+    "enough explanation of a failure reconstructs the scenario that produced it."
+  ],
+
+  "submit_curriculum": {
+    "purpose": "Acknowledge receipt of a Scenario Pack and return a run reference.",
+    "fields": {
+      "run_ref": "Opaque SimForge run identifier. Correlation only.",
+      "accepted": "Boolean. Whether the pack was accepted for execution.",
+      "scenario_count": "How many scenarios were accepted. A count, never content.",
+      "coverage_denominator": "The denominator. Required: a count without one is not coverage.",
+      "rejected_reason": "Short enum-like reason if not accepted. Never scenario text."
+    }
+  },
+
+  "get_gate_result": {
+    "purpose": "The verdict of a certification run.",
+    "fields": {
+      "run_ref": "Correlates to the submission.",
+      "unit": "'A' or 'B'. Which certification unit this verdict is for.",
+      "verdict": "PASS | FAIL | TIMEOUT | NOT_RUN | IN_PROGRESS | REVOKED.",
+      "rubric_kind": "'operation' or 'domain'. Never a merged score.",
+      "rubric_version": "Version stamp of the rubric applied.",
+      "score": "Numeric score. A number carries no scenario content.",
+      "threshold": "The threshold applied. SimForge owns it; The Office reads it.",
+      "certified_tier": "auto_execute | propose | suggest. Caps the declared tier.",
+      "scenario_count": "How many scenarios ran.",
+      "coverage_denominator": "How many there were. Report the denominator.",
+      "completed_at": "When the run finished. A timestamp carries no scenario content."
+    }
+  },
+
+  "get_certification_status": {
+    "purpose": "Current state of a certification, for staleness reconciliation.",
+    "fields": {
+      "unit": "'A' or 'B'. Which certification unit this status is for.",
+      "state": "SimForge's view of the certification state.",
+      "rubric_version": "Version stamp of the rubric applied to this unit.",
+      "updated_at": "When SimForge last changed this state. Used for reconciliation only."
+    }
+  },
+
+  "_deliberately_absent": {
+    "purpose": "Fields that must never exist. Listed so their absence is intentional and reviewable, not accidental.",
+    "fields": {
+      "scenario_bodies": "The held-out set itself.",
+      "failed_scenario_ids": "Which scenarios failed narrows the held-out set by elimination.",
+      "failure_explanation": "A rich explanation of a failure reconstructs the scenario.",
+      "expected_outputs": "Answer keys.",
+      "per_scenario_scores": "A score vector over an ordered set leaks the set's shape.",
+      "rubric_dimension_detail": "Dimension-level reasoning is scenario-adjacent."
+    }
+  }
+}

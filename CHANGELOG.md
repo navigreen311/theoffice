@@ -62,6 +62,31 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - `incident` table, append-only.
   - 31 governance tests; 93 total.
 
+- **Phase 2 — instructions and certification.** The certification gate was previously
+  a non-null check on a free-text column; any string satisfied it.
+  - **Forge Operating Instructions** with eight required sections enforced by CHECK,
+    `content_hash` computed by database trigger, exactly one live set per module,
+    and section-level diff.
+  - **Two certification units**, both required. Unit A (agent x forge x module,
+    operation rubric), Unit B (department x forge, domain rubric). A CHECK pairs unit
+    to rubric so a merged score cannot be written.
+  - **Seven states, never collapsed.** `TIMEOUT` maps to `in_training`, never
+    `certified`; `NOT_RUN` maps to `never_certified`, never `failed`. An unknown
+    verdict raises rather than defaulting.
+  - **Staleness by comparison**, not by flag. Rewriting instructions flips affected
+    certs to `stale_instructions` and the next call fails. A Forge version bump flips
+    to `stale_forge` only at or above the module's declared `version_sensitivity`.
+    `major.minor.patch` requires a written rationale.
+  - **Certified tier caps declared tier, live** in `resolve_grant` rather than at
+    grant issuance.
+  - **THE NO-READ-PATH CHECK** (`tests/golden/test_no_read_path.py`) — SimForge's ship
+    condition, verified by machine. Manifest completeness, forbidden field names and
+    prose-shape detection, and a parameter-smuggling sweep. Needs no database and no
+    SimForge instance. Includes a deliberately leaky stub so the check is provably not
+    vacuous.
+  - `curriculum_submission` records refs and counts, never scenario bodies.
+  - 182 tests total.
+
 ### Changed
 - **Second blueprint gap:** Part 12 mandates a per-task USD ceiling, but
   `agent_call_ledger` carries no task identifier and `idempotency_key` is a one-way

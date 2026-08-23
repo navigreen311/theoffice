@@ -13,7 +13,13 @@ to check three and forget the fourth:
   1. Does the identity exist and is it `active`?
   2. Is there a grant for this agent x forge x module x venture?
   3. Is that grant un-revoked?
-  4. Are BOTH certification units present?
+  4. Are BOTH certification units present AND in state `certified`?
+
+Point 4 changed in Phase 2. Before, the gate was a non-null check on a free-text
+column and any string satisfied it. Now it joins `certification` and requires state
+`certified` on both units, live - so a cert that went stale because its module's
+instructions were rewritten stops the very next call, for the same reason revocation
+does.
 
 The Forge and module are read from the registry in the same round trip - nothing
 about which Forge is bridged first may be hardcoded (see CLAUDE.md).
@@ -27,6 +33,7 @@ from dataclasses import dataclass
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 
+from broker.certification import cap_tier
 from broker.errors import IdentityInactive, NotCertified, NotGranted, UnknownForge
 
 
@@ -49,6 +56,9 @@ class ResolvedGrant:
     idempotency_support: str
     is_mutating: bool
     compliance_flags: tuple[str, ...]
+    certified_tier: str
+    """Part 10.1: certified tier caps declared tier. `trust_tier` above is already
+    capped by this - callers must not re-derive it."""
 
     @property
     def is_compliance_flagged(self) -> bool:
@@ -65,6 +75,7 @@ SELECT
     g.dept_context_cert_ref,
     g.revoked_at              AS grant_revoked_at,
     i.agent_name,
+    i.department,
     i.status                  AS identity_status,
     r.base_url,
     r.api_version,
@@ -73,12 +84,25 @@ SELECT
     c.credential_ref,
     m.idempotency_support,
     m.is_mutating,
-    m.compliance_flags_implied
+    m.compliance_flags_implied,
+    ca.state          AS unit_a_state,
+    ca.certified_tier AS unit_a_tier,
+    cb.state          AS unit_b_state
 FROM agent_forge_grant g
 JOIN office_agent_identity i ON i.office_agent_id = g.office_agent_id
 JOIN forge_registry       r ON r.forge_id        = g.forge_id
 JOIN forge_module_registry m ON m.forge_id = g.forge_id AND m.module_id = g.module_id
 LEFT JOIN forge_tenant_credential c ON c.forge_id = g.forge_id
+-- Certification state, live. LEFT JOIN so a missing cert is distinguishable from a
+-- cert in a non-certified state: "never certified" and "failed" are different
+-- findings and must not collapse into one message.
+LEFT JOIN certification ca ON ca.unit = 'A'
+                          AND ca.office_agent_id = g.office_agent_id
+                          AND ca.forge_id = g.forge_id
+                          AND ca.module_id = g.module_id
+LEFT JOIN certification cb ON cb.unit = 'B'
+                          AND cb.department = i.department
+                          AND cb.forge_id = g.forge_id
 WHERE g.office_agent_id = %(agent_id)s
   AND g.forge_id        = %(forge_id)s
   AND g.module_id       = %(module_id)s
@@ -152,15 +176,35 @@ async def resolve_grant(
 
     if row["operation_cert_ref"] is None or row["dept_context_cert_ref"] is None:
         raise NotCertified(
-            "grant is missing a certification unit and is not assignable",
+            "grant is missing a certification unit reference and is not assignable",
             operation_cert=row["operation_cert_ref"] is not None,
             dept_context_cert=row["dept_context_cert_ref"] is not None,
+        )
+
+    # Phase 2: the reference existing is not the gate - the STATE is. Reported
+    # per unit and by name, because `stale_instructions` (was good, text changed),
+    # `failed` (was never good) and `never_certified` (never attempted) call for
+    # three different responses.
+    unit_a = row["unit_a_state"] or "never_certified"
+    unit_b = row["unit_b_state"] or "never_certified"
+    if unit_a != "certified" or unit_b != "certified":
+        raise NotCertified(
+            "certification is not current; the grant is not assignable",
+            unit_a_state=unit_a,
+            unit_b_state=unit_b,
+            department=row["department"],
         )
 
     if row["credential_ref"] is None:
         raise UnknownForge(
             "forge has no tenant credential registered", forge_id=forge_id
         )
+
+    # Part 10.1: "The Pack declares a ceiling; SimForge sets the actual." Applied
+    # live rather than at grant issuance, so a cert downgraded after the grant was
+    # written takes effect on the next call - same reason revocation is not cached.
+    certified_tier = row["unit_a_tier"]
+    effective_tier = cap_tier(row["trust_tier"], certified_tier)
 
     return ResolvedGrant(
         grant_id=row["grant_id"],
@@ -169,7 +213,8 @@ async def resolve_grant(
         forge_id=forge_id,
         module_id=module_id,
         venture_id=venture_id,
-        trust_tier=row["trust_tier"],
+        trust_tier=effective_tier,
+        certified_tier=certified_tier,
         base_url=row["base_url"],
         api_version=row["api_version"],
         auth_model=row["auth_model"],

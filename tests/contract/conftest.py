@@ -8,6 +8,7 @@ from collections.abc import AsyncIterator, Iterator
 
 import httpx
 import psycopg
+import psycopg.types.json
 import pytest
 import pytest_asyncio
 
@@ -119,15 +120,29 @@ def registered_forge(admin: psycopg.Connection) -> Iterator[tuple[str, str]]:
     _drop_forge(admin, forge_id)
 
 
+# Every table that references a Forge or one of its modules, in the order they must
+# be deleted. Kept as one list because this has bitten three times: the autouse wipe
+# fixtures tear down AFTER this one, so they cannot be relied on to clear the way, and
+# each new phase adds another referencing table.
+FORGE_DEPENDENTS = (
+    "certification",
+    "forge_operating_instruction",
+    "curriculum_submission",
+    "venture_forge_manifest",
+    "proposal",
+    "agent_forge_grant",
+    "forge_tenant_credential",
+    "forge_module_registry",
+)
+
+
 def _drop_forge(conn: psycopg.Connection, forge_id: str) -> None:
     with conn.cursor() as cur:
-        # These reference (forge_id, module_id) and must go first. The autouse
-        # governance wipe tears down AFTER this fixture, so it cannot be relied on.
-        cur.execute("DELETE FROM venture_forge_manifest WHERE forge_id = %s", (forge_id,))
-        cur.execute("DELETE FROM proposal WHERE forge_id = %s", (forge_id,))
-        cur.execute("DELETE FROM agent_forge_grant WHERE forge_id = %s", (forge_id,))
-        cur.execute("DELETE FROM forge_tenant_credential WHERE forge_id = %s", (forge_id,))
-        cur.execute("DELETE FROM forge_module_registry WHERE forge_id = %s", (forge_id,))
+        for table in FORGE_DEPENDENTS:
+            cur.execute(
+                f"DELETE FROM {table} WHERE forge_id = %s",
+                (forge_id,),
+            )
         cur.execute("DELETE FROM forge_registry WHERE forge_id = %s", (forge_id,))
     conn.commit()
 
@@ -364,3 +379,113 @@ def audit_events_for(admin: psycopg.Connection):
             return [r[0] for r in cur.fetchall()]
 
     return _get
+
+
+# ---------------------------------------------------------------- Phase 2 fixtures
+
+@pytest.fixture(autouse=True)
+def _clean_certification(admin: psycopg.Connection) -> Iterator[None]:
+    _wipe_certs(admin)
+    yield
+    _wipe_certs(admin)
+
+
+def _wipe_certs(conn: psycopg.Connection) -> None:
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM curriculum_submission")
+        cur.execute("DELETE FROM certification")
+        cur.execute("DELETE FROM forge_operating_instruction")
+    conn.commit()
+
+
+@pytest.fixture
+def certified_agent(
+    admin: psycopg.Connection,
+    granted_agent: tuple[uuid.UUID, str, str],
+    _clean_certification: None,
+) -> Iterator[tuple[uuid.UUID, str, str]]:
+    # _clean_certification is requested explicitly, not left to autouse ordering.
+    # Autouse fixtures order by definition, and this one ran first - so the wipe
+    # deleted the certifications it had just created, and every downstream test
+    # failed at a gate with no obvious cause.
+    """An agent holding live instructions plus both certification units.
+
+    Phase 2 turned the certification gate from a non-null string check into a live
+    state check, so `granted_agent` alone no longer reaches a Forge. This fixture is
+    what "assignable" now means.
+    """
+    agent_id, forge_id, module_id = granted_agent
+
+    content = {
+        "what_it_does": "Parses a bank statement PDF into structured transactions.",
+        "what_it_does_not_do": "Does not judge creditworthiness.",
+        "inputs": {"document_url": "signed URL"},
+        "correct_sequence": ["upload", "parse", "return"],
+        "failure_signatures": {"silent_partial": "200 with a short transactions[]"},
+        "retry_vs_escalate": "Retry 5xx twice; escalate any 422.",
+        "never_do": ["Never re-submit after a 200"],
+        "compliance_coupling": ["TILA"],
+    }
+
+    with admin.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO forge_operating_instruction
+              (forge_id, module_id, instruction_version, forge_api_version,
+               version_sensitivity, content, content_hash, authored_by)
+            VALUES (%s, %s, '1.0.0', '2.1.0', 'major.minor', %s, '', %s)
+            RETURNING content_hash
+            """,
+            (forge_id, module_id, psycopg.types.json.Jsonb(content), str(uuid.uuid4())),
+        )
+        row = cur.fetchone()
+        assert row is not None
+        content_hash = row[0]
+
+        cur.execute("SELECT department FROM office_agent_identity WHERE office_agent_id = %s",
+                    (agent_id,))
+        dept_row = cur.fetchone()
+        assert dept_row is not None
+        department = dept_row[0]
+
+        cur.execute(
+            """
+            INSERT INTO certification
+              (cert_id, unit, office_agent_id, forge_id, module_id, state,
+               certified_tier, instruction_content_hash, forge_api_version,
+               rubric_kind, rubric_version, score, threshold, simforge_verdict)
+            VALUES (%s, 'A', %s, %s, %s, 'certified', 'auto_execute', %s, '2.1.0',
+                    'operation', '1.4.0', 0.91, 0.80, 'PASS')
+            """,
+            (str(uuid.uuid4()), agent_id, forge_id, module_id, content_hash),
+        )
+        cur.execute(
+            """
+            INSERT INTO certification
+              (cert_id, unit, department, forge_id, state, certified_tier,
+               instruction_content_hash, forge_api_version, rubric_kind,
+               rubric_version, score, threshold, simforge_verdict)
+            VALUES (%s, 'B', %s, %s, 'certified', 'auto_execute', %s, '2.1.0',
+                    'domain', '3.2.0', 0.88, 0.80, 'PASS')
+            """,
+            (str(uuid.uuid4()), department, forge_id, content_hash),
+        )
+    admin.commit()
+    yield agent_id, forge_id, module_id
+
+
+@pytest.fixture(autouse=True)
+def _certified_by_default(request):
+    """Any test using `granted_agent` also gets both certification units.
+
+    Phase 2 turned the certification gate from a non-null string check into a live
+    state check, so a granted agent no longer reaches a Forge on its own. Earlier
+    phases' tests are about the call path and the governance gates, not about
+    certification - without this they would all stop at a gate they are not testing,
+    and each would fail for the wrong reason.
+
+    Tests that ARE about certification request `certified_agent` explicitly and then
+    manipulate it. Fixture caching means they get the same instance, not a second one.
+    """
+    if "granted_agent" in request.fixturenames:
+        request.getfixturevalue("certified_agent")

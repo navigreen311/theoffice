@@ -13,9 +13,11 @@ never collapsed. Storing which one it was preserves that distinction for the con
 even though the runtime effect is identical today.
 
 **Certified tier caps declared tier** (Part 10.1): the Pack declares a ceiling,
-SimForge sets the actual, and the grant carries whichever is lower. That reconciliation
-happens at grant issuance, so by the time the call path reads `grant.trust_tier` it is
-already the effective ceiling - the call path must not re-derive it.
+SimForge sets the actual, and the lower wins. Phase 2 made that reconciliation happen
+in `resolve_grant` on every call rather than once at grant issuance, so a cert
+downgraded after the grant was written takes effect on the next call - the same reason
+revocation is not cached. By the time the call path reads `grant.trust_tier` it is
+already capped; the tier gate must not re-derive it.
 
 The soft budget cap lowers the tier further, engagement-wide (Part 12).
 
