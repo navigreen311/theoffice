@@ -25,7 +25,8 @@ exists to make the first ones true.
 | **2** | **Instructions, certification, no-read-path check** | **Done** |
 | **3.1** | **Business Pack v3 + Pack Validator (27 rules)** | **Done** — 247 tests |
 | **3.2** | **The seven generators + golden snapshots** | **Done** — 274 tests |
-| **3.3** | **Shift assignment + verified PHI flush** | **Done** - 293 tests |
+| **3.3** | **Shift assignment + verified PHI flush** | **Done** |
+| **4.1** | **Continuous verification: 4 sweeps + control health** | **Done** - 311 tests |
 
 ## Quick start
 
@@ -49,6 +50,9 @@ cp .env.example .env      # then fill it in
 .venv/Scripts/python -m alembic downgrade base          # roll back fully
 
 psql "$OFFICE_ADMIN_DSN" -c "SELECT * FROM audit_log_verify_chain()"
+
+.venv/Scripts/python -m broker sweep                    # the verification sweeps
+.venv/Scripts/python -m broker health                   # freshness of every control
 ```
 
 ## Layout
@@ -80,6 +84,7 @@ docs/
 - `docs/pack-validator.md` — the Business Pack, the 27 rules, and why three of them read the world
 - `docs/generators.md` — the seven generators, determinism, and two findings they surfaced
 - `docs/shifts.md` — the temporal PHI wall, the verified flush, and why a failed flush blocks
+- `docs/sweeps.md` — continuous verification, and why a stale pass is not a pass
 - `docs/reference/` — what The Office is, and what gets built in what order
 
 ## Security

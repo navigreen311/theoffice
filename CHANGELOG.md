@@ -130,6 +130,23 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - A test asserts `OfficeClient` exposes nothing that could skip a boundary.
   - 293 tests total.
 
+- **Phase 4, increment 1 - continuous verification.** Three controls shipped fully
+  tested and completely inert because nothing ran them; a control nobody runs exists in
+  the repository, not in the system.
+  - `audit_chain` sweep - CRITICAL incident on a break, `tail_gap` stays advisory.
+  - `certification_staleness` sweep - HIGH incident when a newly-stale cert backs a
+    live grant. Finding staleness reports `passed`: it is the sweep working.
+  - `manifest_reconciliation` sweep (Gate 15) - opens a `manifest_disposition` per
+    UNDECLARED in-use module and **fails while any is pending**. Resolution requires a
+    named human and a stated reason, enforced by CHECK. `accepted_risk` is a real
+    option so nobody has to mislabel a tolerated finding as `declared`.
+  - `restore_drill` (Gate 13) - a real `pg_dump`, a real restore into a scratch
+    database, and the hash chain verified **in the copy**.
+  - `broker health` reports `never_run | fresh | stale | failing` per control and exits
+    non-zero on any of the first three. **A stale pass is not a pass.**
+  - `python -m broker sweep|health`, one advisory lock per sweep kind, cron-safe.
+  - 311 tests total.
+
 ### Changed
 - **Second blueprint gap:** Part 12 mandates a per-task USD ceiling, but
   `agent_call_ledger` carries no task identifier and `idempotency_key` is a one-way
