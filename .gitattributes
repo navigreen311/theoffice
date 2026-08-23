@@ -1,0 +1,19 @@
+# Line endings, pinned rather than left to each machine's core.autocrlf.
+#
+# The shell scripts are the reason this file exists. `bootstrap.sh` and
+# `console-smoke.sh` are checked out with CRLF on Windows, and a `.sh` whose shebang
+# ends in a carriage return is a broken shebang on Linux: the kernel looks for an
+# interpreter literally named `bash\r`. It has not bitten yet only because git stores
+# LF and CI checks out on Linux - which is luck, not design, and it would bite the
+# first person to run these from a Windows checkout inside WSL.
+*.sh text eol=lf
+
+# Same reasoning for anything else read by a POSIX tool rather than by an editor.
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Let git decide for everything else, and never touch a binary.
+* text=auto
+*.png binary
+*.jpg binary
+*.pdf binary
