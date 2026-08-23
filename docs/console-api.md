@@ -36,7 +36,7 @@ Two rules, both tested rather than reviewed by eye:
 
 **2. Routes that must not exist, do not exist.**
 `test_the_api_exposes_no_route_that_bypasses_a_control` pins the entire write surface to
-fourteen routes and rejects any path containing `certification`, `flush`, `ledger`,
+nineteen routes and rejects any path containing `certification`, `flush`, `ledger`,
 `shift`, `memory`, `grant` or `audit`. If a new route trips it, the question is not how to make it
 pass — it is whether that route should exist.
 
@@ -56,6 +56,16 @@ pass — it is whether that route should exist.
 | `POST /api/provisioning/runs/{id}/review` | `provisioning.record_human_review` |
 | `POST /api/provisioning/runs/{id}/abort` | `provisioning.abort_run` |
 | `POST /api/provisioning/runs/{id}/signoff` | `provisioning.sign_off_run` |
+| `POST /api/knowledge/playbooks` | `knowledge.author_playbook` |
+| `POST /api/knowledge/playbooks/share` | `knowledge.share_playbook` / `revoke_share` |
+| `POST /api/knowledge/compliance` | `knowledge.author_compliance_entry` |
+| `POST /api/knowledge/personas` | `knowledge.author_persona` — **write-only** |
+| `POST /api/knowledge/history` | `knowledge.record` — append-only |
+
+The persona route writes and **there is no route that reads a body back**, because
+`office_app` holds no read privilege on that column (Part 6.4). A read route would be a
+privilege error rather than a leak. `docs/knowledge-bases.md` has the four layers that
+keep it that way.
 
 `advance` is the only route in this API that can end with an agent holding production
 authority, and it cannot skip a gate to get there: the machine runs from the current

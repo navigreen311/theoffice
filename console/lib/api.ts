@@ -380,3 +380,87 @@ export type RunDetail = {
     recorded_at: string;
   }[];
 };
+
+// ------------------------------------------------------------- knowledge bases
+
+export type StoreCoverage = {
+  covered?: number;
+  denominator?: number;
+  uncovered?: string[];
+  count?: number;
+  entries?: number;
+  shares?: number;
+  blocking: boolean;
+  note: string;
+};
+
+export type KnowledgeCoverage = {
+  forge_operating_instructions: StoreCoverage;
+  compliance_library: StoreCoverage;
+  business_playbooks: StoreCoverage;
+  persona_library: StoreCoverage;
+  historical_records: StoreCoverage;
+};
+
+export type PlaybookRow = {
+  playbook_id: string;
+  venture_id: string;
+  title: string;
+  lifecycle_stage: string | null;
+  playbook_version: string;
+  content_hash: string;
+  content: Record<string, unknown>;
+  shared_from: string | null;
+};
+
+export type ShareRow = {
+  playbook_id: string;
+  title: string;
+  from_venture: string;
+  to_venture_id: string;
+  reason: string;
+  shared_at: string;
+  revoked_at: string | null;
+};
+
+export type PlaybookResponse = {
+  venture_id: string | null;
+  playbooks: PlaybookRow[];
+  shares: ShareRow[];
+};
+
+export type ComplianceEntry = {
+  entry_ref: string;
+  framework: string;
+  jurisdiction: string[];
+  applicability_rule: string;
+  agent_behavior_implication: string;
+  escalation_trigger: string;
+  citation: string;
+  runtime_flag: string | null;
+  authored_at: string;
+  updated_at: string;
+};
+
+/** Never carries a body. `office_app` holds no SELECT on `persona_body`. */
+export type PersonaRow = {
+  persona_id: string;
+  venture_id: string;
+  persona_name: string;
+  target_persona: string;
+  persona_version: string;
+  body_hash: string;
+  authored_at: string;
+};
+
+export type HistoryRow = {
+  record_id: number;
+  venture_id: string | null;
+  record_type: string;
+  summary: string;
+  detail: Record<string, unknown>;
+  actor_type: string;
+  recorded_by: string | null;
+  occurred_at: string;
+  recorded_at: string;
+};

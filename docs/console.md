@@ -61,15 +61,12 @@ quiet incident list means nothing if the check producing it is stale.
 | **Instruction authoring** (`/instructions`) | index + version, diff, staleness, certification impact |
 | **Pack Editor** (`/packs`, `/packs/[venture]`) | validate and publish as separate acts; version history with hashes |
 | **Provisioning Console** (`/provisioning`, `/provisioning/[venture]`) | the sixteen-gate ladder, with three verdicts rendered three ways |
+| **Knowledge Base Manager** (`/knowledge`) | coverage for all five stores; blocking gaps render differently from advisory ones |
 
-One remains, and it is **still not buildable**:
-
-| Screen | Blocked by |
-|---|---|
-| **Knowledge Base Manager** | Part 6 names five knowledge bases. **One exists.** The other four would be empty promises with a UI on top. |
-
-A screen over nothing is worse than an absent screen, because it implies the thing
-exists.
+**All fourteen exist.** The Manager was the last, and it was refused three times with
+the same sentence — *a screen over nothing is worse than an absent screen, because it
+implies the thing exists.* Part 6 names five knowledge bases and one was built, so the
+screen was never the increment: the four stores were. See `docs/knowledge-bases.md`.
 
 ## The risk increment 3 adds
 
@@ -229,8 +226,9 @@ and no forms at all.
 
 ## Known gaps
 
-- **One screen remains** — the Knowledge Base Manager, blocked on four knowledge bases
-  that do not exist.
+- **Playbooks and personas are authored but not consumed.** There is no knowledge-
+  retrieval path for agents in The Office at all, and SimForge has no instance. See
+  `docs/knowledge-bases.md` for what that leaves open.
 - **Gate 10's sign-off form is not exercised by the smoke script.** The real Greenstone
   Pack blocks at gate 4.5 on the capacity finding, so a run from the dev seed never
   reaches gate 10. The form shares its hook usage with the three that are exercised;

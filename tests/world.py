@@ -47,6 +47,39 @@ ROSTER = [
      "Client Success & Operations"),
 ]
 
+# Part 6.3's six fields. The Greenstone Pack's `library_entry_ref` values resolve to
+# these, and V28 fails if they do not exist.
+COMPLIANCE_ENTRIES = [
+    {
+        "entry_ref": "compliance/nv-two-party-consent-v1",
+        "framework": "TWO_PARTY_CONSENT_RECORDING",
+        "jurisdiction": ["NV"],
+        "applicability_rule": "Any recorded call with an owner or broker in Nevada.",
+        "agent_behavior_implication": (
+            "Obtain and record affirmative consent from every party before recording "
+            "starts. Do not begin recording while waiting for an answer."
+        ),
+        "escalation_trigger": (
+            "Any party declines, hesitates, or asks what the recording is for."
+        ),
+        "citation": "NRS 200.620",
+        "runtime_flag": "recording_consent_required",
+    },
+    {
+        "entry_ref": "compliance/ftc-tsr-v2",
+        "framework": "FTC_TSR",
+        "jurisdiction": ["FEDERAL"],
+        "applicability_rule": "Outbound cold calls to property owners.",
+        "agent_behavior_implication": (
+            "State identity, the company, and the purpose of the call before anything "
+            "else. Honour a do-not-call request on the call it is made."
+        ),
+        "escalation_trigger": "The called party asserts a do-not-call registration.",
+        "citation": "16 CFR 310",
+        "runtime_flag": "tsr_disclosure_required",
+    },
+]
+
 INSTRUCTION_CONTENT = {
     "what_it_does": "Documented.", "what_it_does_not_do": "Documented.",
     "inputs": {"a": "b"}, "correct_sequence": ["a", "b"],
@@ -111,6 +144,25 @@ def build_world(admin: psycopg.Connection) -> None:
                      psycopg.types.json.Jsonb(INSTRUCTION_CONTENT),
                      "00000000-0000-5000-8000-00000000aaaa"),
                 )
+
+        # Part 6.3. The Greenstone Pack names these two refs; without them V28 fails
+        # and Gate 2 blocks - which is V28 working, and is why a prepared world has to
+        # include the library rather than only the bridge.
+        for entry in COMPLIANCE_ENTRIES:
+            cur.execute(
+                """
+                INSERT INTO compliance_library_entry
+                  (entry_ref, framework, jurisdiction, applicability_rule,
+                   agent_behavior_implication, escalation_trigger, citation,
+                   runtime_flag, authored_by)
+                VALUES (%(entry_ref)s, %(framework)s, %(jurisdiction)s,
+                        %(applicability_rule)s, %(agent_behavior_implication)s,
+                        %(escalation_trigger)s, %(citation)s, %(runtime_flag)s,
+                        '00000000-0000-5000-8000-00000000aaaa')
+                ON CONFLICT (entry_ref) DO NOTHING
+                """,
+                entry,
+            )
 
         for agent_id, name, dept in ROSTER:
             cur.execute(
@@ -177,6 +229,11 @@ def teardown_world(conn: psycopg.Connection) -> None:
         cur.execute("DELETE FROM venture_budget WHERE venture_id = 'greenstone'")
         cur.execute("DELETE FROM agent_forge_grant WHERE venture_id = 'greenstone'")
         cur.execute("DELETE FROM certification")
+        for entry in COMPLIANCE_ENTRIES:
+            cur.execute(
+                "DELETE FROM compliance_library_entry WHERE entry_ref = %s",
+                (entry["entry_ref"],),
+            )
         cur.execute("DELETE FROM forge_operating_instruction")
         for agent_id, _n, _d in ROSTER:
             cur.execute("DELETE FROM office_agent_identity WHERE office_agent_id = %s",

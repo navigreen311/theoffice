@@ -99,7 +99,7 @@ for _ in $(seq 1 40); do
 done
 say "listening on $CONSOLE_PORT"
 
-ROUTES="/ /agents /audit /forge-map /revocations /ventures /proposals /instructions /packs /provisioning"
+ROUTES="/ /agents /audit /forge-map /revocations /ventures /proposals /instructions /packs /provisioning /knowledge"
 
 step "Unauthenticated routes redirect"
 for path in $ROUTES; do
@@ -319,6 +319,67 @@ PY
 else
   fail "could not start a provisioning run"
 fi
+
+step "Knowledge Base Manager"
+curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT/knowledge" > /tmp/office-kb.html
+
+# All five stores named. A Manager that quietly rendered four would be the version of
+# this screen that was refused three times: a screen implying the thing exists.
+missing_store=0
+for store in "Forge Operating Instructions" "Compliance Library" "Business Playbooks"              "Persona Library" "Historical Records"; do
+  grep -qF "$store" /tmp/office-kb.html || { fail "the Manager does not render $store"; missing_store=1; }
+done
+[ "$missing_store" -eq 0 ] && say "all five knowledge bases render"
+
+# Denominators, not bare counts. "3 of 7" is the whole point of the screen; a list of
+# entries with no denominator is a filing cabinet with search.
+if grep -qE '[0-9]+ of [0-9]+' /tmp/office-kb.html; then
+  say "coverage renders with denominators"
+else
+  fail "no coverage fraction on the page - a store count without a denominator cannot show a gap"
+fi
+
+# Which stores block, said on the screen rather than left to be learned at Gate 6.
+if grep -qF "blocks provisioning at Gate 6" /tmp/office-kb.html    && grep -qF "advisory at Gate 6" /tmp/office-kb.html; then
+  say "blocking and advisory stores are distinguished"
+else
+  fail "the Manager does not say which knowledge bases block provisioning"
+fi
+
+step "A persona body never reaches the browser"
+# The column privilege makes a read fail server-side. This is the observable half: write
+# a persona through the API with a distinctive body, then check every rendered page.
+PERSONA_MARKER="smoke-persona-body-$$"
+"$VPY" - "$TOKEN" "$API_PORT" "$PACK_VENTURE" "$PERSONA_MARKER" <<'PY' | sed 's/^/  /'
+import json, sys, urllib.error, urllib.request
+token, port, venture, marker = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+req = urllib.request.Request(
+    f"http://127.0.0.1:{port}/api/knowledge/personas",
+    data=json.dumps({
+        "venture_id": venture, "persona_name": f"Smoke {marker[-6:]}",
+        "target_persona": "Regional broker with stale pocket listings",
+        "persona_version": "1.0.0", "persona_body": {"disposition": marker},
+    }).encode(),
+    method="POST",
+    headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+)
+try:
+    with urllib.request.urlopen(req) as response:
+        body = response.read().decode()
+    print("persona written" if marker not in body else "LEAK: the write echoed the body")
+except urllib.error.HTTPError as error:
+    print(f"could not write a persona: {error.code} {error.read().decode()[:120]}")
+PY
+
+leaked=0
+for path in $ROUTES; do
+  curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT$path" > /tmp/office-page.html
+  if grep -qF "$PERSONA_MARKER" /tmp/office-page.html; then
+    fail "$path leaked a persona body into the HTML"
+    leaked=1
+  fi
+done
+[ "$leaked" -eq 0 ] && say "no rendered page contains a persona body"
 
 step "The provisioning ceiling is stated, not discovered"
 curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT/provisioning" > /tmp/office-prov.html

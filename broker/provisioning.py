@@ -38,7 +38,7 @@ from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from broker import audit, humans, packs
+from broker import audit, humans, knowledge, packs
 from generators import pipeline as generator_pipeline
 from generators import runtime_config as runtime_gen
 from generators.artifacts import GeneratedArtifacts
@@ -302,41 +302,130 @@ async def _gate_5(ctx: _Context) -> GateOutcome:
 
 
 async def _gate_6(ctx: _Context) -> GateOutcome:
-    """Instructions indexed, knowledge bases seeded.
+    """Knowledge bases seeded, instructions indexed - counted, not asserted.
 
-    Part 6 names five knowledge bases. **One exists.** The gate reports that gap rather
-    than passing over it - a venture told its knowledge bases are seeded when four of
-    them do not exist has been told something false.
+    This gate used to carry a hardcoded list of the four knowledge bases that did not
+    exist. A hardcoded list is right exactly once and then rots: the four were built,
+    and the gate would have gone on reporting them missing while a venture provisioned
+    against a library it was being told was absent.
+
+    So every store is counted against a denominator drawn from what this venture
+    actually needs. Two of them block, and only two:
+
+      * a module with no Forge Operating Instructions - SimForge has nothing to test
+        against, so no agent can be certified for it and the position cannot be filled;
+      * a compliance flag in use with no Compliance Library entry - the agent carries a
+        flag that nothing in the system can explain, which means no behavioural
+        implication and no escalation trigger reach the agent operating under it.
+
+    Playbooks, personas and history are reported and do not block. A venture can operate
+    without an SOP written down; it cannot operate under a compliance flag nobody has
+    defined. Saying which is which is the whole content of this gate.
     """
     artifacts = ctx.require_artifacts()
     modules = {m for p in artifacts.roles.positions for m in p.forge_modules_operated}
-    async with ctx.conn.cursor() as cur:
+    flags = {f for p in artifacts.roles.positions for f in p.effective_compliance_flags}
+    stages = {
+        stage
+        for line in ctx.pack.pack.engagement_model.service_lines
+        for stage in line.lifecycle_stages
+    }
+    target_personas = set(ctx.pack.pack.market.target_personas)
+
+    async with ctx.conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
             "SELECT module_id FROM forge_operating_instruction WHERE superseded_at IS NULL"
         )
-        authored = {r[0] for r in await cur.fetchall()}
-    missing = sorted(modules - authored)
-    evidence = {
-        "modules_operated": sorted(modules),
-        "instructions_authored": sorted(modules & authored),
-        "missing_instructions": missing,
-        "knowledge_bases_built": ["forge_operating_instructions"],
-        "knowledge_bases_missing": [
-            "business_playbooks", "compliance_library",
-            "persona_library", "historical_records",
-        ],
+        authored = {r["module_id"] for r in await cur.fetchall()}
+
+        await cur.execute(
+            "SELECT DISTINCT runtime_flag FROM compliance_library_entry "
+            "WHERE runtime_flag IS NOT NULL"
+        )
+        explained_flags = {r["runtime_flag"] for r in await cur.fetchall()}
+
+        await cur.execute(
+            "SELECT lifecycle_stage FROM business_playbook "
+            "WHERE venture_id = %s AND superseded_at IS NULL",
+            (ctx.venture_id,),
+        )
+        playbook_stages = {
+            r["lifecycle_stage"] for r in await cur.fetchall() if r["lifecycle_stage"]
+        }
+
+        # `persona_body` is deliberately not selected. office_app holds no SELECT on it
+        # (Part 6.4), so naming it here would be a privilege error rather than a leak -
+        # which is the point of enforcing the boundary with a column grant.
+        await cur.execute(
+            "SELECT target_persona FROM persona "
+            "WHERE venture_id = %s AND superseded_at IS NULL",
+            (ctx.venture_id,),
+        )
+        covered_personas = {r["target_persona"] for r in await cur.fetchall()}
+
+        await cur.execute(
+            "SELECT count(*) AS records FROM historical_record WHERE venture_id = %s",
+            (ctx.venture_id,),
+        )
+        history_row = await cur.fetchone()
+
+    missing_instructions = sorted(modules - authored)
+    unexplained_flags = sorted(flags - explained_flags)
+
+    def coverage(covered: set[str], needed: set[str]) -> dict[str, Any]:
+        return {
+            "covered": len(covered & needed),
+            "denominator": len(needed),
+            "uncovered": sorted(needed - covered),
+        }
+
+    playbooks = coverage(playbook_stages, stages)
+    personas = coverage(covered_personas, target_personas)
+    evidence: dict[str, Any] = {
+        "forge_operating_instructions": coverage(authored, modules),
+        "compliance_library": coverage(explained_flags, flags),
+        "business_playbooks": playbooks,
+        "persona_library": personas,
+        "historical_records": {
+            "records": int(history_row["records"]) if history_row else 0
+        },
+        "blocking": ["forge_operating_instructions", "compliance_library"],
     }
-    if missing:
+
+    if missing_instructions:
         return GateOutcome(
             "6", BLOCKED,
-            f"no Forge Operating Instructions for: {', '.join(missing)}. SimForge has "
+            f"no Forge Operating Instructions for {len(missing_instructions)} of "
+            f"{len(modules)} module(s): {', '.join(missing_instructions)}. SimForge has "
             "nothing to test against, so no agent can be certified for them.",
             evidence,
         )
+    if unexplained_flags:
+        return GateOutcome(
+            "6", BLOCKED,
+            f"{len(unexplained_flags)} compliance flag(s) in use with no Compliance "
+            f"Library entry: {', '.join(unexplained_flags)}. The agents carrying these "
+            "have no behavioural implication and no escalation trigger to act on.",
+            evidence,
+        )
+
+    advisory = []
+    if playbooks["covered"] < playbooks["denominator"]:
+        advisory.append(
+            f"{playbooks['denominator'] - playbooks['covered']} lifecycle stage(s) have "
+            "no playbook"
+        )
+    if personas["covered"] < personas["denominator"]:
+        advisory.append(
+            f"{personas['denominator'] - personas['covered']} target persona(s) have no "
+            "persona authored"
+        )
+
     return GateOutcome(
         "6", PASSED,
-        f"instructions indexed for {len(modules)} module(s). 1 of 5 knowledge bases "
-        "built - the other four are not implemented.",
+        f"instructions for {len(modules)} module(s), {len(flags)} compliance flag(s) "
+        f"explained"
+        + (f". Advisory: {'; '.join(advisory)}." if advisory else "."),
         evidence,
     )
 
@@ -782,6 +871,19 @@ async def advance(
         next_index = GATE_SEQUENCE.index(gate) + 1
         if next_index >= len(GATE_SEQUENCE):
             await _set_status(conn, run_id, "complete", gate, done=True)
+            # Part 6.5. A venture going live is the institutional fact a history is
+            # made of, and a store nothing writes to is an inert control with a nicer
+            # name - which this codebase has shipped once already.
+            await knowledge.record(
+                conn, record_type="venture_provisioned", venture_id=state.venture_id,
+                summary=(
+                    f"{state.venture_id} provisioned live from Pack "
+                    f"{state.pack_version} (run {str(run_id)[:8]})."
+                ),
+                detail={"run_id": str(run_id), "pack_version": state.pack_version,
+                        "artifacts_hash": ctx.artifacts_hash_value},
+                actor_type="human", recorded_by=actor,
+            )
             return outcomes
         await _set_status(conn, run_id, "running", GATE_SEQUENCE[next_index])
 
@@ -861,6 +963,19 @@ async def abort_run(
         actor_type="human", actor_id=human.human_id, venture_id=state.venture_id,
         subject={"run_id": str(run_id), "at_gate": state.current_gate,
                  "reason": reason},
+    )
+    # An abandoned attempt is institutional memory too - arguably more of it than a
+    # successful one, because the next person to provision this venture wants to know
+    # what stopped the last attempt and where.
+    await knowledge.record(
+        conn, record_type="provisioning_abandoned", venture_id=state.venture_id,
+        summary=(
+            f"Provisioning run {str(run_id)[:8]} abandoned at gate "
+            f"{state.current_gate}: {reason}"
+        ),
+        detail={"run_id": str(run_id), "at_gate": state.current_gate,
+                "pack_version": state.pack_version},
+        actor_type="human", recorded_by=human.human_id,
     )
 
 

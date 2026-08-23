@@ -1,4 +1,4 @@
-"""V2, V6 and V11 — the rules that read the world rather than the document.
+"""V2, V6, V11 and V28 — the rules that read the world rather than the document.
 
 A Pack that *declares* a Forge is bridged proves nothing. That is precisely the state
 Gate 0 exists to catch, so these three rules query the database and cannot be satisfied
@@ -23,6 +23,7 @@ from broker.db import connection
 from generators.pack import BusinessPack, load_pack
 from generators.validator import Verdict, validate
 from tests.conftest import requires_db
+from tests.world import COMPLIANCE_ENTRIES
 
 pytestmark = [requires_db, pytest.mark.db]
 
@@ -38,6 +39,44 @@ VOICE_MODULES = ("place_call", "transcribe_call")
 @pytest.fixture
 def greenstone() -> BusinessPack:
     return load_pack(PACK_PATH)
+
+
+@pytest.fixture
+def stocked_library(admin: psycopg.Connection):
+    """The two Compliance Library entries the Greenstone Pack names.
+
+    Separate from `bridged_world` on purpose: V28 must be exercisable with the bridge
+    up and the library empty, which is the realistic order in which the two get built.
+    """
+    _clear_library(admin)
+    with admin.cursor() as cur:
+        for entry in COMPLIANCE_ENTRIES:
+            cur.execute(
+                """
+                INSERT INTO compliance_library_entry
+                  (entry_ref, framework, jurisdiction, applicability_rule,
+                   agent_behavior_implication, escalation_trigger, citation,
+                   runtime_flag, authored_by)
+                VALUES (%(entry_ref)s, %(framework)s, %(jurisdiction)s,
+                        %(applicability_rule)s, %(agent_behavior_implication)s,
+                        %(escalation_trigger)s, %(citation)s, %(runtime_flag)s,
+                        '00000000-0000-5000-8000-00000000aaaa')
+                """,
+                entry,
+            )
+    admin.commit()
+    yield
+    _clear_library(admin)
+
+
+def _clear_library(conn: psycopg.Connection) -> None:
+    with conn.cursor() as cur:
+        for entry in COMPLIANCE_ENTRIES:
+            cur.execute(
+                "DELETE FROM compliance_library_entry WHERE entry_ref = %s",
+                (entry["entry_ref"],),
+            )
+    conn.commit()
 
 
 @pytest.fixture
@@ -241,17 +280,85 @@ async def test_v11_passes_once_every_operated_module_has_instructions(
     assert report.get("V11").verdict is Verdict.PASS, report.get("V11").message
 
 
+# ------------------------------------------------------------------------- V28
+
+async def test_v28_fails_when_a_library_ref_resolves_to_nothing(
+    greenstone, bridged_world, admin
+):
+    """K4 — the half V4 could never check.
+
+    The Greenstone Pack names two entries. V4 passes because they are *named*; V28 asks
+    whether they exist, and with an empty library the answer is no. This is the same
+    upgrade V2 represents over a Pack that declares a Forge is bridged.
+    """
+    _clear_library(admin)
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+
+    v4 = report.get("V4")
+    v28 = report.get("V28")
+    assert v4.verdict is Verdict.PASS, "V4 only checks that a ref is named"
+    assert v28.verdict is Verdict.FAIL
+    assert "COMPLIANCE LIBRARY GAP" in v28.message
+    assert "compliance/ftc-tsr-v2" in v28.message
+    assert "2 of 2" in v28.message, "report the denominator, not just the misses"
+
+
+async def test_v28_passes_once_the_entries_exist(
+    greenstone, bridged_world, stocked_library
+):
+    """The rule must let a correct Pack through, or it is an outage."""
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+    result = report.get("V28")
+    assert result.verdict is Verdict.PASS, result.message
+    assert "2 of 2" in result.message
+
+
+async def test_v28_accepts_an_explicit_library_gap(greenstone, bridged_world, admin):
+    """An honest `library_gap: true` is not a failure.
+
+    The Pack has said the entry does not exist, which is the thing V28 would otherwise
+    have to discover. Failing it here would punish the Pack that told the truth and
+    leave the one that named a ref into thin air indistinguishable from a correct one.
+    """
+    _clear_library(admin)
+    gapped = copy.deepcopy(greenstone)
+    for surface in gapped.market.compliance_surface:
+        object.__setattr__(surface, "library_entry_ref", None)
+        object.__setattr__(surface, "library_gap", True)
+
+    async with connection() as conn:
+        report = await validate(gapped, conn)
+    assert report.get("V28").verdict is Verdict.PASS
+    assert report.get("V4").verdict is Verdict.PASS
+
+
+async def test_v28_is_not_run_without_a_connection_never_a_pass(greenstone):
+    """K5 — the rule that cannot run says so.
+
+    Part 10.1: NOT_RUN must never be reported as a failure. The converse matters just as
+    much, and a Pack whose library check could not run has not been validated.
+    """
+    report = await validate(greenstone)
+    result = report.get("V28")
+    assert result.verdict is Verdict.NOT_RUN
+    assert result.verdict is not Verdict.PASS
+    assert not report.passed, "NOT_RUN never counts toward a passing report"
+
+
 # ---------------------------------------------------------------- whole-Pack gate
 
 async def test_greenstone_passes_gate_2_in_a_fully_prepared_world(
-    greenstone, bridged_world, admin
+    greenstone, bridged_world, stocked_library, admin
 ):
     """The blueprint acceptance criterion for this increment: the Greenstone Pack
     passes validation.
 
-    'Fully prepared' means the bridge reaches CRE Forge and instructions are
-    authored — neither of which is true today, and both of which are exactly what
-    Gate 0 and V11 exist to require before provisioning.
+    'Fully prepared' now means three things, and none of them is true today: the bridge
+    reaches CRE Forge, instructions are authored, and the Compliance Library holds the
+    entries the Pack names. All three are exactly what Gate 0, V11 and V28 exist to
+    require before provisioning.
     """
     operated = tuple({m for p in greenstone.positions_required for m in p.forge_modules_operated})
     author_instructions(admin, operated)

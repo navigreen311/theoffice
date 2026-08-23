@@ -455,6 +455,17 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
         "/api/provisioning/runs/{run_id}/review",
         "/api/provisioning/runs/{run_id}/abort",
         "/api/provisioning/runs/{run_id}/signoff",
+        # Knowledge Base Manager. Four stores that author content, and none of them
+        # touches a control: a playbook is an SOP, a compliance entry is what explains
+        # a flag rather than what applies one, a persona is SimForge input, and a
+        # historical record is append-only by grant. The one to watch is the persona
+        # route - it writes and there is deliberately no route that reads a body back,
+        # because `office_app` holds no SELECT on the column.
+        "/api/knowledge/playbooks",
+        "/api/knowledge/playbooks/share",
+        "/api/knowledge/compliance",
+        "/api/knowledge/personas",
+        "/api/knowledge/history",
     }, f"the write surface changed: {sorted(writes)}"
 
 

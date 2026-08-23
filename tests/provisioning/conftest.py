@@ -37,6 +37,16 @@ def _wipe(conn: psycopg.Connection) -> None:
         cur.execute("DELETE FROM business_pack WHERE venture_id = %s", (VENTURE,))
         cur.execute("DELETE FROM signoff_record WHERE venture_id = %s", (VENTURE,))
         cur.execute("DELETE FROM curriculum_submission WHERE venture_id = %s", (VENTURE,))
+        # Provisioning writes institutional history now, and the table is append-only
+        # to office_app - so clearing it between tests needs the guard trigger off and
+        # the superuser connection, exactly as `clean_audit` does for the chain.
+        cur.execute(
+            "ALTER TABLE historical_record DISABLE TRIGGER historical_record_append_only"
+        )
+        cur.execute("DELETE FROM historical_record WHERE venture_id = %s", (VENTURE,))
+        cur.execute(
+            "ALTER TABLE historical_record ENABLE TRIGGER historical_record_append_only"
+        )
         cur.execute("DELETE FROM office_human_role WHERE venture_id = %s", (VENTURE,))
         cur.execute(
             "DELETE FROM office_human WHERE email LIKE %s", ("%@provisioning.invalid",)

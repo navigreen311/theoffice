@@ -267,3 +267,57 @@ export function validationSummary(report: {
     failures.length > 0 ? "bad" : not_run.length > 0 ? "warn" : "ok";
   return { severity, text: parts.join(", ") };
 }
+
+/**
+ * Knowledge base coverage.
+ *
+ * The rule this file has followed since increment 2 — **anything not verifiably healthy
+ * renders as not-healthy** — needs one refinement here, because two of the five stores
+ * block provisioning and three do not.
+ *
+ * An empty Business Playbook shelf is a real gap and is not an outage: a venture can
+ * operate without its SOPs written down. A compliance flag with no library entry is
+ * different in kind — the agent carrying it has no behavioural implication and no
+ * escalation trigger to act on, so the flag is a label rather than a constraint.
+ *
+ * Rendering both as the same red teaches an operator that red here means "eventually",
+ * which is how the one that means "now" gets skipped. So the severity depends on
+ * whether the store blocks, and the screen says which do.
+ */
+export function coverageSeverity(store: {
+  covered?: number;
+  denominator?: number;
+  count?: number;
+  blocking: boolean;
+}): Severity {
+  const { covered, denominator, count, blocking } = store;
+
+  if (typeof denominator === "number") {
+    if (denominator === 0) {
+      // Nothing needs covering. Not a pass and not a failure — there is no question.
+      return "neutral";
+    }
+    const gap = denominator - (covered ?? 0);
+    if (gap === 0) return "ok";
+    return blocking ? "bad" : "warn";
+  }
+
+  // A store with no denominator reports a bare count. Zero is worth saying out loud;
+  // a non-zero count is not evidence of coverage and must not render as a pass.
+  if ((count ?? 0) === 0) return blocking ? "bad" : "warn";
+  return "neutral";
+}
+
+/** "3 of 7 · 4 missing", or "12 entries" when there is no denominator to report. */
+export function coverageLabel(store: {
+  covered?: number;
+  denominator?: number;
+  count?: number;
+}): string {
+  if (typeof store.denominator === "number") {
+    const gap = store.denominator - (store.covered ?? 0);
+    return `${store.covered ?? 0} of ${store.denominator}${gap > 0 ? ` · ${gap} missing` : ""}`;
+  }
+  const count = store.count ?? 0;
+  return `${count} ${count === 1 ? "entry" : "entries"}`;
+}

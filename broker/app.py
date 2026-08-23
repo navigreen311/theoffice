@@ -46,6 +46,7 @@ from broker import (
     certification,
     humans,
     instructions,
+    knowledge,
     packs,
     proposals,
     provisioning,
@@ -1115,5 +1116,363 @@ async def sign_off_provisioning_run(
     except provisioning.ProvisioningError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"signoff_id": str(signoff_id), "artifacts_hash": hash_value}
+
+# ======================================================= read: knowledge bases
+
+@app.get("/api/knowledge/coverage")
+async def knowledge_coverage(conn: DB, _me: ME) -> dict[str, Any]:
+    """The Manager's whole reason to exist: what is missing, out of how many.
+
+    Part 6 names five knowledge bases. A screen listing forty entries and no denominator
+    is a filing cabinet with search; the question an operator has is which of the five
+    is thin, and where.
+
+    Every denominator here is drawn from something the system already needs - modules in
+    the registry, compliance flags carried by live grants, lifecycle stages the Packs
+    declare, target personas the Packs name. A denominator invented for the display
+    would make the coverage number unfalsifiable.
+    """
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            """
+            SELECT
+              (SELECT count(*) FROM forge_module_registry) AS modules,
+              (SELECT count(*) FROM forge_operating_instruction
+                WHERE superseded_at IS NULL) AS instructions,
+              (SELECT count(*) FROM business_playbook
+                WHERE superseded_at IS NULL) AS playbooks,
+              (SELECT count(*) FROM playbook_share WHERE revoked_at IS NULL) AS shares,
+              (SELECT count(*) FROM compliance_library_entry) AS compliance_entries,
+              (SELECT count(*) FROM persona WHERE superseded_at IS NULL) AS personas,
+              (SELECT count(*) FROM historical_record) AS records
+            """
+        )
+        counts = await cur.fetchone()
+
+        # Modules with no instructions. A module here can never be certified, so its
+        # position can never be filled - this is a staffing gap wearing a docs label.
+        await cur.execute(
+            """
+            SELECT m.forge_id, m.module_id
+            FROM forge_module_registry m
+            LEFT JOIN forge_operating_instruction i
+              ON i.forge_id = m.forge_id AND i.module_id = m.module_id
+             AND i.superseded_at IS NULL
+            WHERE i.module_id IS NULL
+            ORDER BY m.forge_id, m.module_id
+            """
+        )
+        modules_without_instructions = [dict(r) for r in await cur.fetchall()]
+
+        # Compliance flags in use with nothing in the library to explain them. "In use"
+        # means implied by a registered module, not merely mentioned somewhere.
+        await cur.execute(
+            """
+            SELECT DISTINCT f AS runtime_flag
+            FROM forge_module_registry m,
+                 unnest(m.compliance_flags_implied) AS f
+            WHERE NOT EXISTS (
+              SELECT 1 FROM compliance_library_entry e WHERE e.runtime_flag = f
+            )
+            ORDER BY 1
+            """
+        )
+        unexplained_flags = [r["runtime_flag"] for r in await cur.fetchall()]
+
+        await cur.execute(
+            "SELECT DISTINCT unnest(compliance_flags_implied) AS f "
+            "FROM forge_module_registry"
+        )
+        flags_in_use = {r["f"] for r in await cur.fetchall()}
+
+    assert counts is not None
+    return {
+        "forge_operating_instructions": {
+            "covered": int(counts["instructions"]),
+            "denominator": int(counts["modules"]),
+            "uncovered": [
+                f"{r['forge_id']}/{r['module_id']}" for r in modules_without_instructions
+            ],
+            "blocking": True,
+            "note": "A module with no instructions can never be certified.",
+        },
+        "compliance_library": {
+            "covered": len(flags_in_use) - len(unexplained_flags),
+            "denominator": len(flags_in_use),
+            "uncovered": unexplained_flags,
+            "entries": int(counts["compliance_entries"]),
+            "blocking": True,
+            "note": (
+                "A flag with no entry reaches the agent as a label, not a constraint."
+            ),
+        },
+        "business_playbooks": {
+            "count": int(counts["playbooks"]),
+            "shares": int(counts["shares"]),
+            "blocking": False,
+            "note": "Cross-venture sharing is opt-in only; absence is a refusal.",
+        },
+        "persona_library": {
+            "count": int(counts["personas"]),
+            "blocking": False,
+            # Deliberately does not name the column. `test_no_module_reads_a_persona_body`
+            # forbids a string literal that pairs SELECT with it anywhere in the runtime,
+            # and loosening that check so prose can mention it is the wrong direction -
+            # the exact column name is also not something a browser response needs.
+            "note": (
+                "SimForge only. The runtime role holds no read privilege on a persona "
+                "body, so this console cannot render one - reviewing one is out of band."
+            ),
+        },
+        "historical_records": {
+            "count": int(counts["records"]),
+            "blocking": False,
+            "note": "Append-only. Written by the system and by named humans.",
+        },
+    }
+
+
+@app.get("/api/knowledge/playbooks")
+async def list_playbooks(
+    conn: DB, _me: ME, venture_id: str | None = Query(default=None)
+) -> dict[str, Any]:
+    """Scoped to a venture, because that is the only correct way to read them.
+
+    Without `venture_id` this returns shares and nothing else. There is deliberately no
+    "all playbooks" read: a caller that got one would be one forgotten filter away from
+    showing a venture another venture's SOPs.
+    """
+    playbooks = (
+        [] if venture_id is None else await knowledge.playbooks_for(conn, venture_id)
+    )
+    return {
+        "venture_id": venture_id,
+        "playbooks": [
+            {
+                "playbook_id": str(p.playbook_id),
+                "venture_id": p.venture_id,
+                "title": p.title,
+                "lifecycle_stage": p.lifecycle_stage,
+                "playbook_version": p.playbook_version,
+                "content_hash": p.content_hash,
+                "content": p.content,
+                "shared_from": p.shared_from,
+            }
+            for p in playbooks
+        ],
+        "shares": await knowledge.list_shares(conn),
+    }
+
+
+@app.get("/api/knowledge/compliance")
+async def list_compliance_entries(conn: DB, _me: ME) -> list[dict[str, Any]]:
+    return await knowledge.compliance_entries(conn)
+
+
+@app.get("/api/knowledge/personas")
+async def list_personas(
+    conn: DB, _me: ME, venture_id: str | None = Query(default=None)
+) -> list[dict[str, Any]]:
+    """Names, targets and hashes. Never bodies - the role cannot read them."""
+    return await knowledge.persona_index(conn, venture_id)
+
+
+@app.get("/api/knowledge/history")
+async def list_history(
+    conn: DB, _me: ME, venture_id: str | None = Query(default=None),
+    limit: int = Query(default=100, le=500),
+) -> list[dict[str, Any]]:
+    return await knowledge.history(conn, venture_id=venture_id, limit=limit)
+
+
+# ====================================================== write: knowledge bases
+
+class PlaybookRequest(BaseModel):
+    venture_id: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    playbook_version: str = Field(min_length=1)
+    content: dict[str, Any]
+    lifecycle_stage: str | None = None
+
+
+@app.post("/api/knowledge/playbooks", status_code=201)
+async def author_playbook_route(
+    body: PlaybookRequest, conn: DB, me: ME
+) -> dict[str, str]:
+    humans.authorize(me, required_role="venture_operator", venture_id=body.venture_id)
+    try:
+        written = await knowledge.author_playbook(
+            conn, venture_id=body.venture_id, title=body.title,
+            playbook_version=body.playbook_version, content=body.content,
+            lifecycle_stage=body.lifecycle_stage, authored_by=me.human_id,
+        )
+    except knowledge.KnowledgeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await _audit_human_action(
+        me, "console_playbook_authored",
+        {"title": body.title, "content_hash": written.content_hash}, body.venture_id,
+    )
+    return {"playbook_id": str(written.playbook_id),
+            "content_hash": written.content_hash}
+
+
+class ShareRequest(BaseModel):
+    playbook_id: uuid.UUID
+    to_venture_id: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+    revoke: bool = False
+
+
+@app.post("/api/knowledge/playbooks/share")
+async def share_playbook_route(body: ShareRequest, conn: DB, me: ME) -> dict[str, str]:
+    """Part 6.2: opt-in only, and the opt-in is a named human with a reason.
+
+    Authority is checked against the venture that **owns** the playbook, not the one
+    receiving it. The owner consents to disclosure; the recipient has nothing to consent
+    to, and checking the recipient's operator would let a venture help itself.
+    """
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "SELECT venture_id FROM business_playbook WHERE playbook_id = %s",
+            (body.playbook_id,),
+        )
+        owner = await cur.fetchone()
+    if owner is None:
+        raise HTTPException(status_code=404, detail="no such playbook")
+    humans.authorize(me, required_role="venture_operator", venture_id=owner[0])
+
+    try:
+        if body.revoke:
+            await knowledge.revoke_share(
+                conn, playbook_id=body.playbook_id, to_venture_id=body.to_venture_id
+            )
+        else:
+            await knowledge.share_playbook(
+                conn, playbook_id=body.playbook_id, to_venture_id=body.to_venture_id,
+                shared_by=me.human_id, reason=body.reason,
+            )
+    except knowledge.KnowledgeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await _audit_human_action(
+        me, "console_playbook_share_revoked" if body.revoke else "console_playbook_shared",
+        {"playbook_id": str(body.playbook_id), "to_venture_id": body.to_venture_id,
+         "reason": body.reason},
+        owner[0],
+    )
+    return {"status": "revoked" if body.revoke else "shared"}
+
+
+class ComplianceEntryRequest(BaseModel):
+    entry_ref: str = Field(min_length=1)
+    framework: str = Field(min_length=1)
+    jurisdiction: list[str] = Field(min_length=1)
+    applicability_rule: str = Field(min_length=1)
+    agent_behavior_implication: str = Field(min_length=1)
+    escalation_trigger: str = Field(min_length=1)
+    citation: str = Field(min_length=1)
+    runtime_flag: str | None = None
+
+
+@app.post("/api/knowledge/compliance", status_code=201)
+async def author_compliance_entry_route(
+    body: ComplianceEntryRequest, conn: DB, me: ME
+) -> dict[str, Any]:
+    """Part 6.3's six fields. The library is portfolio-wide, so authority is too.
+
+    Writing an entry changes what every Pack's `library_entry_ref` resolves against and
+    what Gate 6 considers explained, which is not a per-venture decision.
+    """
+    humans.authorize(me, required_role="compliance_officer")
+    try:
+        await knowledge.author_compliance_entry(
+            conn, entry_ref=body.entry_ref, framework=body.framework,
+            jurisdiction=body.jurisdiction,
+            applicability_rule=body.applicability_rule,
+            agent_behavior_implication=body.agent_behavior_implication,
+            escalation_trigger=body.escalation_trigger, citation=body.citation,
+            runtime_flag=body.runtime_flag, authored_by=me.human_id,
+        )
+    except knowledge.KnowledgeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await _audit_human_action(
+        me, "console_compliance_entry_authored",
+        {"entry_ref": body.entry_ref, "runtime_flag": body.runtime_flag},
+    )
+    return {
+        "entry_ref": body.entry_ref,
+        "note": (
+            "Packs naming this ref now resolve it, and any Gate 6 that blocked on this "
+            "runtime flag will pass on its next run."
+        ),
+    }
+
+
+class PersonaRequest(BaseModel):
+    venture_id: str = Field(min_length=1)
+    persona_name: str = Field(min_length=1)
+    target_persona: str = Field(min_length=1)
+    persona_version: str = Field(min_length=1)
+    persona_body: dict[str, Any]
+
+
+@app.post("/api/knowledge/personas", status_code=201)
+async def author_persona_route(
+    body: PersonaRequest, conn: DB, me: ME
+) -> dict[str, str]:
+    """Write a persona. There is no route that reads one back, and there cannot be.
+
+    Part 6.4 is SimForge only. `office_app` holds no SELECT on `persona_body`, so a read
+    route would be a privilege error rather than a leak - and this console runs as that
+    role, which is why authoring here is a one-way act.
+    """
+    humans.authorize(me, required_role="venture_operator", venture_id=body.venture_id)
+    try:
+        persona_id = await knowledge.author_persona(
+            conn, venture_id=body.venture_id, persona_name=body.persona_name,
+            target_persona=body.target_persona,
+            persona_version=body.persona_version, persona_body=body.persona_body,
+            authored_by=me.human_id,
+        )
+    except knowledge.KnowledgeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await _audit_human_action(
+        me, "console_persona_authored",
+        {"persona_name": body.persona_name, "target_persona": body.target_persona},
+        body.venture_id,
+    )
+    return {
+        "persona_id": str(persona_id),
+        "note": (
+            "Written. This console cannot read the body back - Part 6.4 is SimForge "
+            "only, enforced by a column privilege rather than by a missing route."
+        ),
+    }
+
+
+class HistoryNoteRequest(BaseModel):
+    summary: str = Field(min_length=1)
+    venture_id: str | None = None
+    detail: dict[str, Any] = Field(default_factory=dict)
+
+
+@app.post("/api/knowledge/history", status_code=201)
+async def record_history_route(
+    body: HistoryNoteRequest, conn: DB, me: ME
+) -> dict[str, int]:
+    """Append one institutional fact. Append-only, so there is no way back out."""
+    humans.authorize(me, required_role="venture_operator", venture_id=body.venture_id)
+    try:
+        record_id = await knowledge.record(
+            conn, record_type="note", venture_id=body.venture_id,
+            summary=body.summary, detail=body.detail, actor_type="human",
+            recorded_by=me.human_id,
+        )
+    except knowledge.KnowledgeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"record_id": record_id}
 
 __all__ = ["NotAuthorized", "app"]

@@ -4,6 +4,8 @@ import {
   capacityTriple,
   compareTiers,
   controlSeverity,
+  coverageLabel,
+  coverageSeverity,
   gateLabel,
   gateSeverity,
   incidentSeverity,
@@ -229,5 +231,46 @@ describe("validation summary", () => {
       rules_checked: 27,
     });
     expect(summary.severity).toBe("bad");
+  });
+});
+
+describe("knowledge base coverage", () => {
+  // The refinement this increment adds: two of the five stores block provisioning and
+  // three do not. Rendering both gaps the same red teaches an operator that red here
+  // means "eventually", which is how the one that means "now" gets skipped.
+  it("distinguishes a blocking gap from an advisory one", () => {
+    const gap = { covered: 3, denominator: 7 };
+    expect(coverageSeverity({ ...gap, blocking: true })).toBe("bad");
+    expect(coverageSeverity({ ...gap, blocking: false })).toBe("warn");
+  });
+
+  it("is ok only when the gap is actually closed", () => {
+    expect(coverageSeverity({ covered: 7, denominator: 7, blocking: true })).toBe("ok");
+    expect(coverageSeverity({ covered: 6, denominator: 7, blocking: true })).toBe("bad");
+  });
+
+  it("treats nothing-to-cover as neither a pass nor a failure", () => {
+    // No modules registered means no instructions are owed. That is not a green tick:
+    // a denominator of zero is the absence of a question, and colouring it as success
+    // is how an empty system reads as a healthy one.
+    expect(coverageSeverity({ covered: 0, denominator: 0, blocking: true })).toBe(
+      "neutral",
+    );
+  });
+
+  it("does not read a bare count as coverage", () => {
+    // A store with no denominator can report twelve entries and still be missing the
+    // one that matters. Non-zero is neutral, never ok.
+    expect(coverageSeverity({ count: 12, blocking: false })).toBe("neutral");
+    expect(coverageSeverity({ count: 12, blocking: false })).not.toBe("ok");
+    expect(coverageSeverity({ count: 0, blocking: false })).toBe("warn");
+    expect(coverageSeverity({ count: 0, blocking: true })).toBe("bad");
+  });
+
+  it("labels a gap with both halves of the fraction", () => {
+    expect(coverageLabel({ covered: 3, denominator: 7 })).toBe("3 of 7 · 4 missing");
+    expect(coverageLabel({ covered: 7, denominator: 7 })).toBe("7 of 7");
+    expect(coverageLabel({ count: 1 })).toBe("1 entry");
+    expect(coverageLabel({ count: 0 })).toBe("0 entries");
   });
 });

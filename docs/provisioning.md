@@ -53,7 +53,7 @@ validated.
 | **4** | **Human review** | **waits — `awaiting_human`** |
 | 4.5 | Capacity and budget | approvals over capacity, unfilled positions |
 | 5 | Sandbox grants issued **inactive** | provisioning failure |
-| 6 | KBs seeded, instructions indexed | a module with no instructions |
+| 6 | KBs seeded, instructions indexed | a module with no instructions, or a compliance flag with no library entry |
 | 7 | Engagement registered, grants inactive | a grant already active |
 | 8 | Curriculum submitted | submission failure |
 | 9 | Readiness Gate per role per domain | any grant whose Unit A or Unit B is not certified |
@@ -213,9 +213,14 @@ There is no route that activates a grant. Activation happens inside the gate mac
 not at all, and `test_there_is_no_route_that_activates_a_grant` fails the build if one
 appears.
 
+## Gate 6
+
+Rewritten once the four missing knowledge bases were built. It used to carry a hardcoded
+list of what did not exist, which was accurate the day it was written and would have been
+a lie the day after. It now counts every store against a denominator drawn from what the
+venture needs, and blocks on the two that must block. See `docs/knowledge-bases.md`.
+
 ## Not built
 
-The **four missing knowledge bases**. Part 6 names five; one is built. Gate 6 reports the
-gap in its evidence rather than passing over it.
-
-A real **SimForge**. `HeldOutSource` is where it plugs in.
+A real **SimForge**. `HeldOutSource` is where it plugs in, and until it exists no run
+started from this deployment can pass Gate 9.5.

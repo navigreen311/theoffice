@@ -111,7 +111,7 @@ class ValidationReport:
 
 
 # Rules that cannot be answered from the document alone.
-NEEDS_WORLD = {"V2", "V6", "V11"}
+NEEDS_WORLD = {"V2", "V6", "V11", "V28"}
 
 # V24 is evaluated at Gate 4.5 against appointment output, which does not exist at
 # Gate 2. Recorded as metadata rather than a comment so the meta-test can see it.
@@ -509,6 +509,48 @@ async def _v11_instructions_authored(
             else f"instructions authored for all {len(modules)} module(s)")
 
 
+async def _v28_library_refs_resolve(
+    conn: AsyncConnection, pack: BusinessPack
+) -> tuple[bool, str]:
+    """V4 says a `library_entry_ref` is present. V28 says it points at something.
+
+    V4 is self-attestation and always was: a Pack naming
+    `compliance/nv-two-party-consent-v1` passes it whether or not that entry exists.
+    That is the same shape as a Pack *declaring* a Forge is bridged, which is precisely
+    what V2 exists to disbelieve. Until Part 6.3 was built there was nothing to check
+    against, so the gap was unavoidable rather than deliberate.
+
+    An explicit `library_gap: true` is honest and does not fail here - the Pack has said
+    the entry does not exist, which is the thing V28 would otherwise have to discover.
+    A ref that resolves to nothing is the failure, because that Pack claims coverage it
+    does not have.
+    """
+    refs = [
+        c.library_entry_ref
+        for c in pack.market.compliance_surface
+        if c.library_entry_ref and not c.library_gap
+    ]
+    if not refs:
+        return True, "no compliance framework claims a library entry"
+
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "SELECT entry_ref FROM compliance_library_entry WHERE entry_ref = ANY(%s)",
+            (refs,),
+        )
+        found = {r[0] for r in await cur.fetchall()}
+
+    missing = sorted(set(refs) - found)
+    return (
+        not missing,
+        f"[COMPLIANCE LIBRARY GAP] {len(missing)} of {len(refs)} ref(s) resolve to "
+        f"nothing: {_join(missing)}. Write the entry, or set library_gap so the Pack "
+        "stops claiming coverage it does not have."
+        if missing
+        else f"{len(found)} of {len(refs)} library ref(s) resolve",
+    )
+
+
 _WORLD_RULES = {
     "V2": (Severity.FAIL, "Bridge operational for every hard Forge binding (Gate 0)",
            _v2_bridge_operational),
@@ -516,6 +558,8 @@ _WORLD_RULES = {
            _v6_modules_resolve),
     "V11": (Severity.FAIL, "Every position's modules have Forge Operating Instructions",
             _v11_instructions_authored),
+    "V28": (Severity.FAIL, "Every library_entry_ref resolves in the Compliance Library",
+            _v28_library_refs_resolve),
 }
 
 
@@ -524,7 +568,7 @@ _WORLD_RULES = {
 async def validate(
     pack: BusinessPack, conn: AsyncConnection | None = None
 ) -> ValidationReport:
-    """Run all 27 rules. Deterministic order, so two runs produce identical reports."""
+    """Run every rule. Deterministic order, so two runs produce identical reports."""
     report = ValidationReport()
     document_rules = {r[0]: r for r in _RULES}
 
@@ -559,7 +603,7 @@ async def validate(
 
 
 def _rule_order() -> list[str]:
-    """V1..V27, numerically. Report order must not depend on import order."""
+    """V1..Vn, numerically. Report order must not depend on import order."""
     ids = {r[0] for r in _RULES} | set(_WORLD_RULES) | GATE_45_RULES
     return sorted(ids, key=lambda r: int(r[1:]))
 

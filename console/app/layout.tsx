@@ -16,6 +16,7 @@ const NAV = [
   { href: "/agents", label: "Agents" },
   { href: "/proposals", label: "Approvals" },
   { href: "/instructions", label: "Instructions" },
+  { href: "/knowledge", label: "Knowledge" },
   { href: "/revocations", label: "Revocation" },
   { href: "/forge-map", label: "Forge Map" },
   { href: "/audit", label: "Audit" },
