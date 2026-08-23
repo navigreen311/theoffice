@@ -119,5 +119,6 @@ cat <<'NEXT'
   Validate a Pack:   .venv/Scripts/python -m generators validate packs/greenstone.yaml
   Run the sweeps:    .venv/Scripts/python -m broker sweep
   Control health:    .venv/Scripts/python -m broker health
+  Serve the API:     .venv/Scripts/python -m broker serve --port 8080
   Verify the chain:  psql "$OFFICE_ADMIN_DSN" -c "SELECT * FROM audit_log_verify_chain()"
 NEXT

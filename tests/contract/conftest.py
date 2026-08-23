@@ -15,6 +15,7 @@ import pytest_asyncio
 from broker.config import get_settings
 from broker.credentials import Credential
 from client.office_client import AgentContext, OfficeClient
+from tests.conftest import drop_forge
 from tests.contract.stub_forge import StubForge
 
 STUB_BASE_URL = "http://stub-forge.invalid"
@@ -109,34 +110,7 @@ def registered_forge(admin: psycopg.Connection) -> Iterator[tuple[str, str]]:
         )
     admin.commit()
     yield forge_id, module_id
-    _drop_forge(admin, forge_id)
-
-
-# Every table that references a Forge or one of its modules, in the order they must
-# be deleted. Kept as one list because this has bitten three times: the autouse wipe
-# fixtures tear down AFTER this one, so they cannot be relied on to clear the way, and
-# each new phase adds another referencing table.
-FORGE_DEPENDENTS = (
-    "certification",
-    "forge_operating_instruction",
-    "curriculum_submission",
-    "venture_forge_manifest",
-    "proposal",
-    "agent_forge_grant",
-    "forge_tenant_credential",
-    "forge_module_registry",
-)
-
-
-def _drop_forge(conn: psycopg.Connection, forge_id: str) -> None:
-    with conn.cursor() as cur:
-        for table in FORGE_DEPENDENTS:
-            cur.execute(
-                f"DELETE FROM {table} WHERE forge_id = %s",
-                (forge_id,),
-            )
-        cur.execute("DELETE FROM forge_registry WHERE forge_id = %s", (forge_id,))
-    conn.commit()
+    drop_forge(admin, forge_id)
 
 
 @pytest.fixture

@@ -147,6 +147,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - `python -m broker sweep|health`, one advisory lock per sweep kind, cron-safe.
   - 311 tests total.
 
+- **Console, increment 1 - human identity and the Operations API.**
+  - `office_human`, `office_human_role` (scoped to a venture), `signoff_record`
+    (bound to an artifact hash, void by comparison).
+  - `broker/app.py` - FastAPI. Thirteen read routes and seven write routes, each
+    delegating to the guarded domain function that owns its rule.
+  - Authorisation asks two questions: is the role strong enough, and is this person
+    an operator of *this venture*. The second could not exist before.
+  - A test pins the write surface and rejects any path touching certification,
+    flush, ledger, shift, memory, grant or audit. A companion test greps the module
+    for raw SQL mutation.
+  - `python -m broker serve` runs uvicorn with loop=none, because uvicorn installs
+    ProactorEventLoop on Windows and psycopg then hangs every request rather than
+    failing.
+  - 337 tests total.
+
 ### Changed
 - **Second blueprint gap:** Part 12 mandates a per-task USD ceiling, but
   `agent_call_ledger` carries no task identifier and `idempotency_key` is a one-way

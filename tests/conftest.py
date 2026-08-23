@@ -26,6 +26,34 @@ from broker.db import close_pool
 ADMIN_DSN = os.environ.get("OFFICE_ADMIN_DSN")
 APP_DSN = os.environ.get("OFFICE_APP_DSN")
 
+# Every table that references a Forge or one of its modules, in deletion order.
+# One list, because this has bitten four times: each phase adds another referencing
+# table, and a fixture that hard-codes its own list silently goes stale.
+FORGE_DEPENDENTS = (
+    "certification",
+    "forge_operating_instruction",
+    "curriculum_submission",
+    "venture_forge_manifest",
+    "manifest_disposition",
+    "proposal",
+    "agent_forge_grant",
+    "forge_tenant_credential",
+    "forge_module_registry",
+)
+
+
+def drop_forge(conn: psycopg.Connection, forge_id: str) -> None:
+    """Delete a Forge and everything that references it, in order."""
+    with conn.cursor() as cur:
+        for table in FORGE_DEPENDENTS:
+            cur.execute(
+                f"DELETE FROM {table} WHERE forge_id = %s",
+                (forge_id,),
+            )
+        cur.execute("DELETE FROM forge_registry WHERE forge_id = %s", (forge_id,))
+    conn.commit()
+
+
 requires_db = pytest.mark.skipif(
     not ADMIN_DSN or not APP_DSN,
     reason="OFFICE_ADMIN_DSN and OFFICE_APP_DSN must be set (see .env.example)",
@@ -107,13 +135,7 @@ def seed_forge(admin: psycopg.Connection) -> Iterator[tuple[str, str]]:
         )
     admin.commit()
     yield forge_id, module_id
-    with admin.cursor() as cur:
-        # Grants reference (forge_id, module_id); they must go first. Fixture
-        # teardown runs in reverse request order, so seed_agent has not run yet.
-        cur.execute("DELETE FROM agent_forge_grant WHERE forge_id = %s", (forge_id,))
-        cur.execute("DELETE FROM forge_module_registry WHERE forge_id = %s", (forge_id,))
-        cur.execute("DELETE FROM forge_registry WHERE forge_id = %s", (forge_id,))
-    admin.commit()
+    drop_forge(admin, forge_id)
 
 
 @pytest.fixture
