@@ -14,6 +14,14 @@ to check three and forget the fourth:
   2. Is there a grant for this agent x forge x module x venture?
   3. Is that grant un-revoked?
   4. Are BOTH certification units present AND in state `certified`?
+  5. Has the grant been ACTIVATED (Gate 11)?
+
+Point 5 was added with the provisioning pipeline, and finding that it was needed is
+worth recording. `agent_forge_grant.is_assignable` is a generated column that encodes
+exactly this condition - and **nothing read it.** This function re-derived the check
+itself, so adding activation to the column changed nothing at runtime and the Gate 7/11
+distinction would have been decorative. A computed column nobody reads is documentation
+with a CHECK constraint attached.
 
 Point 4 changed in Phase 2. Before, the gate was a non-null check on a free-text
 column and any string satisfied it. Now it joins `certification` and requires state
@@ -34,7 +42,13 @@ from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 
 from broker.certification import cap_tier
-from broker.errors import IdentityInactive, NotCertified, NotGranted, UnknownForge
+from broker.errors import (
+    GrantNotActivated,
+    IdentityInactive,
+    NotCertified,
+    NotGranted,
+    UnknownForge,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,6 +99,7 @@ SELECT
     m.idempotency_support,
     m.is_mutating,
     m.compliance_flags_implied,
+    g.activated_at,
     ca.state          AS unit_a_state,
     ca.certified_tier AS unit_a_tier,
     cb.state          AS unit_b_state
@@ -193,6 +208,16 @@ async def resolve_grant(
             unit_a_state=unit_a,
             unit_b_state=unit_b,
             department=row["department"],
+        )
+
+    # Gate 11. An issued-but-unactivated grant is a venture mid-provisioning, not a
+    # missing appointment.
+    if row["activated_at"] is None:
+        raise GrantNotActivated(
+            "grant has not been activated; the venture has not completed provisioning "
+            "through Gate 11",
+            grant_id=str(row["grant_id"]),
+            venture_id=venture_id,
         )
 
     if row["credential_ref"] is None:

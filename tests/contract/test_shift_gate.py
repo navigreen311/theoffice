@@ -52,8 +52,8 @@ async def test_a_call_for_a_different_venture_is_refused(
             """
             INSERT INTO agent_forge_grant
               (grant_id, office_agent_id, forge_id, module_id, venture_id, trust_tier,
-               operation_cert_ref, dept_context_cert_ref, granted_by)
-            VALUES (%s, %s, %s, %s, 'greenstone', 'auto_execute', 'a', 'b', %s)
+               operation_cert_ref, dept_context_cert_ref, granted_by, activated_at)
+            VALUES (%s, %s, %s, %s, 'greenstone', 'auto_execute', 'a', 'b', %s, now())
             """,
             (str(uuid.uuid4()), agent_id, forge_id, module_id, str(uuid.uuid4())),
         )

@@ -196,7 +196,12 @@ def test_revoked_identity_must_state_when_who_and_why(app):
 
 
 def test_grant_without_certs_is_not_assignable(app, seed_agent, seed_forge):
-    """Invariant 6 - certification is the grant condition, not advisory metadata."""
+    """Invariant 6 - certification is the grant condition, not advisory metadata.
+
+    Both grants below are activated, so certification is the only variable. Since the
+    provisioning pipeline landed, `is_assignable` also requires activation (Gate 11) -
+    exercised separately in `test_an_unactivated_grant_is_not_assignable`.
+    """
     forge_id, module_id = seed_forge
 
     with app.cursor() as cur:
@@ -204,8 +209,8 @@ def test_grant_without_certs_is_not_assignable(app, seed_agent, seed_forge):
             """
             INSERT INTO agent_forge_grant
               (grant_id, office_agent_id, forge_id, module_id, venture_id,
-               trust_tier, granted_by)
-            VALUES (%s, %s, %s, %s, 'greenstone', 'auto_execute', %s)
+               trust_tier, granted_by, activated_at)
+            VALUES (%s, %s, %s, %s, 'greenstone', 'auto_execute', %s, now())
             RETURNING is_assignable
             """,
             (str(uuid.uuid4()), seed_agent, forge_id, module_id, str(uuid.uuid4())),
@@ -216,9 +221,10 @@ def test_grant_without_certs_is_not_assignable(app, seed_agent, seed_forge):
             """
             INSERT INTO agent_forge_grant
               (grant_id, office_agent_id, forge_id, module_id, venture_id,
-               trust_tier, operation_cert_ref, dept_context_cert_ref, granted_by)
+               trust_tier, operation_cert_ref, dept_context_cert_ref, granted_by,
+               activated_at)
             VALUES (%s, %s, %s, %s, 'greenstone', 'auto_execute',
-                    'simforge://unitA/1', 'simforge://unitB/1', %s)
+                    'simforge://unitA/1', 'simforge://unitB/1', %s, now())
             RETURNING is_assignable
             """,
             (str(uuid.uuid4()), seed_agent, forge_id, module_id, str(uuid.uuid4())),
@@ -238,8 +244,9 @@ def test_only_one_cert_unit_is_still_not_assignable(app, seed_agent, seed_forge)
             """
             INSERT INTO agent_forge_grant
               (grant_id, office_agent_id, forge_id, module_id, venture_id,
-               trust_tier, operation_cert_ref, granted_by)
-            VALUES (%s, %s, %s, %s, 'greenstone', 'propose', 'simforge://unitA/1', %s)
+               trust_tier, operation_cert_ref, granted_by, activated_at)
+            VALUES (%s, %s, %s, %s, 'greenstone', 'propose', 'simforge://unitA/1', %s,
+                    now())
             RETURNING is_assignable
             """,
             (str(uuid.uuid4()), seed_agent, forge_id, module_id, str(uuid.uuid4())),

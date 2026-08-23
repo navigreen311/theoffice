@@ -234,7 +234,7 @@ These are controls, not preferences. Code that weakens one is wrong even if it p
 3. **Revocation is checked per call at the broker, never cached.** A revoked agent's *next* call fails — not its next session.
 4. **The client library is the only path to a Forge.** Network policy must make Forge endpoints unreachable from agent runtime except via the broker. Without that, every guardrail is a convention.
 5. **Audit is written BEFORE the call.** On compliance-flagged actions, a failed audit write fails closed.
-6. **A grant with either cert reference NULL is not assignable.** Certification is the grant condition, not advisory metadata.
+6. **A grant with either cert reference NULL, or with `activated_at` NULL, is not assignable.** Certification is the grant condition, not advisory metadata; activation is Gate 11's, and a grant issued at Gate 5 is inert until a named human signs off against the current artifact hash. `resolve_grant` enforces both — the generated column is the record, not the control.
 7. **One venture per agent per shift. Locked.** No mid-shift switching under any condition, including non-PHI ventures.
 8. **The PHI wall is temporal, not spatial.** PHI tagged at write time; mandatory agent-uninterruptible flush at every shift boundary; flush verified and audited; **a failed flush blocks the next assignment.** Enforced regardless of certification state.
 9. **The Office has no read path to SimForge's held-out partition.** The obligation is negative — there is no endpoint, field, log, query, backup, or export to build. An automated no-read-path check ships *with* the partition, in the golden-test suite; adding a response field without updating the manifest fails the build.

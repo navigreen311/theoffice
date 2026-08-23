@@ -124,10 +124,11 @@ def granted_agent(
             """
             INSERT INTO agent_forge_grant
               (grant_id, office_agent_id, forge_id, module_id, venture_id,
-               trust_tier, operation_cert_ref, dept_context_cert_ref, granted_by)
+               trust_tier, operation_cert_ref, dept_context_cert_ref, granted_by,
+               activated_at)
             VALUES (%s, %s, %s, %s, 'burkham-wickmont', 'auto_execute',
                     'simforge://unitA/parse_bank_statement/1.0.0',
-                    'simforge://unitB/finance/1.0.0', %s)
+                    'simforge://unitB/finance/1.0.0', %s, now())
             """,
             (str(uuid.uuid4()), seed_agent, forge_id, module_id, str(uuid.uuid4())),
         )

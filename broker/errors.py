@@ -94,6 +94,20 @@ class ForgeUnreachable(OfficeError):
     status_code = 502
 
 
+class GrantNotActivated(OfficeError):
+    """The grant exists and is certified, but has not been activated.
+
+    Part 11: Gate 7 issues grants inactive; Gate 11 activates them against a valid
+    sign-off. Distinct from `NotGranted` because the fix is different - this agent is
+    correctly appointed and the venture has not finished provisioning.
+
+    Named separately for the same reason every other refusal is: "not granted" would
+    send an operator looking for a missing grant that is sitting right there.
+    """
+
+    audit_event = "call_refused_grant_not_activated"
+
+
 class Revoked(OfficeError):
     """An active revocation covers this call.
 

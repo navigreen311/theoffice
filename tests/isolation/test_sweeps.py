@@ -169,8 +169,8 @@ async def test_staleness_sweep_flips_certs_and_escalates_affected_grants(
             """
             INSERT INTO agent_forge_grant
               (grant_id, office_agent_id, forge_id, module_id, venture_id, trust_tier,
-               operation_cert_ref, dept_context_cert_ref, granted_by)
-            VALUES (%s, %s, %s, %s, %s, 'auto_execute', %s, %s, %s)
+               operation_cert_ref, dept_context_cert_ref, granted_by, activated_at)
+            VALUES (%s, %s, %s, %s, %s, 'auto_execute', %s, %s, %s, now())
             """,
             (str(uuid.uuid4()), agent_id, forge_id, module_id, VENTURE,
              str(cert_id), str(cert_id), str(OPERATOR)),
