@@ -67,13 +67,14 @@ cd console && npm run dev                               # the console on :3000
 
 ## CI
 
-`.github/workflows/ci.yml`. Five jobs: **lint and types** (ruff, strict mypy,
+`.github/workflows/ci.yml`. Six jobs: **lint and types** (ruff, strict mypy,
 shellcheck), **tests** (Postgres 16 service, migrations, the full suite), **migrations
 are reversible** (up/down/up/down/up, then one head), **console** (vitest, tsc, build,
-eslint), and **no committed secrets**.
+eslint), **smoke** (a real server, real requests, real pages), and **no committed
+secrets**.
 
-Two of those need explaining, because both exist to close a way this repository can go
-green while proving nothing.
+Three of those need explaining, because each closes a way this repository can go green
+while proving nothing.
 
 **`tests` refuses to pass if anything skipped.** Every database test is guarded by
 `requires_db`, which *skips* when the DSNs are unset. With the service container
@@ -84,9 +85,22 @@ skip, because the suite has no legitimately skipped test.
 **`console` lints with `--max-warnings=0`.** `next lint` exits 0 on warnings, so a lint
 step without that flag reports success over every warning it just printed.
 
-`scripts/console-smoke.sh` is **not** in CI: it kills listeners with `netstat` and
-`taskkill` and is Windows-only today. Run it locally before shipping a console change —
-`next build` passing is not evidence the app renders.
+**`smoke` starts the real thing and asks it for pages.** `next build` passing is not
+evidence the app runs: the revocation page compiled, type-checked and threw at render
+because a React 19 hook does not exist in React 18. The job runs
+`scripts/console-smoke.sh`, which boots the Operations API and the console, checks that
+every route redirects unauthenticated and renders authenticated, that the bearer token
+never appears in the HTML, that a persona body reaches no page, and that the gate ladder
+renders against a live provisioning run.
+
+The script runs on Linux and on Windows under Git Bash — everything platform-specific is
+behind two functions. It reads `.env` when there is one and the environment when there
+is not, so CI needs no dotfile:
+
+```bash
+./scripts/console-smoke.sh              # build, then verify
+./scripts/console-smoke.sh --no-build   # reuse an existing .next
+```
 
 ## Layout
 
