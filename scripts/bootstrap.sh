@@ -120,5 +120,8 @@ cat <<'NEXT'
   Run the sweeps:    .venv/Scripts/python -m broker sweep
   Control health:    .venv/Scripts/python -m broker health
   Serve the API:     .venv/Scripts/python -m broker serve --port 8080
+  Console dev:       cd console && npm run dev
+  Console checks:    cd console && npm run typecheck && npm test
+  Console smoke:     ./scripts/console-smoke.sh
   Verify the chain:  psql "$OFFICE_ADMIN_DSN" -c "SELECT * FROM audit_log_verify_chain()"
 NEXT

@@ -28,7 +28,8 @@ exists to make the first ones true.
 | **3.3** | **Shift assignment + verified PHI flush** | **Done** |
 | **4.1** | **Continuous verification: 4 sweeps + control health** | **Done** |
 | **4.2** | **Human identity + Operations API** | **Done** - 337 tests |
-| 4.3 | Next.js console (14 screens) | Next |
+| **4.3** | **Next.js console - 5 of 14 screens** | **Done** - 337 py + 12 ts tests |
+| 4.4 | Remaining nine console screens | Next |
 
 ## Quick start
 
@@ -56,6 +57,8 @@ psql "$OFFICE_ADMIN_DSN" -c "SELECT * FROM audit_log_verify_chain()"
 .venv/Scripts/python -m broker sweep                    # the verification sweeps
 .venv/Scripts/python -m broker health                   # freshness of every control
 .venv/Scripts/python -m broker serve --port 8080        # the Operations API
+cd console && npm run dev                               # the console on :3000
+./scripts/console-smoke.sh                              # both, verified end to end
 ```
 
 ## Layout
@@ -89,6 +92,7 @@ docs/
 - `docs/shifts.md` — the temporal PHI wall, the verified flush, and why a failed flush blocks
 - `docs/sweeps.md` — continuous verification, and why a stale pass is not a pass
 - `docs/console-api.md` - the Operations API, and why it is not a bypass
+- `docs/console.md` - the console, and why the browser never sees the token
 - `docs/reference/` — what The Office is, and what gets built in what order
 
 ## Security

@@ -162,6 +162,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     failing.
   - 337 tests total.
 
+- **Console, increment 2 - the Next.js application.** Five screens: Compliance
+  Dashboard, Agent Registry, Revocation Controls, Forge Map, Audit Log Explorer.
+  - **Every API call is server-side.** The token lives in an httpOnly,
+    sameSite=strict cookie; the browser never talks to the API. That removes CORS
+    entirely and keeps the token out of JavaScript. `lib/api.ts` imports
+    `server-only`, so importing it from a client component is a build error.
+  - `lib/severity.ts` - the rule this increment adds: anything not verifiably
+    healthy renders as not-healthy. `never_run` and `stale` are red, not grey.
+    12 unit tests, because this is the logic a UI can get wrong in a way that
+    misleads.
+  - `scripts/console-smoke.sh` - starts both servers, checks every route, asserts
+    the cookie is httpOnly and that no page leaks the token, then tears down.
+  - shadcn primitives hand-written; its init CLI is interactive and would hang.
+
 ### Changed
 - **Second blueprint gap:** Part 12 mandates a per-task USD ceiling, but
   `agent_call_ledger` carries no task identifier and `idempotency_key` is a one-way
@@ -173,6 +187,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   reset fixture moved to the root conftest - it existed in two directories and not in
   the two others that use the pool, so those left one bound to a dead loop and the next
   suite's first test paid for it.
+- **React 19 hook in a React 18 project.** `/revocations` used `useActionState`,
+  which does not exist in React 18.3.1. `tsc --noEmit` and `next build` both passed;
+  the page threw at render. Now `useFormState` from react-dom. A green build is not
+  proof the app runs, which is why the smoke script exercises a real server.
 - **Cross-Forge appointment bug.** 5.2 assumed one Forge per position and checked every
   module against it, so a position operating modules on two Forges came back
   unfillable - as valid JSON describing a venture with nobody in it. Found by reading a
