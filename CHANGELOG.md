@@ -87,11 +87,26 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - `curriculum_submission` records refs and counts, never scenario bodies.
   - 182 tests total.
 
+- **Phase 3, increment 1 — Business Pack schema v3 and the Pack Validator.**
+  - `generators/pack.py` — pydantic models for schema v3, `extra="forbid"` throughout.
+  - `generators/validator.py` — all 27 rules. Returns a report naming the offending
+    value, in deterministic V1..V27 order.
+  - V2 (Gate 0), V6 and V11 read the database, not the document. Without a connection
+    they report `NOT_RUN`, and NOT_RUN is not a pass.
+  - `packs/greenstone.yaml` — the first venture Pack, hand-authored.
+  - `python -m generators validate <pack>` — exits 1 on FAIL or NOT_RUN.
+  - 65 validator tests: every FAIL rule has both a must-fail and a must-pass fixture,
+    plus a meta-test that fails the build if a rule ships without one. 247 tests total.
+
 ### Changed
 - **Second blueprint gap:** Part 12 mandates a per-task USD ceiling, but
   `agent_call_ledger` carries no task identifier and `idempotency_key` is a one-way
   hash that cannot be grouped by task. Per-task spend was not computable as specified.
   `task_id` added in migration 0006. The blueprint should be amended.
+- **V22 semantics corrected.** The rule compared scenario coverage against compliance
+  *framework names*, but "compliance flag" means the `runtime_flag` everywhere else in
+  the system. The framework name never appears at runtime, so the rule was
+  unsatisfiable by construction.
 - **Blueprint J4 superseded:** CapitalForge bridges first, not CRE Forge (Ivan's
   decision). Consequence: Gate 0 blocks a Greenstone-first Phase 3 until CRE Forge is
   also bridged.

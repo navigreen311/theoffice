@@ -22,7 +22,10 @@ exists to make the first ones true.
 | 0.7 | Revocation — four scopes | **Done** |
 | 0.8 | **First real authenticated call** | The milestone — needs Forge access |
 | **1** | **Governance in the path** | **Done** |
-| **2** | **Instructions, certification, no-read-path check** | **Done** — 182 tests |
+| **2** | **Instructions, certification, no-read-path check** | **Done** |
+| **3.1** | **Business Pack v3 + Pack Validator (27 rules)** | **Done** — 247 tests |
+| 3.2 | The seven generators | Next |
+| 3.3 | Shift assignment + verified PHI flush | Next |
 
 ## Quick start
 
@@ -74,6 +77,7 @@ docs/
 - `docs/call-path.md` — the broker, the client library, and why the order matters
 - `docs/governance.md` — revocation scopes, manifest, trust tiers, limits, budget
 - `docs/certification.md` — instructions, the two units, staleness, and the no-read-path check
+- `docs/pack-validator.md` — the Business Pack, the 27 rules, and why three of them read the world
 - `docs/reference/` — what The Office is, and what gets built in what order
 
 ## Security

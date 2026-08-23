@@ -103,7 +103,7 @@ if [ "$RUN_TESTS" -eq 1 ]; then
   "$VPY" -m ruff check .
 
   step "Type check"
-  "$VPY" -m mypy broker client
+  "$VPY" -m mypy broker client generators
 
   step "Tests"
   # The stub Forge credential is fake and exists only so the env-backed resolver
@@ -115,6 +115,7 @@ step "Done"
 cat <<'NEXT'
   Run tests again:   .venv/Scripts/python -m pytest -q
   Lint:              .venv/Scripts/python -m ruff check .
-  Type check:        .venv/Scripts/python -m mypy broker client
+  Type check:        .venv/Scripts/python -m mypy broker client generators
+  Validate a Pack:   .venv/Scripts/python -m generators validate packs/greenstone.yaml
   Verify the chain:  psql "$OFFICE_ADMIN_DSN" -c "SELECT * FROM audit_log_verify_chain()"
 NEXT
