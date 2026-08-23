@@ -59,13 +59,13 @@ quiet incident list means nothing if the check producing it is stale.
 | **Agent Identity & Grants** (`/agents/[id]`) | grants, per-Forge migration status, recent shifts |
 | **Approval queue** (`/proposals`) | the screen that can erode a control without bypassing it |
 | **Instruction authoring** (`/instructions`) | index + version, diff, staleness, certification impact |
+| **Pack Editor** (`/packs`, `/packs/[venture]`) | validate and publish as separate acts; version history with hashes |
+| **Provisioning Console** (`/provisioning`, `/provisioning/[venture]`) | the sixteen-gate ladder, with three verdicts rendered three ways |
 
-Three remain, and **none of them are buildable yet**:
+One remains, and it is **still not buildable**:
 
 | Screen | Blocked by |
 |---|---|
-| **Pack Editor** | Packs are YAML files on disk. There is no Pack store, no persistence, no versioning — an editor over a file the server cannot see is a text box. |
-| **Provisioning Console** | Gates 3–11 are functions nobody has wired to a request. Running seven generators, holding artifacts for Gate 4 review, then applying is a backend increment. |
 | **Knowledge Base Manager** | Part 6 names five knowledge bases. **One exists.** The other four would be empty promises with a UI on top. |
 
 A screen over nothing is worse than an absent screen, because it implies the thing
@@ -154,9 +154,87 @@ rather than fails. The five primitives these screens need are hand-written in
 `components/ui/` following shadcn conventions, so running the real CLI later drops in on
 top. Recorded rather than silently substituted.
 
+## The risk increment 4 adds
+
+These are the first two screens that **author the input to everything else**. A Business
+Pack is the document every artifact derives from — positions, appointments, workflow,
+task ledger, curriculum, grants. A provisioning run is the thing that turns it into
+production authority.
+
+A text box that publishes a Pack looks like a file editor. It is not: publishing
+supersedes the live Pack, and the next run provisions the new one.
+
+Three rules follow.
+
+**Validate before publish, and show the whole report.** `POST /api/packs/validate` runs
+all 27 rules and stores nothing. FAIL, WARN and NOT_RUN render separately, because
+`NOT_RUN` is not a pass and an editor that shows it as a green tick teaches the operator
+to read it that way.
+
+Publishing does *not* require a clean report. Gate 2 refuses a Pack with a FAIL, and it
+refuses it in the run — where refusing means something. An editor that would not let you
+save a draft with a known failing rule pushes people to edit YAML somewhere this console
+cannot see.
+
+**Publishing does not start a run.** Two acts, two routes, two audit events. A save
+button that quietly begins provisioning is a save button that issues grants. The editor
+does say what publishing will disturb — an active run, and any Gate 10 signature that
+will be void against the new artifacts — because neither is visible from a text box.
+
+**The console cannot choose the hash it signs.** `POST /api/signoffs` accepts an
+arbitrary `artifact_hash`, which was harmless while nothing consumed it. Gate 11
+activates production grants against it now, so provisioning sign-off has its own route:
+the client sends the hash **it displayed**, the server regenerates the artifacts, and a
+mismatch is refused rather than re-pointed. A signature is a confirmation of what was on
+screen.
+
+### Three verdicts, rendered three ways
+
+`gateSeverity` in `lib/severity.ts` is the piece of presentation logic that can defeat
+the gate it describes. `awaiting_human` rendered as a pass and the operator stops
+looking; rendered as blocked and they go hunting for a defect instead of reading the
+artifacts they are being asked to review. A gate that has not run is a fourth case, and
+is not a pass either.
+
+The ladder renders **all sixteen rows**, including gates still ahead. A ladder listing
+only what happened shows a run stopped at 9.5 as a tidy column of nine passes.
+
+Gate 4 is the approval queue's hazard in a new place: a one-click "reviewed" beside a
+collapsed artifact summary is a rubber stamp — authorised, audited, and producing exactly
+the outcome the gate exists to prevent. So the unfilled positions, the capacity triple
+and the generator warnings render expanded above the form, and the note is required.
+
+### The ceiling is stated on the index, not discovered at the gate
+
+No run started from this console can pass gate 9.5, because SimForge's held-out partition
+does not exist. The index says so in a card rather than letting an operator find out by
+clicking Advance nine times. There is no override.
+
+## Running the console against real data
+
+A fresh database has no Forge registry, so Gate 0 refuses every run — correctly — and
+these two screens have nothing to render.
+
+    .venv/Scripts/python scripts/seed_dev_world.py
+
+Registers three Forges at `example.invalid`, authors instructions, and certifies the
+seven-agent stand-in roster. **Development only**, and idempotent by deletion: it clears
+the world it owns before rebuilding, which includes every certification and instruction
+in the database.
+
+`scripts/console-smoke.sh` calls it when the Forge registry is empty, publishes the
+Greenstone Pack if no venture has one, then drives a real run and renders the ladder —
+because the first version of these checks passed against a page showing one blocked gate
+and no forms at all.
+
 ## Known gaps
 
-- **Nine screens remain** (increment 3).
+- **One screen remains** — the Knowledge Base Manager, blocked on four knowledge bases
+  that do not exist.
+- **Gate 10's sign-off form is not exercised by the smoke script.** The real Greenstone
+  Pack blocks at gate 4.5 on the capacity finding, so a run from the dev seed never
+  reaches gate 10. The form shares its hook usage with the three that are exercised;
+  that is an argument, not evidence.
 - **No `secure` cookie flag outside production** — correct for local HTTP, but the
   deployment must be HTTPS or the cookie travels in the clear.
 - **No CSRF token on the Server Actions.** Next.js Server Actions carry origin checks and

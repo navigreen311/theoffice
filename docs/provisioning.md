@@ -201,11 +201,19 @@ quietly revise.
 
 ---
 
-## Not built
+## The console over this
 
-The **Pack Editor** and **Provisioning Console** screens. This increment is their
-backend; there are no HTTP routes for either yet, and the console write surface is
-unchanged at seven routes.
+`/packs` and `/provisioning` — see `docs/console.md`. Seven write routes were added for
+them, taking the pinned API write surface from seven to fourteen. One is new in kind:
+`POST /api/provisioning/runs/{run_id}/signoff` recomputes the artifacts and refuses a
+hash that does not match, because `POST /api/signoffs` takes whatever hash its caller
+passes and Gate 11 now activates production grants against it.
+
+There is no route that activates a grant. Activation happens inside the gate machine or
+not at all, and `test_there_is_no_route_that_activates_a_grant` fails the build if one
+appears.
+
+## Not built
 
 The **four missing knowledge bases**. Part 6 names five; one is built. Gate 6 reports the
 gap in its evidence rather than passing over it.

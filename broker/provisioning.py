@@ -947,6 +947,80 @@ async def get_run(conn: AsyncConnection, run_id: uuid.UUID) -> RunState | None:
     return RunState(**row)
 
 
+async def list_runs(
+    conn: AsyncConnection, *, venture_id: str | None = None
+) -> list[dict[str, Any]]:
+    """Runs, newest first, with how far each got."""
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            """
+            SELECT r.run_id::text AS run_id, r.venture_id, r.pack_version, r.pack_hash,
+                   r.status, r.current_gate, r.artifacts_hash, r.started_at,
+                   r.completed_at,
+                   (SELECT count(*) FROM provisioning_gate_result g
+                     WHERE g.run_id = r.run_id AND g.verdict = 'passed') AS gates_passed
+            FROM provisioning_run r
+            WHERE (%s::text IS NULL OR r.venture_id = %s)
+            ORDER BY r.started_at DESC
+            """,
+            (venture_id, venture_id),
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def sign_off_run(
+    conn: AsyncConnection,
+    *,
+    run_id: uuid.UUID,
+    human: humans.Human,
+    displayed_artifacts_hash: str,
+    note: str | None = None,
+) -> tuple[uuid.UUID, str]:
+    """Gate 10, signed against the artifacts the signer was shown.
+
+    `humans.sign_off` takes whatever hash its caller passes, which was harmless while
+    nothing consumed it. It is not harmless now: Gate 11 activates production grants
+    against that hash, so a client able to choose it can sign artifacts it never
+    displayed.
+
+    So this regenerates the artifacts here and refuses unless they match what the caller
+    says was on screen. The check runs in that direction deliberately - the server does
+    not silently sign its own freshly computed hash, because that would be a signature
+    on something the human never saw. A mismatch means the world moved between render
+    and click, and the answer is to look again, not to sign harder.
+    """
+    state = await get_run(conn, run_id)
+    if state is None:
+        raise ProvisioningError(f"no such run {run_id}")
+    if state.status in ("complete", "aborted"):
+        raise ProvisioningError(f"run is {state.status}")
+
+    pack = await packs.get_version(conn, state.venture_id, state.pack_version)
+    if pack is None:
+        raise ProvisioningError("the Pack version this run started from is gone")
+
+    artifacts = await generator_pipeline.run_all(pack.pack, conn)
+    current = artifacts_hash(artifacts)
+    if current != displayed_artifacts_hash:
+        raise ProvisioningError(
+            "the artifacts changed since this page was rendered, so signing now would "
+            f"sign something you have not seen (shown {displayed_artifacts_hash[:12]}…, "
+            f"now {current[:12]}…). Reload the run and review it again."
+        )
+
+    signoff_id = await humans.sign_off(
+        conn, gate="gate_10", venture_id=state.venture_id, human=human,
+        artifact_kind="provisioning_artifacts", artifact_hash_value=current, note=note,
+    )
+    await audit.write_event(
+        event_type="provisioning_gate_10_signed",
+        actor_type="human", actor_id=human.human_id, venture_id=state.venture_id,
+        subject={"run_id": str(run_id), "signoff_id": str(signoff_id),
+                 "artifacts_hash": current},
+    )
+    return signoff_id, current
+
+
 async def gate_results(
     conn: AsyncConnection, run_id: uuid.UUID
 ) -> list[dict[str, Any]]:

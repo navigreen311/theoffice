@@ -296,3 +296,87 @@ export type Proposal = {
   created_at: string;
   review_seconds: string | null;
 };
+
+export type PackSummary = {
+  venture_id: string;
+  pack_version: string;
+  content_hash: string;
+  authored_at: string;
+};
+
+export type PackVersion = {
+  pack_version: string;
+  content_hash: string;
+  authored_by: string;
+  authored_at: string;
+  superseded_at: string | null;
+};
+
+export type PackDetail = {
+  venture_id: string;
+  live: {
+    pack_version: string;
+    content_hash: string;
+    yaml_source: string;
+  } | null;
+  versions: PackVersion[];
+};
+
+export type RuleRow = {
+  rule_id: string;
+  severity: "FAIL" | "WARN";
+  verdict: "PASS" | "FAIL" | "WARN" | "NOT_RUN";
+  message: string;
+};
+
+export type ValidationResponse = {
+  parsed: boolean;
+  error?: string;
+  venture_id?: string;
+  passed: boolean;
+  results: RuleRow[];
+  failures: string[];
+  warnings: string[];
+  not_run: string[];
+  rules_checked?: number;
+};
+
+export type RunSummary = {
+  run_id: string;
+  venture_id: string;
+  pack_version: string;
+  pack_hash: string;
+  status: string;
+  current_gate: string;
+  artifacts_hash: string | null;
+  started_at: string;
+  completed_at: string | null;
+  gates_passed: number;
+};
+
+export type GateRow = {
+  gate: string;
+  title: string;
+  verdict: "passed" | "blocked" | "awaiting_human" | null;
+  reason: string | null;
+  evidence: Record<string, unknown>;
+  recorded_at: string | null;
+  is_current: boolean;
+};
+
+export type RunDetail = {
+  run_id: string;
+  venture_id: string;
+  pack_version: string;
+  status: string;
+  current_gate: string;
+  artifacts_hash: string | null;
+  ladder: GateRow[];
+  history: {
+    gate: string;
+    verdict: string;
+    reason: string;
+    evidence: Record<string, unknown>;
+    recorded_at: string;
+  }[];
+};

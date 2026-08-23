@@ -181,3 +181,89 @@ export function capacityTriple(input: {
     return { label, value };
   });
 }
+
+/**
+ * Gate verdicts. **Three, never two.**
+ *
+ * `awaiting_human` is neither a pass nor a failure, and a UI that renders it as either
+ * defeats the gate it is describing. Rendered as a pass, the operator stops looking.
+ * Rendered as blocked, they go hunting for a defect instead of reading the artifacts
+ * they are being asked to review.
+ *
+ * `null` — a gate that has not run — is its own case for the same reason `NOT_RUN` is
+ * everywhere else in this system: it is not a pass, and it is not a failure either.
+ */
+export type GateVerdict = "passed" | "blocked" | "awaiting_human" | null;
+
+export function gateSeverity(verdict: GateVerdict): Severity {
+  switch (verdict) {
+    case "passed":
+      return "ok";
+    case "blocked":
+      return "bad";
+    case "awaiting_human":
+      return "warn";
+    default:
+      return "neutral";
+  }
+}
+
+/** The word on screen. Never abbreviated to "pending", which reads as "nearly done". */
+export function gateLabel(verdict: GateVerdict): string {
+  switch (verdict) {
+    case "passed":
+      return "passed";
+    case "blocked":
+      return "blocked";
+    case "awaiting_human":
+      return "awaiting a human";
+    default:
+      return "not run";
+  }
+}
+
+/** Run status → severity. `awaiting_human` is again distinct from `blocked`. */
+export function runSeverity(status: string): Severity {
+  switch (status) {
+    case "complete":
+      return "ok";
+    case "running":
+      return "neutral";
+    case "awaiting_human":
+      return "warn";
+    case "blocked":
+      return "bad";
+    case "aborted":
+      return "neutral";
+    default:
+      // An unrecognised status is loud, not quiet — the same rule incidentSeverity
+      // follows. Guessing "probably fine" for a value nobody anticipated is how a new
+      // state ships rendered as a success.
+      return "bad";
+  }
+}
+
+/**
+ * What a validator report says, without collapsing the three outcomes.
+ *
+ * NOT_RUN is deliberately not folded into "fine". A Pack whose bridge check could not
+ * run has not been validated, and an editor that renders it as a green tick teaches the
+ * operator to read it that way.
+ */
+export function validationSummary(report: {
+  failures: string[];
+  warnings: string[];
+  not_run: string[];
+  rules_checked: number;
+}): { severity: Severity; text: string } {
+  const { failures, warnings, not_run, rules_checked } = report;
+  const parts = [
+    `${failures.length} FAIL`,
+    `${warnings.length} WARN`,
+    `${not_run.length} NOT_RUN`,
+    `of ${rules_checked} rules`,
+  ];
+  const severity: Severity =
+    failures.length > 0 ? "bad" : not_run.length > 0 ? "warn" : "ok";
+  return { severity, text: parts.join(", ") };
+}

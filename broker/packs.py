@@ -50,7 +50,7 @@ class StoredPack:
         return f"{self.venture_id}@{self.pack_version}"
 
 
-def _parse(yaml_source: str) -> BusinessPack:
+def parse_only(yaml_source: str) -> BusinessPack:
     """Shape-validate before storing.
 
     Storing a Pack that does not parse would let a venture hold something that reads
@@ -81,7 +81,7 @@ async def store(
     `venture_id` is derived from the Pack rather than passed in, so a caller cannot
     store one venture's Pack under another venture's name.
     """
-    pack = _parse(yaml_source)
+    pack = parse_only(yaml_source)
     venture_id = pack.venture_id
 
     async with conn.cursor(row_factory=dict_row) as cur:
@@ -134,7 +134,7 @@ async def live(conn: AsyncConnection, venture_id: str) -> StoredPack | None:
         pack_version=row["pack_version"],
         content_hash=row["content_hash"],
         yaml_source=row["yaml_source"],
-        pack=_parse(row["yaml_source"]),
+        pack=parse_only(row["yaml_source"]),
     )
 
 
@@ -161,7 +161,7 @@ async def get_version(
         pack_version=row["pack_version"],
         content_hash=row["content_hash"],
         yaml_source=row["yaml_source"],
-        pack=_parse(row["yaml_source"]),
+        pack=parse_only(row["yaml_source"]),
     )
 
 
@@ -194,5 +194,6 @@ __all__ = [
     "list_ventures",
     "list_versions",
     "live",
+    "parse_only",
     "store",
 ]

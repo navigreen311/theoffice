@@ -4,10 +4,14 @@ import {
   capacityTriple,
   compareTiers,
   controlSeverity,
+  gateLabel,
+  gateSeverity,
   incidentSeverity,
   isHealthy,
   isRubberStamp,
   relativeAge,
+  runSeverity,
+  validationSummary,
 } from "./severity";
 
 /**
@@ -148,5 +152,82 @@ describe("capacity triple", () => {
       produced_not_yet_certified: 0,
     });
     expect(result.map((r) => r.value)).toEqual([0, 0, 0]);
+  });
+});
+
+describe("gate verdicts", () => {
+  // C11 - three verdicts, three renderings. This is the piece of presentation logic
+  // that can defeat the gate it describes: awaiting_human rendered as a pass and the
+  // operator stops looking; rendered as blocked and they hunt for a defect instead of
+  // reading the artifacts they are being asked to review.
+  it("renders awaiting_human as neither passed nor blocked", () => {
+    expect(gateSeverity("passed")).toBe("ok");
+    expect(gateSeverity("blocked")).toBe("bad");
+    expect(gateSeverity("awaiting_human")).toBe("warn");
+
+    const all = ["passed", "blocked", "awaiting_human"] as const;
+    const severities = all.map(gateSeverity);
+    expect(new Set(severities).size).toBe(3);
+  });
+
+  it("treats a gate that has not run as its own case, not as a pass", () => {
+    expect(gateSeverity(null)).toBe("neutral");
+    expect(gateSeverity(null)).not.toBe(gateSeverity("passed"));
+    expect(gateLabel(null)).toBe("not run");
+  });
+
+  it("spells awaiting_human out rather than abbreviating it to pending", () => {
+    // "Pending" reads as nearly done. This gate is not nearly done; it is stopped
+    // until a named human does something.
+    expect(gateLabel("awaiting_human")).toBe("awaiting a human");
+    expect(gateLabel("awaiting_human")).not.toContain("pending");
+  });
+});
+
+describe("run status", () => {
+  it("keeps awaiting_human distinct from blocked", () => {
+    expect(runSeverity("awaiting_human")).toBe("warn");
+    expect(runSeverity("blocked")).toBe("bad");
+    expect(runSeverity("complete")).toBe("ok");
+  });
+
+  it("renders an unrecognised status loudly rather than quietly", () => {
+    // The same rule incidentSeverity follows. A new status shipped as a green tick is
+    // how a state nobody anticipated gets read as success.
+    expect(runSeverity("half_provisioned")).toBe("bad");
+  });
+});
+
+describe("validation summary", () => {
+  it("never folds NOT_RUN into a pass", () => {
+    const summary = validationSummary({
+      failures: [],
+      warnings: ["V7"],
+      not_run: ["V2"],
+      rules_checked: 27,
+    });
+    expect(summary.severity).toBe("warn");
+    expect(summary.text).toContain("1 NOT_RUN");
+  });
+
+  it("reports the denominator even when everything passed", () => {
+    const summary = validationSummary({
+      failures: [],
+      warnings: [],
+      not_run: [],
+      rules_checked: 27,
+    });
+    expect(summary.severity).toBe("ok");
+    expect(summary.text).toContain("of 27 rules");
+  });
+
+  it("is bad when anything fails, whatever else is true", () => {
+    const summary = validationSummary({
+      failures: ["V14"],
+      warnings: [],
+      not_run: [],
+      rules_checked: 27,
+    });
+    expect(summary.severity).toBe("bad");
   });
 });

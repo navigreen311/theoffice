@@ -46,13 +46,16 @@ from broker import (
     certification,
     humans,
     instructions,
+    packs,
     proposals,
+    provisioning,
     revocation,
     sweeps,
 )
 from broker.db import close_pool, connection
 from broker.errors import NotAuthorized, OfficeError
 from broker.humans import Human
+from generators.validator import validate as validate_pack
 
 
 @asynccontextmanager
@@ -817,5 +820,300 @@ async def signoff_status(
         "voided": status.voided,
     }
 
+
+# ====================================================== read: packs and runs
+
+def _rule_rows(report: Any) -> list[dict[str, str]]:
+    return [
+        {"rule_id": r.rule_id, "severity": r.severity.value,
+         "verdict": r.verdict.value, "message": r.message}
+        for r in report.results
+    ]
+
+
+@app.get("/api/packs")
+async def list_packs(conn: DB, _me: ME) -> list[dict[str, Any]]:
+    """The live Pack of every venture that has one."""
+    return await packs.list_ventures(conn)
+
+
+@app.get("/api/packs/{venture_id}")
+async def pack_detail(venture_id: str, conn: DB, _me: ME) -> dict[str, Any]:
+    """Version history and the live source.
+
+    Superseded versions stay listed. A run records the version it started from, and an
+    editor that only showed the current text would make that record unreadable.
+    """
+    live = await packs.live(conn, venture_id)
+    return {
+        "venture_id": venture_id,
+        "live": None if live is None else {
+            "pack_version": live.pack_version,
+            "content_hash": live.content_hash,
+            "yaml_source": live.yaml_source,
+        },
+        "versions": await packs.list_versions(conn, venture_id),
+    }
+
+
+@app.get("/api/packs/{venture_id}/versions/{pack_version}")
+async def pack_version(
+    venture_id: str, pack_version: str, conn: DB, _me: ME
+) -> dict[str, Any]:
+    stored = await packs.get_version(conn, venture_id, pack_version)
+    if stored is None:
+        raise HTTPException(status_code=404, detail="no such Pack version")
+    return {
+        "venture_id": stored.venture_id,
+        "pack_version": stored.pack_version,
+        "content_hash": stored.content_hash,
+        "yaml_source": stored.yaml_source,
+    }
+
+
+@app.get("/api/provisioning/runs")
+async def list_provisioning_runs(
+    conn: DB, _me: ME, venture_id: str | None = Query(default=None)
+) -> list[dict[str, Any]]:
+    return await provisioning.list_runs(conn, venture_id=venture_id)
+
+
+@app.get("/api/provisioning/runs/{run_id}")
+async def provisioning_run(run_id: uuid.UUID, conn: DB, _me: ME) -> dict[str, Any]:
+    """A run, its gate ladder, and every gate's evidence.
+
+    The full sequence is returned, including the gates that have not run - the console
+    renders sixteen rows either way, because a gate ladder that only lists what has
+    happened cannot show what is still ahead of a blocked run.
+    """
+    state = await provisioning.get_run(conn, run_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail="no such run")
+    results = await provisioning.gate_results(conn, run_id)
+
+    latest: dict[str, dict[str, Any]] = {}
+    for row in results:
+        latest[row["gate"]] = row
+
+    ladder = [
+        {
+            "gate": gate,
+            "title": provisioning.GATE_TITLES[gate],
+            "verdict": latest.get(gate, {}).get("verdict"),
+            "reason": latest.get(gate, {}).get("reason"),
+            "evidence": latest.get(gate, {}).get("evidence", {}),
+            "recorded_at": latest.get(gate, {}).get("recorded_at"),
+            "is_current": gate == state.current_gate,
+        }
+        for gate in provisioning.GATE_SEQUENCE
+    ]
+    return {
+        "run_id": str(state.run_id),
+        "venture_id": state.venture_id,
+        "pack_version": state.pack_version,
+        "status": state.status,
+        "current_gate": state.current_gate,
+        "artifacts_hash": state.artifacts_hash,
+        "ladder": ladder,
+        "history": results,
+    }
+
+
+# ================================================= write: packs and runs
+
+class PackValidateRequest(BaseModel):
+    yaml_source: str = Field(min_length=1)
+
+
+@app.post("/api/packs/validate")
+async def validate_pack_source(
+    body: PackValidateRequest, conn: DB, _me: ME
+) -> dict[str, Any]:
+    """Run all 27 rules against a draft. **Stores nothing.**
+
+    A POST because the body is a document, not because anything is written. The editor
+    needs this: publishing a Pack that fails Gate 2 wastes a run, and finding out at
+    Gate 2 means finding out after Gates 0 and 1 have already reported healthy.
+
+    FAIL, WARN and NOT_RUN are reported separately. Collapsing NOT_RUN into "no problem"
+    is how a Pack whose bridge check never ran gets read as validated.
+    """
+    try:
+        parsed = packs.parse_only(body.yaml_source)
+    except packs.PackStoreError as exc:
+        return {"parsed": False, "error": str(exc), "results": [],
+                "failures": [], "warnings": [], "not_run": [], "passed": False}
+
+    report = await validate_pack(parsed, conn)
+    return {
+        "parsed": True,
+        "venture_id": parsed.venture_id,
+        "passed": report.passed,
+        "results": _rule_rows(report),
+        "failures": [r.rule_id for r in report.failures],
+        "warnings": [r.rule_id for r in report.warnings],
+        "not_run": [r.rule_id for r in report.not_run],
+        "rules_checked": len(report.results),
+    }
+
+
+class PackPublishRequest(BaseModel):
+    yaml_source: str = Field(min_length=1)
+    pack_version: str = Field(min_length=1)
+
+
+@app.post("/api/packs", status_code=201)
+async def publish_pack(body: PackPublishRequest, conn: DB, me: ME) -> dict[str, Any]:
+    """Publish a Pack version. Supersedes the live one; does **not** start a run.
+
+    Two acts, two routes, two audit events. A save button that quietly begins
+    provisioning is a save button that issues grants.
+
+    The venture is not a parameter - it comes from the document - so authorisation is
+    checked against the venture the Pack names rather than one the caller chose.
+    """
+    try:
+        parsed = packs.parse_only(body.yaml_source)
+    except packs.PackStoreError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    humans.authorize(me, required_role="venture_operator", venture_id=parsed.venture_id)
+    stored = await packs.store(
+        conn, yaml_source=body.yaml_source, pack_version=body.pack_version,
+        authored_by=me.human_id,
+    )
+    await _audit_human_action(
+        me, "console_pack_published",
+        {"pack_version": stored.pack_version, "content_hash": stored.content_hash},
+        stored.venture_id,
+    )
+    return {
+        "venture_id": stored.venture_id,
+        "pack_version": stored.pack_version,
+        "content_hash": stored.content_hash,
+        "note": (
+            "Published. Any existing Gate 10 signature is void against the artifacts "
+            "this Pack generates, and no run has been started."
+        ),
+    }
+
+
+class StartRunRequest(BaseModel):
+    venture_id: str = Field(min_length=1)
+
+
+@app.post("/api/provisioning/runs", status_code=201)
+async def start_provisioning_run(
+    body: StartRunRequest, conn: DB, me: ME
+) -> dict[str, str]:
+    humans.authorize(me, required_role="venture_operator", venture_id=body.venture_id)
+    try:
+        run_id = await provisioning.start_run(
+            conn, venture_id=body.venture_id, started_by=me.human_id
+        )
+    except provisioning.ProvisioningError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"run_id": str(run_id)}
+
+
+@app.post("/api/provisioning/runs/{run_id}/advance")
+async def advance_provisioning_run(
+    run_id: uuid.UUID, conn: DB, me: ME
+) -> dict[str, Any]:
+    """Run gates from the current one until something stops the run.
+
+    This is the only route that can lead to a grant becoming active, and it cannot skip
+    a gate to get there: Gate 11 refuses without a Gate 10 signature bound to the
+    current artifacts, and it re-checks rather than trusting Gate 10's recorded verdict.
+    There is no route that activates a grant directly, and there must never be.
+
+    `held_out` is left at its default, so a run started here stops at Gate 9.5. The
+    partition does not exist in this deployment and the console says so rather than
+    offering an override.
+    """
+    state = await provisioning.get_run(conn, run_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail="no such run")
+    humans.authorize(me, required_role="venture_operator", venture_id=state.venture_id)
+    try:
+        outcomes = await provisioning.advance(conn, run_id=run_id, actor=me.human_id)
+    except provisioning.ProvisioningError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    after = await provisioning.get_run(conn, run_id)
+    assert after is not None
+    return {
+        "run_id": str(run_id),
+        "status": after.status,
+        "current_gate": after.current_gate,
+        "outcomes": [
+            {"gate": o.gate, "verdict": o.verdict, "reason": o.reason,
+             "evidence": o.evidence}
+            for o in outcomes
+        ],
+    }
+
+
+class RunNoteRequest(BaseModel):
+    note: str = Field(min_length=1)
+
+
+@app.post("/api/provisioning/runs/{run_id}/review")
+async def review_provisioning_run(
+    run_id: uuid.UUID, body: RunNoteRequest, conn: DB, me: ME
+) -> dict[str, str]:
+    """Gate 4. A named human states they reviewed the artifacts, and says what.
+
+    The note is required by the domain function, not by this route - re-checking it here
+    would just be a second opinion that eventually disagrees with the first.
+    """
+    try:
+        await provisioning.record_human_review(
+            conn, run_id=run_id, human=me, note=body.note
+        )
+    except provisioning.ProvisioningError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"status": "reviewed"}
+
+
+@app.post("/api/provisioning/runs/{run_id}/abort")
+async def abort_provisioning_run(
+    run_id: uuid.UUID, body: RunNoteRequest, conn: DB, me: ME
+) -> dict[str, str]:
+    """Abandon a run. Not a revocation - grants are deliberately untouched."""
+    try:
+        await provisioning.abort_run(
+            conn, run_id=run_id, human=me, reason=body.note
+        )
+    except provisioning.ProvisioningError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"status": "aborted"}
+
+
+class RunSignoffRequest(BaseModel):
+    artifacts_hash: str = Field(min_length=64, max_length=64)
+    note: str | None = None
+
+
+@app.post("/api/provisioning/runs/{run_id}/signoff", status_code=201)
+async def sign_off_provisioning_run(
+    run_id: uuid.UUID, body: RunSignoffRequest, conn: DB, me: ME
+) -> dict[str, str]:
+    """Gate 10, bound to the artifacts the signer was shown.
+
+    `POST /api/signoffs` takes whatever hash its caller passes. That was harmless while
+    nothing consumed it and is not harmless now that Gate 11 activates production grants
+    against it. Here the caller sends the hash **it displayed**, the server regenerates
+    the artifacts, and a mismatch is refused - so a signature is a confirmation of what
+    was on screen rather than an assertion about what is in the database.
+    """
+    try:
+        signoff_id, hash_value = await provisioning.sign_off_run(
+            conn, run_id=run_id, human=me,
+            displayed_artifacts_hash=body.artifacts_hash, note=body.note,
+        )
+    except provisioning.ProvisioningError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"signoff_id": str(signoff_id), "artifacts_hash": hash_value}
 
 __all__ = ["NotAuthorized", "app"]

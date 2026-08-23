@@ -442,6 +442,19 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
         "/api/instructions",
         "/api/ventures/{venture_id}/reverse-hard-cap",
         "/api/signoffs",
+        # Pack Editor. `validate` is a POST because the body is a document; it writes
+        # nothing, which `test_validate_stores_nothing` asserts rather than trusting.
+        "/api/packs/validate",
+        "/api/packs",
+        # Provisioning Console. `advance` is the only route that can lead to a grant
+        # becoming active, and it cannot skip a gate to get there - Gate 11 refuses
+        # without a signature bound to the current artifacts and re-checks rather than
+        # trusting Gate 10. There is no route that activates a grant directly.
+        "/api/provisioning/runs",
+        "/api/provisioning/runs/{run_id}/advance",
+        "/api/provisioning/runs/{run_id}/review",
+        "/api/provisioning/runs/{run_id}/abort",
+        "/api/provisioning/runs/{run_id}/signoff",
     }, f"the write surface changed: {sorted(writes)}"
 
 

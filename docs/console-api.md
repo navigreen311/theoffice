@@ -36,8 +36,8 @@ Two rules, both tested rather than reviewed by eye:
 
 **2. Routes that must not exist, do not exist.**
 `test_the_api_exposes_no_route_that_bypasses_a_control` pins the entire write surface to
-seven routes and rejects any path containing `certification`, `flush`, `ledger`, `shift`,
-`memory`, `grant` or `audit`. If a new route trips it, the question is not how to make it
+fourteen routes and rejects any path containing `certification`, `flush`, `ledger`,
+`shift`, `memory`, `grant` or `audit`. If a new route trips it, the question is not how to make it
 pass — it is whether that route should exist.
 
 | Write route | Delegates to |
@@ -49,6 +49,29 @@ pass — it is whether that route should exist.
 | `POST /api/instructions` | `instructions.author` |
 | `POST /api/ventures/{id}/reverse-hard-cap` | `budget.reverse_hard_cap` |
 | `POST /api/signoffs` | `humans.sign_off` |
+| `POST /api/packs/validate` | `validator.validate` — **writes nothing** |
+| `POST /api/packs` | `packs.store` |
+| `POST /api/provisioning/runs` | `provisioning.start_run` |
+| `POST /api/provisioning/runs/{id}/advance` | `provisioning.advance` |
+| `POST /api/provisioning/runs/{id}/review` | `provisioning.record_human_review` |
+| `POST /api/provisioning/runs/{id}/abort` | `provisioning.abort_run` |
+| `POST /api/provisioning/runs/{id}/signoff` | `provisioning.sign_off_run` |
+
+`advance` is the only route in this API that can end with an agent holding production
+authority, and it cannot skip a gate to get there: the machine runs from the current
+gate, Gate 11 refuses without a Gate 10 signature bound to the current artifacts, and it
+re-checks rather than trusting Gate 10's recorded verdict.
+
+**There is no route that activates a grant**, and there must never be — the signature
+check, the artifact binding and Gate 9 all live on the other side of one.
+`test_there_is_no_route_that_activates_a_grant` fails the build if one appears.
+
+`POST /api/provisioning/runs/{id}/signoff` exists because `POST /api/signoffs` takes
+whatever `artifact_hash` its caller passes. That was harmless while nothing consumed it.
+Gate 11 activates production grants against it now, so the provisioning route takes the
+hash the client **displayed**, regenerates the artifacts, and refuses a mismatch rather
+than re-pointing the signature at whatever is current. A signature is a confirmation of
+what was on screen.
 
 ## Authorisation asks two questions
 
@@ -118,6 +141,9 @@ Interactive docs at `/docs` once running.
 - **No rate limiting on the API itself.** Agents are rate-limited; humans are not.
 - **No CORS configuration** — needed before a browser app on a different origin can
   call this.
-- **The Next.js console does not exist yet** (increment 2).
+- **`POST /api/signoffs` still accepts a caller-supplied hash.** Provisioning has its
+  own route that does not, but the general one is unchanged, so a Gate 10 signature can
+  still be created against an arbitrary hash by calling it directly. Narrowing it needs
+  a per-gate artifact resolver, which does not exist for the gates outside Part 11.
 - **Gate sign-off does not yet read the Pack's declared `gate_signoff_policy`** — the
   API takes `distinct_humans` as a request field rather than resolving it from the Pack.
