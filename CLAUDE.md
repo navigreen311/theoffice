@@ -238,7 +238,8 @@ These are controls, not preferences. Code that weakens one is wrong even if it p
 
 ### Sequencing decisions already locked
 
-- **CRE Forge gets the bridge first** (J4) — Greenstone has no PHI, smallest compliance surface.
+- **CapitalForge gets the bridge first** — Ivan's decision, 2026-08-22. **Supersedes blueprint J4**, which chose CRE Forge on the grounds that Greenstone has no PHI and the smallest compliance surface. CapitalForge also has no PHI; its venture (Burkham Wickmont) carries TILA, FCRA, ECOA, UDAAP, CROA and state lender licensure, which matters at Phase 3 rather than Phase 0. Consequence: Gate 0 blocks provisioning against an unbridged Forge, so a Greenstone-first Phase 3 needs CRE Forge bridged as well.
+- **Nothing in `broker/` or `client/` may hardcode a Forge.** Forge identity, base URL, API version, auth model and credential mode are rows in `forge_registry` and `forge_module_registry`. Which Forge is bridged first is configuration. This is the same structural requirement as the brokered→native credential swap (master prompt §1.6), and it is why that swap is a config change rather than a rewrite.
 - **SimForge owns the held-out partition outright** (J8).
 - **One venture per shift** (J2) — resolved, no conditional switching.
 
