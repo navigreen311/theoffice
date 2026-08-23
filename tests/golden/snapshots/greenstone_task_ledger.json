@@ -1,0 +1,672 @@
+{
+  "projected_daily_approvals": {
+    "compliance_officer": 192
+  },
+  "tasks": [
+    {
+      "assigned_agent": "11111111-1111-5111-8111-111111111111",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "cre-forge",
+      "idempotency_class": "key",
+      "module_id": "comp_analysis",
+      "position": "Acquisition Analyst",
+      "sla_minutes": 15,
+      "step_number": 1,
+      "task_id": "1900d465-fde0-5bae-90b9-cd3c78c82cd2",
+      "trust_tier": "auto_execute"
+    },
+    {
+      "assigned_agent": "22222222-2222-5222-8222-222222222222",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "cre-forge",
+      "idempotency_class": "key",
+      "module_id": "comp_analysis",
+      "position": "Acquisition Analyst",
+      "sla_minutes": 15,
+      "step_number": 1,
+      "task_id": "3e569e00-2397-5656-b593-cc71d92ff2de",
+      "trust_tier": "auto_execute"
+    },
+    {
+      "assigned_agent": "33333333-3333-5333-8333-333333333333",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "cre-forge",
+      "idempotency_class": "key",
+      "module_id": "comp_analysis",
+      "position": "Acquisition Analyst",
+      "sla_minutes": 15,
+      "step_number": 1,
+      "task_id": "9b55204c-7d44-51b0-be6d-8ea746e56d0b",
+      "trust_tier": "auto_execute"
+    },
+    {
+      "assigned_agent": "11111111-1111-5111-8111-111111111111",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "voiceforge",
+      "idempotency_class": "key",
+      "module_id": "place_call",
+      "position": "Acquisition Analyst",
+      "sla_minutes": 15,
+      "step_number": 2,
+      "task_id": "bafce601-e525-523f-b6b2-380c63da14bd",
+      "trust_tier": "auto_execute"
+    },
+    {
+      "assigned_agent": "22222222-2222-5222-8222-222222222222",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "voiceforge",
+      "idempotency_class": "key",
+      "module_id": "place_call",
+      "position": "Acquisition Analyst",
+      "sla_minutes": 15,
+      "step_number": 2,
+      "task_id": "d1b703a8-1370-5f02-b9e7-822c226a0d04",
+      "trust_tier": "auto_execute"
+    },
+    {
+      "assigned_agent": "33333333-3333-5333-8333-333333333333",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "voiceforge",
+      "idempotency_class": "key",
+      "module_id": "place_call",
+      "position": "Acquisition Analyst",
+      "sla_minutes": 15,
+      "step_number": 2,
+      "task_id": "2f67cce4-5c33-54d6-a8fd-eea7ab0eb6c0",
+      "trust_tier": "auto_execute"
+    },
+    {
+      "assigned_agent": "11111111-1111-5111-8111-111111111111",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "cre-forge",
+      "idempotency_class": "key",
+      "module_id": "property_lookup",
+      "position": "Acquisition Analyst",
+      "sla_minutes": 15,
+      "step_number": 3,
+      "task_id": "4fea4ca7-245b-5eca-bc8f-9c195ad4c01b",
+      "trust_tier": "auto_execute"
+    },
+    {
+      "assigned_agent": "22222222-2222-5222-8222-222222222222",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "cre-forge",
+      "idempotency_class": "key",
+      "module_id": "property_lookup",
+      "position": "Acquisition Analyst",
+      "sla_minutes": 15,
+      "step_number": 3,
+      "task_id": "0ba4781a-a1ba-5044-b2b9-56d18e8c71ab",
+      "trust_tier": "auto_execute"
+    },
+    {
+      "assigned_agent": "33333333-3333-5333-8333-333333333333",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "cre-forge",
+      "idempotency_class": "key",
+      "module_id": "property_lookup",
+      "position": "Acquisition Analyst",
+      "sla_minutes": 15,
+      "step_number": 3,
+      "task_id": "c17ec867-25d1-5f93-a20b-5773e8181486",
+      "trust_tier": "auto_execute"
+    },
+    {
+      "assigned_agent": "11111111-1111-5111-8111-111111111111",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "cre-forge",
+      "idempotency_class": "key",
+      "module_id": "comp_analysis",
+      "position": "Acquisition Analyst",
+      "sla_minutes": 15,
+      "step_number": 4,
+      "task_id": "fd10dce9-0cf1-50ba-9ed7-10b70e6f2032",
+      "trust_tier": "auto_execute"
+    },
+    {
+      "assigned_agent": "22222222-2222-5222-8222-222222222222",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "cre-forge",
+      "idempotency_class": "key",
+      "module_id": "comp_analysis",
+      "position": "Acquisition Analyst",
+      "sla_minutes": 15,
+      "step_number": 4,
+      "task_id": "f5c77cba-9c27-5d68-9260-66a26ad88981",
+      "trust_tier": "auto_execute"
+    },
+    {
+      "assigned_agent": "33333333-3333-5333-8333-333333333333",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "cre-forge",
+      "idempotency_class": "key",
+      "module_id": "comp_analysis",
+      "position": "Acquisition Analyst",
+      "sla_minutes": 15,
+      "step_number": 4,
+      "task_id": "e3dc9d7e-3c32-59bd-a905-e2c12501239a",
+      "trust_tier": "auto_execute"
+    },
+    {
+      "assigned_agent": "11111111-1111-5111-8111-111111111111",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "voiceforge",
+      "idempotency_class": "key",
+      "module_id": "place_call",
+      "position": "Acquisition Analyst",
+      "sla_minutes": 15,
+      "step_number": 5,
+      "task_id": "019e934c-a52a-599b-9525-8d580bd42b20",
+      "trust_tier": "auto_execute"
+    },
+    {
+      "assigned_agent": "22222222-2222-5222-8222-222222222222",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "voiceforge",
+      "idempotency_class": "key",
+      "module_id": "place_call",
+      "position": "Acquisition Analyst",
+      "sla_minutes": 15,
+      "step_number": 5,
+      "task_id": "e046c6b0-773a-5e03-9f8c-5d817dfe4eaa",
+      "trust_tier": "auto_execute"
+    },
+    {
+      "assigned_agent": "33333333-3333-5333-8333-333333333333",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "voiceforge",
+      "idempotency_class": "key",
+      "module_id": "place_call",
+      "position": "Acquisition Analyst",
+      "sla_minutes": 15,
+      "step_number": 5,
+      "task_id": "35e55736-082c-56b7-9a76-7ef0e4f16d97",
+      "trust_tier": "auto_execute"
+    },
+    {
+      "assigned_agent": "11111111-1111-5111-8111-111111111111",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "cre-forge",
+      "idempotency_class": "key",
+      "module_id": "property_lookup",
+      "position": "Acquisition Analyst",
+      "sla_minutes": 15,
+      "step_number": 6,
+      "task_id": "17ebf727-9ac0-5b04-a52a-815bb1ba66dc",
+      "trust_tier": "auto_execute"
+    },
+    {
+      "assigned_agent": "22222222-2222-5222-8222-222222222222",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "cre-forge",
+      "idempotency_class": "key",
+      "module_id": "property_lookup",
+      "position": "Acquisition Analyst",
+      "sla_minutes": 15,
+      "step_number": 6,
+      "task_id": "45aeb87e-b464-5e58-9ad2-7f9ff27f5034",
+      "trust_tier": "auto_execute"
+    },
+    {
+      "assigned_agent": "33333333-3333-5333-8333-333333333333",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "cre-forge",
+      "idempotency_class": "key",
+      "module_id": "property_lookup",
+      "position": "Acquisition Analyst",
+      "sla_minutes": 15,
+      "step_number": 6,
+      "task_id": "59f1fc21-3531-5940-9ad5-6b52f8882c19",
+      "trust_tier": "auto_execute"
+    },
+    {
+      "assigned_agent": "44444444-4444-5444-8444-444444444444",
+      "compliance_flags": [
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "cre-forge",
+      "idempotency_class": "key",
+      "module_id": "comp_analysis",
+      "position": "Deal Underwriter",
+      "sla_minutes": 240,
+      "step_number": 7,
+      "task_id": "c0d4e65a-a69c-5f6a-bb97-d0ef138e66f2",
+      "trust_tier": "propose"
+    },
+    {
+      "assigned_agent": "55555555-5555-5555-8555-555555555555",
+      "compliance_flags": [
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "cre-forge",
+      "idempotency_class": "key",
+      "module_id": "comp_analysis",
+      "position": "Deal Underwriter",
+      "sla_minutes": 240,
+      "step_number": 7,
+      "task_id": "c6552f5c-dbd9-5520-9ecd-4672f5bd475b",
+      "trust_tier": "propose"
+    },
+    {
+      "assigned_agent": "44444444-4444-5444-8444-444444444444",
+      "compliance_flags": [
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "cre-forge",
+      "idempotency_class": "key",
+      "module_id": "underwrite_deal",
+      "position": "Deal Underwriter",
+      "sla_minutes": 240,
+      "step_number": 8,
+      "task_id": "0e6e720c-0f89-5331-af8e-74dc06d539ec",
+      "trust_tier": "propose"
+    },
+    {
+      "assigned_agent": "55555555-5555-5555-8555-555555555555",
+      "compliance_flags": [
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "cre-forge",
+      "idempotency_class": "key",
+      "module_id": "underwrite_deal",
+      "position": "Deal Underwriter",
+      "sla_minutes": 240,
+      "step_number": 8,
+      "task_id": "1ec23afe-fa08-54b5-b20e-7027e584aab6",
+      "trust_tier": "propose"
+    },
+    {
+      "assigned_agent": "44444444-4444-5444-8444-444444444444",
+      "compliance_flags": [
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "cre-forge",
+      "idempotency_class": "key",
+      "module_id": "comp_analysis",
+      "position": "Deal Underwriter",
+      "sla_minutes": 240,
+      "step_number": 9,
+      "task_id": "845332a6-b57a-5e97-aa4f-e21fdc892b78",
+      "trust_tier": "propose"
+    },
+    {
+      "assigned_agent": "55555555-5555-5555-8555-555555555555",
+      "compliance_flags": [
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "cre-forge",
+      "idempotency_class": "key",
+      "module_id": "comp_analysis",
+      "position": "Deal Underwriter",
+      "sla_minutes": 240,
+      "step_number": 9,
+      "task_id": "5334186a-9312-527e-8bbf-3b849dadc0d3",
+      "trust_tier": "propose"
+    },
+    {
+      "assigned_agent": "44444444-4444-5444-8444-444444444444",
+      "compliance_flags": [
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "cre-forge",
+      "idempotency_class": "key",
+      "module_id": "underwrite_deal",
+      "position": "Deal Underwriter",
+      "sla_minutes": 240,
+      "step_number": 10,
+      "task_id": "cc3e1e54-8e52-510b-b868-d2756df9ca12",
+      "trust_tier": "propose"
+    },
+    {
+      "assigned_agent": "55555555-5555-5555-8555-555555555555",
+      "compliance_flags": [
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "cre-forge",
+      "idempotency_class": "key",
+      "module_id": "underwrite_deal",
+      "position": "Deal Underwriter",
+      "sla_minutes": 240,
+      "step_number": 10,
+      "task_id": "72678e22-77d1-5eb9-b4a7-539ca280faf7",
+      "trust_tier": "propose"
+    },
+    {
+      "assigned_agent": "66666666-6666-5666-8666-666666666666",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "cre-forge",
+      "idempotency_class": "key",
+      "module_id": "buyer_match",
+      "position": "Buyer Network Manager",
+      "sla_minutes": 240,
+      "step_number": 11,
+      "task_id": "e5e27211-a820-59c1-8a8f-8bbfdcbf4b40",
+      "trust_tier": "propose"
+    },
+    {
+      "assigned_agent": "77777777-7777-5777-8777-777777777777",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "cre-forge",
+      "idempotency_class": "key",
+      "module_id": "buyer_match",
+      "position": "Buyer Network Manager",
+      "sla_minutes": 240,
+      "step_number": 11,
+      "task_id": "225ea488-efb6-58c6-aa3e-ee896975fe6e",
+      "trust_tier": "propose"
+    },
+    {
+      "assigned_agent": "66666666-6666-5666-8666-666666666666",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "cre-forge",
+      "idempotency_class": "at_most_once",
+      "module_id": "generate_loi",
+      "position": "Buyer Network Manager",
+      "sla_minutes": 240,
+      "step_number": 12,
+      "task_id": "20d1423a-9b15-5c7f-81ce-8b8eb44851e3",
+      "trust_tier": "propose"
+    },
+    {
+      "assigned_agent": "77777777-7777-5777-8777-777777777777",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "cre-forge",
+      "idempotency_class": "at_most_once",
+      "module_id": "generate_loi",
+      "position": "Buyer Network Manager",
+      "sla_minutes": 240,
+      "step_number": 12,
+      "task_id": "2f8149b8-24ed-5e54-94f1-28b93b7d98ef",
+      "trust_tier": "propose"
+    },
+    {
+      "assigned_agent": "66666666-6666-5666-8666-666666666666",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "voiceforge",
+      "idempotency_class": "key",
+      "module_id": "place_call",
+      "position": "Buyer Network Manager",
+      "sla_minutes": 240,
+      "step_number": 13,
+      "task_id": "28483121-0ad9-54bc-b0aa-ead956f15eea",
+      "trust_tier": "propose"
+    },
+    {
+      "assigned_agent": "77777777-7777-5777-8777-777777777777",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "voiceforge",
+      "idempotency_class": "key",
+      "module_id": "place_call",
+      "position": "Buyer Network Manager",
+      "sla_minutes": 240,
+      "step_number": 13,
+      "task_id": "58aeb5eb-55c5-5d92-8017-80e7bc3b3923",
+      "trust_tier": "propose"
+    },
+    {
+      "assigned_agent": "66666666-6666-5666-8666-666666666666",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "voiceforge",
+      "idempotency_class": "key",
+      "module_id": "transcribe_call",
+      "position": "Buyer Network Manager",
+      "sla_minutes": 240,
+      "step_number": 14,
+      "task_id": "94a280a5-bdd5-5462-b89b-55cb557c3973",
+      "trust_tier": "propose"
+    },
+    {
+      "assigned_agent": "77777777-7777-5777-8777-777777777777",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "voiceforge",
+      "idempotency_class": "key",
+      "module_id": "transcribe_call",
+      "position": "Buyer Network Manager",
+      "sla_minutes": 240,
+      "step_number": 14,
+      "task_id": "b160f1cc-31a7-5bb1-b9e2-0a6e466a7d81",
+      "trust_tier": "propose"
+    },
+    {
+      "assigned_agent": "66666666-6666-5666-8666-666666666666",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "cre-forge",
+      "idempotency_class": "key",
+      "module_id": "buyer_match",
+      "position": "Buyer Network Manager",
+      "sla_minutes": 240,
+      "step_number": 15,
+      "task_id": "17fd56e0-c5cd-5fb2-8b08-cca883ed2112",
+      "trust_tier": "propose"
+    },
+    {
+      "assigned_agent": "77777777-7777-5777-8777-777777777777",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "cre-forge",
+      "idempotency_class": "key",
+      "module_id": "buyer_match",
+      "position": "Buyer Network Manager",
+      "sla_minutes": 240,
+      "step_number": 15,
+      "task_id": "dc05c768-4d04-5c19-ba31-1ee4bb549208",
+      "trust_tier": "propose"
+    },
+    {
+      "assigned_agent": "66666666-6666-5666-8666-666666666666",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "cre-forge",
+      "idempotency_class": "at_most_once",
+      "module_id": "generate_loi",
+      "position": "Buyer Network Manager",
+      "sla_minutes": 240,
+      "step_number": 16,
+      "task_id": "3b1604b6-5e48-5320-8edf-d17ee987e837",
+      "trust_tier": "propose"
+    },
+    {
+      "assigned_agent": "77777777-7777-5777-8777-777777777777",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "cre-forge",
+      "idempotency_class": "at_most_once",
+      "module_id": "generate_loi",
+      "position": "Buyer Network Manager",
+      "sla_minutes": 240,
+      "step_number": 16,
+      "task_id": "f838bcdc-ab38-5631-af82-4e555c8876c4",
+      "trust_tier": "propose"
+    },
+    {
+      "assigned_agent": "66666666-6666-5666-8666-666666666666",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "voiceforge",
+      "idempotency_class": "key",
+      "module_id": "place_call",
+      "position": "Buyer Network Manager",
+      "sla_minutes": 240,
+      "step_number": 17,
+      "task_id": "1e1d0cfc-a5de-51c8-87a2-fa165fa35e46",
+      "trust_tier": "propose"
+    },
+    {
+      "assigned_agent": "77777777-7777-5777-8777-777777777777",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "voiceforge",
+      "idempotency_class": "key",
+      "module_id": "place_call",
+      "position": "Buyer Network Manager",
+      "sla_minutes": 240,
+      "step_number": 17,
+      "task_id": "346c44d5-874b-5bcc-a486-116477283188",
+      "trust_tier": "propose"
+    },
+    {
+      "assigned_agent": "66666666-6666-5666-8666-666666666666",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "voiceforge",
+      "idempotency_class": "key",
+      "module_id": "transcribe_call",
+      "position": "Buyer Network Manager",
+      "sla_minutes": 240,
+      "step_number": 18,
+      "task_id": "5ab8443f-961a-5165-a050-c38978fc69a4",
+      "trust_tier": "propose"
+    },
+    {
+      "assigned_agent": "77777777-7777-5777-8777-777777777777",
+      "compliance_flags": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "expected_daily_volume": 8,
+      "forge_id": "voiceforge",
+      "idempotency_class": "key",
+      "module_id": "transcribe_call",
+      "position": "Buyer Network Manager",
+      "sla_minutes": 240,
+      "step_number": 18,
+      "task_id": "af1c7442-76b3-5ecb-b2f3-e95facb78005",
+      "trust_tier": "propose"
+    }
+  ],
+  "venture_id": "greenstone"
+}
