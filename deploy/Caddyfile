@@ -1,0 +1,38 @@
+# TLS is Caddy's job: it obtains and renews a certificate for OFFICE_DOMAIN on its own.
+#
+# NOT VERIFIED BY ME. I have no domain to test against, so this is the standard
+# configuration and the deployment doc says what to change. The first deploy should
+# check `docker compose logs caddy` for the certificate issuance, because a failure
+# there leaves the site serving on HTTP - and the session cookie is `secure`, so the
+# console will appear to accept a sign-in and then behave as though nobody signed in.
+
+{$OFFICE_DOMAIN} {
+	encode gzip
+
+	# The console is the only thing exposed. The Operations API is NOT proxied: it is
+	# reachable on the compose network by the console and by nothing else. Publishing
+	# it here would put a bearer-token API on the public internet to serve exactly one
+	# client that is already inside the network.
+	reverse_proxy console:3000 {
+		health_uri /login
+		health_interval 15s
+		health_timeout 5s
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "same-origin"
+		# The console loads no third-party anything: no CDN, no fonts, no analytics.
+		# Saying so here means an accidental <script src="https://..."> fails visibly
+		# in the browser console rather than silently working.
+		Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-ancestors 'none'"
+		-Server
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

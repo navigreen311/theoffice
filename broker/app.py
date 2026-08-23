@@ -34,7 +34,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
@@ -57,6 +57,12 @@ from broker.db import close_pool, connection
 from broker.errors import NotAuthorized, OfficeError
 from broker.humans import Human
 from generators.validator import validate as validate_pack
+
+# The migration this build expects. `/api/ready` compares it to what the database
+# actually reports, so a container cannot serve traffic against a schema its code was
+# never written for. Bump it in the same commit as the migration - the two disagreeing
+# is the condition this exists to detect.
+EXPECTED_SCHEMA_REVISION = "0013"
 
 
 @asynccontextmanager
@@ -130,6 +136,58 @@ async def _audit_human_action(
         venture_id=venture_id,
         subject={"human": human.display_name, **subject},
     )
+
+
+# ================================================ unauthenticated: liveness
+
+# THE ONLY TWO ROUTES ON THIS API THAT DO NOT REQUIRE A TOKEN.
+#
+# Docker's healthcheck and Caddy's upstream check cannot hold a bearer token, so the
+# alternative to these is no health checking at all - which means a container that has
+# lost its database keeps receiving traffic.
+#
+# Adding a third is a reviewable act:
+# `test_the_unauthenticated_surface_is_exactly_these_two` pins the set. Neither returns
+# anything an unauthenticated caller could learn from - no version, no counts, no error
+# text, no schema revision. `/api/health` stays authenticated, because control freshness
+# is exactly what an attacker would like to know is stale.
+
+@app.get("/api/live")
+async def live() -> dict[str, str]:
+    """The process is up. No database, no auth, no information.
+
+    Deliberately does not touch the database. A liveness probe that fails when the
+    database is unreachable makes the orchestrator restart a perfectly healthy process
+    in a loop, which turns a database outage into an application outage as well.
+    """
+    return {"status": "live"}
+
+
+@app.get("/api/ready")
+async def ready(response: Response) -> dict[str, str]:
+    """The database answers and the schema is at head.
+
+    Both halves matter. A container serving traffic against a half-migrated database is
+    worse than one that is down: it answers, and it answers wrong. This is the check
+    that keeps a deploy from switching traffic onto a version whose migration has not
+    finished.
+
+    Returns 503 rather than raising, so the body stays this small on both paths. The
+    reason a readiness check failed is operational detail, and it belongs in the
+    container's logs rather than in an unauthenticated response.
+    """
+    try:
+        async with connection() as conn, conn.cursor() as cur:
+            await cur.execute("SELECT version_num FROM alembic_version")
+            row = await cur.fetchone()
+    except Exception:
+        response.status_code = 503
+        return {"status": "not_ready"}
+
+    if row is None or row[0] != EXPECTED_SCHEMA_REVISION:
+        response.status_code = 503
+        return {"status": "not_ready"}
+    return {"status": "ready"}
 
 
 # =============================================================== read: health

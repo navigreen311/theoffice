@@ -1,0 +1,152 @@
+# The Office - one Linux VM, five services.
+#
+#   docker compose -f compose.yaml -f compose.staging.yaml up -d
+#   docker compose -f compose.yaml -f compose.prod.yaml    up -d
+#
+# Or use scripts/deploy.sh, which also migrates, waits for readiness and verifies the
+# audit chain before it reports success.
+#
+# Two things about the network shape are deliberate.
+#
+# **Only Caddy binds a host port.** Postgres, the API and the console are reachable on
+# the compose network and nowhere else. A Postgres published to the host is a Postgres
+# exposed to the internet the first time the VM's firewall is edited by someone in a
+# hurry, and this database holds the audit chain.
+#
+# **The console talks to the API over the compose network, not through Caddy.** The
+# console is the only client of the API, every call happens server-side, and routing
+# them back out through the proxy would add a hop, a TLS handshake and a second place
+# for the request to be logged with a bearer token in it.
+
+name: theoffice
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-theoffice}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      # Explicit rather than inherited from the host locale, so a restore into a fresh
+      # container sorts identically to the database it came from.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-theoffice}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # No `ports:`. Deliberate - see the header.
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: theoffice-api:${IMAGE_TAG:-local}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      OFFICE_APP_DSN: ${OFFICE_APP_DSN:?OFFICE_APP_DSN is required}
+      CREDENTIAL_BACKEND: ${CREDENTIAL_BACKEND:-vault}
+      VAULT_ADDR: ${VAULT_ADDR:-}
+      VAULT_TOKEN: ${VAULT_TOKEN:-}
+      VAULT_NAMESPACE: ${VAULT_NAMESPACE:-}
+      FORGE_TIMEOUT_SECONDS: ${FORGE_TIMEOUT_SECONDS:-30}
+      POOL_MAX_SIZE: ${POOL_MAX_SIZE:-10}
+    expose:
+      - "8080"
+
+  console:
+    build:
+      context: ./console
+      dockerfile: Dockerfile
+    image: theoffice-console:${IMAGE_TAG:-local}
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      # Over the compose network. The browser never makes this request.
+      OFFICE_API_URL: http://api:8080
+      # Drives the `secure` flag on the session cookie. Never set this to anything but
+      # production on a deployment that serves over HTTPS: without it the cookie holding
+      # a human's bearer token is sent in the clear the first time a link is http://.
+      NODE_ENV: production
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - console
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      OFFICE_DOMAIN: ${OFFICE_DOMAIN:?OFFICE_DOMAIN is required}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  # Part 4.1: the sweeps are the continuous-verification layer, and until now nothing
+  # ran them on a schedule. A control that exists in the repository and not in the
+  # deployment is a control that does not exist - this project shipped three of those
+  # once already.
+  #
+  # A container rather than a host crontab, so the schedule ships with the deployment
+  # and cannot be true on one VM and absent on the next.
+  sweeps:
+    image: theoffice-api:${IMAGE_TAG:-local}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      OFFICE_APP_DSN: ${OFFICE_APP_DSN:?OFFICE_APP_DSN is required}
+      CREDENTIAL_BACKEND: ${CREDENTIAL_BACKEND:-vault}
+      VAULT_ADDR: ${VAULT_ADDR:-}
+      VAULT_TOKEN: ${VAULT_TOKEN:-}
+      SWEEP_INTERVAL_SECONDS: ${SWEEP_INTERVAL_SECONDS:-3600}
+    entrypoint: ["/bin/sh", "-c"]
+    # `|| true` on the sweep itself: a failing sweep is a finding to be recorded and
+    # investigated, not a reason to stop running the sweeps. The exit code is still
+    # printed, and `broker health` is what a monitor watches.
+    #
+    # The heartbeat file is what makes the healthcheck below mean anything.
+    command:
+      - |
+        while true; do
+          echo "--- sweep $$(date -u +%FT%TZ)"
+          python -m broker sweep || true
+          date +%s > /tmp/last-sweep
+          sleep "$${SWEEP_INTERVAL_SECONDS}"
+        done
+    # This service reuses the API image and therefore inherited its HEALTHCHECK, which
+    # curls http://127.0.0.1:8080/api/live - an endpoint this container does not serve.
+    # It reported `unhealthy` forever while doing its job perfectly, which is worse than
+    # no signal: a permanently red service teaches an operator to ignore the column.
+    #
+    # Replaced with the question actually worth asking about a loop: did it go round
+    # recently. Three intervals of slack, so one slow sweep is not an alarm.
+    healthcheck:
+      # One line on purpose. Written as a folded scalar it looked correct and was not:
+      # YAML keeps the newline before a more-indented continuation, so the shell got
+      # `[ ... -lt` on one line and the bound on the next, and reported `[: missing ]`
+      # three times before anybody noticed the service said `health: starting` forever.
+      test: ["CMD-SHELL", "test -f /tmp/last-sweep && [ $$(( $$(date +%s) - $$(cat /tmp/last-sweep) )) -lt $$(( $${SWEEP_INTERVAL_SECONDS:-3600} * 3 )) ]"]
+      interval: 60s
+      timeout: 10s
+      # The first sweep has to finish before there is anything to check.
+      start_period: 180s
+      retries: 3
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

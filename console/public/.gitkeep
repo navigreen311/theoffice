@@ -1,0 +1,8 @@
+Kept so `console/public` exists in git and therefore in the Docker build context.
+
+console/Dockerfile does `COPY --from=build /app/public ./public`, and an empty
+directory is not tracked by git - so without this file the build fails on a clean
+checkout with "/app/public: not found", which is exactly how it failed once.
+
+Dropping the COPY instead would make the build pass and silently omit the first asset
+anybody puts here.

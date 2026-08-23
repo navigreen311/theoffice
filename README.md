@@ -67,11 +67,11 @@ cd console && npm run dev                               # the console on :3000
 
 ## CI
 
-`.github/workflows/ci.yml`. Six jobs: **lint and types** (ruff, strict mypy,
+`.github/workflows/ci.yml`. Seven jobs: **lint and types** (ruff, strict mypy,
 shellcheck), **tests** (Postgres 16 service, migrations, the full suite), **migrations
 are reversible** (up/down/up/down/up, then one head), **console** (vitest, tsc, build,
-eslint), **smoke** (a real server, real requests, real pages), and **no committed
-secrets**.
+eslint), **smoke** (a real server, real requests, real pages), **images** (both containers build,
+start and run non-root), and **no committed secrets**.
 
 Three of those need explaining, because each closes a way this repository can go green
 while proving nothing.
@@ -101,6 +101,21 @@ is not, so CI needs no dotfile:
 ./scripts/console-smoke.sh              # build, then verify
 ./scripts/console-smoke.sh --no-build   # reuse an existing .next
 ```
+
+## Deploy
+
+One Linux VM, Docker Compose, Vault, staging and production. See
+`docs/deployment.md`.
+
+```bash
+cp deploy/example.env deploy/production.env    # gitignored; fill it in
+./scripts/deploy.sh production
+./scripts/backup.sh production --verify        # dump, restore, verify the chain
+```
+
+`deploy.sh` refuses a dirty tree, migrates before starting the new API, **waits for
+`/api/ready` and fails without switching traffic if it never comes**, then verifies the
+audit chain — a migration is the most plausible thing to have broken it.
 
 ## Layout
 

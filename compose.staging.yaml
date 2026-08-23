@@ -1,0 +1,22 @@
+# Staging. Same images, same shape, smaller everything.
+#
+# Same shape is the point. A staging environment that differs structurally from
+# production rehearses a deployment nobody is going to perform - the whole reason to
+# have one is that Gate 5 issues grants and Gate 11 activates them, and there needs to
+# be somewhere to get that wrong.
+
+services:
+  api:
+    environment:
+      POOL_MAX_SIZE: 5
+
+  caddy:
+    ports: !override
+      - "80:80"
+      - "443:443"
+
+  sweeps:
+    environment:
+      # More often than production, because staging is where a broken sweep should be
+      # noticed, and an hourly cadence hides one for an hour.
+      SWEEP_INTERVAL_SECONDS: 900

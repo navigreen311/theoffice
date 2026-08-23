@@ -1,6 +1,6 @@
 name: CI
 
-# Six jobs, and the one that matters most is `tests` — because most of this
+# Seven jobs, and the one that matters most is `tests` — because most of this
 # repository's controls ARE tests. The write-surface pin, the SimForge no-read-path
 # check, the persona-body scan and the validator meta-test are not documentation about
 # controls; they are the enforcement. Until now they only fired when somebody remembered
@@ -340,6 +340,100 @@ jobs:
       # there is nothing to upload on success. On failure it has already printed the
       # relevant log tail itself - a wait that times out dumps the server log rather
       # than leaving somebody to guess which of thirty checks went first.
+
+  # ------------------------------------------------------------------ images
+  images:
+    name: Images build
+    runs-on: ubuntu-latest
+
+    # A Dockerfile that only looks right is the same class of error as a build that
+    # compiles and throws at render. Both images are built on every PR so a broken one
+    # fails here rather than during a deploy, which is the worst moment to find out.
+    #
+    # Build only. Nothing is pushed and nothing is deployed - `scripts/deploy.sh` builds
+    # on the target VM, so there is no registry in this design to push to.
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: false
+          load: true
+          tags: theoffice-api:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Console image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./console
+          file: console/Dockerfile
+          push: false
+          load: true
+          tags: theoffice-console:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # An image that builds and cannot start is a Dockerfile that passed review. Both
+      # entrypoints are exercised: the API answers its own liveness probe, and the
+      # console serves the one page that renders without a session.
+      - name: The API image starts and answers /api/live
+        run: |
+          docker run -d --name api-probe -p 18080:8080             -e OFFICE_APP_DSN=postgresql://unused:unused@127.0.0.1:5432/unused             theoffice-api:ci
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18080/api/live >/dev/null 2>&1; then
+              echo "api image is live"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "the API image never answered /api/live" >&2
+          docker logs api-probe >&2
+          exit 1
+
+      - name: The API image runs as a non-root user
+        # Everything in this system is about who is allowed to do what. An image running
+        # as root undoes that at a layer below any of it.
+        run: |
+          who="$(docker run --rm theoffice-api:ci id -un)"
+          [ "$who" = "office" ] || { echo "API image runs as $who, expected office" >&2; exit 1; }
+          echo "api runs as $who"
+
+      - name: The console image starts and serves /login
+        run: |
+          docker run -d --name console-probe -p 13000:3000             -e OFFICE_API_URL=http://127.0.0.1:1 theoffice-console:ci
+          for _ in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:13000/login >/dev/null 2>&1; then
+              echo "console image serves /login"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "the console image never served /login" >&2
+          docker logs console-probe >&2
+          exit 1
+
+      - name: The console image runs as a non-root user
+        run: |
+          who="$(docker run --rm theoffice-console:ci id -un)"
+          [ "$who" = "node" ] || { echo "console image runs as $who, expected node" >&2; exit 1; }
+          echo "console runs as $who"
+
+      - name: Compose configuration is valid for both environments
+        env:
+          POSTGRES_PASSWORD: ci-not-a-secret
+          OFFICE_APP_DSN: postgresql://office_app:ci-not-a-secret@db:5432/theoffice
+          OFFICE_DOMAIN: office.invalid
+        run: |
+          docker compose -f compose.yaml -f compose.staging.yaml config >/dev/null
+          docker compose -f compose.yaml -f compose.prod.yaml config >/dev/null
+          echo "both overlays valid"
 
   # ------------------------------------------------------------------ secrets
   secrets:
