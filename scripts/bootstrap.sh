@@ -97,16 +97,24 @@ psql "$OFFICE_ADMIN_DSN" -tAc \
   "SELECT 'ok=' || ok || ' checked=' || checked_count || ' :: ' || reason
      FROM audit_log_verify_chain()" | sed 's/^/  /'
 
-# --- tests --------------------------------------------------------------
+# --- quality gates ------------------------------------------------------
 if [ "$RUN_TESTS" -eq 1 ]; then
+  step "Lint"
+  "$VPY" -m ruff check .
+
+  step "Type check"
+  "$VPY" -m mypy broker client
+
   step "Tests"
-  "$VPY" -m pytest -q
+  # The stub Forge credential is fake and exists only so the env-backed resolver
+  # has something to resolve. Never a real secret.
+  STUB_FORGE_TOKEN="${STUB_FORGE_TOKEN:-stub-forge-test-token}" "$VPY" -m pytest -q
 fi
 
 step "Done"
 cat <<'NEXT'
   Run tests again:   .venv/Scripts/python -m pytest -q
   Lint:              .venv/Scripts/python -m ruff check .
-  Type check:        .venv/Scripts/python -m mypy broker client generators
+  Type check:        .venv/Scripts/python -m mypy broker client
   Verify the chain:  psql "$OFFICE_ADMIN_DSN" -c "SELECT * FROM audit_log_verify_chain()"
 NEXT

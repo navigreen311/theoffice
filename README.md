@@ -16,8 +16,8 @@ exists to make the first ones true.
 | 0.1 | Schema, append-only ledger, hash chain | **Done** — 42 tests |
 | 0.2 | Identity issuance for all 106 agents | Blocked — needs the Village roster |
 | 0.3 | Vault + CRE Forge credential | Blocked — needs Vault and CRE Forge access |
-| 0.4 | Broker skeleton | Next |
-| 0.5 | Client library | Next |
+| 0.4 | Broker — grant resolution, credentials, execution | **Done** |
+| 0.5 | Client library — the mandatory call path | **Done** |
 | 0.6 | Network policy | Blocked — needs the deployment target |
 | 0.7 | Revocation | After 0.4 |
 | 0.8 | **First real authenticated call** | The milestone |
@@ -69,6 +69,7 @@ docs/
 - `CLAUDE.md` — conventions and the 14 non-negotiable invariants
 - `PROJECT_RULEBOOK.md` — the governing methodology
 - `docs/ledger.md` — how append-only and the hash chain actually work
+- `docs/call-path.md` — the broker, the client library, and why the order matters
 - `docs/reference/` — what The Office is, and what gets built in what order
 
 ## Security

@@ -23,8 +23,38 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - 42 tests across schema, append-only, and hash-chain suites.
 - AI development setup: `CLAUDE.md`, `PROJECT_RULEBOOK.md`, five commands.
 
+- **Phase 0.4 + 0.5 — identity broker and client library.** The bridge's call path.
+  - `broker/grants.py` — authorization resolved live on every call. One query checks
+    identity status, grant existence, revocation, and both certification units.
+    No cache, by design: this query is the kill switch.
+  - `broker/credentials.py` — `CredentialResolver` protocol with an env-backed dev
+    implementation. `Credential` prints redacted; `.reveal()` is the only way out.
+    The Vault backend raises rather than silently falling back.
+  - `broker/executor.py` — presents the Forge's tenant credential and stamps
+    `X-Office-Agent-Id`, `X-Office-Venture`, `X-Office-Trace`, `Idempotency-Key`.
+  - `broker/audit.py`, `broker/ledger.py` — pre-call intent entry, post-call outcome
+    row, derived idempotency keys, payload hashing.
+  - `broker/errors.py` — a named refusal type per failure mode, each carrying the
+    audit event it writes.
+  - `client/office_client.py` — the mandatory call path in seven ordered steps.
+  - Fail-closed audit on compliance-flagged actions; degrade otherwise.
+  - `at_most_once` modules escalate to a human instead of auto-retrying.
+  - Nothing names a Forge: base URL, API version, auth model, credential mode and
+    idempotency class are all registry rows.
+  - 20 contract tests against an in-process stub Forge. 62 tests total.
+  - `ruff` and strict `mypy` wired into `bootstrap.sh` as gates.
+
+### Changed
+- **Blueprint J4 superseded:** CapitalForge bridges first, not CRE Forge (Ivan's
+  decision). Consequence: Gate 0 blocks a Greenstone-first Phase 3 until CRE Forge is
+  also bridged.
+
 ### Fixed
 - **Blueprint §2 defect:** `agent_call_ledger` declared `call_id UUID PRIMARY KEY`
   on a RANGE-partitioned table. PostgreSQL requires every partitioning column in a
   unique constraint, so the migration could not run. Corrected to
   `PRIMARY KEY (call_id, ts_start)`. The blueprint should be amended.
+- Windows: psycopg's async driver cannot run on asyncio's default
+  `ProactorEventLoop`. Without the selector policy the pool does not fail fast — it
+  retries to `PoolTimeout`, so the symptom is a 30-second hang rather than an error
+  naming the cause. Set once in `broker/__init__.py`, platform-guarded.

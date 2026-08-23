@@ -106,9 +106,22 @@ When you receive an error report, use the trigger context, not just the stack tr
 - Match the style of the existing code — it is the primary specification.
 - Keep docs short but accurate, and **always include the run / test / deploy commands.**
 
-**Exemplar files** — match the design, style, and conventions of these:
-<!-- POPULATE once code exists. These files are the canonical "this is what good looks like here". Keep them genuinely excellent; they train every future change. -->
-- _(to be nominated)_
+**Exemplar files** — match the design, style, and conventions of these. They are the
+canonical "this is what good looks like here", and they train every future change.
+Keep them genuinely excellent; a weak exemplar propagates.
+
+- `broker/grants.py` — module docstring states the rule being enforced and why the
+  obvious shortcut (caching) is forbidden. One query, one dataclass, named refusals.
+- `client/office_client.py` — the order of operations documented as the design, with
+  each step's justification.
+- `db/versions/0003_hash_chain.py` — a migration whose docstring explains the three
+  decisions that each prevent a specific silent failure.
+- `tests/contract/test_call_path.py` — tests written the way that can actually fail,
+  with the reasoning in the docstring.
+
+House style, visible in all four: **comments explain why, never what.** A comment
+restating the code is noise; a comment naming the failure the code prevents is the
+only durable record of that reasoning.
 
 ---
 
