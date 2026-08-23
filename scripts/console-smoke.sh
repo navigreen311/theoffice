@@ -29,11 +29,20 @@ BUILD=1
 WORK="$(mktemp -d)"
 COOKIE_JAR="$WORK/cookies.txt"
 FAILURES=0
+UNEXERCISED=0
 
 say()  { printf '  %s\n' "$1"; }
 step() { printf '\n==> %s\n' "$1"; }
 fail() { printf '  FAIL %s\n' "$1"; FAILURES=$((FAILURES + 1)); }
 die()  { printf 'error: %s\n' "$1" >&2; exit 1; }
+
+# A check that could not run is not a check that passed, and it does not get to be a
+# quiet note either. Two of these hid in plain sight for three increments: the
+# parameterised-route checks ran BEFORE the world was seeded, so on a fresh database
+# they reported "not exercised" and the run still ended in "all checks passed". That is
+# the same false green the CI test guard exists to prevent, in the script that is
+# supposed to be the last line of defence.
+notrun() { printf '  NOT EXERCISED %s\n' "$1"; UNEXERCISED=$((UNEXERCISED + 1)); }
 
 case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*) OS_KIND=windows ;;
@@ -115,6 +124,10 @@ wait_for() {
   return 1
 }
 
+# shellcheck disable=SC2317  # invoked by the EXIT trap, which shellcheck cannot see.
+# It began firing only once the Result block ended in explicit exits, at which point
+# there is no fallthrough path into this function - the trap is the only caller, and
+# that is the intent.
 cleanup() {
   kill_port "$API_PORT"
   kill_port "$CONSOLE_PORT"
@@ -180,6 +193,10 @@ asyncio.run(main())
 PY
 )"
 [ -n "$TOKEN" ] || { echo "could not issue a token" >&2; exit 1; }
+# Defined here, next to the token, because two steps below used to be above the old
+# definition after a reorder. Under `set -u` that produced an empty header and a
+# comparison against a response the script never received, which read as a pass.
+API_AUTH="Authorization: Bearer $TOKEN"
 say "issued ${TOKEN:0:8}..."
 
 step "Console"
@@ -232,37 +249,6 @@ for path in $ROUTES; do
 done
 say "no route leaked the token"
 
-step "Parameterised routes render"
-# Ids come from the API, not from scraping the HTML. The first version of this grepped
-# the page for /ventures/<slug> and matched a Next.js chunk filename, then reported a
-# pass for a venture that does not exist. A check that can pass for the wrong reason is
-# worse than no check.
-API_AUTH="Authorization: Bearer $TOKEN"
-
-AGENT_ID="$(curl -s -H "$API_AUTH" "http://127.0.0.1:$API_PORT/api/agents"   | grep -o '"office_agent_id": *"[^"]*"' | head -1 | grep -o '[0-9a-f-]\{36\}' || true)"
-if [ -n "$AGENT_ID" ]; then
-  code="$(curl -s -b "$COOKIE_JAR" -o /dev/null -w '%{http_code}'     "http://127.0.0.1:$CONSOLE_PORT/agents/$AGENT_ID")"
-  if [ "$code" = "200" ]; then say "/agents/$AGENT_ID -> 200"; else fail "/agents/$AGENT_ID returned $code"; fi
-else
-  say "no agents in the registry; /agents/[id] not exercised"
-fi
-
-VENTURE="$(curl -s -H "$API_AUTH" "http://127.0.0.1:$API_PORT/api/ventures"   | grep -o '"venture_id": *"[^"]*"' | head -1 | sed 's/.*: *"//; s/"$//' || true)"
-if [ -n "$VENTURE" ]; then
-  code="$(curl -s -b "$COOKIE_JAR" -o /dev/null -w '%{http_code}'     "http://127.0.0.1:$CONSOLE_PORT/ventures/$VENTURE")"
-  if [ "$code" = "200" ]; then say "/ventures/$VENTURE -> 200"; else fail "/ventures/$VENTURE returned $code"; fi
-else
-  say "no ventures registered; /ventures/[id] not exercised"
-fi
-
-# A venture that does not exist must 404 rather than render zeroes that look like data.
-code="$(curl -s -b "$COOKIE_JAR" -o /dev/null -w '%{http_code}'   "http://127.0.0.1:$CONSOLE_PORT/ventures/definitely-not-a-venture")"
-if [ "$code" = "404" ]; then
-  say "unknown venture -> 404"
-else
-  fail "unknown venture returned $code; an empty dashboard for a mistyped venture is indistinguishable from a real one that has not started"
-fi
-
 step "Seed a development world if the bridge is empty"
 # Without Forges registered, Gate 0 refuses every run - correctly - and the console's
 # most important screens have nothing to render. A smoke test that quietly settles for
@@ -294,6 +280,35 @@ else
   say "a Pack already exists"
 fi
 
+step "Parameterised routes render"
+# Ids come from the API, not from scraping the HTML. The first version of this grepped
+# the page for /ventures/<slug> and matched a Next.js chunk filename, then reported a
+# pass for a venture that does not exist. A check that can pass for the wrong reason is
+# worse than no check.
+AGENT_ID="$(curl -s -H "$API_AUTH" "http://127.0.0.1:$API_PORT/api/agents"   | grep -o '"office_agent_id": *"[^"]*"' | head -1 | grep -o '[0-9a-f-]\{36\}' || true)"
+if [ -n "$AGENT_ID" ]; then
+  code="$(curl -s -b "$COOKIE_JAR" -o /dev/null -w '%{http_code}'     "http://127.0.0.1:$CONSOLE_PORT/agents/$AGENT_ID")"
+  if [ "$code" = "200" ]; then say "/agents/$AGENT_ID -> 200"; else fail "/agents/$AGENT_ID returned $code"; fi
+else
+  notrun "/agents/[id] - no agents in the registry"
+fi
+
+VENTURE="$(curl -s -H "$API_AUTH" "http://127.0.0.1:$API_PORT/api/ventures"   | grep -o '"venture_id": *"[^"]*"' | head -1 | sed 's/.*: *"//; s/"$//' || true)"
+if [ -n "$VENTURE" ]; then
+  code="$(curl -s -b "$COOKIE_JAR" -o /dev/null -w '%{http_code}'     "http://127.0.0.1:$CONSOLE_PORT/ventures/$VENTURE")"
+  if [ "$code" = "200" ]; then say "/ventures/$VENTURE -> 200"; else fail "/ventures/$VENTURE returned $code"; fi
+else
+  notrun "/ventures/[id] - no venture appears in the directory"
+fi
+
+# A venture that does not exist must 404 rather than render zeroes that look like data.
+code="$(curl -s -b "$COOKIE_JAR" -o /dev/null -w '%{http_code}'   "http://127.0.0.1:$CONSOLE_PORT/ventures/definitely-not-a-venture")"
+if [ "$code" = "404" ]; then
+  say "unknown venture -> 404"
+else
+  fail "unknown venture returned $code; an empty dashboard for a mistyped venture is indistinguishable from a real one that has not started"
+fi
+
 step "Pack Editor and Provisioning Console"
 # Both are parameterised on a venture that must actually have a Pack. Deriving the id
 # from /api/packs rather than /api/ventures matters: a venture in the directory with no
@@ -315,7 +330,7 @@ if [ -n "$PACK_VENTURE" ]; then
     fail "the Pack editor rendered without the Pack source in it"
   fi
 else
-  say "no venture has a Pack; the editor and console screens were not exercised"
+  notrun "the Pack editor and provisioning console - no venture has a Pack"
 fi
 
 # Both screens 404 for a venture with neither a Pack nor a run, for the same reason the
@@ -498,9 +513,18 @@ else
 fi
 
 step "Result"
-if [ "$FAILURES" -eq 0 ]; then
-  say "all checks passed"
-else
-  say "$FAILURES check(s) failed"
-  exit 1
+if [ "$UNEXERCISED" -gt 0 ]; then
+  say "$UNEXERCISED check(s) could not run"
 fi
+if [ "$FAILURES" -eq 0 ] && [ "$UNEXERCISED" -eq 0 ]; then
+  say "all checks passed"
+  exit 0
+fi
+if [ "$FAILURES" -gt 0 ]; then
+  say "$FAILURES check(s) failed"
+fi
+# Unexercised is fatal, deliberately. Everything this script needs is either seeded by
+# it or seeded by seed_dev_world.py, so a check that cannot run means the script is
+# wrong about its own preconditions or the environment is broken. Both are worth
+# stopping for, and neither is worth reporting as green.
+exit 1
