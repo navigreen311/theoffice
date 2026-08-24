@@ -265,6 +265,22 @@ for path in $ROUTES; do
   if [ "$code" = "200" ]; then say "$path -> 200"; else fail "$path returned $code"; fi
 done
 
+step "A stale session is a redirect, not a crash"
+# A cookie the API REJECTS - an expired token, or one from a database that has since
+# been rebuilt - used to throw ApiError(401), which no page caught. Every screen
+# answered with a 500 and a digest, and the only way out was knowing to clear a cookie
+# you cannot read. `dev-up.sh` reissues a token on every run, so this was reachable by
+# doing nothing except leaving a tab open.
+stale=0
+for path in $ROUTES; do
+  code="$(curl -s -o /dev/null -w '%{http_code}' --max-redirs 0     -H "Cookie: office_session=this-token-no-longer-exists"     "http://127.0.0.1:$CONSOLE_PORT$path")"
+  case "$code" in
+    30*) ;;
+    *)   fail "$path answered $code to a rejected session; it must redirect to /login"; stale=1 ;;
+  esac
+done
+[ "$stale" -eq 0 ] && say "every route sends a rejected session to the login page"
+
 step "The token never reaches the browser"
 for path in $ROUTES; do
   curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT$path" > "$WORK"/page.html
