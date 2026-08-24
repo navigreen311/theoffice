@@ -140,6 +140,27 @@ touches the database hangs on Windows.
 
 Interactive docs at `/docs` once running.
 
+## Two SQL shapes that are banned
+
+`tests/test_sql_shapes.py` fails the build on either of these inside a query containing
+a `LEFT JOIN`. Both shipped, both produced a believable wrong number, and neither raised
+or logged anything.
+
+**`count(*) FILTER (WHERE <joined column> IS NULL)`.** A LEFT JOIN that matches nothing
+still produces one row with every right-hand column NULL, and `NULL IS NULL` is true —
+so the row is counted. A venture with no grants reported one live grant. Count a column
+from the joined side instead: `count(g.grant_id) FILTER (...)`.
+
+**`bool_or` / `bool_and` without `COALESCE`.** Over an empty group the result is NULL,
+and `NOT NULL` is NULL rather than TRUE — so the group matches no negated filter and
+disappears from the totals. An agent with no certification row fell into none of the
+three capacity numbers, which then stopped summing to the roster they were counting,
+under a docstring reading "all three, always — one hides the state".
+
+The checks are scoped to `LEFT JOIN` because with an inner join every group has at least
+one row and both idioms are correct. They are proved able to fail against the two
+queries as they were actually written.
+
 ## Known gaps
 
 *Last verified: 2026-08-23.*
