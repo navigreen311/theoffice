@@ -573,3 +573,57 @@ export type ComplianceOverview = {
   };
   library_entries: number;
 };
+
+export type VenturePhase = { name: string; state: "done" | "current" | "todo" };
+
+export type VentureFramework = { framework: string; wired: boolean };
+
+export type VentureCard = {
+  slug: string;
+  display_name: string;
+  category: string;
+  carries_phi: boolean;
+  operating_forge: string | null;
+  registered: boolean;
+  has_pack: boolean;
+  pack_version: string | null;
+  status: string;
+  gate: string | null;
+  blocked_because: string | null;
+  phases: VenturePhase[];
+  gate_index: number;
+  gate_total: number;
+  positions_filled: number;
+  positions_defined: number;
+  live_grants: number;
+  monthly_usd_cap: number | null;
+  hard_cap_action: string | null;
+  soft_cap_pct: number | null;
+  hard_cap_reversed_at: string | null;
+  spend_this_month: number;
+  frameworks: VentureFramework[];
+  frameworks_wired: number;
+  last_activity: string | null;
+};
+
+export type PortfolioGap = {
+  slug: string;
+  display_name: string;
+  category: string;
+  operating_status: string;
+  frameworks: string[];
+  note: string;
+};
+
+export type VentureDirectory = {
+  as_of: string;
+  ventures: VentureCard[];
+  missing: PortfolioGap[];
+  portfolio_size: number;
+  scorecard: {
+    live: Metric;
+    agents_appointed: Metric;
+    spend_this_month: Metric;
+    blocked: Metric;
+  };
+};

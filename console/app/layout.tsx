@@ -21,6 +21,9 @@ const NAV: { group: string; links: { href: string; label: string }[] }[] = [
   {
     group: "Operate",
     links: [
+      // First, and it is the route home. There was no way back to a dashboard from any
+      // page: the wordmark was not a link and nothing in the nav pointed at `/`.
+      { href: "/", label: "Dashboard" },
       { href: "/ventures", label: "Ventures" },
       { href: "/packs", label: "Packs" },
       { href: "/provisioning", label: "Provisioning" },
@@ -61,7 +64,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <header className="mb-6 border-b border-line pb-4">
             <div className="flex flex-wrap items-baseline justify-between gap-3">
               <div>
-                <h1 className="text-section font-medium text-ink">The Office</h1>
+                {/* The wordmark is the route home from every page. */}
+                <Link href="/" className="text-section font-medium text-ink">
+                  The Office
+                </Link>
                 <p className="text-meta text-ink-muted">
                   Every action here is audited with you as the actor. Humans sign, not
                   agents.

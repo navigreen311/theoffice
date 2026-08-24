@@ -120,6 +120,52 @@ export function FileExport(props: IconProps) {
   );
 }
 
+/** ti-plus — create. */
+export function Plus(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 5l0 14" />
+      <path d="M5 12l14 0" />
+    </Icon>
+  );
+}
+
+/** ti-plug-off — a venture blocked because something it depends on does not exist. */
+export function PlugOff(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M3 3l18 18" />
+      <path d="M9.785 6h8.215v8m-3 3h-9v-9a3 3 0 0 1 3 -3" />
+      <path d="M7 19v2" />
+      <path d="M17 19v2" />
+      <path d="M7 5v-2" />
+      <path d="M17 5v-2" />
+    </Icon>
+  );
+}
+
+/** ti-dots — the overflow menu. */
+export function Dots(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+      <path d="M12 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+      <path d="M19 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+    </Icon>
+  );
+}
+
+/** ti-external-link — open. */
+export function ExternalLink(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 6h-6a2 2 0 0 0 -2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-6" />
+      <path d="M11 13l9 -9" />
+      <path d="M15 4h5v5" />
+    </Icon>
+  );
+}
+
 /** The icon for a control, by id. Unknown ids get the loudest one on purpose. */
 export const CONTROL_ICON: Record<
   string,
