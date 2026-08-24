@@ -49,6 +49,8 @@ cp .env.example .env      # then fill it in
 ## Commands
 
 ```bash
+./scripts/dev-up.sh                                     # a usable local instance + a token
+./scripts/dev-up.sh --stop                              # stop it again
 ./scripts/bootstrap.sh                                  # everything
 .venv/Scripts/python -m pytest -q                       # tests
 .venv/Scripts/python -m ruff check .                    # lint
@@ -64,6 +66,24 @@ cd console && npm run dev                               # the console on :3000
 ./scripts/console-smoke.sh                              # both, verified end to end
 .venv/Scripts/python scripts/seed_dev_world.py          # bridged Forges + a certified roster
 ```
+
+## Running it locally
+
+```bash
+./scripts/dev-up.sh
+```
+
+Migrates, seeds the dev world and the Greenstone Pack if they are missing, issues a
+token for the operator (**reissuing** rather than failing when they already exist), and
+starts the API and the console. Prints the URL and the token.
+
+Re-run it after the test suite: the suite empties `office_human`, the Forge registry and
+every venture-scoped table, which is correct — a suite that left rows behind would be a
+suite whose next run depended on its last — and it means a browser session dies every
+time the tests run.
+
+Sign in at **http://localhost:3100**, not `127.0.0.1`: the session cookie is scoped to
+the host you sign in on, and Next redirects to `localhost` regardless.
 
 ## CI
 
