@@ -79,6 +79,27 @@ else
   echo "  created $DB_NAME"
 fi
 
+# --- test database ------------------------------------------------------
+# The suite empties every table it touches, which is correct and is also why it must not
+# share a database with anything somebody has a browser session open against. Created
+# here so a fresh checkout gets the separation without reading a doc about it.
+if [ -n "${OFFICE_TEST_ADMIN_DSN:-}" ]; then
+  step "Test database"
+  TEST_DB="$(printf '%s' "$OFFICE_TEST_ADMIN_DSN" | sed -E 's#.*/([^/?]+)(\?.*)?$##')"
+  if psql "$ADMIN_NO_DB" -tAc        "SELECT 1 FROM pg_database WHERE datname = '$TEST_DB'" | grep -q 1; then
+    echo "  $TEST_DB exists"
+  else
+    psql "$ADMIN_NO_DB" -q -c "CREATE DATABASE \"$TEST_DB\"" >/dev/null
+    echo "  created $TEST_DB"
+  fi
+  OFFICE_ADMIN_DSN="$OFFICE_TEST_ADMIN_DSN" "$VPY" -m alembic upgrade head >/dev/null
+  echo "  migrated to head"
+else
+  step "Test database"
+  echo "  OFFICE_TEST_ADMIN_DSN is not set: the suite will empty the development"
+  echo "  database and end any open console session. See .env.example."
+fi
+
 # --- migrations ---------------------------------------------------------
 step "Migrations"
 "$VPY" -m alembic upgrade head
