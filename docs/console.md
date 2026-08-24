@@ -305,8 +305,14 @@ four groups — Operate, Teach, Govern, Inspect.
   Pack blocks at gate 4.5 on the capacity finding, so a run from the dev seed never
   reaches gate 10. The form shares its hook usage with the three that are exercised;
   that is an argument, not evidence.
-- **No `secure` cookie flag outside production** — correct for local HTTP, but the
-  deployment must be HTTPS or the cookie travels in the clear.
+- **The `secure` cookie flag follows the request protocol, not the build mode.** It used
+  to follow `NODE_ENV`, and `next start` sets that to production — so a local build over
+  http emitted a `Secure` cookie that the browser silently discarded, and the sign-in
+  bounced straight back to the login screen looking like a rejected token. `curl` stores
+  such a cookie anyway, which is why the smoke script passed while the console was
+  unusable in a browser. It now reads `x-forwarded-proto` first (Caddy terminates TLS
+  and the app sees http on the internal hop) and falls back to the request URL, and the
+  smoke script asserts both directions.
 - **No CSRF token on the Server Actions.** Next.js Server Actions carry origin checks and
   the cookie is `sameSite=strict`, which covers the common case; a deployment behind a
   proxy that rewrites `Origin` would need more.

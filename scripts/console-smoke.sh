@@ -233,6 +233,31 @@ else
   fail "session cookie is not httpOnly - a script could read the token"
 fi
 
+# The `Secure` attribute must follow the protocol in use, not the build mode.
+#
+# It used to follow NODE_ENV, and `next start` sets that to production - so a local
+# build over http emitted a Secure cookie that the BROWSER SILENTLY DISCARDED. The
+# sign-in redirected to a page that bounced straight back to the login screen, which
+# looks exactly like a rejected token. curl stores the cookie anyway, so every check in
+# this script passed while the console was unusable in a browser.
+SET_COOKIE="$(curl -s -i -X POST -d "token=$TOKEN"   "http://127.0.0.1:$CONSOLE_PORT/api/session" | grep -i '^set-cookie:' || true)"
+case "$SET_COOKIE" in
+  *Secure*)
+    fail "the session cookie is marked Secure over http; a browser will discard it and the sign-in will loop back to the login page" ;;
+  "")
+    fail "no session cookie was set at all" ;;
+  *)
+    say "session cookie is not Secure over http, so a browser will keep it" ;;
+esac
+
+# And the other direction: behind a proxy terminating TLS, it MUST be Secure. Dropping
+# it there is the one failure that must never happen quietly.
+FORWARDED="$(curl -s -i -X POST -H "X-Forwarded-Proto: https" -d "token=$TOKEN"   "http://127.0.0.1:$CONSOLE_PORT/api/session" | grep -i '^set-cookie:' || true)"
+case "$FORWARDED" in
+  *Secure*) say "session cookie is Secure when the client hop is https" ;;
+  *)        fail "the session cookie is NOT Secure behind an https proxy - the token would travel in the clear" ;;
+esac
+
 step "Authenticated routes render"
 for path in $ROUTES; do
   code="$(curl -s -b "$COOKIE_JAR" -o "$WORK"/page.html -w '%{http_code}' \
