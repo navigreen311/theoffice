@@ -1,7 +1,14 @@
 import { redirect } from "next/navigation";
 
 import { Badge, Card, Cell, Field, Row, Table, inputClass } from "@/components/ui";
-import { api, NotAuthenticated, type AuditEntry, type ChainStatus } from "@/lib/api";
+import { Pager } from "@/components/pager";
+import {
+  api,
+  NotAuthenticated,
+  type AuditEntry,
+  type ChainStatus,
+  type Paged,
+} from "@/lib/api";
 import { relativeAge } from "@/lib/severity";
 
 export const dynamic = "force-dynamic";
@@ -19,19 +26,27 @@ export const dynamic = "force-dynamic";
 export default async function AuditPage({
   searchParams,
 }: {
-  searchParams: { event_type?: string; venture_id?: string; trace_id?: string };
+  searchParams: {
+    event_type?: string;
+    venture_id?: string;
+    trace_id?: string;
+    limit?: string;
+    offset?: string;
+  };
 }) {
-  const query = new URLSearchParams({ limit: "100" });
+  const limit = searchParams.limit ?? "100";
+  const offset = searchParams.offset ?? "0";
+  const query = new URLSearchParams({ limit, offset });
   for (const key of ["event_type", "venture_id", "trace_id"] as const) {
     const value = searchParams[key];
     if (value) query.set(key, value);
   }
 
-  let entries: AuditEntry[];
+  let page: Paged<AuditEntry>;
   let chain: ChainStatus;
   try {
-    [entries, chain] = await Promise.all([
-      api.get<AuditEntry[]>(`/api/audit?${query}`),
+    [page, chain] = await Promise.all([
+      api.get<Paged<AuditEntry>>(`/api/audit?${query}`),
       api.get<ChainStatus>("/api/audit/chain"),
     ]);
   } catch (error) {
@@ -84,9 +99,9 @@ export default async function AuditPage({
 
         <Table
           head={["#", "Event", "Actor", "Venture", "When", "Entry hash"]}
-          empty="No entries match. An empty audit log and an unfiltered one look the same — check the filters."
+          empty="No entries match these filters. The count below is the denominator — an empty result over 40,000 entries is a finding; over zero it is an empty database."
         >
-          {entries.map((entry) => (
+          {page.items.map((entry) => (
             <Row key={entry.audit_id}>
               <Cell mono>{entry.audit_id}</Cell>
               <Cell mono>{entry.event_type}</Cell>
@@ -101,6 +116,18 @@ export default async function AuditPage({
             </Row>
           ))}
         </Table>
+
+        {/* The denominator. Without it, "no entries match" and "no entries match in the
+            most recent hundred" render identically — and only one of them is a finding. */}
+        <Pager
+          page={page}
+          basePath="/audit"
+          params={{
+            event_type: searchParams.event_type,
+            venture_id: searchParams.venture_id,
+            trace_id: searchParams.trace_id,
+          }}
+        />
       </Card>
     </div>
   );

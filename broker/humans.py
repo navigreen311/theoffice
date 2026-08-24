@@ -135,7 +135,8 @@ async def authenticate(conn: AsyncConnection, token: str) -> Human | None:
                      '{}'
                    ) AS roles
             FROM office_human h
-            LEFT JOIN office_human_role r ON r.human_id = h.human_id
+            LEFT JOIN office_human_role r
+              ON r.human_id = h.human_id AND r.revoked_at IS NULL
             WHERE h.token_hash = %s
             GROUP BY h.human_id, h.display_name, h.email, h.status
             """,
@@ -185,6 +186,256 @@ def authorize(human: Human, *, required_role: str, venture_id: str | None = None
             venture_id=venture_id,
         )
     return held
+
+
+# ------------------------------------------------------- administering humans
+
+def assert_may_grant(
+    actor: Human,
+    *,
+    role: str,
+    target: Human | None = None,
+    revoking: bool = False,
+) -> str:
+    """Who may hand out which role, and to whom.
+
+    **Strictly stronger, except at the top.** `compliance_officer` grants
+    `venture_operator`; a `venture_operator` grants nothing. Not "stronger or equal",
+    which would let a compliance officer mint another compliance officer and make the
+    role self-propagating - at which point the hierarchy describes nothing.
+
+    `ivan` is the exception, and it has to be. Nothing outranks it, so applying the rule
+    literally would make the top role **ungrantable and unremovable by anybody** - and
+    since the bootstrap CLI refuses once one human exists, there could never be a second
+    administrator at all. That is not a restriction, it is a single point of failure with
+    no recovery. Found by writing the test for the rule and watching a legitimate
+    demotion get refused.
+
+    Refusing it also buys nothing: a holder of `ivan` already has total authority over
+    this system. What actually constrains the top role is the other two rules -
+    **never to yourself**, so every role anyone holds was granted by somebody else and
+    the audit log says who; and the last active administrator cannot be removed, so the
+    system can never become unadministrable.
+    """
+    if role not in ROLE_RANK:
+        raise NotAuthorized(f"unknown role {role!r}", role=role)
+    if not actor.is_active:
+        raise NotAuthorized(f"{actor.display_name} is {actor.status}")
+
+    held = actor.strongest_role()
+    top = max(ROLE_RANK.values())
+    sufficient = held is not None and (
+        ROLE_RANK[held] > ROLE_RANK[role]
+        # The top role manages its own rank, because nothing outranks it and the
+        # alternative is a role no one can ever grant.
+        or (ROLE_RANK[held] == top and ROLE_RANK[role] == top)
+    )
+    if not sufficient:
+        raise NotAuthorized(
+            f"granting {role!r} requires a strictly stronger role; you hold "
+            f"{held or 'none'}. Equal-strength granting would make the role "
+            "self-propagating - except at the top, where nothing outranks it.",
+            held_role=held,
+            granting_role=role,
+        )
+    assert held is not None  # narrowed by `sufficient`; mypy cannot see it
+
+    # Self-targeting is forbidden for a grant and allowed for a revocation. Granting
+    # yourself is escalation; dropping your own role is not, and refusing it would both
+    # be over-broad and produce a message about granting for somebody who was removing.
+    # What stops an administrator removing their own last administrator role is
+    # `assert_not_the_last_administrator`, which is the rule that actually applies.
+    if not revoking and target is not None and target.human_id == actor.human_id:
+        raise NotAuthorized(
+            "nobody grants themselves a role, including ivan. Every role anyone holds "
+            "was granted by somebody else, and that is what makes the audit trail "
+            "answer 'who decided this'.",
+            granting_role=role,
+        )
+    return held
+
+
+async def count_active_administrators(
+    conn: AsyncConnection, *, excluding: uuid.UUID | None = None
+) -> int:
+    """Active humans holding `ivan`. The number that must never reach zero."""
+    async with conn.cursor() as cur:
+        await cur.execute(
+            """
+            SELECT count(DISTINCT h.human_id)
+            FROM office_human h
+            JOIN office_human_role r
+              ON r.human_id = h.human_id AND r.revoked_at IS NULL
+            WHERE h.status = 'active' AND r.role = 'ivan'
+              AND (%s::uuid IS NULL OR h.human_id <> %s)
+            """,
+            (excluding, excluding),
+        )
+        row = await cur.fetchone()
+    assert row is not None
+    return int(row[0])
+
+
+async def assert_not_the_last_administrator(
+    conn: AsyncConnection, *, human_id: uuid.UUID, action: str
+) -> None:
+    """Refuse anything that would leave the system with no administrator.
+
+    An availability control rather than a security one, and worth as much: a system with
+    no `ivan` cannot appoint one, and the only recovery is a shell on the database -
+    which is exactly the dependency this whole module exists to remove.
+    """
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "SELECT 1 FROM office_human_role WHERE human_id = %s AND role = 'ivan' "
+            "AND revoked_at IS NULL",
+            (human_id,),
+        )
+        is_admin = await cur.fetchone() is not None
+    if not is_admin:
+        return
+    if await count_active_administrators(conn, excluding=human_id) == 0:
+        raise NotAuthorized(
+            f"refusing to {action}: this is the last active administrator, and a "
+            "system with no administrator cannot appoint one.",
+            human_id=str(human_id),
+        )
+
+
+async def revoke_role(
+    conn: AsyncConnection,
+    *,
+    human_id: uuid.UUID,
+    role: str,
+    revoked_by: uuid.UUID,
+    venture_id: str | None = None,
+) -> bool:
+    """Remove a role, keeping the record of it. Returns whether one was live.
+
+    A soft delete, the same shape `playbook_share` uses. Deleting the row would destroy
+    the answer to "who had this, who gave it to them, and who took it away" - and that
+    question is the entire justification for forbidding self-grants.
+    """
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "UPDATE office_human_role SET revoked_at = now(), revoked_by = %s "
+            "WHERE human_id = %s AND role = %s "
+            "AND COALESCE(venture_id, '*') = COALESCE(%s, '*') "
+            "AND revoked_at IS NULL",
+            (revoked_by, human_id, role, venture_id),
+        )
+        removed = cur.rowcount
+    await conn.commit()
+    return removed > 0
+
+
+async def set_status(
+    conn: AsyncConnection, *, human_id: uuid.UUID, status: str, actor: uuid.UUID
+) -> None:
+    """Suspend or reactivate.
+
+    Status is read live on every request, so a suspension takes effect on the suspended
+    human's next call rather than their next session - the same rule agent revocation
+    follows, for the same reason.
+    """
+    if status not in ("active", "suspended"):
+        raise NotAuthorized(f"unknown status {status!r}", status=status)
+
+    async with conn.cursor() as cur:
+        if status == "suspended":
+            await cur.execute(
+                "UPDATE office_human SET status = 'suspended', suspended_at = now(), "
+                "suspended_by = %s WHERE human_id = %s",
+                (actor, human_id),
+            )
+        else:
+            await cur.execute(
+                "UPDATE office_human SET status = 'active', suspended_at = NULL, "
+                "suspended_by = NULL WHERE human_id = %s",
+                (human_id,),
+            )
+    await conn.commit()
+
+
+async def reissue_token(conn: AsyncConnection, *, human_id: uuid.UUID) -> str:
+    """Replace the token. The old one stops working the moment this returns.
+
+    The API has never had rotation: a token was valid until its human was suspended.
+    Returned in plaintext exactly once, like the original - a system that can show it
+    again is a system where hashing it was pointless.
+    """
+    plaintext = issue_token()
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "UPDATE office_human SET token_hash = %s WHERE human_id = %s",
+            (hash_token(plaintext), human_id),
+        )
+        if cur.rowcount == 0:
+            raise NotAuthorized("no such human", human_id=str(human_id))
+    await conn.commit()
+    return plaintext
+
+
+async def get_human(conn: AsyncConnection, human_id: uuid.UUID) -> Human | None:
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            """
+            SELECT h.human_id, h.display_name, h.email, h.status,
+                   COALESCE(
+                     array_agg(ARRAY[r.role, COALESCE(r.venture_id, '')])
+                       FILTER (WHERE r.role IS NOT NULL),
+                     '{}'
+                   ) AS roles
+            FROM office_human h
+            LEFT JOIN office_human_role r
+              ON r.human_id = h.human_id AND r.revoked_at IS NULL
+            WHERE h.human_id = %s
+            GROUP BY h.human_id, h.display_name, h.email, h.status
+            """,
+            (human_id,),
+        )
+        row = await cur.fetchone()
+    if row is None:
+        return None
+    return Human(
+        human_id=row["human_id"],
+        display_name=row["display_name"],
+        email=row["email"],
+        status=row["status"],
+        roles=tuple((r[0], r[1] or None) for r in row["roles"]),
+    )
+
+
+async def list_humans(conn: AsyncConnection) -> list[dict[str, Any]]:
+    """Everyone, with their roles. Never a token and never a hash.
+
+    The hash is not a secret in the way the token is, but it is a verifier: anything
+    holding it can confirm a guess offline. It has no business on a screen, so this
+    reports only whether one exists.
+    """
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            """
+            SELECT h.human_id::text AS human_id, h.display_name, h.email, h.status,
+                   h.auth_method, h.created_at, h.suspended_at,
+                   h.token_hash IS NOT NULL AS has_token,
+                   COALESCE(
+                     json_agg(
+                       json_build_object('role', r.role, 'venture_id', r.venture_id,
+                                         'granted_by', r.granted_by,
+                                         'granted_at', r.granted_at)
+                       ORDER BY r.role
+                     ) FILTER (WHERE r.role IS NOT NULL),
+                     '[]'
+                   ) AS roles
+            FROM office_human h
+            LEFT JOIN office_human_role r
+              ON r.human_id = h.human_id AND r.revoked_at IS NULL
+            GROUP BY h.human_id
+            ORDER BY h.display_name
+            """
+        )
+        return [dict(r) for r in await cur.fetchall()]
 
 
 # ------------------------------------------------------------------- sign-offs

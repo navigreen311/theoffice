@@ -45,6 +45,7 @@ from broker import (
     budget,
     certification,
     humans,
+    incidents,
     instructions,
     knowledge,
     packs,
@@ -62,7 +63,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0013"
+EXPECTED_SCHEMA_REVISION = "0015"
 
 
 @asynccontextmanager
@@ -188,6 +189,64 @@ async def ready(response: Response) -> dict[str, str]:
         response.status_code = 503
         return {"status": "not_ready"}
     return {"status": "ready"}
+
+
+
+# ================================================================= pagination
+
+class Page(BaseModel):
+    """A page of results that says what it did not show.
+
+    This project's rule is *report the denominator; no green check without a coverage
+    count*, and the screen that broke it hardest was the audit explorer - which capped
+    at 100 rows and said nothing about the rest. "I looked and found nothing" is the
+    entire value of an audit search, and it is a different sentence from "I looked at
+    the most recent hundred".
+
+    `total` is a second query. Worth it: a page without one is a list that looks
+    complete, which is the same failure as a sweep that never ran looking green.
+    """
+
+    items: list[dict[str, Any]]
+    total: int
+    limit: int
+    offset: int
+
+    @property
+    def shown(self) -> int:
+        return len(self.items)
+
+
+async def paginate(
+    conn: AsyncConnection,
+    *,
+    select: str,
+    count: str,
+    params: dict[str, Any],
+    limit: int,
+    offset: int,
+) -> Page:
+    """Run the page and its denominator against the same parameters.
+
+    `select` must end in its ORDER BY; LIMIT and OFFSET are appended here so a caller
+    cannot forget them and return the whole table by accident.
+    """
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(count, params)
+        row = await cur.fetchone()
+        total = int(next(iter(row.values()))) if row else 0
+
+        await cur.execute(
+            f"{select} LIMIT %(limit)s OFFSET %(offset)s",
+            {**params, "limit": limit, "offset": offset},
+        )
+        items = [dict(r) for r in await cur.fetchall()]
+
+    return Page(items=items, total=total, limit=limit, offset=offset)
+
+
+LimitParam = Annotated[int, Query(ge=1, le=500)]
+OffsetParam = Annotated[int, Query(ge=0)]
 
 
 # =============================================================== read: health
@@ -446,27 +505,37 @@ async def audit_explorer(
     actor_id: Annotated[uuid.UUID | None, Query()] = None,
     venture_id: Annotated[str | None, Query()] = None,
     trace_id: Annotated[uuid.UUID | None, Query()] = None,
-    limit: Annotated[int, Query(ge=1, le=500)] = 100,
-) -> list[dict[str, Any]]:
-    """Audit Log Explorer. Read-only, and there is no route that writes here."""
-    async with conn.cursor(row_factory=dict_row) as cur:
-        await cur.execute(
-            """
+    limit: LimitParam = 100,
+    offset: OffsetParam = 0,
+) -> Page:
+    """Audit Log Explorer. Read-only, and there is no route that writes here.
+
+    Paginated with a total, because the previous version capped at 100 and said nothing
+    about the rest. "I searched the audit log and found nothing" is the entire value of
+    this screen and it is a different sentence from "I looked at the most recent
+    hundred" - and the two were indistinguishable in the response.
+    """
+    where = """
+        WHERE (%(event_type)s::text IS NULL OR event_type = %(event_type)s)
+          AND (%(actor_id)s::uuid IS NULL OR actor_id = %(actor_id)s)
+          AND (%(venture_id)s::text IS NULL OR venture_id = %(venture_id)s)
+          AND (%(trace_id)s::uuid IS NULL OR trace_id = %(trace_id)s)
+    """
+    return await paginate(
+        conn,
+        select=f"""
             SELECT audit_id, event_type, actor_type, actor_id, venture_id, subject,
                    trace_id, ts, entry_hash
-            FROM audit_log
-            WHERE (%(event_type)s::text IS NULL OR event_type = %(event_type)s)
-              AND (%(actor_id)s::uuid IS NULL OR actor_id = %(actor_id)s)
-              AND (%(venture_id)s::text IS NULL OR venture_id = %(venture_id)s)
-              AND (%(trace_id)s::uuid IS NULL OR trace_id = %(trace_id)s)
-            ORDER BY audit_id DESC LIMIT %(limit)s
-            """,
-            {
-                "event_type": event_type, "actor_id": actor_id,
-                "venture_id": venture_id, "trace_id": trace_id, "limit": limit,
-            },
-        )
-        return [dict(r) for r in await cur.fetchall()]
+            FROM audit_log {where} ORDER BY audit_id DESC
+        """,
+        count=f"SELECT count(*) FROM audit_log {where}",
+        params={
+            "event_type": event_type, "actor_id": actor_id,
+            "venture_id": venture_id, "trace_id": trace_id,
+        },
+        limit=limit,
+        offset=offset,
+    )
 
 
 @app.get("/api/incidents")
@@ -474,16 +543,39 @@ async def list_incidents(
     conn: DB,
     _me: ME,
     severity: Annotated[str | None, Query()] = None,
-    limit: Annotated[int, Query(ge=1, le=500)] = 100,
-) -> list[dict[str, Any]]:
-    async with conn.cursor(row_factory=dict_row) as cur:
-        await cur.execute(
-            "SELECT * FROM incident "
-            "WHERE (%s::text IS NULL OR severity = %s) "
-            "ORDER BY raised_at DESC LIMIT %s",
-            (severity, severity, limit),
-        )
-        return [dict(r) for r in await cur.fetchall()]
+    include_resolved: bool = Query(default=False),
+    limit: LimitParam = 100,
+    offset: OffsetParam = 0,
+) -> Page:
+    """Incidents, with whether each has been resolved and by whom.
+
+    Resolution is a joined row rather than a column: `incident` is append-only by
+    design, so an incident is never edited and "resolved" is the presence of an
+    `incident_resolution` rather than a flag somebody set.
+    """
+    where = """
+        WHERE (%(severity)s::text IS NULL OR i.severity = %(severity)s)
+          AND (%(include_resolved)s OR r.incident_id IS NULL)
+    """
+    join = "FROM incident i LEFT JOIN incident_resolution r ON r.incident_id = i.incident_id"
+    return await paginate(
+        conn,
+        select=f"""
+            SELECT i.incident_id::text AS incident_id, i.severity, i.kind, i.venture_id,
+                   i.office_agent_id::text AS office_agent_id, i.forge_id, i.module_id,
+                   i.trace_id::text AS trace_id, i.detail, i.raised_at,
+                   r.resolution, r.resolved_at, r.resolved_by::text AS resolved_by
+            {join} {where}
+            ORDER BY
+              CASE i.severity WHEN 'CRITICAL' THEN 0 WHEN 'HIGH' THEN 1
+                              WHEN 'MEDIUM' THEN 2 ELSE 3 END,
+              i.raised_at DESC
+        """,
+        count=f"SELECT count(*) {join} {where}",
+        params={"severity": severity, "include_resolved": include_resolved},
+        limit=limit,
+        offset=offset,
+    )
 
 
 @app.get("/api/proposals")
@@ -1532,5 +1624,263 @@ async def record_history_route(
     except knowledge.KnowledgeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"record_id": record_id}
+
+# ======================================================= read: humans and access
+
+@app.get("/api/humans")
+async def list_humans(conn: DB, me: ME) -> list[dict[str, Any]]:
+    """Everyone with access, and what they hold.
+
+    Requires `compliance_officer`: the roster of who can act on this system, and which
+    of them holds `ivan`, is a map of whom to compromise. It is not a secret from the
+    people who operate the Office, and it is not a read for a venture operator either.
+    """
+    humans.authorize(me, required_role="compliance_officer")
+    return await humans.list_humans(conn)
+
+
+@app.get("/api/revocations")
+async def list_revocations(
+    conn: DB, _me: ME, include_lifted: bool = Query(default=False)
+) -> list[dict[str, Any]]:
+    """What is currently revoked.
+
+    There was no way to see this. `POST /api/revocations/{id}/reinstate` existed and was
+    pinned, so lifting a revocation required getting the id out of the database by hand
+    - a write-only loop, and the write was the kill switch.
+    """
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            """
+            SELECT r.revocation_id::text AS revocation_id, r.scope, r.reason,
+                   r.office_agent_id::text AS office_agent_id, r.forge_id, r.module_id,
+                   r.venture_id, r.revoked_by::text AS revoked_by, r.revoked_by_role,
+                   r.revoked_at, r.reinstated_at,
+                   r.reinstated_by::text AS reinstated_by,
+                   i.agent_name
+            FROM revocation r
+            LEFT JOIN office_agent_identity i ON i.office_agent_id = r.office_agent_id
+            WHERE %s OR r.reinstated_at IS NULL
+            ORDER BY r.revoked_at DESC
+            """,
+            (include_lifted,),
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+# ====================================================== write: humans and access
+
+class HumanRequest(BaseModel):
+    display_name: str = Field(min_length=1)
+    email: str = Field(min_length=3)
+    auth_method: str = "sso_mfa"
+    role: str | None = None
+    venture_id: str | None = None
+
+
+@app.post("/api/humans", status_code=201)
+async def create_human_route(body: HumanRequest, conn: DB, me: ME) -> dict[str, Any]:
+    """Create a human, and return their token exactly once.
+
+    Creating a human creates a credential, so this needs `compliance_officer` at least -
+    and if an initial role is requested, the strictly-stronger rule applies to that role
+    on top. A `compliance_officer` can therefore create a `venture_operator` and cannot
+    create a peer.
+
+    The plaintext is in this response and nowhere else, ever. A system that can show it
+    again is a system where hashing it was pointless.
+    """
+    humans.authorize(me, required_role="compliance_officer")
+    if body.role is not None:
+        humans.assert_may_grant(me, role=body.role)
+
+    human_id, token = await humans.create_human(
+        conn, display_name=body.display_name, email=body.email,
+        auth_method=body.auth_method,
+    )
+    if body.role is not None:
+        await humans.grant_role(
+            conn, human_id=human_id, role=body.role,
+            venture_id=body.venture_id, granted_by=me.human_id,
+        )
+
+    await _audit_human_action(
+        me, "console_human_created",
+        {"human_id": str(human_id), "email": body.email, "initial_role": body.role},
+        body.venture_id,
+    )
+    return {
+        "human_id": str(human_id),
+        "token": token,
+        "note": (
+            "This token is shown once and is not recoverable. If it is lost, reissue - "
+            "which invalidates this one."
+        ),
+    }
+
+
+class RoleRequest(BaseModel):
+    role: str
+    venture_id: str | None = None
+    revoke: bool = False
+
+
+@app.post("/api/humans/{human_id}/roles")
+async def set_role(
+    human_id: uuid.UUID, body: RoleRequest, conn: DB, me: ME
+) -> dict[str, str]:
+    """Grant or remove a role.
+
+    Two rules, both in `humans.assert_may_grant`: strictly stronger than the role being
+    handed out, and never to yourself. Removing is guarded the same way - being unable
+    to grant `ivan` and able to remove it would be the same power with an extra step.
+    """
+    target = await humans.get_human(conn, human_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="no such human")
+    humans.assert_may_grant(
+        me, role=body.role, target=target, revoking=body.revoke
+    )
+
+    if body.revoke:
+        if body.role == "ivan":
+            await humans.assert_not_the_last_administrator(
+                conn, human_id=human_id, action="remove the ivan role"
+            )
+        removed = await humans.revoke_role(
+            conn, human_id=human_id, role=body.role, venture_id=body.venture_id,
+            revoked_by=me.human_id,
+        )
+        await _audit_human_action(
+            me, "console_role_revoked",
+            {"human_id": str(human_id), "role": body.role, "existed": removed},
+            body.venture_id,
+        )
+        return {"status": "revoked" if removed else "no_such_role"}
+
+    await humans.grant_role(
+        conn, human_id=human_id, role=body.role,
+        venture_id=body.venture_id, granted_by=me.human_id,
+    )
+    await _audit_human_action(
+        me, "console_role_granted",
+        {"human_id": str(human_id), "role": body.role}, body.venture_id,
+    )
+    return {"status": "granted"}
+
+
+class StatusRequest(BaseModel):
+    status: str
+    reason: str = Field(min_length=1)
+
+
+@app.post("/api/humans/{human_id}/status")
+async def set_human_status(
+    human_id: uuid.UUID, body: StatusRequest, conn: DB, me: ME
+) -> dict[str, str]:
+    """Suspend or reactivate. Takes effect on their next request, not their next session."""
+    humans.authorize(me, required_role="compliance_officer")
+    target = await humans.get_human(conn, human_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="no such human")
+
+    if body.status == "suspended":
+        # Both guards. The first stops the system becoming unadministrable; the second
+        # stops an operator locking themselves out with one click and needing somebody
+        # else to let them back in.
+        await humans.assert_not_the_last_administrator(
+            conn, human_id=human_id, action="suspend this human"
+        )
+        if human_id == me.human_id:
+            raise HTTPException(
+                status_code=400,
+                detail="suspending yourself would lock you out; ask another operator",
+            )
+
+    await humans.set_status(
+        conn, human_id=human_id, status=body.status, actor=me.human_id
+    )
+    await _audit_human_action(
+        me, "console_human_status_changed",
+        {"human_id": str(human_id), "status": body.status, "reason": body.reason},
+    )
+    return {"status": body.status}
+
+
+@app.post("/api/humans/{human_id}/token")
+async def reissue_human_token(
+    human_id: uuid.UUID, conn: DB, me: ME
+) -> dict[str, str]:
+    """Rotate a token. The old one stops working immediately.
+
+    Your own, or anyone's with `ivan`. Rotation has never existed here - a token was
+    valid until its human was suspended, which made a leaked token a permanent one.
+    """
+    if human_id != me.human_id:
+        humans.authorize(me, required_role="ivan")
+
+    token = await humans.reissue_token(conn, human_id=human_id)
+    await _audit_human_action(
+        me, "console_token_reissued", {"human_id": str(human_id)}
+    )
+    return {
+        "token": token,
+        "note": "Shown once. The previous token stopped working when this was issued.",
+    }
+
+
+class ResolveIncidentRequest(BaseModel):
+    resolution: str = Field(min_length=1)
+
+
+@app.post("/api/incidents/{incident_id}/resolve", status_code=201)
+async def resolve_incident(
+    incident_id: uuid.UUID, body: ResolveIncidentRequest, conn: DB, me: ME
+) -> dict[str, str]:
+    """Close an incident, with an account of what was done.
+
+    An append, not an edit - `incidents.resolve` explains why. Authority is checked
+    against the incident's own venture rather than one the request named, because a
+    request body is a claim and the row is the fact.
+
+    Also what finally writes `historical_record.incident_resolved`, which has been an
+    enum value with no producer since the knowledge bases landed.
+    """
+    # Read first, so the venture used for authorisation comes from the database.
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT venture_id FROM incident WHERE incident_id = %s", (incident_id,)
+        )
+        row = await cur.fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="no such incident")
+    humans.authorize(
+        me, required_role="compliance_officer", venture_id=row["venture_id"]
+    )
+
+    try:
+        incident = await incidents.resolve(
+            conn, incident_id=incident_id, resolution=body.resolution,
+            resolved_by=me.human_id,
+        )
+    except incidents.IncidentError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    await knowledge.record(
+        conn, record_type="incident_resolved", venture_id=incident["venture_id"],
+        summary=(
+            f"{incident['severity']} {incident['kind']} resolved: {body.resolution}"
+        ),
+        detail={"incident_id": str(incident_id), "severity": incident["severity"],
+                "kind": incident["kind"]},
+        actor_type="human", recorded_by=me.human_id,
+    )
+    await _audit_human_action(
+        me, "console_incident_resolved",
+        {"incident_id": str(incident_id), "resolution": body.resolution},
+        incident["venture_id"],
+    )
+    return {"status": "resolved"}
+
 
 __all__ = ["NotAuthorized", "app"]

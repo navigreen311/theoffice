@@ -62,6 +62,8 @@ quiet incident list means nothing if the check producing it is stale.
 | **Pack Editor** (`/packs`, `/packs/[venture]`) | validate and publish as separate acts; version history with hashes |
 | **Provisioning Console** (`/provisioning`, `/provisioning/[venture]`) | the sixteen-gate ladder, with three verdicts rendered three ways |
 | **Knowledge Base Manager** (`/knowledge`) | coverage for all five stores; blocking gaps render differently from advisory ones |
+| **Access** (`/access`) | people, roles, tokens and active revocations — the screen that removed the shell dependency |
+| **Incidents** (`/incidents`) | open and resolved; resolving appends an account and never edits the detection |
 
 **All fourteen exist.** The Manager was the last, and it was refused three times with
 the same sentence — *a screen over nothing is worse than an absent screen, because it
@@ -226,6 +228,8 @@ and no forms at all.
 
 ## Known gaps
 
+*Last verified: 2026-08-23.*
+
 - **Playbooks and personas are authored but not consumed.** There is no knowledge-
   retrieval path for agents in The Office at all, and SimForge has no instance. See
   `docs/knowledge-bases.md` for what that leaves open.
@@ -239,7 +243,8 @@ and no forms at all.
   the cookie is `sameSite=strict`, which covers the common case; a deployment behind a
   proxy that rewrites `Origin` would need more.
 - **Session is 8 hours with no refresh and no idle timeout.**
-- **No pagination** — the audit explorer caps at 100 rows and says nothing about what it
-  did not show.
-- **Revocation is write-only in the UI.** Reinstatement exists in the API; there is no
-  screen for it yet, so lifting a revocation currently needs a direct API call.
+- **Pagination covers audit and incidents only.** Proposals, history and the knowledge
+  lists still return everything they have. They are bounded by the business today and
+  will not stay that way.
+- **No search across ventures.** Every list is filtered by exact match; there is no free
+  text anywhere.

@@ -178,6 +178,8 @@ exactly what V28 asks about — without it, Greenstone's Pack fails V28 and Gate
 
 ## Known gaps
 
+*Last verified: 2026-08-23.*
+
 - **Nothing consumes personas yet.** They are authored and indexed, and the curriculum
   generator does not reference them — SimForge is the consumer and has no instance. The
   store is not inert (Gate 6 counts persona coverage against the Pack's target personas)

@@ -170,6 +170,8 @@ backup container that dies with the stack it is backing up is not a backup:
 
 ## Known gaps
 
+*Last verified: 2026-08-23.*
+
 - **No off-host copy.** `./backups` lives on the same VM as the database, so it survives
   a bad migration and not a lost disk. Add object-storage sync before this holds
   anything that matters.

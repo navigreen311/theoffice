@@ -18,6 +18,8 @@ const NAV = [
   { href: "/instructions", label: "Instructions" },
   { href: "/knowledge", label: "Knowledge" },
   { href: "/revocations", label: "Revocation" },
+  { href: "/incidents", label: "Incidents" },
+  { href: "/access", label: "Access" },
   { href: "/forge-map", label: "Forge Map" },
   { href: "/audit", label: "Audit" },
 ];

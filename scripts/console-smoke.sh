@@ -212,7 +212,7 @@ if ! wait_for "http://127.0.0.1:$CONSOLE_PORT/login" "the console" "$WORK/consol
 fi
 say "listening on $CONSOLE_PORT"
 
-ROUTES="/ /agents /audit /forge-map /revocations /ventures /proposals /instructions /packs /provisioning /knowledge"
+ROUTES="/ /agents /audit /forge-map /revocations /ventures /proposals /instructions /packs /provisioning /knowledge /incidents /access"
 
 step "Unauthenticated routes redirect"
 for path in $ROUTES; do
@@ -491,6 +491,78 @@ for path in $ROUTES; do
   fi
 done
 [ "$leaked" -eq 0 ] && say "no rendered page contains a persona body"
+
+step "Access administration"
+# The screen that removed the shell dependency. Until it existed, a deployed Office
+# needed somebody with a terminal to create its second operator.
+curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT/access" > "$WORK"/access.html
+if grep -qi "Administrators" "$WORK"/access.html    && grep -qi "Add a person" "$WORK"/access.html    && grep -qi "Change a role" "$WORK"/access.html; then
+  say "the access screen renders people, roles and the administrator count"
+else
+  fail "the access screen did not render its controls"
+fi
+
+# The smoke operator holds `ivan`, so they are the administrator the screen counts.
+if grep -q "active" "$WORK"/access.html; then
+  say "the administrator count rendered"
+else
+  fail "the administrator count did not render"
+fi
+
+# A second operator, created THROUGH THE API rather than through a python shell - which
+# is the whole point of the increment. The token comes back once and must work.
+NEW_TOKEN="$("$VPY" - "$TOKEN" "$API_PORT" <<'PY' | tail -1
+import json, sys, urllib.error, urllib.request, uuid
+token, port = sys.argv[1], sys.argv[2]
+suffix = uuid.uuid4().hex[:8]
+req = urllib.request.Request(
+    f"http://127.0.0.1:{port}/api/humans",
+    data=json.dumps({
+        "display_name": f"smoke-operator-{suffix}",
+        "email": f"smoke-operator-{suffix}@example.invalid",
+        "role": "venture_operator", "venture_id": "greenstone",
+    }).encode(),
+    method="POST",
+    headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+)
+try:
+    with urllib.request.urlopen(req) as response:
+        print(json.load(response)["token"])
+except urllib.error.HTTPError as error:
+    print(f"FAILED {error.code} {error.read().decode()[:120]}")
+PY
+)"
+case "$NEW_TOKEN" in
+  FAILED*) fail "could not create a second operator: $NEW_TOKEN" ;;
+  "")      fail "creating a second operator returned no token" ;;
+  *)
+    code="$(curl -s -o /dev/null -w '%{http_code}'       -H "Authorization: Bearer $NEW_TOKEN"       "http://127.0.0.1:$API_PORT/api/health")"
+    if [ "$code" = "200" ]; then
+      say "a second operator was created through the API and their token works"
+    else
+      fail "the new operator's token returned $code"
+    fi
+
+    # And they must NOT be able to read the roster - who holds ivan is a map of whom to
+    # compromise, and a venture operator has no business with it.
+    code="$(curl -s -o /dev/null -w '%{http_code}'       -H "Authorization: Bearer $NEW_TOKEN"       "http://127.0.0.1:$API_PORT/api/humans")"
+    if [ "$code" = "403" ]; then
+      say "a venture operator is refused the roster"
+    else
+      fail "a venture operator read the roster ($code)"
+    fi
+    ;;
+esac
+
+step "Pagination reports a denominator"
+# The audit explorer capped at 100 and said nothing about the rest, so "I searched and
+# found nothing" was indistinguishable from "I looked at the most recent hundred".
+curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT/audit?limit=5" > "$WORK"/audit.html
+if grep -qE "showing (all [0-9]+|[0-9]+–[0-9]+ of [0-9]+|no matches)" "$WORK"/audit.html; then
+  say "the audit explorer states what it did not show"
+else
+  fail "the audit explorer rendered no denominator - a truncated list that looks complete"
+fi
 
 step "The provisioning ceiling is stated, not discovered"
 curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT/provisioning" > "$WORK"/prov.html

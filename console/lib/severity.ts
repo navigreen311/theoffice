@@ -321,3 +321,40 @@ export function coverageLabel(store: {
   const count = store.count ?? 0;
   return `${count} ${count === 1 ? "entry" : "entries"}`;
 }
+
+/**
+ * What a page did not show.
+ *
+ * The audit explorer capped at 100 rows and said nothing about the rest, so "I searched
+ * and found nothing" was indistinguishable from "I looked at the most recent hundred".
+ * Only one of those is evidence, and this is the sentence that separates them.
+ */
+export function pageSummary(page: {
+  total: number;
+  limit: number;
+  offset: number;
+  items: unknown[];
+}): { text: string; truncated: boolean } {
+  const { total, offset, items } = page;
+  const shown = items.length;
+
+  if (total === 0) return { text: "no matches", truncated: false };
+
+  const first = offset + 1;
+  const last = offset + shown;
+  const truncated = total > shown;
+
+  if (!truncated) {
+    return { text: `all ${total}`, truncated: false };
+  }
+  return { text: `${first}–${last} of ${total}`, truncated: true };
+}
+
+/** Whether there is another page after this one. */
+export function hasNextPage(page: {
+  total: number;
+  limit: number;
+  offset: number;
+}): boolean {
+  return page.offset + page.limit < page.total;
+}

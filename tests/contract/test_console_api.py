@@ -466,6 +466,21 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
         "/api/knowledge/compliance",
         "/api/knowledge/personas",
         "/api/knowledge/history",
+        # Human and role administration — the most privilege-sensitive surface in this
+        # file. The rules live in `humans.assert_may_grant`: a role may be granted only
+        # by somebody holding a STRICTLY stronger one, and never to yourself.
+        #
+        # The path is `/roles` and not `/grants` on purpose. "Grant" means agent
+        # authority over a Forge module everywhere else in this system, and the
+        # forbidden-fragment list above would rightly have refused it.
+        "/api/humans",
+        "/api/humans/{human_id}/roles",
+        "/api/humans/{human_id}/status",
+        "/api/humans/{human_id}/token",
+        # Resolution APPENDS to incident_resolution. `incident` stays append-only and is
+        # never edited, so there is deliberately no route that changes an incident's
+        # severity — the field somebody under pressure would most want to lower.
+        "/api/incidents/{incident_id}/resolve",
     }, f"the write surface changed: {sorted(writes)}"
 
 
