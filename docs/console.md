@@ -294,6 +294,57 @@ palette moved to variables.
 Type scale is six named sizes and two weights. Navigation is the same fourteen links in
 four groups — Operate, Teach, Govern, Inspect.
 
+## The Ventures page, rebuilt
+
+Five columns, none of which answered the question a reader opens the page to ask:
+**where is this venture, and can it go live.** Pipeline state is a venture's most
+important attribute and appeared nowhere — and a table row has nowhere to put the
+blocked reason, which is the most important content on the page.
+
+**Cards, with the gate in the status.** `blocked at gate 0`, never bare "blocked" —
+which tells a reader nothing they can act on. A six-segment bar maps the sixteen gates
+onto bridge → pack → generate → certify → sign off → live, and a test asserts the
+mapping covers `GATE_SEQUENCE` exactly so a gate cannot drift into the wrong phase.
+
+**The blocked sentence is computed, never looked up.** The brief that specified this
+page supplied three example blockers, and one of them — "structural PHI flush is not
+built" — had stopped being true when Phase 3.3 shipped. That is the argument against a
+table of blocker strings: right the day it is written, wrong afterwards. The sentence
+comes from the validator's own message for the rule that failed, so Greenstone reports
+*the bridge does not reach cre-forge* because V2 says so.
+
+**Status is derived, not stored.** The only stored states are the two nothing can
+derive: `archived`, and the draft that exists before a Pack does.
+
+**Creation, two ways.** Start from a Pack validates all 28 rules before anything is
+created; start blank takes five fields and leaves the rest to the Pack editor. The
+venture id always comes from the document rather than the form.
+
+**The portfolio panel.** Four of the five named ventures have no Pack. They are listed
+as absent, with what each one would bring — the same principle as the Compliance
+banner, because absence must not be able to look like health. Which are missing is
+computed against what exists, so it cannot go on claiming a venture is unauthored after
+somebody authors it.
+
+**Spend shows the cap and says it is not measured.** `usd_cost` is never populated, so a
+burn-down bar pinned at zero would read as "nothing spent" when it means "nothing
+measured". The bar renders only when there is real spend, with the soft cap marked —
+that is the line where every agent in the venture downgrades to `propose`.
+
+### A venture table, for two things an engagement cannot be
+
+A venture has always been an engagement rather than a table, and mostly still is. It
+cannot represent a **draft** — `BusinessPack` is `Strict`, so a stub Pack would mean
+inventing a `monthly_usd_cap`, which is the field V18 exists to stop a venture reaching
+production without — or **archived**, which is indistinguishable from empty. So
+`venture` holds only that: slug, declared name and category, environment, lifecycle. The
+Pack still wins on everything it declares.
+
+### Navigation
+
+The wordmark is a link, Dashboard is the first item under Operate, and pages carry a
+breadcrumb. There was previously no route back to a dashboard from anywhere.
+
 ## Known gaps
 
 *Last verified: 2026-08-23.*

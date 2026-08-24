@@ -56,6 +56,7 @@ from broker import (
     provisioning,
     revocation,
     sweeps,
+    ventures,
 )
 from broker.db import close_pool, connection
 from broker.errors import NotAuthorized, OfficeError
@@ -66,7 +67,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0015"
+EXPECTED_SCHEMA_REVISION = "0016"
 
 
 @asynccontextmanager
@@ -386,7 +387,13 @@ async def list_ventures(conn: DB, _me: ME) -> list[dict[str, Any]]:
 
 @app.get("/api/ventures/{venture_id}/capacity")
 async def venture_capacity(venture_id: str, conn: DB, _me: ME) -> dict[str, Any]:
-    """The three numbers (§7.2). All three, always — one hides the state."""
+    """The three numbers (§7.2). All three, always — one hides the state.
+
+    And they must **sum to the active roster**. They did not: an agent with no
+    certification row fell into none of the three, because `bool_or` over zero rows is
+    NULL and `NOT NULL` is NULL rather than TRUE. Three numbers that quietly omit
+    somebody are a worse version of the single number this exists to replace.
+    """
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
             """
@@ -396,9 +403,16 @@ async def venture_capacity(venture_id: str, conn: DB, _me: ME) -> dict[str, Any]
               count(*) FILTER (WHERE NOT certified)               AS produced_not_yet_certified
             FROM (
               SELECT i.office_agent_id,
-                     bool_or(c.state = 'certified')                       AS certified,
-                     bool_or(s.venture_id IS NOT NULL
-                             AND s.venture_id <> %(venture)s)             AS allocated
+                     -- COALESCE, because `bool_or` over no rows is NULL and `NOT NULL`
+                     -- is NULL rather than TRUE. An agent with no certification row at
+                     -- all therefore matched none of the three filters and appeared in
+                     -- none of the three numbers - so they silently stopped summing to
+                     -- the roster, which is the exact failure the docstring above
+                     -- claims to prevent. An agent nobody has certified is "produced,
+                     -- not yet certified"; that is the state, not an absence of one.
+                     COALESCE(bool_or(c.state = 'certified'), false)       AS certified,
+                     COALESCE(bool_or(s.venture_id IS NOT NULL
+                             AND s.venture_id <> %(venture)s), false)      AS allocated
               FROM office_agent_identity i
               LEFT JOIN certification c
                      ON c.unit = 'A' AND c.office_agent_id = i.office_agent_id
@@ -2326,5 +2340,102 @@ async def export_compliance_record(
         body.venture_id,
     )
     return document
+
+# ==================================================== read: venture directory
+
+@app.get("/api/ventures/directory")
+async def venture_directory(conn: DB, _me: ME) -> dict[str, Any]:
+    """Where each venture is, what is blocking it, and what the portfolio is missing.
+
+    The old `/api/ventures` answered five questions nobody was asking - agent count,
+    grant count, cap, whether a hard cap had been reversed - and pipeline state, which
+    is a venture's most important attribute, appeared nowhere. It stays, because the
+    venture dashboard reads it; this is the one the directory uses.
+
+    Status is derived, never stored, except the two states nothing can derive: a draft
+    that exists before its Pack, and an archived venture that is indistinguishable from
+    an empty one without somewhere to say so.
+    """
+    result = await ventures.directory(conn)
+    return {"as_of": datetime.now(UTC).isoformat(), **result}
+
+
+# =================================================== write: venture directory
+
+class NewVentureRequest(BaseModel):
+    display_name: str = Field(min_length=1)
+    slug: str | None = None
+    category: str = Field(min_length=1)
+    environment: str = "sandbox"
+
+
+@app.post("/api/ventures", status_code=201)
+async def create_venture(body: NewVentureRequest, conn: DB, me: ME) -> dict[str, Any]:
+    """Register a venture in draft.
+
+    Requires `compliance_officer`. Creating a venture is not operating one: it commits
+    a slug that every venture-scoped table will key on for the rest of its life, and a
+    venture operator is scoped to a venture that does not exist yet.
+
+    Draft means no Pack, and therefore no manifest, no runtime config and nothing to
+    grant against. The inability to receive grants is structural rather than a flag.
+    """
+    humans.authorize(me, required_role="compliance_officer")
+    try:
+        slug = await ventures.create(
+            conn,
+            slug=body.slug or ventures.slugify(body.display_name),
+            display_name=body.display_name,
+            category=body.category,
+            environment=body.environment,
+            created_by=me.human_id,
+        )
+    except ventures.VentureError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await _audit_human_action(
+        me, "console_venture_created",
+        {"slug": slug, "display_name": body.display_name,
+         "category": body.category, "environment": body.environment},
+        slug,
+    )
+    return {
+        "slug": slug,
+        "status": "draft",
+        "note": (
+            "Draft. Author a Business Pack before this venture can be validated, "
+            "provisioned or granted anything."
+        ),
+    }
+
+
+class LifecycleRequest(BaseModel):
+    state: str
+    reason: str = Field(min_length=1)
+
+
+@app.post("/api/ventures/{slug}/lifecycle")
+async def set_venture_lifecycle(
+    slug: str, body: LifecycleRequest, conn: DB, me: ME
+) -> dict[str, str]:
+    """Archive a venture, or bring one back.
+
+    Archiving does not delete anything and does not revoke anything - a venture's grants
+    and its ledger outlive the decision to stop operating it, and collapsing the two
+    would make archiving a silent way to pull authority with no revocation record.
+    """
+    humans.authorize(me, required_role="compliance_officer", venture_id=slug)
+    try:
+        await ventures.set_lifecycle(
+            conn, slug=slug, state=body.state, actor=me.human_id
+        )
+    except ventures.VentureError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await _audit_human_action(
+        me, "console_venture_lifecycle_changed",
+        {"slug": slug, "state": body.state, "reason": body.reason}, slug,
+    )
+    return {"slug": slug, "state": body.state}
 
 __all__ = ["NotAuthorized", "app"]

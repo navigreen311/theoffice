@@ -489,6 +489,15 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
         # Part 9's regulator export. A POST because producing a record for CFPB, FTC,
         # HHS OCR or a state DFI is an act somebody performed, and it is audited as one.
         "/api/compliance/export",
+        # The venture registry. `POST /api/ventures` creates a DRAFT: it commits a slug
+        # that every venture-scoped table will key on for the rest of its life, and
+        # nothing else. A draft has no Pack, so there is no manifest and no runtime
+        # config to grant against - the inability to receive grants is structural.
+        "/api/ventures",
+        # Archiving revokes nothing, deliberately. Grants and the ledger outlive the
+        # decision to stop operating a venture, and collapsing the two would make
+        # archiving a quiet way to pull authority with no revocation record.
+        "/api/ventures/{slug}/lifecycle",
     }, f"the write surface changed: {sorted(writes)}"
 
 

@@ -665,6 +665,62 @@ else
   say "no unhealthy controls present to check"
 fi
 
+step "The ventures page answers where each venture is"
+curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT/ventures" > "$WORK"/ventures.html
+
+while IFS= read -r phrase; do
+  grep -qF "$phrase" "$WORK"/ventures.html || fail "ventures page lost: ${phrase:0:60}"
+done <<'PHRASES'
+The Village carries several ventures at once. One venture per agent per shift.
+V18 makes budget caps a required Pack field, so an unmetered venture cannot reach
+PHRASES
+say "the preserved copy is present verbatim"
+
+# Pipeline state is a venture's most important attribute and used to appear nowhere.
+if grep -qE "blocked at gate [0-9]|draft|validating|live|awaiting sign-off" "$WORK"/ventures.html; then
+  say "ventures carry a pipeline status"
+else
+  fail "no venture reports where it is in the pipeline"
+fi
+
+# A blocked venture must name its gate. "Blocked" alone is not actionable.
+if grep -qF "blocked at gate" "$WORK"/ventures.html; then
+  if grep -qE "blocked at gate [0-9]" "$WORK"/ventures.html; then
+    say "a blocked venture names its gate"
+  else
+    fail "a venture reports blocked without naming the gate"
+  fi
+fi
+
+# Absence must not look like health: the unauthored portfolio ventures are listed.
+if grep -qF "portfolio ventures have no Pack yet" "$WORK"/ventures.html; then
+  say "the unauthored portfolio ventures are visible as absent"
+else
+  fail "four portfolio ventures are missing and the page does not say so"
+fi
+
+if grep -qF "New venture" "$WORK"/ventures.html; then
+  say "a venture can be created from the page"
+else
+  fail "no way to create a venture"
+fi
+
+step "Every page has a route home"
+# There was no way back to a dashboard from anywhere: the wordmark was not a link and
+# nothing in the nav pointed at `/`.
+missing_home=0
+for path in /ventures /packs /knowledge /access /audit; do
+  curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT$path" > "$WORK"/page.html
+  grep -qF '>Dashboard<' "$WORK"/page.html || { fail "$path has no route home"; missing_home=1; }
+done
+[ "$missing_home" -eq 0 ] && say "every page links back to the dashboard"
+
+if grep -qF ">Ventures<" "$WORK"/ventures.html; then
+  say "the breadcrumb names where you are"
+else
+  fail "no breadcrumb on the ventures page"
+fi
+
 step "Dark mode is defined, not hardcoded"
 # Every colour resolves through a CSS variable. A hex literal in a component is a
 # colour that cannot invert, and one of them eventually renders a failure state in a
