@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, type HistoryRun } from "@/lib/api";
 
 export type RunActionState = { error?: string; ok?: string };
 
@@ -149,4 +149,122 @@ export async function abortRunAction(
   } catch (error) {
     return fail(error);
   }
+}
+
+
+/* ------------------------------------------------- actions for the index page */
+
+/**
+ * Resume a run from the gate it stopped at.
+ *
+ * The same call as advancing — `advance_run` starts from `current_gate`, so resuming is
+ * not a separate mechanism and cannot drift from one. What differs is the wording: an
+ * operator looking at a run that stopped three days ago is asking to continue it, not
+ * to step it forward.
+ *
+ * Not offered when the Pack changed underneath the run. That check lives on the server
+ * and the button is hidden here; both, because a hidden button is a courtesy and the
+ * server check is the control.
+ */
+export async function resumeRunAction(
+  _prev: RunActionState | null,
+  form: FormData,
+): Promise<RunActionState> {
+  const runId = String(form.get("run_id") ?? "");
+  const venture = String(form.get("venture_id") ?? "");
+
+  try {
+    const result = await api.post<{
+      status: string;
+      current_gate: string;
+      outcomes: { gate: string; verdict: string; reason: string }[];
+    }>(`/api/provisioning/runs/${runId}/advance`, {});
+    revalidatePath("/provisioning");
+    revalidatePath(`/provisioning/${venture}`);
+
+    const last = result.outcomes[result.outcomes.length - 1];
+    if (!last) {
+      return { ok: `No gate ran. The run is still ${result.status} at gate ${result.current_gate}.` };
+    }
+    if (last.verdict === "passed") {
+      return { ok: `${result.outcomes.length} gate(s) ran. Now at gate ${result.current_gate}.` };
+    }
+    return {
+      ok: `${result.outcomes.length} gate(s) ran. Stopped at gate ${last.gate} — ${last.reason}`,
+    };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/**
+ * Start a fresh run from gate 0.
+ *
+ * A re-run is a new run, not a reset of the old one. The old run keeps its record —
+ * which gate stopped it and why is the institutional memory the next attempt is built
+ * on, and a page that only ever showed the latest attempt would throw it away.
+ */
+export async function rerunAction(
+  _prev: RunActionState | null,
+  form: FormData,
+): Promise<RunActionState> {
+  const venture = String(form.get("venture_id") ?? "");
+  try {
+    const result = await api.post<{ run_id: string; current_gate: string }>(
+      "/api/provisioning/runs",
+      { venture_id: venture },
+    );
+    revalidatePath("/provisioning");
+    revalidatePath(`/provisioning/${venture}`);
+    return {
+      ok: `Run ${result.run_id.slice(0, 8)} started at gate 0. The previous run keeps its record.`,
+    };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/**
+ * Decline at a gate awaiting a human decision.
+ *
+ * Distinct from abandoning the run, and the console has to keep them distinct because
+ * the statuses mean different things to whoever provisions this venture next: a
+ * cancelled run says nothing about the artifacts, a rejected one is a judgement of them.
+ *
+ * This is the only human decision here that stops a run. There is deliberately no
+ * counterpart that passes a gate the system blocked.
+ */
+export async function rejectRunAction(
+  _prev: RunActionState | null,
+  form: FormData,
+): Promise<RunActionState> {
+  const runId = String(form.get("run_id") ?? "");
+  const venture = String(form.get("venture_id") ?? "");
+  const note = String(form.get("note") ?? "").trim();
+
+  if (!note) {
+    return {
+      error:
+        "Rejecting needs a reason. It is a judgement about the artifacts, and the next person to provision this venture reads it.",
+    };
+  }
+
+  try {
+    await api.post(`/api/provisioning/runs/${runId}/reject`, { note });
+    revalidatePath("/provisioning");
+    revalidatePath(`/provisioning/${venture}`);
+    return {
+      ok: "Rejected. Grants are unchanged — rejecting is not revoking.",
+    };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/** Every run for a venture. Read on the server; the page holds no history until asked. */
+export async function ventureHistory(ventureId: string): Promise<HistoryRun[]> {
+  const result = await api.get<{ runs: HistoryRun[] }>(
+    `/api/provisioning/history/${encodeURIComponent(ventureId)}`,
+  );
+  return result.runs;
 }

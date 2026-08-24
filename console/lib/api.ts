@@ -430,6 +430,85 @@ export type ValidationResponse = {
   rules_checked?: number;
 };
 
+export type LadderRow = {
+  gate: string;
+  /** Plain language, for scanning. `title` is what the gate actually checks. */
+  name: string;
+  title: string;
+  state: "passed" | "blocked" | "awaiting" | "running" | "pending";
+  reason: string | null;
+  evidence: Record<string, unknown>;
+  recorded_at: string | null;
+  /** Elapsed from the previous gate, so a slow gate is visible. */
+  seconds: number | null;
+  is_current: boolean;
+  is_ceiling: boolean;
+  /** Never ran, because the run stopped before reaching it. Not the same as "not yet". */
+  downstream_of_stop: boolean;
+};
+
+export type RunStop = {
+  gate: string;
+  name: string;
+  reason: string;
+  evidence: Record<string, unknown>;
+  at: string | null;
+  /** Who acted at the gate — not who started the run. Different people, often. */
+  actor: string | null;
+};
+
+export type RunCard = {
+  run_id: string;
+  status: string;
+  /** The reader's vocabulary: `stopped at gate 4`, `at ceiling`, `cancelled`. */
+  display_status: string;
+  current_gate: string;
+  current_gate_name: string;
+  pack_version: string;
+  started_at: string;
+  completed_at: string | null;
+  started_by: string | null;
+  gates_passed: number;
+  stop: RunStop | null;
+};
+
+export type ProvisioningCard = {
+  venture_id: string;
+  display_name: string;
+  has_live_pack: boolean;
+  live_pack_version: string | null;
+  run: RunCard | null;
+  ladder: LadderRow[];
+  runs_total: number;
+  resumable: boolean;
+  resume_blocked_because: string | null;
+  pack_changed: boolean;
+};
+
+export type ProvisioningDirectory = {
+  as_of: string;
+  ventures: ProvisioningCard[];
+  startable: { venture_id: string; display_name: string }[];
+  gates_total: number;
+  ceiling_gate: string;
+  portfolio_size: number;
+  empty_ladder: LadderRow[];
+};
+
+export type HistoryRun = {
+  run_id: string;
+  status: string;
+  display_status: string;
+  current_gate: string;
+  current_gate_name: string;
+  pack_version: string;
+  started_at: string;
+  completed_at: string | null;
+  actor: string | null;
+  gates_passed: number;
+  reason: string | null;
+};
+
 export type RunSummary = {
   run_id: string;
   venture_id: string;

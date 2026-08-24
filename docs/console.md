@@ -60,7 +60,7 @@ quiet incident list means nothing if the check producing it is stale.
 | **Approval queue** (`/proposals`) | the screen that can erode a control without bypassing it |
 | **Instruction authoring** (`/instructions`) | index + version, diff, staleness, certification impact |
 | **Packs** (`/packs`, `/packs/[venture]`) | whether each Pack can provision and why not; draft/live/provisioned versions and the drift between them; validate and publish as separate acts |
-| **Provisioning Console** (`/provisioning`, `/provisioning/[venture]`) | the sixteen-gate ladder, with three verdicts rendered three ways |
+| **Provisioning** (`/provisioning`, `/provisioning/[venture]`) | the sixteen-gate ladder, with three verdicts rendered three ways |
 | **Knowledge Base Manager** (`/knowledge`) | coverage for all five stores; blocking gaps render differently from advisory ones |
 | **Access** (`/access`) | people, roles, tokens and active revocations — the screen that removed the shell dependency |
 | **Incidents** (`/incidents`) | open and resolved; resolving appends an account and never edits the detection |
@@ -415,6 +415,95 @@ framework as `NRS_648` where the Pack schema's literal is `NRS_648_NV` — so no
 that venture could ever have declared it. Nothing had noticed, because nothing tried to
 generate a Pack from the portfolio until templates existed. Both are pinned by tests.
 
+## The Provisioning page, rebuilt
+
+The page's own subtitle promised that a run "stops at the first gate that blocks and
+says which". It named the gate number and stopped there. Sixteen gates were represented
+by `5 of 16` - a number with no map - and the page could not say what happened at the
+gate that stopped the run, what cleared before it, or what is still ahead. It also
+carried no action at all, which made the provisioning page the one place you could not
+provision from.
+
+**The ladder replaces the fraction.** Every gate renders, in order, whether or not it
+ran, and it is never collapsed or truncated: seeing the whole path is the point. The
+gate a run stopped at is filled in danger; the ceiling gate is filled in warning
+wherever the run stopped. Those are two unrelated walls - the one this run hit, and the
+one every run in this deployment will hit - and the old page gave no way to tell them
+apart.
+
+**Plain-language names on the ladder, the spec's names underneath.** `GATE_TITLES` says
+what a gate checks, in the vocabulary of the document that defined it - "Human review of
+artifacts, BOM and appointment gap report". That is right on the gate's own row, where
+there is room; a sixteen-row ladder needs "Human review". `GATE_NAMES` is the second
+map, and the ladder carries the long form as the row's title attribute rather than
+losing it.
+
+**The numbering is explained rather than left contradictory.** A page showing "Gate 4"
+and "5 of 16" at the same time reads as a bug. Gates 3.5, 4.5 and 9.5 were inserted
+after the original twelve, so the gate number and the cleared count legitimately differ,
+and the footnote says so - computed from the ladder, including which gates are the
+fractional ones, so inserting a gate 6.5 later cannot make the sentence wrong.
+
+**Why the run stopped, in this run's own words.** The old page said `aborted, gate 4`.
+Gate 4 is human review, so that could have been a rejection, a timeout or an error. The
+stop block now names the gate, the disposition, the human who acted and when, then what
+happened and what it means downstream - including how many gates never ran as a result.
+The reason is always the recorded outcome; rendering the gate's generic description here
+would produce a sentence true of every run and about none of them.
+
+**A run somebody ended does not have its reason in the gate results.** The gate recorded
+why it was *waiting*; the human recorded why they stopped it, and that went to the audit
+log. So a cancelled or rejected run reads its disposition from `audit_log` - actor,
+timestamp and reason - and that overrides the gate's message. The first build of this
+page credited a cancellation to whoever *started* the run, which for a run cancelled
+days later is the wrong person.
+
+**The status vocabulary is the reader's, not the machine's.** `aborted` reads as though
+somebody cancelled it - which is what it means, and what it fails to distinguish from a
+gate refusing. Stored status stays as it is; the display status is derived:
+
+| Shown | When |
+| --- | --- |
+| `running at gate N` | in progress |
+| `awaiting review at gate N` | a gate has put something to a human |
+| `stopped at gate N` | a gate blocked on policy |
+| `failed at gate N` | a gate threw. Marked at the gate with `evidence.error`, not guessed from the reason string |
+| `rejected at gate N` | a human declined at a gate awaiting their decision |
+| `cancelled` | a human abandoned the run. Says nothing about the artifacts |
+| `at ceiling` | reached 9.5 and can go no further in this deployment |
+| `complete` | reached gate 12 |
+
+**`at ceiling` is not a failure.** A run that reaches 9.5 has done everything currently
+possible, and conflating that with failing would misrepresent a successful run as a
+broken one. It is drawn on the *evidence*, not the gate number: a held-out verdict of
+`FAIL` at the same gate is a real failure, and reading the two the same way would report
+a venture that failed adversarial testing as merely waiting for infrastructure.
+
+**Gate 4 can now say no.** Until this increment `record_human_review` could only record
+that a human had reviewed the artifacts - there was no way to decline. A review that can
+only approve is not a review, and what a reviewer actually had was `abort_run`, which
+means something different: abandoning a run rather than judging it. Migration 0018 adds
+`rejected` as a terminal status, and it is only reachable while a gate is
+`awaiting_human` - rejecting a run nothing has put to a human would be a way to stop it
+mid-flight while dressing it as a judgement. Like an abort, it does not deactivate
+grants: a rejection is not a revocation.
+
+**Resume, and when it is refused.** Resuming is `advance` from the gate the run stopped
+at - the same mechanism, so it cannot drift from one. It is unavailable when the Pack
+changed underneath the run, including the case a version string cannot catch: the same
+version re-stored with different content. The run holds the Pack hash it began with, and
+resuming against different content would provision something nobody started.
+
+**No override, anywhere.** The ceiling notice states there is none deliberately, and a
+UI offering one would make that copy a lie. `test_no_route_can_pass_a_gate_that_blocked`
+enumerates the provisioning write surface and fails on any route whose path contains
+force, skip, override, bypass or unblock - so the guarantee is enforced rather than
+remembered. Every write there either starts a run, runs gates in order, or stops one.
+
+**Ceiling styling.** The notice was styled identically to body copy, which is how the
+strongest sentence in the console came to read like an aside. It now carries the warning
+palette and a lock icon.
+
 ## Known gaps
 
 *Last verified: 2026-08-24.*
@@ -441,6 +530,15 @@ generate a Pack from the portfolio until templates existed. Both are pinned by t
   rejected session redirects to the login page — it used to throw a 500, because only a
   *missing* cookie raised `NotAuthenticated` while a *rejected* one raised `ApiError`
   that no page caught.
+- **Per-gate timing is measured from the previous gate's record, not from when the gate
+  started.** With gates that take milliseconds this is the same number; a gate that waits
+  on a human shows the wait rather than the work, which is arguably the more useful
+  figure and is definitely not the one the column name implies.
+- **History is fetched per venture on demand and is not paginated.** A venture with
+  hundreds of runs would return all of them. Nothing has more than a handful today.
+- **`failed at gate N` depends on gates marking their own faults.** Gates 3 and 5 set
+  `evidence.error` when they catch an exception; a gate added later that blocks on a
+  caught error without setting it will read as `stopped`, which understates it.
 - **The Pack directory validates every Pack on every page load.** Each card runs the
   full rule set against the live database, which is why a Pack that passed yesterday can
   fail today — a Forge went unreachable, an instruction was withdrawn. With one Pack

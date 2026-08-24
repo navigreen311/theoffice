@@ -453,6 +453,11 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
         "/api/provisioning/runs",
         "/api/provisioning/runs/{run_id}/advance",
         "/api/provisioning/runs/{run_id}/review",
+        # Stops a run; it cannot start or advance one. Added deliberately: Gate 4
+        # review could previously only approve, so the only way for a human to say no
+        # was to abandon the run - which means something different to the next person
+        # who provisions this venture.
+        "/api/provisioning/runs/{run_id}/reject",
         "/api/provisioning/runs/{run_id}/abort",
         "/api/provisioning/runs/{run_id}/signoff",
         # Knowledge Base Manager. Four stores that author content, and none of them

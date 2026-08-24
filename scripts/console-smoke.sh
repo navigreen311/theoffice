@@ -810,6 +810,123 @@ else
   notrun "pack templates - the catalogue is empty"
 fi
 
+step "The provisioning page shows the whole gate path"
+curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT/provisioning" > "$WORK"/prov-index.html
+sed 's/<!-- -->//g' "$WORK"/prov-index.html > "$WORK"/prov-text.html
+
+# The ceiling notice is the strongest copy in the console. Checked verbatim, because
+# these sentences are the ones most likely to be tightened by somebody who does not know
+# why they are long.
+preserved=0
+while IFS= read -r phrase; do
+  grep -qF "$phrase" "$WORK"/prov-text.html || { fail "provisioning page lost: ${phrase:0:60}"; preserved=1; }
+done <<'PHRASES'
+Sixteen gates from a Business Pack to a live venture. A run stops at the first gate that blocks and says which.
+Ceiling in this deployment: gate 9.5
+Stated here rather than discovered at the gate.
+does not exist yet, so no run started from this console can pass gate 9.5 and no venture can reach gate 12.
+not skipped: a run that skipped certification would produce a venture reading as fully provisioned that has been certified for nothing. There is no override, deliberately.
+PHRASES
+[ "$preserved" -eq 0 ] && say "the ceiling notice is present verbatim"
+
+# The ceiling reads as a live constraint, not a paragraph. It was styled identically to
+# body copy, which is how the strongest sentence in the console came to read as an aside.
+if grep -q 'bg-warn-bg' "$WORK"/prov-index.html; then
+  say "the ceiling notice carries a warning treatment"
+else
+  fail "the ceiling notice is styled as body copy again"
+fi
+
+# The gap the rebuild closed: sixteen gates were rendered as a fraction. Every gate has
+# to appear, including the ones no run has reached.
+missing_gate=0
+for gate in 0 1 2 3 3.5 4 4.5 5 6 7 8 9 9.5 10 11 12; do
+  grep -qE ">${gate}<" "$WORK"/prov-index.html || { fail "gate $gate is missing from the ladder"; missing_gate=1; }
+done
+[ "$missing_gate" -eq 0 ] && say "all sixteen gates render, not a fraction"
+
+# Plain-language names, so the ladder can be scanned.
+for phrase in "Bridge operational" "Pack validated" "Human review" "Held-out set" "Named-human sign-off" "Live"; do
+  grep -qF "$phrase" "$WORK"/prov-text.html || fail "gate not named in plain language: $phrase"
+done
+say "gates carry plain-language names"
+
+# The ceiling gate is visible in every ladder, wherever the run stopped. Those are two
+# unrelated walls and the old page gave no way to tell them apart.
+if grep -qF "ceiling, not buildable yet" "$WORK"/prov-text.html; then
+  say "the ceiling gate is marked in the ladder itself"
+else
+  fail "the ladder does not distinguish the ceiling from wherever the run stopped"
+fi
+
+# The numbering contradiction, explained rather than left to be read as a bug.
+if grep -qF "were inserted after the original twelve" "$WORK"/prov-text.html; then
+  say "the gate numbering is explained"
+else
+  fail "the page shows a gate number and a cleared count that cannot be reconciled"
+fi
+
+step "A stopped run says what happened, who acted, and what it means"
+# `aborted, gate 4` was the whole story. Gate 4 is human review, so that could have been
+# a rejection, a timeout or an error.
+if grep -qE "stopped at gate|rejected at gate|failed at gate|at ceiling|cancelled|complete|running at gate|awaiting review" "$WORK"/prov-text.html; then
+  say "runs report an outcome in the reader's vocabulary"
+else
+  fail "no run states an outcome - the status vocabulary is missing"
+fi
+
+# `at ceiling` is not a failure. A run that reaches 9.5 has done everything currently
+# possible, and rendering it as broken would misreport a successful run.
+if grep -qF "at ceiling" "$WORK"/prov-text.html; then
+  if grep -qE 'at ceiling[^<]*' "$WORK"/prov-text.html && ! grep -qF "failed at gate 9.5" "$WORK"/prov-text.html; then
+    say "a run at the ceiling is not rendered as a failure"
+  else
+    fail "a run at the ceiling renders as a failure"
+  fi
+fi
+
+if grep -qE "gates? downstream never ran" "$WORK"/prov-text.html; then
+  say "a stopped run says what did not run because of it"
+fi
+
+step "There is no way past a gate in the UI"
+# The ceiling notice states there is no override, deliberately. A control offering one
+# would make that copy a lie.
+found_override=0
+for word in "Force" "force-past" "Skip gate" "Override" "Bypass" "admin-bypass"; do
+  if grep -qF "$word" "$WORK"/prov-index.html; then
+    fail "the provisioning page offers '$word' - the ceiling notice says there is no override"
+    found_override=1
+  fi
+done
+[ "$found_override" -eq 0 ] && say "no force, skip or override control is rendered"
+
+step "A run can be started and re-run from the provisioning page"
+# There was no action on this page at all: you could read how far a venture got and had
+# to go somewhere else to do anything about it.
+if grep -qF "Start run" "$WORK"/prov-text.html; then
+  say "a run can be started from the page"
+else
+  fail "no way to start a run from the provisioning page"
+fi
+if grep -qF "Re-run" "$WORK"/prov-text.html; then
+  say "a venture can be re-run"
+else
+  fail "no way to re-run a venture"
+fi
+
+# Run metadata. A run against a superseded Pack is not evidence about the current one.
+if grep -qE "gates cleared" "$WORK"/prov-text.html && grep -qF "Pack" "$WORK"/prov-text.html; then
+  say "runs carry their Pack version and a cleared count with a denominator"
+else
+  fail "a run renders without its Pack version or without a denominator"
+fi
+
+# The ladder is a map, so the gate the run stopped at is filled rather than merely named.
+if grep -q 'bg-bad-bg' "$WORK"/prov-index.html; then
+  say "the stopped gate is filled, not just labelled"
+fi
+
 step "Every page has a route home"
 # There was no way back to a dashboard from anywhere: the wordmark was not a link and
 # nothing in the nav pointed at `/`.

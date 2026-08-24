@@ -68,7 +68,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0017"
+EXPECTED_SCHEMA_REVISION = "0018"
 
 
 @asynccontextmanager
@@ -1098,6 +1098,32 @@ async def list_provisioning_runs(
     return await provisioning.list_runs(conn, venture_id=venture_id)
 
 
+# Declared BEFORE `/api/provisioning/runs/{run_id}`. A literal segment registered
+# after a parameterised one at the same depth is unreachable - FastAPI hands it to the
+# path parameter and answers 200 with the wrong body. `/api/packs/directory` shipped
+# that way and nothing failed.
+@app.get("/api/provisioning/directory")
+async def provisioning_directory(conn: DB, _me: ME) -> dict[str, Any]:
+    """Every venture, and exactly how far it got.
+
+    The old index rendered `5 of 16` - a number with no map. A fraction cannot say which
+    gate stopped the run, what happened there, or what is still ahead.
+    """
+    result = await provisioning.directory(conn)
+    return {"as_of": datetime.now(UTC).isoformat(), **result}
+
+
+@app.get("/api/provisioning/history/{venture_id}")
+async def provisioning_history(
+    venture_id: str, conn: DB, _me: ME
+) -> dict[str, Any]:
+    """Every run for a venture. Provisioning is iterative and the pattern is the point."""
+    return {
+        "venture_id": venture_id,
+        "runs": await provisioning.venture_history(conn, venture_id),
+    }
+
+
 @app.get("/api/provisioning/runs/{run_id}")
 async def provisioning_run(run_id: uuid.UUID, conn: DB, _me: ME) -> dict[str, Any]:
     """A run, its gate ladder, and every gate's evidence.
@@ -1294,6 +1320,26 @@ async def review_provisioning_run(
     except provisioning.ProvisioningError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"status": "reviewed"}
+
+
+@app.post("/api/provisioning/runs/{run_id}/reject")
+async def reject_provisioning_run(
+    run_id: uuid.UUID, body: RunNoteRequest, conn: DB, me: ME
+) -> dict[str, str]:
+    """A named human declines at a gate awaiting their decision.
+
+    Not the same act as abandoning the run. Aborting says nothing about the artifacts;
+    this is a judgement about them, and the next person to provision this venture needs
+    to know which one happened.
+
+    Deliberately not an override in the other direction: there is no route that lets a
+    human pass a gate the system blocked.
+    """
+    try:
+        await provisioning.reject_run(conn, run_id=run_id, human=me, reason=body.note)
+    except provisioning.ProvisioningError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"status": "rejected"}
 
 
 @app.post("/api/provisioning/runs/{run_id}/abort")

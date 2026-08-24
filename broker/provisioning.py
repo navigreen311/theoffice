@@ -186,7 +186,11 @@ async def _gate_3(ctx: _Context) -> GateOutcome:
     try:
         artifacts = await generator_pipeline.run_all(ctx.pack.pack, ctx.conn)
     except Exception as exc:
-        return GateOutcome("3", BLOCKED, f"generator error: {exc}", {})
+        # `error` marks this as a fault rather than a policy decision. The gate
+        # already knows it caught an exception; without recording that, the console
+        # has to guess from the reason string, and "failed" and "stopped" are
+        # different outcomes to whoever has to act on them.
+        return GateOutcome("3", BLOCKED, f"generator error: {exc}", {"error": True})
     ctx.artifacts = artifacts
     return GateOutcome(
         "3", PASSED,
@@ -292,7 +296,7 @@ async def _gate_5(ctx: _Context) -> GateOutcome:
             config, ctx.conn, granted_by=str(ctx.actor)
         )
     except ValueError as exc:
-        return GateOutcome("5", BLOCKED, str(exc), {})
+        return GateOutcome("5", BLOCKED, str(exc), {"error": True})
     return GateOutcome(
         "5", PASSED,
         f"{written['grants']} grant(s) issued INACTIVE, {written['manifest_rows']} "
@@ -1147,3 +1151,457 @@ async def gate_results(
             (run_id,),
         )
         return [dict(r) for r in await cur.fetchall()]
+
+
+async def reject_run(
+    conn: AsyncConnection, *, run_id: uuid.UUID, human: humans.Human, reason: str
+) -> None:
+    """A named human declines at a gate that was waiting for their decision.
+
+    Distinct from `abort_run`, and the distinction is the point. Aborting abandons a run
+    and says nothing about the artifacts; rejecting is a judgement about them. The next
+    person to provision this venture wants to know which one happened, and a single
+    `aborted` status cannot tell them.
+
+    Only possible while a gate is `awaiting_human`. Rejecting a run that no gate has
+    handed to a human would be a way to stop it mid-flight while dressing it as a review
+    - and stopping a run mid-flight is what `abort_run` is for.
+
+    Does **not** deactivate grants, for the same reason an abort does not: Gate 11 may
+    already have activated them, and a rejection is not a revocation.
+    """
+    if not reason.strip():
+        raise ProvisioningError("rejecting a run requires a reason")
+
+    state = await get_run(conn, run_id)
+    if state is None:
+        raise ProvisioningError(f"no such run {run_id}")
+    if state.status != AWAITING_HUMAN:
+        raise ProvisioningError(
+            f"run is {state.status}, not awaiting a human decision. Nothing has been "
+            "put to a human to accept or decline; abandon the run instead."
+        )
+    humans.authorize(human, required_role="venture_operator", venture_id=state.venture_id)
+
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "UPDATE provisioning_run SET status = 'rejected', completed_at = now() "
+            "WHERE run_id = %s",
+            (run_id,),
+        )
+    await conn.commit()
+
+    await audit.write_event(
+        event_type="provisioning_run_rejected",
+        actor_type="human", actor_id=human.human_id, venture_id=state.venture_id,
+        subject={"run_id": str(run_id), "at_gate": state.current_gate,
+                 "reason": reason},
+    )
+    await knowledge.record(
+        conn, record_type="provisioning_rejected", venture_id=state.venture_id,
+        summary=(
+            f"Provisioning run {str(run_id)[:8]} rejected at gate "
+            f"{state.current_gate}: {reason}"
+        ),
+        detail={"run_id": str(run_id), "at_gate": state.current_gate,
+                "reason": reason},
+        actor_type="human", recorded_by=human.human_id,
+    )
+
+
+# ----------------------------------------------------------------- the directory
+
+# The plain-language name of each gate. `GATE_TITLES` describes what the gate *checks*,
+# in the vocabulary of the spec that defined it - "Human review of artifacts, BOM and
+# appointment gap report". That belongs on the gate row where there is room for it; a
+# sixteen-row ladder needs a name a reader can scan.
+GATE_NAMES = {
+    "0": "Bridge operational",
+    "1": "Pack authored",
+    "2": "Pack validated",
+    "3": "Generators ran",
+    "3.5": "Manifest reconciled",
+    "4": "Human review",
+    "4.5": "Capacity and budget check",
+    "5": "Sandbox grants issued",
+    "6": "Knowledge bases seeded",
+    "7": "Agents appointed, paused",
+    "8": "Curriculum to SimForge",
+    "9": "Readiness Gate",
+    "9.5": "Held-out set",
+    "10": "Named-human sign-off",
+    "11": "Production grants",
+    "12": "Live",
+}
+
+# The gate this deployment cannot pass, and the evidence that says so. A block at 9.5 is
+# only the ceiling when the partition does not exist; a held-out verdict of FAIL is a
+# real failure at the same gate, and reading the two the same way would report a venture
+# that failed adversarial testing as merely waiting for infrastructure.
+CEILING_GATE = "9.5"
+CEILING_EVIDENCE = "held_out_partition_not_created"
+
+
+def _display_status(
+    status: str, current_gate: str, blocking: dict[str, Any] | None
+) -> str:
+    """What actually happened, in words a reader can act on.
+
+    `aborted` reads as though somebody cancelled it - which is what it means, and what it
+    fails to distinguish from a gate refusing. The stored status is the machine's
+    vocabulary; this is the reader's.
+    """
+    if status == "complete":
+        return "complete"
+    if status == "running":
+        return f"running at gate {current_gate}"
+    if status == AWAITING_HUMAN:
+        return f"awaiting review at gate {current_gate}"
+    if status == "aborted":
+        return "cancelled"
+    if status == "rejected":
+        return f"rejected at gate {current_gate}"
+
+    evidence = (blocking or {}).get("evidence") or {}
+    if current_gate == CEILING_GATE and evidence.get("blocked_by") == CEILING_EVIDENCE:
+        # Not a failure. A run here has done everything this deployment can do, and
+        # rendering it as broken would misreport a successful run.
+        return "at ceiling"
+    if evidence.get("error"):
+        return f"failed at gate {current_gate}"
+    return f"stopped at gate {current_gate}"
+
+
+def _ladder(
+    results: list[dict[str, Any]], current_gate: str | None, status: str | None
+) -> list[dict[str, Any]]:
+    """Every gate, in order, whether or not it ran.
+
+    A ladder that lists only what has happened cannot show what is still ahead of a
+    stopped run - which is most of the reason to draw one.
+    """
+    latest: dict[str, dict[str, Any]] = {}
+    for row in results:
+        latest[row["gate"]] = row
+
+    # Elapsed per gate, measured from the previous gate's record, so a slow gate is
+    # visible rather than inferred from a total.
+    ordered = sorted(
+        (r for r in results if r.get("recorded_at")), key=lambda r: r["recorded_at"]
+    )
+    previous: dict[str, Any] = {}
+    seconds: dict[str, float] = {}
+    for row in ordered:
+        prior = previous.get("recorded_at")
+        if prior is not None:
+            seconds[row["gate"]] = (row["recorded_at"] - prior).total_seconds()
+        previous = row
+
+    live = status in ("running", AWAITING_HUMAN)
+    reached = False
+    ladder: list[dict[str, Any]] = []
+    for gate in GATE_SEQUENCE:
+        record = latest.get(gate)
+        is_current = gate == current_gate
+        if is_current:
+            reached = True
+
+        if record and record["verdict"] == PASSED:
+            state = "passed"
+        elif record and record["verdict"] == BLOCKED:
+            state = "blocked"
+        elif record and record["verdict"] == AWAITING_HUMAN:
+            state = "awaiting"
+        elif is_current and live:
+            state = "running"
+        else:
+            state = "pending"
+
+        ladder.append({
+            "gate": gate,
+            "name": GATE_NAMES[gate],
+            "title": GATE_TITLES[gate],
+            "state": state,
+            "reason": None if record is None else record["reason"],
+            "evidence": {} if record is None else (record["evidence"] or {}),
+            "recorded_at": None if record is None
+                           else record["recorded_at"].isoformat(),
+            "seconds": seconds.get(gate),
+            "is_current": is_current,
+            "is_ceiling": gate == CEILING_GATE,
+            # Everything past the gate a run stopped at never ran, and saying so is the
+            # difference between "not yet" and "we do not know".
+            "downstream_of_stop": reached and not is_current and not live,
+        })
+    return ladder
+
+
+# A run a human ended does not have its reason in `provisioning_gate_result`. The gate
+# recorded why it was *waiting*; the human recorded why they stopped it, and that went to
+# the audit log. Rendering the gate's message for a cancelled run answers "why did this
+# stop" with the generic sentence the gate says to everybody - which is exactly what the
+# stop block exists not to do.
+_TERMINAL_EVENTS = {
+    "aborted": "provisioning_run_aborted",
+    "rejected": "provisioning_run_rejected",
+}
+
+
+async def _human_disposition(
+    conn: AsyncConnection, run_id: str, status: str
+) -> dict[str, Any] | None:
+    """Who ended this run, when, and why they said they did."""
+    event_type = _TERMINAL_EVENTS.get(status)
+    if event_type is None:
+        return None
+
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            """
+            SELECT a.subject, a.ts, h.display_name AS actor
+            FROM audit_log a
+            LEFT JOIN office_human h ON h.human_id = a.actor_id
+            WHERE a.event_type = %s AND a.subject->>'run_id' = %s
+            ORDER BY a.ts DESC
+            LIMIT 1
+            """,
+            (event_type, run_id),
+        )
+        row = await cur.fetchone()
+
+    if row is None:
+        return None
+    subject = row["subject"] or {}
+    return {
+        "actor": row["actor"],
+        "at": row["ts"].isoformat(),
+        "reason": subject.get("reason"),
+        "gate": subject.get("at_gate"),
+    }
+
+
+async def directory(conn: AsyncConnection) -> dict[str, Any]:
+    """Every venture that could be provisioned, and exactly how far it got.
+
+    The old index rendered `5 of 16` - a number with no map. A fraction cannot say which
+    gate stopped the run, what happened there, or what is still ahead, and those are the
+    three things a reader opens this page to find out.
+    """
+    from broker import ventures as ventures_mod
+
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            """
+            SELECT DISTINCT ON (r.venture_id)
+                   r.run_id::text AS run_id, r.venture_id, r.pack_version, r.pack_hash,
+                   r.status, r.current_gate, r.artifacts_hash, r.started_at,
+                   r.completed_at, r.started_by::text AS started_by
+            FROM provisioning_run r
+            ORDER BY r.venture_id, r.started_at DESC
+            """
+        )
+        latest_runs = {r["venture_id"]: dict(r) for r in await cur.fetchall()}
+
+        await cur.execute(
+            "SELECT venture_id, count(*) AS runs FROM provisioning_run "
+            "GROUP BY venture_id"
+        )
+        run_counts = {r["venture_id"]: int(r["runs"]) for r in await cur.fetchall()}
+
+        await cur.execute(
+            "SELECT venture_id, pack_version, content_hash, parsed "
+            "FROM business_pack WHERE status = 'live' ORDER BY venture_id"
+        )
+        live_packs = {r["venture_id"]: dict(r) for r in await cur.fetchall()}
+
+        await cur.execute("SELECT slug, display_name FROM venture")
+        registered = {r["slug"]: r["display_name"] for r in await cur.fetchall()}
+
+        await cur.execute(
+            "SELECT human_id::text AS human_id, display_name FROM office_human"
+        )
+        actors = {r["human_id"]: r["display_name"] for r in await cur.fetchall()}
+
+    out: list[dict[str, Any]] = []
+    for venture_id in sorted(set(latest_runs) | set(live_packs)):
+        run = latest_runs.get(venture_id)
+        pack = live_packs.get(venture_id)
+
+        results = (
+            [] if run is None else await gate_results(conn, uuid.UUID(run["run_id"]))
+        )
+        blocking = None
+        if run is not None:
+            for row in results:
+                if row["gate"] == run["current_gate"] and row["verdict"] != PASSED:
+                    blocking = row
+
+        display = (
+            None if run is None
+            else _display_status(run["status"], run["current_gate"], blocking)
+        )
+        disposition = (
+            None if run is None
+            else await _human_disposition(conn, run["run_id"], run["status"])
+        )
+        ladder = _ladder(
+            results,
+            None if run is None else run["current_gate"],
+            None if run is None else run["status"],
+        )
+
+        # Resume is `advance` from where the run stopped. It is unavailable when the
+        # document changed underneath it: the run holds the Pack hash it began with, and
+        # resuming against different content would provision something nobody started.
+        pack_changed = bool(
+            run is not None and pack is not None
+            and run["pack_version"] == pack["pack_version"]
+            and run["pack_hash"] != pack["content_hash"]
+        )
+        superseded = bool(
+            run is not None and pack is not None
+            and run["pack_version"] != pack["pack_version"]
+        )
+        resumable = bool(run is not None and run["status"] == BLOCKED)
+        because = None
+        if run is not None and run["status"] in ("complete", "aborted", "rejected"):
+            because = f"This run is {display}. Start a fresh run."
+        elif pack_changed:
+            resumable = False
+            because = "Pack has changed since this run. Start a fresh run."
+        elif superseded:
+            resumable = False
+            live_version = "" if pack is None else pack["pack_version"]
+            ran_against = "" if run is None else run["pack_version"]
+            because = (
+                f"This run provisioned Pack {ran_against} and {live_version} is now "
+                "live. Start a fresh run."
+            )
+
+        identity = ((pack or {}).get("parsed") or {}).get("identity") or {}
+        out.append({
+            "venture_id": venture_id,
+            "display_name": (
+                registered.get(venture_id)
+                or identity.get("venture_name")
+                or venture_id
+            ),
+            "has_live_pack": pack is not None,
+            "live_pack_version": None if pack is None else pack["pack_version"],
+            "run": None if run is None else {
+                "run_id": run["run_id"],
+                "status": run["status"],
+                "display_status": display,
+                "current_gate": run["current_gate"],
+                "current_gate_name": GATE_NAMES[run["current_gate"]],
+                "pack_version": run["pack_version"],
+                "started_at": run["started_at"].isoformat(),
+                "completed_at": (
+                    None if run["completed_at"] is None
+                    else run["completed_at"].isoformat()
+                ),
+                "started_by": actors.get(run["started_by"]),
+                "gates_passed": sum(1 for g in ladder if g["state"] == "passed"),
+                # A human ending a run overrides the gate's own message: the gate said
+                # why it was waiting, the human said why they stopped it, and only the
+                # second answers the question the block is asking.
+                "stop": None if (blocking is None and disposition is None) else {
+                    "gate": (
+                        (disposition or {}).get("gate")
+                        or (blocking or {})["gate"]
+                    ),
+                    "name": GATE_NAMES[
+                        (disposition or {}).get("gate") or (blocking or {})["gate"]
+                    ],
+                    "reason": (
+                        (disposition or {}).get("reason")
+                        or (blocking or {}).get("reason")
+                        or ""
+                    ),
+                    "evidence": (blocking or {}).get("evidence") or {},
+                    "at": (
+                        (disposition or {}).get("at")
+                        or (
+                            blocking["recorded_at"].isoformat()
+                            if blocking is not None else None
+                        )
+                    ),
+                    # Who acted at the gate. Not who started the run - for a run somebody
+                    # ended, those are different people and the second is the wrong one.
+                    "actor": (disposition or {}).get("actor"),
+                },
+            },
+            "ladder": ladder,
+            "runs_total": run_counts.get(venture_id, 0),
+            "resumable": resumable,
+            "resume_blocked_because": because,
+            "pack_changed": pack_changed or superseded,
+        })
+
+    return {
+        "ventures": out,
+        "startable": [
+            {"venture_id": row["venture_id"], "display_name": row["display_name"]}
+            for row in out if row["has_live_pack"]
+        ],
+        "gates_total": len(GATE_SEQUENCE),
+        "gate_names": GATE_NAMES,
+        "ceiling_gate": CEILING_GATE,
+        "portfolio_size": len(ventures_mod.PORTFOLIO),
+        # The ladder as it looks before anything has run. The empty state renders this
+        # rather than a blank card: what a run *will* do is more use than nothing.
+        "empty_ladder": _ladder([], None, None),
+    }
+
+
+async def venture_history(
+    conn: AsyncConnection, venture_id: str
+) -> list[dict[str, Any]]:
+    """Every run for a venture, newest first.
+
+    Provisioning is iterative. Showing only the latest run hides the pattern - the same
+    gate failing four times is a different problem from four different gates failing
+    once, and an index showing one run cannot tell them apart.
+    """
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            """
+            SELECT r.run_id::text AS run_id, r.status, r.current_gate, r.pack_version,
+                   r.started_at, r.completed_at, r.started_by::text AS started_by,
+                   h.display_name AS actor,
+                   (SELECT count(*) FROM provisioning_gate_result g
+                     WHERE g.run_id = r.run_id AND g.verdict = 'passed') AS gates_passed
+            FROM provisioning_run r
+            LEFT JOIN office_human h ON h.human_id = r.started_by
+            WHERE r.venture_id = %s
+            ORDER BY r.started_at DESC
+            """,
+            (venture_id,),
+        )
+        rows = [dict(r) for r in await cur.fetchall()]
+
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        results = await gate_results(conn, uuid.UUID(row["run_id"]))
+        blocking = next(
+            (
+                r for r in results
+                if r["gate"] == row["current_gate"] and r["verdict"] != PASSED
+            ),
+            None,
+        )
+        out.append({
+            **row,
+            "started_at": row["started_at"].isoformat(),
+            "completed_at": (
+                None if row["completed_at"] is None
+                else row["completed_at"].isoformat()
+            ),
+            "gates_passed": int(row["gates_passed"]),
+            "current_gate_name": GATE_NAMES[row["current_gate"]],
+            "display_status": _display_status(
+                row["status"], row["current_gate"], blocking
+            ),
+            "reason": None if blocking is None else blocking["reason"],
+        })
+    return out

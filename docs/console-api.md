@@ -56,6 +56,7 @@ pass — it is whether that route should exist.
 | `POST /api/provisioning/runs` | `provisioning.start_run` |
 | `POST /api/provisioning/runs/{id}/advance` | `provisioning.advance` |
 | `POST /api/provisioning/runs/{id}/review` | `provisioning.record_human_review` |
+| `POST /api/provisioning/runs/{id}/reject` | `provisioning.reject_run` — a human declines at a gate awaiting their decision. Distinct from abort |
 | `POST /api/provisioning/runs/{id}/abort` | `provisioning.abort_run` |
 | `POST /api/provisioning/runs/{id}/signoff` | `provisioning.sign_off_run` |
 | `POST /api/knowledge/playbooks` | `knowledge.author_playbook` |
