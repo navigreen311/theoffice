@@ -367,7 +367,10 @@ breadcrumb. There was previously no route back to a dashboard from anywhere.
 - **No CSRF token on the Server Actions.** Next.js Server Actions carry origin checks and
   the cookie is `sameSite=strict`, which covers the common case; a deployment behind a
   proxy that rewrites `Origin` would need more.
-- **Session is 8 hours with no refresh and no idle timeout.**
+- **Session is 8 hours with no refresh and no idle timeout.** An expired or otherwise
+  rejected session redirects to the login page — it used to throw a 500, because only a
+  *missing* cookie raised `NotAuthenticated` while a *rejected* one raised `ApiError`
+  that no page caught.
 - **Pagination covers audit and incidents only.** Proposals, history and the knowledge
   lists still return everything they have. They are bounded by the business today and
   will not stay that way.

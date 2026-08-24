@@ -34,7 +34,18 @@ export class ApiError extends Error {
   }
 }
 
-/** Raised when there is no session at all, so a page can redirect rather than throw. */
+/**
+ * Raised when there is no usable session, so a page can redirect rather than throw.
+ *
+ * Two cases, and both must land here. No cookie at all is the obvious one. The other is
+ * a cookie the API **rejects** — an expired token, a token from a database that has
+ * since been rebuilt, a suspended human — which used to throw `ApiError(401)` instead.
+ * No page caught that, so every screen answered with a 500 and a digest, and the only
+ * way out was to know to clear a cookie you cannot read.
+ *
+ * A rejected credential is not an application error. It is the same situation as having
+ * no credential, and it gets the same answer: go and sign in.
+ */
 export class NotAuthenticated extends Error {}
 
 async function token(): Promise<string> {
@@ -66,6 +77,13 @@ async function request<T>(
       (body as { detail?: string; message?: string } | null)?.detail ??
       (body as { message?: string } | null)?.message ??
       response.statusText;
+
+    // 401 only. A 403 is a *authenticated* human without the authority for this action,
+    // which several screens explain in place rather than bouncing to a login they are
+    // already past — the access screen says whose screen it is not.
+    if (response.status === 401) {
+      throw new NotAuthenticated(detail);
+    }
     throw new ApiError(response.status, detail, body);
   }
   return body as T;
