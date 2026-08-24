@@ -51,6 +51,8 @@ pass — it is whether that route should exist.
 | `POST /api/signoffs` | `humans.sign_off` |
 | `POST /api/packs/validate` | `validator.validate` — **writes nothing** |
 | `POST /api/packs` | `packs.store` |
+| `POST /api/packs/draft` | `packs.store(publish=False)` — stored, and unreachable by Gate 1 |
+| `POST /api/packs/{venture_id}/publish` | `packs.publish_draft` |
 | `POST /api/provisioning/runs` | `provisioning.start_run` |
 | `POST /api/provisioning/runs/{id}/advance` | `provisioning.advance` |
 | `POST /api/provisioning/runs/{id}/review` | `provisioning.record_human_review` |

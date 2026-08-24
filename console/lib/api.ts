@@ -315,6 +315,77 @@ export type Proposal = {
   review_seconds: string | null;
 };
 
+export type PackTemplateCategory = {
+  category: string;
+  frameworks: string[];
+  example: string;
+};
+
+export type RuleHit = { rule_id: string; message: string };
+
+/**
+ * A Pack's validation state. Four values, and the reason there are four rather than two
+ * is `not_validated`: a rule that could not run has not passed. Rendering "no failures
+ * found" the same way as "every rule passed" is the single thing this page must not do.
+ */
+export type PackValidation = {
+  state: "failing" | "not_validated" | "warnings" | "valid";
+  failures: RuleHit[];
+  warnings: RuleHit[];
+  not_run: RuleHit[];
+  /** Rules evaluated at a later gate. Deferred is not the same as unrun. */
+  deferred: RuleHit[];
+  rules_checked: number;
+};
+
+export type PackVersionRef = {
+  version: string;
+  content_hash: string;
+  authored_at: string;
+  author: string | null;
+};
+
+export type PackArtifact = {
+  name: string;
+  count: number | null;
+  persisted: boolean;
+  note: string | null;
+};
+
+export type PackCard = {
+  venture_id: string;
+  display_name: string;
+  validation: PackValidation;
+  versions: {
+    draft: PackVersionRef | null;
+    live: PackVersionRef | null;
+    provisioned: string | null;
+  };
+  drift: boolean;
+  never_provisioned: boolean;
+  signatures: number;
+  signatures_voided_by_publish: boolean;
+  schema: {
+    present: number;
+    total: number;
+    missing: string[];
+    required_missing: string[];
+  };
+  artifacts: PackArtifact[];
+  nothing_generated: boolean;
+};
+
+export type PackDirectory = {
+  as_of: string;
+  packs: PackCard[];
+  packless: string[];
+  registered_ventures: number;
+  unregistered_portfolio: PortfolioGap[];
+  portfolio_size: number;
+  rules_total: number;
+  schema_blocks: number;
+};
+
 export type PackSummary = {
   venture_id: string;
   pack_version: string;

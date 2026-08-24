@@ -498,6 +498,11 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
         # decision to stop operating a venture, and collapsing the two would make
         # archiving a quiet way to pull authority with no revocation record.
         "/api/ventures/{slug}/lifecycle",
+        # Pack drafting. A draft cannot provision - `packs.live` does not return one, so
+        # Gate 1 cannot find it and nothing downstream can generate from it. Publishing
+        # is the separate act that puts one in force.
+        "/api/packs/draft",
+        "/api/packs/{venture_id}/publish",
     }, f"the write surface changed: {sorted(writes)}"
 
 

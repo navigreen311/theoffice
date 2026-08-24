@@ -59,7 +59,7 @@ quiet incident list means nothing if the check producing it is stale.
 | **Agent Identity & Grants** (`/agents/[id]`) | grants, per-Forge migration status, recent shifts |
 | **Approval queue** (`/proposals`) | the screen that can erode a control without bypassing it |
 | **Instruction authoring** (`/instructions`) | index + version, diff, staleness, certification impact |
-| **Pack Editor** (`/packs`, `/packs/[venture]`) | validate and publish as separate acts; version history with hashes |
+| **Packs** (`/packs`, `/packs/[venture]`) | whether each Pack can provision and why not; draft/live/provisioned versions and the drift between them; validate and publish as separate acts |
 | **Provisioning Console** (`/provisioning`, `/provisioning/[venture]`) | the sixteen-gate ladder, with three verdicts rendered three ways |
 | **Knowledge Base Manager** (`/knowledge`) | coverage for all five stores; blocking gaps render differently from advisory ones |
 | **Access** (`/access`) | people, roles, tokens and active revocations — the screen that removed the shell dependency |
@@ -166,7 +166,7 @@ supersedes the live Pack, and the next run provisions the new one.
 Three rules follow.
 
 **Validate before publish, and show the whole report.** `POST /api/packs/validate` runs
-all 27 rules and stores nothing. FAIL, WARN and NOT_RUN render separately, because
+every rule in the registry and stores nothing. FAIL, WARN and NOT_RUN render separately, because
 `NOT_RUN` is not a pass and an editor that shows it as a green tick teaches the operator
 to read it that way.
 
@@ -345,9 +345,79 @@ Pack still wins on everything it declares.
 The wordmark is a link, Dashboard is the first item under Operate, and pages carry a
 breadcrumb. There was previously no route back to a dashboard from anywhere.
 
+## The Packs page, rebuilt
+
+The old page listed which ventures had a Pack and gave the first sixteen characters of a
+hash. It could not answer the question a reader opens it with: **can this Pack
+provision, and if not, why.** A Pack failing any FAIL rule cannot provision, cannot
+generate and cannot appoint — so validation state is the most consequential thing about
+a Pack, and it was the one thing the page did not carry.
+
+**Four validation states, not two.** `can provision`, `provisions with warnings`, `not
+validated`, `cannot provision`. The third exists because a rule that could not run has
+passed nothing, and rendering "no problems were found" the same as "every rule passed"
+is the specific failure this page exists to prevent. `not validated` renders in the
+warning palette rather than a neutral one: an unknown about whether a Pack can provision
+is not a resting state.
+
+**Deferred is not unrun.** V24 is evaluated at Gate 4.5 against appointment output,
+which does not exist at Gate 2 — Gate 2 excludes it from its own NOT_RUN check. Counting
+it here would make `not validated` permanent and `can provision` unreachable, which
+turns the distinction above into noise. It is reported separately, by rule id.
+
+**The failure names this Pack's problem.** `V11 · no Forge Operating Instructions
+authored for: comp_analysis, place_call`, not the rule's description. The second is a
+specification; only the first tells somebody what to go and do. It comes from the
+validator's own message, so it cannot go stale the way a table of blocker strings does.
+
+**Three version states, because they are three different documents.** The draft somebody
+is writing, the live version that would be provisioned next, and the version the running
+system was actually built from. Live ahead of provisioned is **drift** — the running
+configuration is not the published one — and nothing in the old page could express it.
+When a Pack has drifted and Gate 10 signatures exist, the page says those signatures no
+longer cover what is published: nothing revoked them, they stopped matching.
+
+**Drafts, and why they cannot provision.** Migration 0017 adds `business_pack.status`.
+A draft is unreachable by construction rather than by a check: `packs.live` filters on
+`status = 'live'`, so Gate 1 cannot find a draft and nothing downstream has an input.
+That is what makes it safe to save a Pack that still fails ten rules — and the work of
+authoring a Pack is mostly the work of making it stop failing, so it has to be storable
+in the meantime or it gets written somewhere this console cannot see. Replacing a draft
+supersedes it rather than deleting it: `office_app` has no DELETE on the Pack store, and
+a draft somebody replaced is still a document somebody wrote.
+
+**New Pack, three ways in and one way out.** Paste, template and duplicate differ only
+in where the text comes from; all three end at the same textarea and the same save. A
+separate "create from template" route that wrote its own row would be a second way to
+author a Pack, and the second way is always the one that skips a check.
+
+**A template fails validation on purpose.** Every field whose value depends on the
+venture is `REPLACE_ME`, and every venture-specific number is zero — so V18 fails on the
+budget caps, and that failure is the mechanism that makes somebody choose real ones. A
+template that shipped a plausible budget would produce a Pack that passes V18 on a
+figure this repository invented. What a template *does* carry is the compliance surface
+for its category, because that does not depend on the venture, marked `library_gap:
+true`. Every other choice defaults to its safe end: `sandbox`, `suggest`, `halt`,
+`fail_closed`, `distinct_humans` — an unfinished Pack that reached a run anyway cannot
+be more permissive than the operator intended.
+
+**Every denominator is computed.** The brief that specified this page said 27 validator
+rules and 17 schema blocks. The registry has 28 and the model has 18, and both numbers
+were already wrong when the brief was written — so the page reads them from
+`all_rule_ids()` and `BusinessPack.model_fields` rather than carrying them as copy.
+
+**Two bugs this increment found.** `/api/packs/directory` was registered after
+`/api/packs/{venture_id}`, and FastAPI matches in declaration order — so the literal
+segment was handed to the parameterised route as a venture id and the endpoint answered
+200 with the detail for a venture named "directory". Nothing failed; the wrong route
+answered with a plausible body. And `PORTFOLIO` declared the cyber venture's only
+framework as `NRS_648` where the Pack schema's literal is `NRS_648_NV` — so no Pack for
+that venture could ever have declared it. Nothing had noticed, because nothing tried to
+generate a Pack from the portfolio until templates existed. Both are pinned by tests.
+
 ## Known gaps
 
-*Last verified: 2026-08-23.*
+*Last verified: 2026-08-24.*
 
 - **Playbooks and personas are authored but not consumed.** There is no knowledge-
   retrieval path for agents in The Office at all, and SimForge has no instance. See
@@ -371,6 +441,15 @@ breadcrumb. There was previously no route back to a dashboard from anywhere.
   rejected session redirects to the login page — it used to throw a 500, because only a
   *missing* cookie raised `NotAuthenticated` while a *rejected* one raised `ApiError`
   that no page caught.
+- **The Pack directory validates every Pack on every page load.** Each card runs the
+  full rule set against the live database, which is why a Pack that passed yesterday can
+  fail today — a Forge went unreachable, an instruction was withdrawn. With one Pack
+  that is correct and cheap; with fifty it is fifty validation passes per render, and it
+  will need caching with an explicit staleness statement rather than a silent one.
+- **Duplicating a Pack does not rewrite the identity for you.** The copy arrives with
+  the source venture's `identity.venture_name`, and `venture_id` derives from it, so
+  saving unchanged overwrites the source venture's own draft rather than creating a new
+  one. The action says so; it does not prevent it.
 - **Pagination covers audit and incidents only.** Proposals, history and the knowledge
   lists still return everything they have. They are bounded by the business today and
   will not stay that way.

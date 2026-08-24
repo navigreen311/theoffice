@@ -51,6 +51,7 @@ from broker import (
     incidents,
     instructions,
     knowledge,
+    pack_templates,
     packs,
     proposals,
     provisioning,
@@ -67,7 +68,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0016"
+EXPECTED_SCHEMA_REVISION = "0017"
 
 
 @asynccontextmanager
@@ -1003,6 +1004,57 @@ def _rule_rows(report: Any) -> list[dict[str, str]]:
 async def list_packs(conn: DB, _me: ME) -> list[dict[str, Any]]:
     """The live Pack of every venture that has one."""
     return await packs.list_ventures(conn)
+
+
+# ======================================================= read: pack directory
+
+@app.get("/api/packs/templates")
+async def list_pack_templates(_me: ME) -> dict[str, Any]:
+    """The template catalogue, one entry per portfolio category."""
+    return {"categories": pack_templates.categories()}
+
+
+@app.get("/api/packs/template")
+async def pack_template(
+    category: str, _me: ME, venture_name: str | None = None,
+) -> dict[str, Any]:
+    """A starting document for `category`.
+
+    Deliberately fails validation. Every field it leaves at `REPLACE_ME` or zero is a
+    decision that depends on the venture, and a template that filled them in with
+    plausible values would produce a Pack that passes the validator on numbers nobody
+    chose.
+    """
+    known = {c["category"] for c in pack_templates.categories()}
+    if category not in known:
+        raise HTTPException(status_code=404, detail=f"no template for {category!r}")
+    return {
+        "category": category,
+        "yaml_source": pack_templates.skeleton(
+            category, venture_name=venture_name or pack_templates.PLACEHOLDER
+        ),
+        "note": (
+            "A template fails validation on purpose. The failing rules are the list of "
+            "what still needs a decision."
+        ),
+    }
+
+
+# Declared BEFORE `/api/packs/{venture_id}`, and it has to be. FastAPI matches routes in
+# declaration order, so a static segment registered after a parameterised one at the
+# same depth is unreachable - this returned the Pack detail for a venture named
+# "directory", with a 200 and a plausible-looking body.
+@app.get("/api/packs/directory")
+async def pack_directory(conn: DB, _me: ME) -> dict[str, Any]:
+    """Every Pack, and whether it can provision.
+
+    The old page showed that a Pack existed and gave its hash. It did not show whether
+    the Pack **works** - and a Pack failing any FAIL rule cannot provision, cannot
+    generate and cannot appoint, which makes "does it validate" the most important
+    thing on the page and the one thing it did not say.
+    """
+    result = await packs.directory(conn)
+    return {"as_of": datetime.now(UTC).isoformat(), **result}
 
 
 @app.get("/api/packs/{venture_id}")
@@ -2437,5 +2489,99 @@ async def set_venture_lifecycle(
         {"slug": slug, "state": body.state, "reason": body.reason}, slug,
     )
     return {"slug": slug, "state": body.state}
+
+# ====================================================== write: pack directory
+
+class DraftPackRequest(BaseModel):
+    yaml_source: str = Field(min_length=1)
+    pack_version: str = "0.1.0"
+
+
+@app.post("/api/packs/draft", status_code=201)
+async def save_draft(body: DraftPackRequest, conn: DB, me: ME) -> dict[str, Any]:
+    """Store a Pack as a draft. Drafts cannot provision.
+
+    Not by a check - by construction. `packs.live` never returns a draft, so Gate 1
+    cannot find one and nothing downstream can generate from it.
+
+    The response carries the validator report, because a draft that has not been
+    validated is the state this page exists to make impossible to mistake for a
+    working one.
+    """
+    try:
+        parsed = packs.parse_only(body.yaml_source)
+    except packs.PackStoreError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    humans.authorize(me, required_role="venture_operator", venture_id=parsed.venture_id)
+
+    live = await packs.live(conn, parsed.venture_id)
+    stored = await packs.store(
+        conn, yaml_source=body.yaml_source, pack_version=body.pack_version,
+        authored_by=me.human_id, publish=False,
+    )
+    report = await validate_pack(parsed, conn)
+
+    await _audit_human_action(
+        me, "console_pack_draft_saved",
+        {"pack_version": stored.pack_version, "content_hash": stored.content_hash,
+         "failing_rules": [r.rule_id for r in report.failures]},
+        stored.venture_id,
+    )
+    return {
+        "venture_id": stored.venture_id,
+        "pack_version": stored.pack_version,
+        "content_hash": stored.content_hash,
+        "has_live_pack": live is not None,
+        "validation": {
+            "failures": _rule_rows(report),
+            "failing": [r.rule_id for r in report.failures],
+            "rules_checked": len(report.results),
+        },
+        "note": (
+            "Saved as a draft. A draft cannot provision: `packs.live` does not return "
+            "it, so Gate 1 cannot find it."
+            + (
+                " This venture already has a live Pack; publishing this draft will "
+                "supersede it."
+                if live is not None else ""
+            )
+        ),
+    }
+
+
+@app.post("/api/packs/{venture_id}/publish")
+async def publish_pack_draft(
+    venture_id: str, conn: DB, me: ME
+) -> dict[str, Any]:
+    """Promote the draft to live.
+
+    Publishing does not start a run, and does not require a clean report - Gate 2
+    refuses a failing Pack in the run, where refusing means something. What it does do
+    is change what the next run provisions, and void every Gate 10 signature taken
+    against the artifacts the previous version generated.
+    """
+    humans.authorize(me, required_role="venture_operator", venture_id=venture_id)
+    try:
+        stored = await packs.publish_draft(
+            conn, venture_id, published_by=me.human_id
+        )
+    except packs.PackStoreError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await _audit_human_action(
+        me, "console_pack_published",
+        {"pack_version": stored.pack_version, "content_hash": stored.content_hash},
+        venture_id,
+    )
+    return {
+        "venture_id": stored.venture_id,
+        "pack_version": stored.pack_version,
+        "content_hash": stored.content_hash,
+        "note": (
+            "Live. Any Gate 10 signature taken against the previous version's artifacts "
+            "is now void by comparison - nothing revoked it, it stopped matching."
+        ),
+    }
 
 __all__ = ["NotAuthorized", "app"]

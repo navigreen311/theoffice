@@ -721,6 +721,95 @@ else
   fail "no way to create a venture"
 fi
 
+step "The Packs page says whether each Pack can provision"
+curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT/packs" > "$WORK"/packs-index.html
+
+while IFS= read -r phrase; do
+  grep -qF "$phrase" "$WORK"/packs-index.html || fail "packs page lost: ${phrase:0:60}"
+done <<'PHRASES'
+The Pack is the document every artifact derives from
+Publishing supersedes the live version; the next provisioning run provisions the new one.
+An engagement exists here
+but there is no document to provision from.
+PHRASES
+say "the preserved copy is present verbatim"
+
+# The gap the rebuild closed. The old page gave a hash and a version and never said
+# whether the document worked - and a Pack failing any FAIL rule cannot provision,
+# cannot generate and cannot appoint.
+if grep -qE "can provision|cannot provision|not validated|provisions with warnings" "$WORK"/packs-index.html; then
+  say "each Pack states whether it can provision"
+else
+  fail "no Pack reports a validation state - the page still cannot answer whether the document works"
+fi
+
+# `not validated` and `valid` must never render alike. A rule that could not run has
+# validated nothing, and the two states carry different colours because a reader scans
+# colour before text.
+if grep -qF "not validated" "$WORK"/packs-index.html; then
+  if grep -qF "could not run" "$WORK"/packs-index.html; then
+    say "an unvalidated Pack says which rules could not run"
+  else
+    fail "a Pack reports 'not validated' without naming the rules that did not run"
+  fi
+fi
+
+# A failing Pack names what is wrong with itself, not what the rule is called.
+if grep -qF "cannot provision" "$WORK"/packs-index.html; then
+  if grep -qE "V[0-9]+" "$WORK"/packs-index.html; then
+    say "a failing Pack names the rules it fails"
+  else
+    fail "a Pack cannot provision and the page does not say which rule stopped it"
+  fi
+fi
+
+# Three version states, and drift between the last two.
+for phrase in "Versions" "provisioned" "Schema blocks" "Generated from this Pack"; do
+  grep -qF "$phrase" "$WORK"/packs-index.html || fail "the Pack card is missing: $phrase"
+done
+say "versions, schema completeness and generated artifacts all render"
+
+# Absence must not look like health here either.
+if grep -qF "portfolio ventures have no Pack" "$WORK"/packs-index.html; then
+  say "ventures with no Pack are listed as absent, not omitted"
+else
+  fail "a venture with no Pack is invisible - Gate 1 refuses it and the page does not say so"
+fi
+
+if grep -qF "New Pack" "$WORK"/packs-index.html; then
+  say "a Pack can be created from the page"
+else
+  fail "no way to create a Pack"
+fi
+
+# Every denominator computed. The brief said 27 rules and 17 schema blocks; the
+# validator registry has 28 and the model has 18, and both were wrong when written.
+RULES_TOTAL="$(curl -s -H "$API_AUTH" "http://127.0.0.1:$API_PORT/api/packs/directory"   | grep -o '"rules_total": *[0-9]*' | sed 's/.*: *//' || true)"
+# React separates adjacent text nodes with `<!-- -->`, so the rendered sentence reads
+# "28 validator rules" while the markup does not. Strip the separators before matching -
+# what the reader sees is the thing under test.
+sed 's/<!-- -->//g' "$WORK"/packs-index.html > "$WORK"/packs-text.html
+if [ -n "$RULES_TOTAL" ] && grep -qF "$RULES_TOTAL validator rules" "$WORK"/packs-text.html; then
+  say "the rule denominator on the page matches the validator registry ($RULES_TOTAL)"
+else
+  fail "the page's rule count does not come from the registry - it will drift the next time a rule is added"
+fi
+
+step "A template is a starting point, and fails validation on purpose"
+# A template that passed would mean this repository chose a budget. V18 fails on a
+# non-positive cap, and that failure is what makes somebody set a real one.
+CATEGORY="$(curl -s -H "$API_AUTH" "http://127.0.0.1:$API_PORT/api/packs/templates"   | grep -o '"category": *"[^"]*"' | head -1 | sed 's/.*: *"//; s/"$//' || true)"
+if [ -n "$CATEGORY" ]; then
+  curl -s -G -H "$API_AUTH" --data-urlencode "category=$CATEGORY"     "http://127.0.0.1:$API_PORT/api/packs/template" > "$WORK"/template.json
+  if grep -qF "REPLACE_ME" "$WORK"/template.json; then
+    say "the $CATEGORY template leaves venture-specific fields empty"
+  else
+    fail "a template carries no placeholders - it is guessing venture-specific values"
+  fi
+else
+  notrun "pack templates - the catalogue is empty"
+fi
+
 step "Every page has a route home"
 # There was no way back to a dashboard from anywhere: the wordmark was not a link and
 # nothing in the nav pointed at `/`.
