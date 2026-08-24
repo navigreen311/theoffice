@@ -142,6 +142,8 @@ Interactive docs at `/docs` once running.
 
 ## Known gaps
 
+*Last verified: 2026-08-23.*
+
 - **`ASSUMPTION` — bearer tokens, not SSO.** Part 14 declares
   `auth_method: sso_mfa | mfa_only`. Real SSO is an external provider that does not
   exist yet (same class as Vault). The column records the intent; the API authenticates

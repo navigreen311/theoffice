@@ -118,9 +118,12 @@ UPDATE_GOLDEN=1 .venv/Scripts/python -m pytest tests/golden -q   # re-record, th
 
 ## Known gaps
 
+*Last verified: 2026-08-23.*
+
 - **Volumes are guesses.** `DEFAULT_DAILY_VOLUME_PER_HEADCOUNT = 8` and the SLA table
   are placeholders. The Gate 4.5 failure above is only as real as that number.
-- **Nothing runs the pipeline in production.** `run_all` exists and is tested; wiring it
-  to Gates 3–11 with human sign-off is not built.
-- **Shift assignment and PHI flush** are increment 3.
 - **The roster is seven fixtures**, not the 106 real agents (Phase 0.2).
+
+*Closed since this list was written:* the pipeline runs at Gates 3–11 through
+`broker/provisioning.py`, with Gate 4 and Gate 10 human sign-off and a console over it.
+Shift assignment and the verified PHI flush shipped in Phase 3.3.

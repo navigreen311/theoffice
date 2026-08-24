@@ -112,6 +112,8 @@ immediately if the first venture becomes Burkham Wickmont against CapitalForge.
 
 ## Known gaps
 
+*Last verified: 2026-08-23.*
+
 - **The seven generators do not exist yet** (increment 2). The Pack validates; nothing
   consumes it.
 - **Shift assignment and PHI flush** are increment 3.

@@ -160,6 +160,8 @@ because the failure lands somewhere else.
 
 ## Known gaps
 
+*Last verified: 2026-08-23.*
+
 - **Nothing schedules rotations.** `rotate()` exists and is tested; no scheduler calls it
   at a real boundary. Until one does, the flush happens when someone asks for it.
 - **Deputy cushion and rest-day rotation are Village mechanics** (Part 7.4). The Office

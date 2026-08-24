@@ -4,6 +4,7 @@
     python -m broker sweep                  # the three routine sweeps
     python -m broker sweep --restore-drill  # plus Gate 13, quarterly
     python -m broker health                 # freshness of every control
+    python -m broker human create --name … --email …   # the FIRST human only
 
 `serve` exists rather than `uvicorn broker.app:app` because **uvicorn explicitly
 installs `WindowsProactorEventLoopPolicy` on Windows**, overriding the selector policy
@@ -25,7 +26,7 @@ import json
 import sys
 
 import broker  # noqa: F401  - imported for its event-loop policy side effect
-from broker import sweeps
+from broker import audit, humans, sweeps
 from broker.db import connection
 
 
@@ -96,6 +97,62 @@ def _serve(host: str, port: int, reload: bool) -> int:
     return 0
 
 
+async def _bootstrap_human(name: str, email: str, role: str) -> int:
+    """Create the first human. Refuses once any human exists.
+
+    The bootstrap problem: every route that creates a human requires a human to
+    authenticate as, so the first one cannot come from the API. The alternative - an
+    unauthenticated route that works "only when the table is empty" - is a permanent
+    backdoor wearing a bootstrap label, and one that is reachable from the internet the
+    moment the table is emptied.
+
+    A CLI on the host is honest instead. Shell access to the VM is already total
+    authority over this system, so this adds nothing anyone in that position lacked.
+    It refuses once a human exists so that it stays a bootstrap tool rather than
+    becoming a standing way to mint administrators without an audit trail naming who
+    granted the role.
+
+    The token is printed once. That is the only time it exists in readable form.
+    """
+    async with connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT count(*) FROM office_human")
+            row = await cur.fetchone()
+        existing = int(row[0]) if row else 0
+
+        if existing:
+            print(
+                f"refusing: {existing} human(s) already exist. This command bootstraps "
+                "the first one only.\n"
+                "Create further humans through the console, where the audit log records "
+                "who granted the role.",
+                file=sys.stderr,
+            )
+            return 1
+
+        human_id, token = await humans.create_human(
+            conn, display_name=name, email=email
+        )
+        # granted_by is the human themselves, and only here. Every later grant names a
+        # different granter because `assert_may_grant` forbids granting to yourself -
+        # this row is the documented exception, and it is visible as one.
+        await humans.grant_role(
+            conn, human_id=human_id, role=role, granted_by=human_id
+        )
+        await audit.write_event(
+            event_type="bootstrap_human_created",
+            actor_type="human", actor_id=human_id, venture_id=None,
+            subject={"display_name": name, "email": email, "role": role,
+                     "via": "cli bootstrap, self-granted"},
+        )
+
+    print(f"created {name} <{email}> with role {role}")
+    print(f"human_id: {human_id}")
+    print(f"token:    {token}")
+    print("\nThis token is shown once and cannot be recovered. Store it now.")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="broker")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -113,6 +170,18 @@ def main() -> int:
     )
     sub.add_parser("health", help="Report freshness of every control")
 
+    hb = sub.add_parser(
+        "human", help="Bootstrap the first human. Refuses once one exists."
+    )
+    hb_sub = hb.add_subparsers(dest="human_command", required=True)
+    hc = hb_sub.add_parser("create", help="Create the first human and print a token")
+    hc.add_argument("--name", required=True)
+    hc.add_argument("--email", required=True)
+    hc.add_argument(
+        "--role", default="ivan", choices=("ivan", "compliance_officer",
+                                           "venture_operator"),
+    )
+
     args = parser.parse_args()
     if args.command == "serve":
         return _serve(args.host, args.port, args.reload)
@@ -120,6 +189,8 @@ def main() -> int:
         return asyncio.run(_sweep(args.restore_drill))
     if args.command == "health":
         return asyncio.run(_health())
+    if args.command == "human":
+        return asyncio.run(_bootstrap_human(args.name, args.email, args.role))
     return 2
 
 

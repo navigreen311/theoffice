@@ -214,11 +214,10 @@ specified.
 
 ## Known gaps
 
-- **Manifest rows are hand-inserted.** Generation from a Pack is Phase 3 (Generator 5.6).
-- **`REQUIRED_NOT_DECLARED` is not checked at runtime** — it is a Gate 3.5 Pack failure,
-  and there is no Pack validator yet.
+*Last verified: 2026-08-23.*
+
 - **Rate limits use module defaults**, not the Pack's `rate_limit_policy`. Wiring that
-  through needs the Pack.
+  through is a small change nobody has needed yet.
 - **`usd_cost` is never populated** — the stub Forge reports no usage. The ladder reads
   real spend correctly; nothing is currently writing any. Cost attribution needs Forge
   responses that report token counts.

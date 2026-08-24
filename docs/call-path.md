@@ -150,18 +150,26 @@ distinguishes "never reached" from "answered with an error".
 
 ## Known gaps
 
+*Last verified: 2026-08-23.*
+
 - **Network policy does not exist** (Phase 0.6, blocked on a deployment target). Until
   it does, the client library is a **convention, not a control** — an agent that
   constructs its own HTTP call bypasses everything here. Saying so plainly is more
   useful than pretending otherwise.
-- **Vault is not implemented** (Phase 0.3). `VaultCredentialResolver` raises rather
-  than falling back to the env resolver: a silent fallback is how a deployment ends up
-  reading secrets from the process environment while its config claims Vault.
-- **`trust_tier` is recorded, not enforced.** Nothing yet stops a `propose`-tier agent
-  from executing. Recording first means Phase 1 enforcement arrives with history
-  behind it — but recording is not enforcing.
-- **`manifest_match` is always `declared_only`.** Real three-way reconciliation needs a
-  venture Forge Manifest, which needs a Pack. Phase 1.
-- **No rate limiting.** Phase 1 (0.9).
-- **Unflagged audit failures are only visible in broker logs.** Phase 1 replaces this
-  with a durable queue.
+- **Forge-side attribution.** A Forge sees the tenant credential and the
+  `X-Office-Agent-Id` header. Per-agent attribution on the Forge side is the Forge's to
+  implement; until it does, Forge logs attribute everything to the tenant and the Office
+  ledger is the only per-agent record. Stated in the master prompt as a known weakness
+  and not hidden here.
+- **`usd_cost` is never populated.** The budget ladder reads real spend correctly and
+  nothing writes any — the stub Forge reports no usage. Cost attribution needs Forge
+  responses that report token counts.
+- **Proposal execution is manual.** Approving a proposal marks it; nothing replays the
+  approved payload through the call path. Deliberately not built until there was a human
+  queue to trigger it — there is one now, so this is the next thing here.
+
+*Closed since this list was written:* Vault is implemented (`VaultCredentialResolver`,
+KV v2, no environment fallback on any path). `trust_tier` **is** enforced — a tier below
+`auto_execute` creates a proposal and raises `RequiresApproval`. Rate limiting is in
+`broker/limits.py` and runs in the path. `manifest_match` does real three-way
+reconciliation against a generated Forge Manifest.

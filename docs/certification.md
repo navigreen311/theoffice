@@ -218,13 +218,17 @@ coverage count."
 
 ## Known gaps
 
+*Last verified: 2026-08-23.*
+
 - **No real SimForge integration.** `SimForgeClient` is a Protocol; the stub exercises
   the contract. Wiring a live instance is a config change, not a rewrite.
-- **Staleness recompute is called explicitly**, not on a schedule or a trigger. Nothing
-  yet runs it when a Forge's `api_version` changes in the registry — a scheduled sweep
-  is needed before this is trustworthy in production.
-- **The authoring UI does not exist** (Part 17, console). Authoring is via
-  `broker.instructions.author`.
+- **Staleness recompute runs in the certification sweep**, not on a trigger. A Forge
+  whose `api_version` changes mid-cycle is stale from the change and detected at the next
+  sweep, which the deployment runs hourly. That window is real and is the reason the
+  sweep's freshness is on the compliance dashboard.
+- **Certification cannot be re-run from the console.** Instructions can be authored and
+  the staleness consequence is shown, but starting a certification run needs SimForge,
+  which has no instance.
 - **Gate 9.5 held-out execution is SimForge's.** The Office's obligation here is only to
   have no read path, and that is what is tested.
 - **`scenario_pack_ref` is opaque.** Scenario Pack *generation* is Phase 3 (Generator 5.5).

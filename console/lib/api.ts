@@ -464,3 +464,52 @@ export type HistoryRow = {
   occurred_at: string;
   recorded_at: string;
 };
+
+/** A page that says what it did not show. See `Page` in `broker/app.py`. */
+export type Paged<T> = {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type HumanRole = {
+  role: string;
+  venture_id: string | null;
+  granted_by: string;
+  granted_at: string;
+};
+
+export type HumanRow = {
+  human_id: string;
+  display_name: string;
+  email: string;
+  status: string;
+  auth_method: string;
+  created_at: string;
+  suspended_at: string | null;
+  has_token: boolean;
+  roles: HumanRole[];
+};
+
+export type RevocationRow = {
+  revocation_id: string;
+  scope: string;
+  reason: string;
+  office_agent_id: string | null;
+  agent_name: string | null;
+  forge_id: string | null;
+  module_id: string | null;
+  venture_id: string | null;
+  revoked_by: string;
+  revoked_by_role: string;
+  revoked_at: string;
+  reinstated_at: string | null;
+  reinstated_by: string | null;
+};
+
+export type IncidentRow = Incident & {
+  resolution: string | null;
+  resolved_at: string | null;
+  resolved_by: string | null;
+};

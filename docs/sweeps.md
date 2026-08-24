@@ -135,6 +135,8 @@ into a scratch database, and verified the chain in the copy.
 
 ## Known gaps
 
+*Last verified: 2026-08-23.*
+
 - **No scheduler ships with this.** The CLI is the entry point; a cron entry or systemd
   timer invokes it. Choosing which is a deployment decision, and Phase 0.6 is still
   blocked on a deployment target.

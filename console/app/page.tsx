@@ -6,7 +6,8 @@ import {
   NotAuthenticated,
   type ChainStatus,
   type HealthResponse,
-  type Incident,
+  type IncidentRow,
+  type Paged,
 } from "@/lib/api";
 import { controlSeverity, incidentSeverity, relativeAge } from "@/lib/severity";
 
@@ -25,13 +26,13 @@ export const dynamic = "force-dynamic";
 export default async function CompliancePage() {
   let health: HealthResponse;
   let chain: ChainStatus;
-  let incidents: Incident[];
+  let incidents: Paged<IncidentRow>;
 
   try {
     [health, chain, incidents] = await Promise.all([
       api.get<HealthResponse>("/api/health"),
       api.get<ChainStatus>("/api/audit/chain"),
-      api.get<Incident[]>("/api/incidents?limit=25"),
+      api.get<Paged<IncidentRow>>("/api/incidents?limit=25"),
     ]);
   } catch (error) {
     if (error instanceof NotAuthenticated) redirect("/login");
@@ -98,12 +99,15 @@ export default async function CompliancePage() {
         <p className="mt-3 text-xs text-neutral-500">{chain.reason}</p>
       </Card>
 
-      <Card title="Recent incidents" subtitle="Detections, not workflow. Triage lives elsewhere.">
+      <Card
+        title="Open incidents"
+        subtitle="Unresolved only. Detections, not workflow — an incident is never edited, and resolving one appends an account of what was done."
+      >
         <Table
           head={["Severity", "Kind", "Venture", "Module", "Raised"]}
-          empty="No incidents recorded. Check the control freshness above before reading that as good news."
+          empty="No unresolved incidents. Check the control freshness above before reading that as good news — a check that never ran raises nothing."
         >
-          {incidents.map((incident) => (
+          {incidents.items.map((incident) => (
             <Row key={incident.incident_id}>
               <Cell>
                 <Badge severity={incidentSeverity(incident.severity)}>
