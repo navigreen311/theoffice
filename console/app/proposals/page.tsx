@@ -48,7 +48,7 @@ export default async function ProposalsPage({
         title={`Approval queue — ${proposals.length} pending`}
         subtitle="An agent below auto_execute asked to act. It has not acted."
       >
-        <p className="text-xs text-neutral-600">
+        <p className="text-xs text-ink-secondary">
           Approvals decided in under {RUBBER_STAMP_SECONDS} seconds raise a governance
           flag. That threshold exists because a trust tier that is really a click-through
           is worse than no tier at all — it looks like oversight. Read the payload.
@@ -57,7 +57,7 @@ export default async function ProposalsPage({
 
       {proposals.length === 0 ? (
         <Card title="Nothing pending">
-          <p className="text-sm text-neutral-600">
+          <p className="text-sm text-ink-secondary">
             No proposals awaiting a decision. If you expected some, check that the
             agents&apos; grants are below <code>auto_execute</code> — an agent at
             auto_execute acts without asking.
@@ -79,10 +79,10 @@ export default async function ProposalsPage({
           {/* Expanded, not behind a disclosure. A payload nobody opened is a payload
               nobody read, and the whole decision rests on it. */}
           <div className="mb-3">
-            <div className="mb-1 text-xs font-medium text-neutral-700">
+            <div className="mb-1 text-xs font-medium text-ink-secondary">
               Payload — this is what the agent will send if you approve
             </div>
-            <pre className="max-h-72 overflow-auto rounded border border-neutral-200 bg-neutral-50 p-3 text-xs">
+            <pre className="max-h-72 overflow-auto rounded border border-line bg-surface-page p-3 text-xs">
               {JSON.stringify(p.payload, null, 2)}
             </pre>
           </div>

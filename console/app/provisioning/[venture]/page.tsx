@@ -42,8 +42,8 @@ function Evidence({ evidence }: { evidence: Record<string, unknown> }) {
     <dl className="mt-2 grid gap-x-4 gap-y-1 text-xs sm:grid-cols-[max-content_1fr]">
       {entries.map(([key, value]) => (
         <div key={key} className="contents">
-          <dt className="text-neutral-500">{key}</dt>
-          <dd className="break-words font-mono text-neutral-800">
+          <dt className="text-ink-muted">{key}</dt>
+          <dd className="break-words font-mono text-ink">
             {typeof value === "object" && value !== null
               ? JSON.stringify(value)
               : String(value)}
@@ -79,20 +79,20 @@ function ReviewBrief({ evidence }: { evidence: Record<string, unknown> }) {
             ["certified_but_allocated", "Certified, allocated elsewhere"],
             ["produced_not_yet_certified", "Produced, not yet certified"],
           ].map(([key, label]) => (
-            <div key={key} className="rounded border border-neutral-200 p-3">
+            <div key={key} className="rounded border border-line p-3">
               <div className="text-2xl font-semibold">{capacity[key] ?? "—"}</div>
-              <div className="mt-1 text-xs text-neutral-600">{label}</div>
+              <div className="mt-1 text-xs text-ink-secondary">{label}</div>
             </div>
           ))}
         </div>
       ) : null}
 
       <div>
-        <h4 className="text-xs font-medium text-neutral-700">
+        <h4 className="text-xs font-medium text-ink-secondary">
           Unfilled positions ({unfilled.length})
         </h4>
         {unfilled.length === 0 ? (
-          <p className="text-xs text-neutral-500">
+          <p className="text-xs text-ink-muted">
             Every position is filled by a certified agent.
           </p>
         ) : (
@@ -109,13 +109,13 @@ function ReviewBrief({ evidence }: { evidence: Record<string, unknown> }) {
       </div>
 
       <div>
-        <h4 className="text-xs font-medium text-neutral-700">
+        <h4 className="text-xs font-medium text-ink-secondary">
           Generator warnings ({warnings.length})
         </h4>
         {warnings.length === 0 ? (
-          <p className="text-xs text-neutral-500">None.</p>
+          <p className="text-xs text-ink-muted">None.</p>
         ) : (
-          <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs text-neutral-700">
+          <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs text-ink-secondary">
             {warnings.map((w) => (
               <li key={w}>{w}</li>
             ))}
@@ -133,21 +133,21 @@ function GateLadder({ ladder }: { ladder: GateRow[] }) {
         <li
           key={g.gate}
           className={`rounded border p-3 ${
-            g.is_current ? "border-neutral-900 bg-neutral-50" : "border-neutral-200"
+            g.is_current ? "border-ink bg-surface-page" : "border-line"
           }`}
         >
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <span className="font-mono text-xs text-neutral-500">Gate {g.gate}</span>
+            <span className="font-mono text-xs text-ink-muted">Gate {g.gate}</span>
             <span className="text-sm font-medium">{g.title}</span>
             <Badge severity={gateSeverity(g.verdict)}>{gateLabel(g.verdict)}</Badge>
             {g.recorded_at ? (
-              <span className="text-xs text-neutral-400">
+              <span className="text-xs text-ink-muted">
                 {relativeAge(g.recorded_at)}
               </span>
             ) : null}
           </div>
           {g.reason ? (
-            <p className="mt-1 text-xs text-neutral-700">{g.reason}</p>
+            <p className="mt-1 text-xs text-ink-secondary">{g.reason}</p>
           ) : null}
           {/* Evidence is expanded on the gate being acted on, because that is the one
               whose numbers a decision is about to rest on. */}
@@ -205,7 +205,7 @@ export default async function ProvisioningVenturePage({
       <div className="flex items-baseline justify-between">
         <div>
           <h2 className="text-base font-semibold">{venture} — provisioning</h2>
-          <p className="mt-1 text-xs text-neutral-500">
+          <p className="mt-1 text-xs text-ink-muted">
             {pack.live
               ? `Live Pack ${pack.live.pack_version} · ${pack.live.content_hash.slice(0, 16)}…`
               : "No live Pack — Gate 1 refuses a run without one."}
@@ -213,7 +213,7 @@ export default async function ProvisioningVenturePage({
         </div>
         <Link
           href={`/packs/${encodeURIComponent(venture)}`}
-          className="text-sm text-neutral-600 underline underline-offset-2"
+          className="text-sm text-ink-secondary underline underline-offset-2"
         >
           Pack editor →
         </Link>
@@ -235,7 +235,7 @@ export default async function ProvisioningVenturePage({
           >
             <div className="flex flex-wrap items-center gap-3">
               <Badge severity={runSeverity(detail.status)}>{detail.status}</Badge>
-              <span className="text-sm text-neutral-700">
+              <span className="text-sm text-ink-secondary">
                 at gate <span className="font-mono">{detail.current_gate}</span> —{" "}
                 {currentGate?.title}
               </span>

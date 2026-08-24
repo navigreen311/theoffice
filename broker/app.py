@@ -29,9 +29,12 @@ venture*. See `broker/humans.authorize`.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
@@ -1882,5 +1885,446 @@ async def resolve_incident(
     )
     return {"status": "resolved"}
 
+
+# ========================================================= read: compliance
+
+# What each control actually does, in a sentence a reader who does not know this system
+# can act on. This lives beside the code that runs them rather than in the console,
+# because a description that drifts from the check it describes is worse than none - and
+# the console is the wrong place to notice the drift.
+CONTROL_COPY: dict[str, dict[str, str]] = {
+    "audit_chain": {
+        "name": "Audit chain integrity",
+        "cadence": "Expected daily",
+        "checks": (
+            "Re-hashes the ledger to prove no entry was altered or removed. Until "
+            "Forges carry per-agent identity, this ledger is the only per-agent record "
+            "anywhere - if it can be edited, you have nothing."
+        ),
+        "consequence": "blocks go-live sign-off",
+        "blocking": "true",
+    },
+    "certification_staleness": {
+        "name": "Certification staleness",
+        "cadence": "Expected daily",
+        "checks": (
+            "Finds agents whose certification was earned under instructions or a Forge "
+            "version that has since changed. A stale certification still reads as "
+            "certified until this runs."
+        ),
+        "consequence": "agents may hold grants they no longer qualify for",
+        "blocking": "true",
+    },
+    "manifest_reconciliation": {
+        "name": "Forge manifest reconciliation",
+        "cadence": "Expected monthly",
+        "checks": (
+            "Compares what each venture declared it needs, what its workflow actually "
+            "calls, and what agents really hit. A call to an undeclared Forge is an "
+            "unflagged compliance surface."
+        ),
+        "consequence": "undeclared Forge use goes unflagged",
+        "blocking": "false",
+    },
+    "restore_drill": {
+        "name": "Backup restore drill",
+        "cadence": "Expected quarterly",
+        "checks": (
+            "Restores the ledger from backup into a scratch database and verifies it "
+            "comes back whole. An untested restore is not a backup."
+        ),
+        "consequence": "due before first venture goes live",
+        "blocking": "true",
+    },
+}
+
+# The restore drill needs superuser credentials to create and drop a scratch database.
+# The API deliberately does not hold them - it runs as office_app, which cannot even
+# read a persona body - so this control cannot be triggered from a request. Saying so,
+# with the command that does work, is more useful than a button that always fails.
+RUNNABLE_FROM_THE_API = ("audit_chain", "certification_staleness", "manifest_reconciliation")
+
+
+@app.get("/api/compliance")
+async def compliance_overview(conn: DB, _me: ME) -> dict[str, Any]:
+    """Everything the Compliance page needs, with every denominator computed here.
+
+    One route rather than six, because the numbers have to agree with each other: a
+    scorecard assembled from separate calls can show "0 of 5 ventures" beside a list of
+    six, and the reader has no way to tell which is wrong.
+
+    **No denominator is hardcoded.** The master prompt describes a Village of 106 agents
+    and a portfolio of several ventures; The Office knows about the agents and ventures
+    that have actually reached it. Reporting "0 of 106" against a roster of seven would
+    invent a denominator, on the page whose own copy insists on real ones - so the
+    counts are what this database can support, and the roster gap is reported as its own
+    fact.
+    """
+    freshness = await sweeps.freshness(conn)
+
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            """
+            SELECT
+              (SELECT count(*) FROM office_agent_identity) AS agents_known,
+              (SELECT count(DISTINCT office_agent_id) FROM agent_forge_grant
+                WHERE is_assignable) AS agents_with_grants,
+              (SELECT count(*) FROM agent_call_ledger) AS agent_calls,
+              (SELECT max(ts_start) FROM agent_call_ledger) AS last_agent_call,
+              (SELECT min(ts) FROM audit_log) AS oldest_entry,
+              (SELECT count(*) FROM audit_log) AS audit_entries
+            """
+        )
+        counts = await cur.fetchone()
+
+        # A venture is an engagement, not a table. "Live" means it has at least one
+        # assignable grant - an agent that could actually act - rather than a row
+        # somewhere saying so.
+        await cur.execute(
+            """
+            SELECT v.venture_id,
+                   count(*) FILTER (WHERE g.is_assignable) AS assignable_grants
+            FROM (SELECT DISTINCT venture_id FROM agent_forge_grant
+                  UNION SELECT DISTINCT venture_id FROM venture_forge_manifest
+                  UNION SELECT venture_id FROM venture_budget
+                  UNION SELECT venture_id FROM business_pack) v
+            LEFT JOIN agent_forge_grant g ON g.venture_id = v.venture_id
+                   AND g.revoked_at IS NULL
+            GROUP BY v.venture_id ORDER BY v.venture_id
+            """
+        )
+        venture_rows = [dict(r) for r in await cur.fetchall()]
+
+        await cur.execute(
+            "SELECT venture_id, parsed FROM business_pack WHERE superseded_at IS NULL"
+        )
+        packs_rows = [dict(r) for r in await cur.fetchall()]
+
+        await cur.execute(
+            "SELECT entry_ref, runtime_flag FROM compliance_library_entry"
+        )
+        library = [dict(r) for r in await cur.fetchall()]
+
+    assert counts is not None
+    entry_refs = {e["entry_ref"] for e in library}
+    library_flags = {e["runtime_flag"] for e in library if e["runtime_flag"]}
+
+    # ------------------------------------------------- framework coverage per venture
+    #
+    # Part 6.3 and validator rule V28: a framework a Pack declares must resolve to a
+    # runtime flag AND a Compliance Library entry. Missing either means the obligation
+    # is named but not enforced - a flag with no entry reaches the agent as a label
+    # rather than a constraint, and an entry with no flag is never applied to anything.
+    ventures: list[dict[str, Any]] = []
+    all_frameworks: set[str] = set()
+    live_ventures = 0
+
+    packs_by_venture = {r["venture_id"]: r["parsed"] for r in packs_rows}
+
+    for row in venture_rows:
+        venture_id = row["venture_id"]
+        assignable = int(row["assignable_grants"])
+        if assignable:
+            live_ventures += 1
+
+        parsed = packs_by_venture.get(venture_id)
+        frameworks: list[dict[str, Any]] = []
+        if parsed:
+            for surface in parsed.get("market", {}).get("compliance_surface", []):
+                framework = surface.get("framework", "")
+                all_frameworks.add(framework)
+                flag = surface.get("runtime_flag") or None
+                ref = surface.get("library_entry_ref") or None
+                frameworks.append({
+                    "framework": framework,
+                    "runtime_flag": flag,
+                    "library_entry_ref": ref,
+                    "declared_gap": bool(surface.get("library_gap")),
+                    "has_flag": bool(flag),
+                    "has_entry": bool(ref and ref in entry_refs)
+                                 or bool(flag and flag in library_flags),
+                })
+
+        resolved = [f for f in frameworks if f["has_flag"] and f["has_entry"]]
+        if not parsed:
+            status, blocked_because = "blocked", "no Business Pack authored"
+        elif not frameworks:
+            status, blocked_because = "ready", None
+        elif len(resolved) < len(frameworks):
+            status, blocked_because = "gaps", None
+        else:
+            status, blocked_because = "ready", None
+
+        ventures.append({
+            "venture_id": venture_id,
+            "frameworks": frameworks,
+            "resolved": len(resolved),
+            "declared": len(frameworks),
+            "assignable_grants": assignable,
+            "status": status,
+            "blocked_because": blocked_because,
+            "has_pack": parsed is not None,
+        })
+
+    verified = sum(1 for c in freshness.values() if c["healthy"])
+
+    return {
+        "as_of": datetime.now(UTC).isoformat(),
+        "controls": [
+            {
+                "id": kind,
+                **CONTROL_COPY.get(kind, {}),
+                "blocking": CONTROL_COPY.get(kind, {}).get("blocking") == "true",
+                "runnable_from_here": kind in RUNNABLE_FROM_THE_API,
+                "host_command": (
+                    None if kind in RUNNABLE_FROM_THE_API
+                    else "python -m broker sweep --restore-drill"
+                ),
+                **state,
+            }
+            for kind, state in sorted(freshness.items())
+        ],
+        "scorecard": {
+            "ventures_live": {"value": live_ventures, "denominator": len(venture_rows)},
+            "agents_with_grants": {
+                "value": int(counts["agents_with_grants"]),
+                "denominator": int(counts["agents_known"]),
+                # The roster is the Village's, and it has not been imported. Stated as a
+                # fact rather than folded into the denominator, because a denominator
+                # nobody can verify is worse than a smaller true one.
+                "note": (
+                    "of the agents The Office knows. The Village roster has not been "
+                    "imported (Phase 0.2)."
+                ),
+            },
+            "frameworks_in_scope": {
+                "value": len(all_frameworks),
+                "denominator": len(all_frameworks),
+                "note": "declared across every live Business Pack",
+            },
+            "controls_verified": {"value": verified, "denominator": len(freshness)},
+        },
+        "ventures": ventures,
+        "chain_stats": {
+            "audit_entries": int(counts["audit_entries"]),
+            "oldest_entry": counts["oldest_entry"].isoformat()
+                            if counts["oldest_entry"] else None,
+            "agent_calls": int(counts["agent_calls"]),
+            "last_agent_call": counts["last_agent_call"].isoformat()
+                               if counts["last_agent_call"] else None,
+        },
+        "library_entries": len(library),
+    }
+
+
+# ======================================================== write: compliance
+
+class RunControlsRequest(BaseModel):
+    control: str | None = None
+    """One control, or every runnable one when omitted."""
+
+
+@app.post("/api/controls/run")
+async def run_controls(body: RunControlsRequest, conn: DB, me: ME) -> dict[str, Any]:
+    """Run the verification sweeps from the console.
+
+    Until now these ran from a CLI and, in the deployment, from a container on a timer.
+    A reader looking at four never-run controls had no way to act on what the page was
+    telling them, which makes the warning decoration.
+
+    Requires `compliance_officer`, because a sweep is not read-only: the certification
+    sweep recomputes staleness and can move agents out of `certified`, and the manifest
+    sweep can raise incidents. It reports what it did rather than a status word - a
+    sweep that acquired no lock ran nothing, and that is a different outcome from one
+    that ran and found nothing.
+    """
+    humans.authorize(me, required_role="compliance_officer")
+
+    if body.control is not None and body.control not in RUNNABLE_FROM_THE_API:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"{body.control!r} cannot be run from the API. The restore drill needs "
+                "superuser credentials to create a scratch database, and the API "
+                "deliberately does not hold them. Run it on the host: "
+                "python -m broker sweep --restore-drill"
+            ),
+        )
+
+    results = await sweeps.run_all(include_restore_drill=False)
+    await _audit_human_action(
+        me, "console_controls_run",
+        {"requested": body.control or "all", "ran": sorted(results)},
+    )
+
+    return {
+        "ran": [
+            {
+                "control": kind,
+                "status": result.status,
+                "passed": result.passed,
+                "denominator": result.denominator,
+            }
+            for kind, result in sorted(results.items())
+        ],
+        "skipped": [k for k in RUNNABLE_FROM_THE_API if k not in results],
+        "note": (
+            "A control missing from `ran` held no lock - another process was already "
+            "running it. That is not the same as running and finding nothing."
+        ),
+    }
+
+
+class ExportRequest(BaseModel):
+    venture_id: str | None = None
+    framework: str | None = None
+    since: str | None = None
+    until: str | None = None
+
+
+@app.post("/api/compliance/export", status_code=201)
+async def export_compliance_record(
+    body: ExportRequest, conn: DB, me: ME
+) -> dict[str, Any]:
+    """Part 9: structured record export on demand - CFPB, FTC, HHS OCR, state DFI.
+
+    Two properties make this an evidence document rather than a data dump.
+
+    **It states its own control freshness on its face.** An export produced while four
+    controls have never run says so at the top, in the same document, so a recipient
+    cannot mistake "no findings" for "checked and clean". An export that omitted this
+    would be the strongest possible version of the failure this whole page exists to
+    prevent.
+
+    **It lists what it did not include.** Scope limits, records the requester cannot
+    see, and stores that do not exist yet. A regulator reading a complete-looking
+    document with silent omissions has been misled, whatever the intent.
+
+    `content_hash` is a SHA-256 over the payload, not a signature. There is no key
+    material in this deployment and inventing one would produce a signature that proves
+    nothing while looking like it proves something. The hash detects alteration in
+    transit; provenance needs a key, and that is named as a gap rather than faked.
+    """
+    humans.authorize(
+        me, required_role="compliance_officer", venture_id=body.venture_id
+    )
+
+    overview = await compliance_overview(conn, me)
+
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute("SELECT * FROM audit_log_verify_chain()")
+        chain_row = await cur.fetchone()
+
+        await cur.execute(
+            """
+            SELECT count(*) AS entries, min(ts) AS first, max(ts) AS last
+            FROM audit_log
+            WHERE (%(venture)s::text IS NULL OR venture_id = %(venture)s)
+              AND (%(since)s::timestamptz IS NULL OR ts >= %(since)s::timestamptz)
+              AND (%(until)s::timestamptz IS NULL OR ts <= %(until)s::timestamptz)
+            """,
+            {"venture": body.venture_id, "since": body.since, "until": body.until},
+        )
+        audit_scope = await cur.fetchone()
+
+        await cur.execute(
+            """
+            SELECT i.severity, count(*) AS n,
+                   count(*) FILTER (WHERE r.incident_id IS NOT NULL) AS resolved
+            FROM incident i
+            LEFT JOIN incident_resolution r ON r.incident_id = i.incident_id
+            WHERE (%(venture)s::text IS NULL OR i.venture_id = %(venture)s)
+            GROUP BY i.severity ORDER BY i.severity
+            """,
+            {"venture": body.venture_id},
+        )
+        incident_summary = [dict(r) for r in await cur.fetchall()]
+
+    unverified = [c["id"] for c in overview["controls"] if not c["healthy"]]
+
+    document: dict[str, Any] = {
+        "export": {
+            "generated_at": datetime.now(UTC).isoformat(),
+            "generated_by": me.display_name,
+            "scope": {
+                "venture_id": body.venture_id or "all ventures",
+                "framework": body.framework or "all frameworks",
+                "since": body.since,
+                "until": body.until,
+            },
+        },
+        # First, and deliberately. A recipient reads this before the contents.
+        "control_freshness_at_export": {
+            "verified": overview["scorecard"]["controls_verified"],
+            "unverified": unverified,
+            "statement": (
+                "Every control was verified within its expected cadence at the time of "
+                "this export."
+                if not unverified
+                else (
+                    f"{len(unverified)} of "
+                    f"{overview['scorecard']['controls_verified']['denominator']} "
+                    "controls were NOT verified when this export was produced: "
+                    + ", ".join(unverified)
+                    + ". An absence of findings from a check that did not run is not "
+                    "evidence. The contents below are not a clean record; they are an "
+                    "unchecked one."
+                )
+            ),
+        },
+        "audit_chain": {
+            "verified": bool(chain_row["ok"]) if chain_row else None,
+            "entries_checked": int(chain_row["checked_count"]) if chain_row else 0,
+            "reason": chain_row["reason"] if chain_row else None,
+            "tail_gap": int(chain_row["tail_gap"]) if chain_row else 0,
+        },
+        "audit_records_in_scope": {
+            "entries": int(audit_scope["entries"]) if audit_scope else 0,
+            "first": audit_scope["first"].isoformat()
+                     if audit_scope and audit_scope["first"] else None,
+            "last": audit_scope["last"].isoformat()
+                    if audit_scope and audit_scope["last"] else None,
+        },
+        "incidents": incident_summary,
+        "framework_coverage": overview["ventures"],
+        "not_included": [
+            "Audit entry bodies. This is a manifest of what exists and whether it "
+            "verifies; the entries themselves are served separately so that a request "
+            "for them is its own audited act.",
+            "SimForge certification evidence. SimForge has no instance in this "
+            "deployment, so no Readiness Gate result exists to include.",
+            "Held-out adversarial results. The Office has no read path to that "
+            "partition by construction (J8) and cannot include what it cannot see.",
+            "Per-agent Forge-side attribution. Forges see the tenant credential; until "
+            "they carry per-agent identity, Forge logs attribute everything to the "
+            "tenant and the Office ledger is the only per-agent record.",
+        ],
+        "integrity": {
+            "method": "sha256-over-payload",
+            "signed": False,
+            "note": (
+                "Hash-stamped, not signed. There is no key material in this "
+                "deployment; a fabricated signature would prove nothing while "
+                "appearing to prove provenance. The hash detects alteration in "
+                "transit only."
+            ),
+        },
+    }
+
+    payload = json.dumps(document, sort_keys=True, separators=(",", ":"), default=str)
+    document["integrity"]["content_hash"] = hashlib.sha256(
+        payload.encode("utf-8")
+    ).hexdigest()
+
+    await _audit_human_action(
+        me, "console_compliance_exported",
+        {
+            "scope": document["export"]["scope"],
+            "content_hash": document["integrity"]["content_hash"],
+            "unverified_controls": unverified,
+        },
+        body.venture_id,
+    )
+    return document
 
 __all__ = ["NotAuthorized", "app"]

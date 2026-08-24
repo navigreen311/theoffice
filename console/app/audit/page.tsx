@@ -61,10 +61,10 @@ export default async function AuditPage({
           <Badge severity={chain.ok ? "ok" : "critical"}>
             {chain.ok ? "verified" : "BROKEN"}
           </Badge>
-          <span className="text-neutral-600">
+          <span className="text-ink-secondary">
             {chain.checked_count.toLocaleString()} entries
           </span>
-          <span className="text-xs text-neutral-500">
+          <span className="text-xs text-ink-muted">
             Entries below are meaningless if this is broken — read it first.
           </span>
         </div>

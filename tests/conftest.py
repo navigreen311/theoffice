@@ -54,6 +54,76 @@ def drop_forge(conn: psycopg.Connection, forge_id: str) -> None:
     conn.commit()
 
 
+# Every table scoped to a venture, in deletion order: children before the rows they
+# reference. One list, for the same reason `FORGE_DEPENDENTS` is one list.
+#
+# This one was added after a new suite hardcoded its own three-table version and
+# `business_pack` could not be deleted because a `provisioning_run` still referenced it
+# - a failure that only appeared when the console smoke script had run first and left a
+# run behind. That is exactly the staleness the comment above predicts, so the answer is
+# the same: one list, used by everyone, updated when a phase adds a table.
+VENTURE_DEPENDENTS = (
+    # Append-only tables first; they need their guard trigger disabled, which is why
+    # they are named separately below rather than being deleted in this loop.
+    "provisioning_gate_result",
+    "provisioning_run",
+    "signoff_record",
+    "curriculum_submission",
+    "agent_working_memory",
+    "shift_assignment",
+    "agent_forge_grant",
+    "manifest_disposition",
+    "venture_forge_manifest",
+    "venture_budget",
+    "proposal",
+    "revocation",
+    "persona",
+    "business_playbook",
+    "business_pack",
+)
+
+# Guarded by an append-only trigger. A superuser can disable it; office_app never can,
+# which is the point of the guard and the reason these are separated here.
+VENTURE_APPEND_ONLY = (
+    ("historical_record", "historical_record_append_only"),
+    ("incident_resolution", "incident_resolution_append_only"),
+    ("agent_call_ledger", "agent_call_ledger_append_only"),
+)
+
+
+def wipe_venture(conn: psycopg.Connection, venture_id: str) -> None:
+    """Remove everything belonging to one venture, in an order the FKs allow.
+
+    Superuser only. `incident_resolution` has no `venture_id` of its own, so it is
+    cleared through its incident - and before it, because the resolution references the
+    detection.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            "DELETE FROM provisioning_gate_result WHERE run_id IN "
+            "(SELECT run_id FROM provisioning_run WHERE venture_id = %s)",
+            (venture_id,),
+        )
+        for table, trigger in VENTURE_APPEND_ONLY:
+            cur.execute(f"ALTER TABLE {table} DISABLE TRIGGER {trigger}")
+        cur.execute(
+            "DELETE FROM incident_resolution WHERE incident_id IN "
+            "(SELECT incident_id FROM incident WHERE venture_id = %s)",
+            (venture_id,),
+        )
+        cur.execute("DELETE FROM incident WHERE venture_id = %s", (venture_id,))
+        cur.execute("DELETE FROM historical_record WHERE venture_id = %s", (venture_id,))
+        cur.execute("DELETE FROM agent_call_ledger WHERE venture_id = %s", (venture_id,))
+        for table, trigger in VENTURE_APPEND_ONLY:
+            cur.execute(f"ALTER TABLE {table} ENABLE TRIGGER {trigger}")
+
+        for table in VENTURE_DEPENDENTS:
+            if table == "provisioning_gate_result":
+                continue
+            cur.execute(f"DELETE FROM {table} WHERE venture_id = %s", (venture_id,))
+    conn.commit()
+
+
 requires_db = pytest.mark.skipif(
     not ADMIN_DSN or not APP_DSN,
     reason="OFFICE_ADMIN_DSN and OFFICE_APP_DSN must be set (see .env.example)",

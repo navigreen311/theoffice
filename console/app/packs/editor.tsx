@@ -72,7 +72,7 @@ function Report({ state }: { state: EditorState | null }) {
       <div className="flex items-center gap-3">
         <Badge severity={summary.severity}>{summary.text}</Badge>
         {report.not_run.length > 0 ? (
-          <span className="text-xs text-neutral-600">
+          <span className="text-xs text-ink-secondary">
             NOT_RUN is not a pass — those rules need the world, and nothing about this
             document answers them.
           </span>
@@ -122,12 +122,12 @@ export function PackEditor({
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-neutral-200 bg-white shadow-sm">
-        <header className="border-b border-neutral-100 px-4 py-3">
-          <h2 className="text-sm font-semibold text-neutral-900">
+      <div className="rounded-lg border border-line bg-surface shadow-sm">
+        <header className="border-b border-line px-4 py-3">
+          <h2 className="text-sm font-semibold text-ink">
             Pack source{liveVersion ? ` — live version ${liveVersion}` : " — no live version"}
           </h2>
-          <p className="mt-0.5 text-xs text-neutral-500">
+          <p className="mt-0.5 text-xs text-ink-muted">
             YAML, schema v3. The hash is taken over these exact bytes, because a reviewer
             signs a document rather than a parse tree.
           </p>
@@ -145,7 +145,7 @@ export function PackEditor({
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             <form action={validate}>
               <input type="hidden" name="yaml_source" value={source} />
-              <p className="mb-2 text-xs text-neutral-600">
+              <p className="mb-2 text-xs text-ink-secondary">
                 Runs all 27 rules against this draft. Writes nothing.
               </p>
               <Submit label="Validate" busy="Validating…" />
@@ -165,7 +165,7 @@ export function PackEditor({
 
           {/* What publishing will disturb, said before it happens rather than
               discovered afterwards. Both facts are invisible from an editor. */}
-          <div className="mt-4 space-y-1 text-xs text-neutral-600">
+          <div className="mt-4 space-y-1 text-xs text-ink-secondary">
             {activeRun ? (
               <p>
                 <Badge severity="warn">

@@ -101,7 +101,7 @@ export default async function AgentPage({ params }: { params: { agentId: string 
           ))}
         </Table>
         {brokered.length > 0 ? (
-          <p className="mt-3 text-xs text-neutral-600">
+          <p className="mt-3 text-xs text-ink-secondary">
             {brokered.length} Forge(s) still brokered. Reconciliation can verify call
             counts and payload hashes against them but cannot independently corroborate
             attribution — a stated weakness, not a hidden one.

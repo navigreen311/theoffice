@@ -35,7 +35,7 @@ export default function LoginPage({
         </form>
       </Card>
       <form method="post" action="/api/session?_method=DELETE" className="mt-4">
-        <p className="text-xs text-neutral-500">
+        <p className="text-xs text-ink-muted">
           Signing in again replaces the current session.
         </p>
       </form>

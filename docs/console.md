@@ -226,6 +226,74 @@ Greenstone Pack if no venture has one, then drives a real run and renders the la
 because the first version of these checks passed against a page showing one blocked gate
 and no forms at all.
 
+## The Compliance page, rebuilt
+
+The page told a reader who already knew the system what state it was in: a banner
+reading "4 control(s) not verified" and four snake_case identifiers in a table. **A
+count is not a conclusion**, and `audit_chain` is an identifier, not an explanation.
+
+What changed, and why each thing:
+
+**The banner states a conclusion.** "Compliance posture is unverified, not clean", then
+what that means for everything below it, then the sentence about absence of findings.
+And it **does not disappear when everything is fine** — it turns green and says so.
+Health communicated by the absence of a warning is indistinguishable from a warning that
+failed to render.
+
+**Every control explains itself.** A human name with the identifier beside it for the
+engineers who search by it, a sentence saying what the check actually does, its cadence,
+and the consequence of it not running — the consequence in the danger colour when it
+blocks. The copy lives in `broker/app.py` next to the code that runs the sweeps, because
+a description that drifts from the check it describes is worse than none, and the console
+is the wrong place to notice the drift.
+
+**Every control can be run from the page — except one, which says why.** The restore
+drill needs superuser credentials to create a scratch database, and the API deliberately
+does not hold them. A Run button that always fails is worse than no button, so that row
+carries the host command instead. This is a deliberate deviation from the brief, and the
+alternative was giving the API superuser credentials to make a button work.
+
+**Frameworks are on the compliance page.** This was the largest gap: a Compliance page
+with no compliance frameworks on it. One row per venture, each declared framework
+resolved against both a runtime flag and a Compliance Library entry — because missing
+either means the obligation is named but not enforced. It is the same check V28 makes at
+Gate 2, rendered.
+
+**Every number carries its denominator, and none of them is invented.** The brief asked
+for "0 of 5 ventures" and "0 of 106 agents". The Village roster has not been imported, so
+the honest denominator is the seven agents The Office actually knows — reporting 106
+would fabricate a number on the one page whose own copy insists on real ones. The gap is
+reported as its own fact instead.
+
+**An as-of timestamp**, because a compliance view with no time anchor cannot be used as
+evidence and a screenshot of it cannot be dated.
+
+**A regulator export** (Part 9). It states its own control freshness *on its face* — an
+export produced while four controls have never run says so at the top — and it lists what
+it did not include. It is hash-stamped rather than signed: there is no key material in
+this deployment, and a fabricated signature would prove nothing while appearing to prove
+provenance.
+
+**Scheduling is a statement, not a button.** There is no in-app scheduler. In a
+deployment the `sweeps` container runs them hourly; locally nothing does. A control that
+claimed to configure a schedule would be a lie on the page whose entire purpose is not
+lying about what has been checked.
+
+### Design tokens and dark mode
+
+Every colour resolves through a CSS variable in `app/globals.css`, with a full dark
+palette. No component contains a hex literal, and the smoke script fails if one appears —
+a hardcoded colour is a colour that cannot invert, and one of them eventually renders a
+failure state in a reassuring grey.
+
+Severity is a triple per state (tinted background, border, text) rather than
+`bg-ok/10`. Tailwind's opacity modifier needs a colour it can decompose into channels
+and a `var(--x)` is opaque to it, so the old classes silently produced nothing once the
+palette moved to variables.
+
+Type scale is six named sizes and two weights. Navigation is the same fourteen links in
+four groups — Operate, Teach, Govern, Inspect.
+
 ## Known gaps
 
 *Last verified: 2026-08-23.*
@@ -248,3 +316,11 @@ and no forms at all.
   will not stay that way.
 - **No search across ventures.** Every list is filtered by exact match; there is no free
   text anywhere.
+- **Dark mode is complete for the primitives and the Compliance page.** Other screens
+  inherit dark surfaces through `Card`, `Badge` and `Table`, and a handful of page-level
+  strings still carry their own spacing-era classes. Nothing is unreadable; a pass over
+  the remaining screens is a follow-up.
+- **The regulator export is hash-stamped, not signed.** Provenance needs key material
+  this deployment does not have.
+- **The export returns a document, not a downloadable archive.** The brief asked for a
+  signed archive; what exists is the manifest that would go in one.

@@ -76,7 +76,7 @@ export function AdvanceForm({
     <form action={action}>
       <input type="hidden" name="run_id" value={runId} />
       <input type="hidden" name="venture_id" value={venture} />
-      <p className="mb-2 text-xs text-neutral-600">
+      <p className="mb-2 text-xs text-ink-secondary">
         Runs from gate {currentGate} until a gate stops it. Gates are not skippable.
       </p>
       <Submit label={`Advance from gate ${currentGate}`} busy="Running gates…" />
@@ -127,7 +127,7 @@ export function SignOffForm({
       <input type="hidden" name="run_id" value={runId} />
       <input type="hidden" name="venture_id" value={venture} />
       <input type="hidden" name="artifacts_hash" value={artifactsHash ?? ""} />
-      <p className="text-xs text-neutral-600">
+      <p className="text-xs text-ink-secondary">
         Signing binds your name to{" "}
         <span className="font-mono">{artifactsHash?.slice(0, 24) ?? "—"}…</span>. If the
         artifacts have changed since this page rendered, the signature is refused rather

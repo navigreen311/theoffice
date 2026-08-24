@@ -49,7 +49,7 @@ export default async function IncidentsPage({
       <div className="flex items-baseline justify-between">
         <div>
           <h2 className="text-base font-semibold">Incidents</h2>
-          <p className="mt-1 text-xs text-neutral-500">
+          <p className="mt-1 text-xs text-ink-muted">
             Detections, not workflow. An incident is never edited — resolving one appends
             an account of what was done and leaves the detection intact.
           </p>
@@ -86,7 +86,7 @@ export default async function IncidentsPage({
                     <Badge severity="ok">
                       resolved {relativeAge(incident.resolved_at)}
                     </Badge>
-                    <p className="text-xs text-neutral-700">{incident.resolution}</p>
+                    <p className="text-xs text-ink-secondary">{incident.resolution}</p>
                   </div>
                 ) : (
                   <Badge severity="warn">open</Badge>
@@ -94,7 +94,7 @@ export default async function IncidentsPage({
               </Cell>
               <Cell>
                 {incident.resolved_at ? (
-                  <span className="text-xs text-neutral-500">
+                  <span className="text-xs text-ink-muted">
                     Closed. A later finding is a new incident, not an edit to this one.
                   </span>
                 ) : (

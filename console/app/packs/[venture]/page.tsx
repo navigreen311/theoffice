@@ -61,14 +61,14 @@ export default async function PackEditorPage({
       <div className="flex items-baseline justify-between">
         <div>
           <h2 className="text-base font-semibold">{venture} — Business Pack</h2>
-          <p className="mt-1 text-xs text-neutral-500">
+          <p className="mt-1 text-xs text-ink-muted">
             Publishing supersedes the live version and starts nothing. Provisioning is a
             separate act on a separate screen.
           </p>
         </div>
         <Link
           href={`/provisioning/${encodeURIComponent(venture)}`}
-          className="text-sm text-neutral-600 underline underline-offset-2"
+          className="text-sm text-ink-secondary underline underline-offset-2"
         >
           Provisioning →
         </Link>

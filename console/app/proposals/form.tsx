@@ -49,7 +49,7 @@ export function DecideForm({ proposalId }: { proposalId: string }) {
       <div className="flex flex-wrap items-center gap-3">
         <Submit label="Approve" decision="approve" />
         <Submit label="Reject" decision="reject" />
-        <span className={`text-xs ${tooFast ? "text-warn" : "text-neutral-500"}`}>
+        <span className={`text-xs ${tooFast ? "text-warn" : "text-ink-muted"}`}>
           {tooFast
             ? `${seconds}s on screen — approving now flags as a rubber stamp`
             : `${seconds}s on screen`}

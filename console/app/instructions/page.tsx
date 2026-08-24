@@ -43,7 +43,7 @@ export default async function InstructionsPage() {
 
       {forges.length === 0 ? (
         <Card title="No Forges registered">
-          <p className="text-sm text-neutral-600">
+          <p className="text-sm text-ink-secondary">
             The bridge reaches nothing yet. Phase 0.3 registers a Forge with a
             credential.
           </p>

@@ -53,7 +53,7 @@ export default async function AccessPage() {
     if (error instanceof ApiError && error.status === 403) {
       return (
         <Card title="Not your screen">
-          <p className="text-sm text-neutral-700">
+          <p className="text-sm text-ink-secondary">
             Access administration requires <code>compliance_officer</code> or above. The
             roster of who can act on this system — and which of them holds{" "}
             <code>ivan</code> — is not a read for a venture operator.
@@ -73,7 +73,7 @@ export default async function AccessPage() {
     <div className="space-y-6">
       <div>
         <h2 className="text-base font-semibold">Access</h2>
-        <p className="mt-1 text-xs text-neutral-500">
+        <p className="mt-1 text-xs text-ink-muted">
           Every action here is audited with you as the actor. A role may be granted only
           by somebody holding a stronger one, and never to yourself.
         </p>
@@ -87,7 +87,7 @@ export default async function AccessPage() {
           <Badge severity={administrators.length > 1 ? "ok" : "warn"}>
             {administrators.length} active
           </Badge>
-          <span className="text-sm text-neutral-700">
+          <span className="text-sm text-ink-secondary">
             {administrators.map((a) => a.display_name).join(", ") || "none"}
           </span>
         </div>

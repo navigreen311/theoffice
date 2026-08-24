@@ -75,13 +75,13 @@ function CoverageCard({ store, title, note }: {
   const uncovered = store.uncovered ?? [];
 
   return (
-    <div className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
+    <div className="rounded-lg border border-line bg-surface p-4 shadow-sm">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-sm font-semibold text-neutral-900">{title}</h3>
+        <h3 className="text-sm font-semibold text-ink">{title}</h3>
         <Badge severity={severity}>{coverageLabel(store)}</Badge>
       </div>
-      <p className="mt-1 text-xs text-neutral-500">{note}</p>
-      <p className="mt-2 text-xs text-neutral-600">{store.note}</p>
+      <p className="mt-1 text-xs text-ink-muted">{note}</p>
+      <p className="mt-2 text-xs text-ink-secondary">{store.note}</p>
 
       <p className="mt-2 text-xs">
         {store.blocking ? (
@@ -147,7 +147,7 @@ export default async function KnowledgePage({
     <div className="space-y-6">
       <div>
         <h2 className="text-base font-semibold">Knowledge Bases</h2>
-        <p className="mt-1 text-xs text-neutral-500">
+        <p className="mt-1 text-xs text-ink-muted">
           Part 6 names five. Two of them block provisioning at Gate 6 and three are
           advisory — a venture can operate without its SOPs written down, and cannot
           operate under a compliance flag nobody has defined.
@@ -179,7 +179,7 @@ export default async function KnowledgePage({
             </Row>
           ))}
         </Table>
-        <div className="mt-4 border-t border-neutral-100 pt-4">
+        <div className="mt-4 border-t border-line pt-4">
           <ComplianceEntryForm knownFlags={unexplainedFlags} />
         </div>
       </Card>
@@ -199,8 +199,8 @@ export default async function KnowledgePage({
               href={`/knowledge?venture=${encodeURIComponent(v)}`}
               className={`rounded border px-2 py-1 text-xs ${
                 v === selected
-                  ? "border-neutral-900 bg-neutral-900 text-white"
-                  : "border-neutral-300 text-neutral-700"
+                  ? "border-ink bg-surface-inverse text-white"
+                  : "border-line-strong text-ink-secondary"
               }`}
             >
               {v}
@@ -233,7 +233,7 @@ export default async function KnowledgePage({
           ))}
         </Table>
 
-        <h3 className="mt-6 text-xs font-medium text-neutral-700">
+        <h3 className="mt-6 text-xs font-medium text-ink-secondary">
           Cross-venture shares ({playbooks.shares.length})
         </h3>
         <Table
@@ -257,7 +257,7 @@ export default async function KnowledgePage({
           ))}
         </Table>
 
-        <div className="mt-4 grid gap-6 border-t border-neutral-100 pt-4 lg:grid-cols-2">
+        <div className="mt-4 grid gap-6 border-t border-line pt-4 lg:grid-cols-2">
           <PlaybookForm ventures={ventureIds} />
           <ShareForm playbooks={playbooks.playbooks} ventures={ventureIds} />
         </div>
@@ -281,7 +281,7 @@ export default async function KnowledgePage({
             </Row>
           ))}
         </Table>
-        <div className="mt-4 border-t border-neutral-100 pt-4">
+        <div className="mt-4 border-t border-line pt-4">
           <PersonaForm ventures={ventureIds} />
         </div>
       </Card>
@@ -304,7 +304,7 @@ export default async function KnowledgePage({
             </Row>
           ))}
         </Table>
-        <div className="mt-4 border-t border-neutral-100 pt-4">
+        <div className="mt-4 border-t border-line pt-4">
           <NoteForm ventures={ventureIds} />
         </div>
       </Card>

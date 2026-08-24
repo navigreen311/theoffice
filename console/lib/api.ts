@@ -513,3 +513,63 @@ export type IncidentRow = Incident & {
   resolved_at: string | null;
   resolved_by: string | null;
 };
+
+export type ControlRow = {
+  id: string;
+  name: string;
+  cadence: string;
+  checks: string;
+  consequence: string;
+  blocking: boolean;
+  runnable_from_here: boolean;
+  host_command: string | null;
+  state: "fresh" | "stale" | "never_run" | "failing";
+  healthy: boolean;
+  last_run?: string;
+  denominator?: number | null;
+  age_hours?: number;
+  max_age_days: number;
+  detail?: string;
+};
+
+export type FrameworkRow = {
+  framework: string;
+  runtime_flag: string | null;
+  library_entry_ref: string | null;
+  declared_gap: boolean;
+  has_flag: boolean;
+  has_entry: boolean;
+};
+
+export type VentureCoverage = {
+  venture_id: string;
+  frameworks: FrameworkRow[];
+  resolved: number;
+  declared: number;
+  assignable_grants: number;
+  status: "ready" | "gaps" | "blocked";
+  blocked_because: string | null;
+  has_pack: boolean;
+};
+
+/** Every metric carries its denominator. That is enforced by the type. */
+export type Metric = { value: number; denominator: number; note?: string };
+
+export type ComplianceOverview = {
+  as_of: string;
+  controls: ControlRow[];
+  scorecard: {
+    ventures_live: Metric;
+    agents_with_grants: Metric;
+    frameworks_in_scope: Metric;
+    controls_verified: Metric;
+  };
+  ventures: VentureCoverage[];
+  chain_stats: {
+    audit_entries: number;
+    oldest_entry: string | null;
+    agent_calls: number;
+    last_agent_call: string | null;
+  };
+  library_entries: number;
+};

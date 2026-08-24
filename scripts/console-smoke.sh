@@ -572,9 +572,65 @@ else
   fail "the provisioning console does not say that no run can pass gate 9.5 - an operator would find out by clicking Advance nine times"
 fi
 
-step "Unverified controls render as unverified"
+step "The compliance page states a conclusion, not a count"
 curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT/" > "$WORK"/home.html
-if grep -q 'never_run\|stale' "$WORK"/home.html; then
+
+# The copy that is the whole point of this page. Checked verbatim, because these
+# sentences are the thing most likely to be "tightened" by somebody who does not know
+# why they are long.
+preserved=0
+while IFS= read -r phrase; do
+  grep -qF "$phrase" "$WORK"/home.html || { fail "compliance page lost: ${phrase:0:60}"; preserved=1; }
+done <<'PHRASES'
+An absence of findings from a check that did not run is not evidence.
+Shown above incidents deliberately: a quiet incident list means nothing if the check producing it is stale.
+Until Forges carry per-agent identity this ledger is the only per-agent record anywhere.
+PHRASES
+[ "$preserved" -eq 0 ] && say "the epistemic copy is present verbatim"
+
+# The banner states a conclusion in one of its two forms. It never disappears: health
+# communicated by the absence of a warning is indistinguishable from a warning that
+# failed to render.
+if grep -qF "Compliance posture is unverified, not clean" "$WORK"/home.html; then
+  say "banner: unverified, stated as a conclusion"
+elif grep -qF "All controls verified within their max age" "$WORK"/home.html; then
+  say "banner: all controls verified, stated rather than implied"
+else
+  fail "the compliance banner rendered in neither state - health by absence of a warning"
+fi
+
+# Every control explains itself to a reader who does not know the system.
+for phrase in "Audit chain integrity" "Certification staleness" "Forge manifest reconciliation" "Backup restore drill"; do
+  grep -qF "$phrase" "$WORK"/home.html || fail "control not named in human terms: $phrase"
+done
+if grep -qF "Re-hashes the ledger to prove no entry was altered" "$WORK"/home.html; then
+  say "controls carry a description, not just an identifier"
+else
+  fail "controls render without their descriptions"
+fi
+
+# Frameworks on the compliance page - the largest gap the rebuild closed.
+if grep -qF "Framework coverage by venture" "$WORK"/home.html; then
+  say "framework coverage renders"
+else
+  fail "a compliance page with no compliance frameworks on it"
+fi
+
+# Every number with a denominator, and the time anchor without which a screenshot
+# cannot be dated.
+if grep -qE "of [0-9]+" "$WORK"/home.html; then
+  say "metrics carry denominators"
+else
+  fail "a metric rendered without its denominator"
+fi
+if grep -qF "As of " "$WORK"/home.html; then
+  say "the page states its as-of time"
+else
+  fail "no as-of timestamp - this cannot be used as evidence"
+fi
+
+step "Unverified controls render as unverified"
+if grep -q 'never run\|stale' "$WORK"/home.html; then
   if grep -q 'text-bad\|text-critical' "$WORK"/home.html; then
     say "unhealthy controls carry a failing severity class"
   else
@@ -582,6 +638,21 @@ if grep -q 'never_run\|stale' "$WORK"/home.html; then
   fi
 else
   say "no unhealthy controls present to check"
+fi
+
+step "Dark mode is defined, not hardcoded"
+# Every colour resolves through a CSS variable. A hex literal in a component is a
+# colour that cannot invert, and one of them eventually renders a failure state in a
+# reassuring grey.
+if grep -rqE "#[0-9a-fA-F]{6}" "$ROOT/console/app" "$ROOT/console/components"      --include="*.tsx" 2>/dev/null; then
+  fail "a hex colour literal exists in a component; dark mode cannot invert it"
+else
+  say "no hex literals in components"
+fi
+if grep -q "prefers-color-scheme: dark" "$ROOT/console/app/globals.css"; then
+  say "a dark palette is defined"
+else
+  fail "no dark palette defined"
 fi
 
 step "Result"

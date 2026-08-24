@@ -22,32 +22,29 @@ import yaml
 
 from broker import humans, packs
 from broker.db import connection
+from tests.conftest import wipe_venture
 from tests.world import PACK_PATH, build_world, certify_for_positions, teardown_world
 
 VENTURE = "greenstone"
 
 
 def _wipe(conn: psycopg.Connection) -> None:
+    """Everything belonging to this venture, via the shared ordered list.
+
+    Hand-rolled before. Each phase adds another table that references a venture, and a
+    fixture with its own list goes stale silently - the compliance suite hit exactly
+    that when `provisioning_run` came to reference `business_pack`.
+    """
+    wipe_venture(conn, VENTURE)
+    # The humans this suite creates. Dropped by accident when this function moved to
+    # the shared list, which the unique index on `email` caught immediately - the
+    # operator and signer fixtures collided on their second run.
     with conn.cursor() as cur:
         cur.execute(
-            "DELETE FROM provisioning_gate_result WHERE run_id IN "
-            "(SELECT run_id FROM provisioning_run WHERE venture_id = %s)", (VENTURE,)
+            "DELETE FROM office_human_role WHERE human_id IN "
+            "(SELECT human_id FROM office_human WHERE email LIKE %s)",
+            ("%@provisioning.invalid",),
         )
-        cur.execute("DELETE FROM provisioning_run WHERE venture_id = %s", (VENTURE,))
-        cur.execute("DELETE FROM business_pack WHERE venture_id = %s", (VENTURE,))
-        cur.execute("DELETE FROM signoff_record WHERE venture_id = %s", (VENTURE,))
-        cur.execute("DELETE FROM curriculum_submission WHERE venture_id = %s", (VENTURE,))
-        # Provisioning writes institutional history now, and the table is append-only
-        # to office_app - so clearing it between tests needs the guard trigger off and
-        # the superuser connection, exactly as `clean_audit` does for the chain.
-        cur.execute(
-            "ALTER TABLE historical_record DISABLE TRIGGER historical_record_append_only"
-        )
-        cur.execute("DELETE FROM historical_record WHERE venture_id = %s", (VENTURE,))
-        cur.execute(
-            "ALTER TABLE historical_record ENABLE TRIGGER historical_record_append_only"
-        )
-        cur.execute("DELETE FROM office_human_role WHERE venture_id = %s", (VENTURE,))
         cur.execute(
             "DELETE FROM office_human WHERE email LIKE %s", ("%@provisioning.invalid",)
         )

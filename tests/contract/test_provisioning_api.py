@@ -23,7 +23,7 @@ import pytest
 from broker import humans, packs
 from broker.app import app
 from broker.db import connection
-from tests.conftest import requires_db
+from tests.conftest import requires_db, wipe_venture
 from tests.provisioning.conftest import amend_for_capacity
 from tests.world import PACK_PATH, build_world, certify_for_positions, teardown_world
 
@@ -34,15 +34,9 @@ AUTHOR = uuid.UUID("00000000-0000-5000-8000-00000000aaaa")
 
 
 def _wipe(conn: psycopg.Connection) -> None:
+    """The shared ordered list, not a copy of it. See `tests/conftest.wipe_venture`."""
+    wipe_venture(conn, VENTURE)
     with conn.cursor() as cur:
-        cur.execute(
-            "DELETE FROM provisioning_gate_result WHERE run_id IN "
-            "(SELECT run_id FROM provisioning_run WHERE venture_id = %s)", (VENTURE,)
-        )
-        cur.execute("DELETE FROM provisioning_run WHERE venture_id = %s", (VENTURE,))
-        cur.execute("DELETE FROM business_pack WHERE venture_id = %s", (VENTURE,))
-        cur.execute("DELETE FROM signoff_record WHERE venture_id = %s", (VENTURE,))
-        cur.execute("DELETE FROM curriculum_submission WHERE venture_id = %s", (VENTURE,))
         cur.execute("DELETE FROM office_human_role")
         cur.execute("DELETE FROM office_human")
     conn.commit()
