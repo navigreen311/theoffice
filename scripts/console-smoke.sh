@@ -1028,25 +1028,30 @@ clock=0
 # `\(\)` escaped: unescaped, `()` is an empty regex group and the pattern matches every
 # `new Date(anything)`, which flagged every correct call site in the console.
 for pattern in 'Date\.now\(\)' 'new Date\(\)'; do
-  for f in $(grep -rlE "$pattern" "$ROOT/console/app" "$ROOT/console/components" \
-             --include="*.tsx" 2>/dev/null); do
+  # `while read` rather than `for f in $(...)`: a path containing a space would be split
+  # into two non-existent paths and the check would quietly pass on both.
+  # Redirected rather than piped, so `clock=1` is set in this shell, not a subshell.
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
     case "$f" in *"$CLOCK_EXEMPT") continue;; esac
     # Ignore the pattern inside comments - the explanation of the rule is not a breach.
     if grep -E "$pattern" "$f" | grep -qvE '^\s*(//|\*|/\*)'; then
       fail "reads the render clock: ${f#"$ROOT/"}"
       clock=1
     fi
-  done
+  done < <(grep -rlE "$pattern" "$ROOT/console/app" "$ROOT/console/components" \
+           --include="*.tsx" 2>/dev/null)
 done
 
 # `toLocaleString()` with no locale uses the runtime's, and the two runtimes do not have
 # to agree: "1,152" against "1.152", "8/24/2026" against "24/08/2026".
-for f in $(grep -rl 'toLocaleString()\|toLocaleTimeString()\|toLocaleDateString()' \
-           "$ROOT/console/app" "$ROOT/console/components" --include="*.tsx" 2>/dev/null); do
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
   case "$f" in *"$CLOCK_EXEMPT") continue;; esac
   fail "formats without an explicit locale: ${f#"$ROOT/"}"
   clock=1
-done
+done < <(grep -rl 'toLocaleString()\|toLocaleTimeString()\|toLocaleDateString()' \
+         "$ROOT/console/app" "$ROOT/console/components" --include="*.tsx" 2>/dev/null)
 [ "$clock" -eq 0 ] && say "no component renders the clock or an implicit locale"
 
 # The property itself, measured rather than argued. Two requests back to back must
