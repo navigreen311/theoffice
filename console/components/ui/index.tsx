@@ -20,12 +20,12 @@ export function Card({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-lg border border-neutral-200 bg-white shadow-sm">
+    <section className="rounded-lg border border-line bg-surface shadow-sm">
       {title ? (
-        <header className="border-b border-neutral-100 px-4 py-3">
-          <h2 className="text-sm font-semibold text-neutral-900">{title}</h2>
+        <header className="border-b border-line px-4 py-3">
+          <h2 className="text-sm font-semibold text-ink">{title}</h2>
           {subtitle ? (
-            <p className="mt-0.5 text-xs text-neutral-500">{subtitle}</p>
+            <p className="mt-0.5 text-xs text-ink-muted">{subtitle}</p>
           ) : null}
         </header>
       ) : null}
@@ -65,9 +65,9 @@ export function Table({
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-sm">
         <thead>
-          <tr className="border-b border-neutral-200 text-left">
+          <tr className="border-b border-line text-left">
             {head.map((h) => (
-              <th key={h} className="px-2 py-2 text-xs font-medium text-neutral-500">
+              <th key={h} className="px-2 py-2 text-xs font-medium text-ink-muted">
                 {h}
               </th>
             ))}
@@ -78,7 +78,7 @@ export function Table({
             <tr>
               <td
                 colSpan={head.length}
-                className="px-2 py-6 text-center text-sm text-neutral-500"
+                className="px-2 py-6 text-center text-sm text-ink-muted"
               >
                 {/* An empty table says why it is empty. "Nothing here" and "nothing
                     was checked" look identical otherwise. */}
@@ -95,7 +95,7 @@ export function Table({
 }
 
 export function Row({ children }: { children: ReactNode }) {
-  return <tr className="border-b border-neutral-100 last:border-0">{children}</tr>;
+  return <tr className="border-b border-line last:border-0">{children}</tr>;
 }
 
 export function Cell({
@@ -124,7 +124,7 @@ export function Button({
   const styles =
     variant === "danger"
       ? "bg-bad text-white hover:bg-critical"
-      : "bg-neutral-900 text-white hover:bg-neutral-700";
+      : "bg-surface-inverse text-white hover:bg-surface-inverse";
   return (
     <button className={`${base} ${styles}`} {...props}>
       {children}
@@ -143,12 +143,12 @@ export function Field({
 }) {
   return (
     <label className="block">
-      <span className="block text-xs font-medium text-neutral-700">{label}</span>
+      <span className="block text-xs font-medium text-ink-secondary">{label}</span>
       {children}
-      {hint ? <span className="mt-1 block text-xs text-neutral-500">{hint}</span> : null}
+      {hint ? <span className="mt-1 block text-xs text-ink-muted">{hint}</span> : null}
     </label>
   );
 }
 
 export const inputClass =
-  "mt-1 w-full rounded border border-neutral-300 px-2 py-1.5 text-sm focus:border-neutral-900 focus:outline-none";
+  "mt-1 w-full rounded border border-line-strong px-2 py-1.5 text-sm focus:border-ink focus:outline-none";

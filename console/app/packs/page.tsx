@@ -40,7 +40,7 @@ export default async function PacksPage() {
     <div className="space-y-6">
       <div>
         <h2 className="text-base font-semibold">Business Packs</h2>
-        <p className="mt-1 text-xs text-neutral-500">
+        <p className="mt-1 text-xs text-ink-muted">
           The Pack is the document every artifact derives from — positions,
           appointments, workflow, task ledger, curriculum, grants. Publishing supersedes
           the live version; the next provisioning run provisions the new one.

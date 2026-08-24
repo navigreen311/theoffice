@@ -51,7 +51,7 @@ export function Pager({
       </Badge>
 
       {summary.truncated ? (
-        <span className="text-neutral-600">
+        <span className="text-ink-secondary">
           This is not the whole result. Narrow the filters or page through.
         </span>
       ) : null}

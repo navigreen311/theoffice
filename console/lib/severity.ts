@@ -124,12 +124,21 @@ export function relativeAge(iso: string | null | undefined): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
+/**
+ * Each severity is a triple: a tinted background, a border and a text colour, all three
+ * resolved from CSS variables.
+ *
+ * Not `bg-ok/10` any more. Tailwind's opacity modifier needs a colour it can decompose
+ * into channels, and a `var(--x)` is opaque to it - the class silently produced nothing.
+ * Naming the tint as its own token also means dark mode can invert the pair properly
+ * rather than putting light-mode text on a darkened background.
+ */
 export const SEVERITY_CLASS: Record<Severity, string> = {
-  ok: "bg-ok/10 text-ok border-ok/30",
-  warn: "bg-warn/10 text-warn border-warn/30",
-  bad: "bg-bad/10 text-bad border-bad/40",
-  critical: "bg-critical/15 text-critical border-critical/50 font-semibold",
-  neutral: "bg-neutral-100 text-neutral-600 border-neutral-300",
+  ok: "bg-ok-bg text-ok border-ok-line",
+  warn: "bg-warn-bg text-warn border-warn-line",
+  bad: "bg-bad-bg text-bad border-bad-line",
+  critical: "bg-critical-bg text-critical border-critical-line font-medium",
+  neutral: "bg-neutral2-bg text-neutral2 border-neutral2-line",
 };
 
 /**

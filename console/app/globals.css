@@ -2,6 +2,102 @@
 @tailwind components;
 @tailwind utilities;
 
+/**
+ * Design tokens.
+ *
+ * Every colour in this console resolves through one of these. Nothing is a hex literal
+ * in a component, which is what makes dark mode a definition rather than a second set
+ * of classes somebody has to remember to add.
+ *
+ * Severity is a named scale with three roles per state - a tinted background, a border,
+ * and a text colour - because the alternative is `bg-red-100 text-red-800` chosen fresh
+ * in each component, and one of them eventually renders "never verified" in a
+ * reassuring grey. A dashboard that manufactures confidence is worse than no dashboard.
+ *
+ * Contrast is checked against the surface the token sits on, not against white. In dark
+ * mode the tinted backgrounds are dark and the text colours lighten to match; the
+ * relationship between them is what has to hold, not the specific values.
+ */
+:root {
+  color-scheme: light;
+
+  --surface-0: #f7f7f8; /* the page */
+  --surface-1: #f1f1f3; /* a panel inside a card */
+  --surface-2: #ffffff; /* a card */
+  --surface-inverse: #18181b;
+  --text-inverse: #fafafa;
+
+  --border: #e4e4e7;
+  --border-strong: #a1a1aa;
+
+  --text-primary: #18181b;
+  --text-secondary: #52525b;
+  --text-muted: #71717a;
+
+  --bg-success: #f0fdf4;
+  --border-success: #bbf7d0;
+  --text-success: #15803d;
+
+  --bg-warning: #fffbeb;
+  --border-warning: #fde68a;
+  --text-warning: #b45309;
+
+  --bg-danger: #fef2f2;
+  --border-danger: #fecaca;
+  --text-danger: #b91c1c;
+
+  --bg-critical: #fef2f2;
+  --border-critical: #fca5a5;
+  --text-critical: #7f1d1d;
+
+  --bg-neutral: #f4f4f5;
+  --border-neutral: #e4e4e7;
+  --text-neutral: #52525b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --surface-0: #09090b;
+    --surface-1: #18181b;
+    --surface-2: #121214;
+    --surface-inverse: #fafafa;
+    --text-inverse: #18181b;
+
+    --border: #27272a;
+    --border-strong: #52525b;
+
+    --text-primary: #fafafa;
+    --text-secondary: #a1a1aa;
+    --text-muted: #8b8b94;
+
+    /* Tinted backgrounds go dark and the text lightens. The pairing is what carries
+       meaning; keeping the light values here would make every state unreadable and
+       every warning invisible, which is the failure this palette exists to prevent. */
+    --bg-success: #0d2b18;
+    --border-success: #14532d;
+    --text-success: #4ade80;
+
+    --bg-warning: #2b1d05;
+    --border-warning: #78350f;
+    --text-warning: #fbbf24;
+
+    --bg-danger: #2b0f0f;
+    --border-danger: #7f1d1d;
+    --text-danger: #f87171;
+
+    --bg-critical: #3b0d0d;
+    --border-critical: #991b1b;
+    --text-critical: #fca5a5;
+
+    --bg-neutral: #1c1c1f;
+    --border-neutral: #27272a;
+    --text-neutral: #a1a1aa;
+  }
+}
+
 body {
-  @apply bg-neutral-50 text-neutral-900;
+  background-color: var(--surface-0);
+  color: var(--text-primary);
 }

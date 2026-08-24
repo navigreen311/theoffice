@@ -481,6 +481,14 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
         # never edited, so there is deliberately no route that changes an incident's
         # severity — the field somebody under pressure would most want to lower.
         "/api/incidents/{incident_id}/resolve",
+        # Running the verification sweeps from the Compliance page. A POST because a
+        # sweep is not read-only: the certification sweep recomputes staleness and can
+        # move agents out of `certified`, and the manifest sweep can raise incidents.
+        # It delegates to `sweeps.run_all`, which is the same function cron calls.
+        "/api/controls/run",
+        # Part 9's regulator export. A POST because producing a record for CFPB, FTC,
+        # HHS OCR or a state DFI is an act somebody performed, and it is audited as one.
+        "/api/compliance/export",
     }, f"the write surface changed: {sorted(writes)}"
 
 

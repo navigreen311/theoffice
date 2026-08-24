@@ -51,7 +51,7 @@ export default async function ProvisioningPage() {
     <div className="space-y-6">
       <div>
         <h2 className="text-base font-semibold">Provisioning</h2>
-        <p className="mt-1 text-xs text-neutral-500">
+        <p className="mt-1 text-xs text-ink-muted">
           Sixteen gates from a Business Pack to a live venture. A run stops at the first
           gate that blocks and says which.
         </p>
@@ -61,7 +61,7 @@ export default async function ProvisioningPage() {
         title="Ceiling in this deployment: gate 9.5"
         subtitle="Stated here rather than discovered at the gate."
       >
-        <p className="text-sm text-neutral-700">
+        <p className="text-sm text-ink-secondary">
           SimForge&rsquo;s held-out adversarial partition does not exist yet, so no run
           started from this console can pass gate 9.5 and no venture can reach gate 12.
           That is <strong>blocked</strong>, not skipped: a run that skipped certification

@@ -60,7 +60,7 @@ export default async function VenturePage({
         <h2 className="text-base font-semibold">{venture}</h2>
         <Link
           href={`/forge-map?venture=${encodeURIComponent(venture)}`}
-          className="text-sm text-neutral-600 underline underline-offset-2"
+          className="text-sm text-ink-secondary underline underline-offset-2"
         >
           Forge map →
         </Link>
@@ -71,9 +71,9 @@ export default async function VenturePage({
           {/* All three, always. capacityTriple throws rather than rendering a partial
               set, because one number hides the state. */}
           {capacityTriple(capacity).map((n) => (
-            <div key={n.label} className="rounded border border-neutral-200 p-3">
+            <div key={n.label} className="rounded border border-line p-3">
               <div className="text-2xl font-semibold">{n.value}</div>
-              <div className="mt-1 text-xs text-neutral-600">{n.label}</div>
+              <div className="mt-1 text-xs text-ink-secondary">{n.label}</div>
             </div>
           ))}
         </div>

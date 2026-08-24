@@ -56,7 +56,7 @@ function Result({ state }: { state: AccessState | null }) {
           <p className="text-xs font-medium text-warn">
             Shown once. There is no route that can produce it again.
           </p>
-          <code className="mt-1 block break-all font-mono text-xs text-neutral-900">
+          <code className="mt-1 block break-all font-mono text-xs text-ink">
             {state.token}
           </code>
         </div>
@@ -156,7 +156,7 @@ export function RoleForm({
           </select>
         </Field>
       </div>
-      <p className="text-xs text-neutral-600">
+      <p className="text-xs text-ink-secondary">
         You may grant a role weaker than your own, and never to yourself — so that every
         role anybody holds was granted by somebody else, and the log says who.
       </p>

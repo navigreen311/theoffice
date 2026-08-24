@@ -57,15 +57,15 @@ export default async function RevocationsPage() {
       >
         <table className="w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b border-neutral-200 text-left">
-              <th className="px-2 py-2 text-xs font-medium text-neutral-500">Scope</th>
-              <th className="px-2 py-2 text-xs font-medium text-neutral-500">Effect</th>
-              <th className="px-2 py-2 text-xs font-medium text-neutral-500">Authority</th>
+            <tr className="border-b border-line text-left">
+              <th className="px-2 py-2 text-xs font-medium text-ink-muted">Scope</th>
+              <th className="px-2 py-2 text-xs font-medium text-ink-muted">Effect</th>
+              <th className="px-2 py-2 text-xs font-medium text-ink-muted">Authority</th>
             </tr>
           </thead>
           <tbody>
             {SCOPES.map((s) => (
-              <tr key={s.scope} className="border-b border-neutral-100 last:border-0">
+              <tr key={s.scope} className="border-b border-line last:border-0">
                 <td className="px-2 py-2 font-mono text-xs">{s.scope}</td>
                 <td className="px-2 py-2">{s.effect}</td>
                 <td className="px-2 py-2 font-mono text-xs">{s.authority}</td>
@@ -73,7 +73,7 @@ export default async function RevocationsPage() {
             ))}
           </tbody>
         </table>
-        <p className="mt-3 text-xs text-neutral-500">
+        <p className="mt-3 text-xs text-ink-muted">
           The console does not pre-check your authority. The API checks it twice — role
           strength for the scope, and whether you operate that venture — and reports the
           refusal. A second opinion here would eventually disagree with the first.

@@ -86,7 +86,7 @@ export default async function InstructionPage({
               against Forge api <strong>{detail.live.forge_api_version}</strong>
             </span>
             <Badge severity="neutral">{detail.live.version_sensitivity}</Badge>
-            <span className="font-mono text-xs text-neutral-500">
+            <span className="font-mono text-xs text-ink-muted">
               {detail.live.content_hash.slice(0, 16)}…
             </span>
           </div>
@@ -104,7 +104,7 @@ export default async function InstructionPage({
       >
         <div className="flex flex-wrap gap-2">
           {Object.entries(detail.certification_states).length === 0 ? (
-            <span className="text-sm text-neutral-500">
+            <span className="text-sm text-ink-muted">
               No certifications recorded for this module.
             </span>
           ) : (
@@ -145,11 +145,11 @@ export default async function InstructionPage({
         </form>
 
         {diff ? (
-          <div className="mb-4 rounded border border-neutral-200 p-3">
-            <div className="text-xs font-medium text-neutral-700">
+          <div className="mb-4 rounded border border-line p-3">
+            <div className="text-xs font-medium text-ink-secondary">
               Section-level diff
             </div>
-            <ul className="mt-2 space-y-1 text-xs text-neutral-700">
+            <ul className="mt-2 space-y-1 text-xs text-ink-secondary">
               <li>
                 changed:{" "}
                 <span className="font-mono">
@@ -197,7 +197,7 @@ export default async function InstructionPage({
           title="Current content"
           subtitle="Eight required sections. A curriculum missing its failure signatures reads fine and teaches nothing about the case that matters."
         >
-          <pre className="max-h-96 overflow-auto rounded border border-neutral-200 bg-neutral-50 p-3 text-xs">
+          <pre className="max-h-96 overflow-auto rounded border border-line bg-surface-page p-3 text-xs">
             {JSON.stringify(detail.live.content, null, 2)}
           </pre>
         </Card>

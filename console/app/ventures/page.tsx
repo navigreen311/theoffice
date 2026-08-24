@@ -30,7 +30,7 @@ export default async function VenturesPage() {
             <Cell>
               <Link
                 href={`/ventures/${encodeURIComponent(v.venture_id)}`}
-                className="font-medium text-neutral-900 underline underline-offset-2"
+                className="font-medium text-ink underline underline-offset-2"
               >
                 {v.venture_id}
               </Link>
@@ -48,7 +48,7 @@ export default async function VenturesPage() {
           </Row>
         ))}
       </Table>
-      <p className="mt-3 text-xs text-neutral-500">
+      <p className="mt-3 text-xs text-ink-muted">
         &quot;Unmetered&quot; means no budget row exists, not a zero cap. Validator rule
         V18 makes budget caps a required Pack field, so an unmetered venture cannot reach
         production.

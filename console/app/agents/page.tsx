@@ -50,7 +50,7 @@ export default async function AgentsPage() {
               <Cell>
                 <Link
                   href={`/agents/${agent.office_agent_id}`}
-                  className="font-medium text-neutral-900 underline underline-offset-2"
+                  className="font-medium text-ink underline underline-offset-2"
                 >
                   {agent.agent_name}
                 </Link>
@@ -68,7 +68,7 @@ export default async function AgentsPage() {
                 {tiers.capped ? (
                   <Badge severity="warn">{tiers.note}</Badge>
                 ) : (
-                  <span className="text-xs text-neutral-500">{tiers.effective ?? "—"}</span>
+                  <span className="text-xs text-ink-muted">{tiers.effective ?? "—"}</span>
                 )}
               </Cell>
             </Row>

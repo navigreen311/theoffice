@@ -57,7 +57,7 @@ export default async function ForgeMapPage({
 
       {map === null ? (
         <Card title="No ventures">
-          <p className="text-sm text-neutral-600">
+          <p className="text-sm text-ink-secondary">
             No venture has a manifest, a grant or a budget yet.
           </p>
         </Card>
@@ -80,7 +80,7 @@ export default async function ForgeMapPage({
                   </Row>
                 ))}
               </Table>
-              <p className="mt-3 text-xs text-neutral-500">
+              <p className="mt-3 text-xs text-ink-muted">
                 Resolving one requires a compliance officer and a written reason.
                 `accepted_risk` is a real option — a vocabulary that forces a lie
                 produces a register nobody trusts.
