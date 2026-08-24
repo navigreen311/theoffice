@@ -504,6 +504,70 @@ remembered. Every write there either starts a run, runs gates in order, or stops
 strongest sentence in the console came to read like an aside. It now carries the warning
 palette and a lock icon.
 
+### The run detail page
+
+The structure here was already right — sixteen rows including the gates still ahead, the
+review form beside the numbers it is about, advance and abandon as separate acts. What
+was wrong was what the page knew and did not say.
+
+**It knew the next gate would fail.** At gate 4 it held `GATE 4.5 V13 FAIL` and filed it
+under *Generator warnings (2)*, then asked a human to write a review and press *Advance
+from gate 4* — while already holding the reason the run halts one gate later. That
+spends somebody's attention to manufacture another abandoned run. A danger banner now
+states it above the form: which gate, which rule, and what advancing will do. It
+deliberately does **not** disable Advance: an operator may legitimately want to confirm
+the halt, and a page that decides for them has stopped informing and started enforcing,
+which is the gates' job.
+
+**A failure was being counted as a warning.** `_collect_warnings` returned a flat list of
+strings, so a rule that FAILs at 4.5 and a genuine advisory shared a container and a
+count. The fix is at the source rather than in the console: `Advisory` carries
+`severity`, `rule_id` and `blocks_at`, so the two cannot be conflated by any reader, and
+the console renders *Blocking failures (1)* and *Warnings (1)* as separate blocks with
+separate counts. Deriving it in the page from a substring match on `"FAIL"` would have
+worked until the day a warning mentioned the word.
+
+**Raw JSON was the default view.** Three capacity numbers as an object literal and a
+warnings array with escaped quotes, printed at the human about to take responsibility for
+what they read. Capacity is three metric cards, unfilled positions render as a sentence
+when empty, the artifacts hash truncates with a copy control and one line on what it
+binds. The raw object stays behind a *View raw* toggle — engineers need it, and when a
+rendered summary and the underlying object disagree the object is the one that is true.
+
+**V13 reads as English.** It was a formula: `192 approvals x 6 min = 1152 minutes against
+144 available`. It is now three sentences that keep every number, and the last one is
+pinned verbatim by a test — the utilisation factor is the one number in that rule
+somebody can lower to make it pass without changing anything real, so the message closes
+that door explicitly.
+
+**Run history states its finding.** Six runs, all Pack 1.0.0, all stopped at gate 4,
+rendered as six identical rows: the pattern was the most useful fact on the page and the
+reader had to derive it. The heading now carries it, the Pack version is on every row —
+consecutive runs sharing a version is the signal that nothing changed — and older
+identical outcomes collapse behind a count.
+
+**`aborted` and `rejected` no longer share a colour.** Abandonment is neutral and says
+nothing about the artifacts; rejection is a judgement about them. `aborted` also renders
+as *abandoned*, because "aborted" reads as a crash when somebody chose it.
+
+**Gate 9.5 reads the same on both screens.** It said *not run* here and *blocked —
+ceiling* on the index, because each screen described the ladder in its own terms. Both
+now call `provisioning.ladder_for`, so one gate cannot mean two things depending on which
+page you opened.
+
+**Two review actions instead of two cards.** *Record review and advance* and *Record
+review only*, in one form. They sat in separate cards with no stated relationship, so
+whether advancing needed the review first was something an operator found out by trying.
+
+**Two smaller defects found on the way.** The shared `Button` hardcoded `text-white` on
+`bg-surface-inverse`; that surface flips with the theme, so every filled button rendered
+white-on-white for dark-mode readers. And starting a second run for a venture surfaced
+the `ux_run_active` constraint as a bare **500** — a deliberate rule reported as an
+internal error teaches an operator that the system is broken when it is working. It now
+refuses with a message naming the run in the way. The constraint is still the control:
+the pre-check loses a race between two simultaneous requests, and a test proves the
+database refuses independently by inserting past the check.
+
 ## Known gaps
 
 *Last verified: 2026-08-24.*
@@ -530,6 +594,14 @@ palette and a lock icon.
   rejected session redirects to the login page — it used to throw a 500, because only a
   *missing* cookie raised `NotAuthenticated` while a *rejected* one raised `ApiError`
   that no page caught.
+- **A run started before this increment has the old gate-4 evidence.** Advisories are
+  recorded when the gate runs, so runs already parked at gate 4 carry the flat `warnings`
+  list and show no downstream banner. Re-running produces the structured form; nothing
+  backfills.
+- **"Awaiting you" means "awaiting somebody with your role".** Gate 4 names no individual
+  — any venture operator can review — so the page says "awaiting you" to anyone who could
+  act and "awaiting a venture operator" to anyone who could not. It is not a personal
+  assignment and does not claim to be.
 - **Per-gate timing is measured from the previous gate's record, not from when the gate
   started.** With gates that take milliseconds this is the same number; a gate that waits
   on a human shows the wait rather than the work, which is arguably the more useful

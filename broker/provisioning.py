@@ -199,7 +199,16 @@ async def _gate_3(ctx: _Context) -> GateOutcome:
         {
             "artifacts_hash": artifacts_hash(artifacts),
             "positions": len(artifacts.roles.positions),
-            "warnings": artifacts.warnings,
+            "advisories": [
+                {
+                    "severity": advisory.severity,
+                    "message": advisory.message,
+                    "source": advisory.source,
+                    "rule_id": advisory.rule_id,
+                    "blocks_at": advisory.blocks_at,
+                }
+                for advisory in artifacts.advisories
+            ],
         },
     )
 
@@ -259,6 +268,20 @@ async def _gate_4(ctx: _Context) -> GateOutcome:
                 "produced_not_yet_certified":
                     artifacts.appointment.capacity.produced_not_yet_certified,
             },
+            # Separated at the source. A rule that FAILS at Gate 4.5 is a known halt one
+            # gate after the one this human is being asked to clear - filing it under
+            # "warnings" alongside a genuine advisory is how a reviewer comes to write a
+            # review, advance, and discover the run stops anyway.
+            "advisories": [
+                {
+                    "severity": advisory.severity,
+                    "message": advisory.message,
+                    "source": advisory.source,
+                    "rule_id": advisory.rule_id,
+                    "blocks_at": advisory.blocks_at,
+                }
+                for advisory in artifacts.advisories
+            ],
             "warnings": artifacts.warnings,
         },
     )
@@ -785,10 +808,26 @@ class _Context:
 async def start_run(
     conn: AsyncConnection, *, venture_id: str, started_by: uuid.UUID
 ) -> uuid.UUID:
-    """Begin a run against the venture's live Pack."""
+    """Begin a run against the venture's live Pack.
+
+    One run at a time per venture, enforced by `ux_run_active`. Two concurrent runs
+    would both issue grants for the same engagement, each unaware of the other's gate
+    state - so the constraint is right and stays. What it must not do is surface as a
+    500: a deliberate rule reported as an internal error teaches the operator that the
+    system is broken when it is working.
+    """
     pack = await packs.live(conn, venture_id)
     if pack is None:
         raise ProvisioningError(f"no live Pack for {venture_id}")
+
+    active = await active_run(conn, venture_id)
+    if active is not None:
+        raise ProvisioningError(
+            f"{venture_id} already has an active run ({str(active.run_id)[:8]}) at gate "
+            f"{active.current_gate}. One run at a time per venture: two would both issue "
+            "grants for this engagement, each unaware of the other. Advance it, or "
+            "abandon it first."
+        )
 
     run_id = uuid.uuid4()
     async with conn.cursor() as cur:
@@ -1053,6 +1092,22 @@ async def _set_status(
     await conn.commit()
 
 
+async def active_run(
+    conn: AsyncConnection, venture_id: str
+) -> RunState | None:
+    """The venture's open run, if it has one. `ux_run_active` guarantees at most one."""
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT run_id FROM provisioning_run WHERE venture_id = %s "
+            "AND status IN ('running', 'blocked', 'awaiting_human')",
+            (venture_id,),
+        )
+        row = await cur.fetchone()
+    if row is None:
+        return None
+    return await get_run(conn, row["run_id"])
+
+
 async def get_run(conn: AsyncConnection, run_id: uuid.UUID) -> RunState | None:
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
@@ -1234,6 +1289,29 @@ GATE_NAMES = {
     "12": "Live",
 }
 
+# One line per gate on what it does. A pending gate that shows only a name tells a
+# reader nothing about what is still ahead of the run; with these the ladder doubles as
+# documentation of the pipeline, which is what makes it worth rendering on a venture that
+# has never been provisioned at all.
+GATE_DESCRIPTIONS = {
+    "0": "Checks the bridge reaches every Forge the Pack depends on.",
+    "1": "Confirms a Pack is authored and live for this venture.",
+    "2": "Runs the full validator. Any FAIL stops the run here.",
+    "3": "Generates positions, workflow, task ledger, curriculum and manifest.",
+    "3.5": "Reconciles the generated manifest against what each Forge declares.",
+    "4": "Waits for a named human to review the artifacts and record what they read.",
+    "4.5": "Re-checks capacity and budget against the generated ledger.",
+    "5": "Issues sandbox grants, scoped to the modules each position operates.",
+    "6": "Seeds knowledge bases and indexes the operating instructions.",
+    "7": "Registers the engagement and appoints agents with grants still inactive.",
+    "8": "Submits the curriculum to SimForge for scenario training.",
+    "9": "Runs the readiness gate per role per domain.",
+    "9.5": "Runs the held-out adversarial set. No deployment can pass this yet.",
+    "10": "Takes a named human signature bound to the artifact hashes.",
+    "11": "Activates production grants against the signed artifacts.",
+    "12": "Venture is live, tiers active, revocation armed.",
+}
+
 # The gate this deployment cannot pass, and the evidence that says so. A block at 9.5 is
 # only the ceiling when the partition does not exist; a held-out verdict of FAIL is a
 # real failure at the same gate, and reading the two the same way would report a venture
@@ -1242,7 +1320,7 @@ CEILING_GATE = "9.5"
 CEILING_EVIDENCE = "held_out_partition_not_created"
 
 
-def _display_status(
+def display_status(
     status: str, current_gate: str, blocking: dict[str, Any] | None
 ) -> str:
     """What actually happened, in words a reader can act on.
@@ -1272,7 +1350,7 @@ def _display_status(
     return f"stopped at gate {current_gate}"
 
 
-def _ladder(
+def ladder_for(
     results: list[dict[str, Any]], current_gate: str | None, status: str | None
 ) -> list[dict[str, Any]]:
     """Every gate, in order, whether or not it ran.
@@ -1321,6 +1399,7 @@ def _ladder(
             "gate": gate,
             "name": GATE_NAMES[gate],
             "title": GATE_TITLES[gate],
+            "description": GATE_DESCRIPTIONS[gate],
             "state": state,
             "reason": None if record is None else record["reason"],
             "evidence": {} if record is None else (record["evidence"] or {}),
@@ -1347,7 +1426,7 @@ _TERMINAL_EVENTS = {
 }
 
 
-async def _human_disposition(
+async def human_disposition(
     conn: AsyncConnection, run_id: str, status: str
 ) -> dict[str, Any] | None:
     """Who ended this run, when, and why they said they did."""
@@ -1438,13 +1517,13 @@ async def directory(conn: AsyncConnection) -> dict[str, Any]:
 
         display = (
             None if run is None
-            else _display_status(run["status"], run["current_gate"], blocking)
+            else display_status(run["status"], run["current_gate"], blocking)
         )
         disposition = (
             None if run is None
-            else await _human_disposition(conn, run["run_id"], run["status"])
+            else await human_disposition(conn, run["run_id"], run["status"])
         )
-        ladder = _ladder(
+        ladder = ladder_for(
             results,
             None if run is None else run["current_gate"],
             None if run is None else run["status"],
@@ -1550,7 +1629,7 @@ async def directory(conn: AsyncConnection) -> dict[str, Any]:
         "portfolio_size": len(ventures_mod.PORTFOLIO),
         # The ladder as it looks before anything has run. The empty state renders this
         # rather than a blank card: what a run *will* do is more use than nothing.
-        "empty_ladder": _ladder([], None, None),
+        "empty_ladder": ladder_for([], None, None),
     }
 
 
@@ -1599,7 +1678,7 @@ async def venture_history(
             ),
             "gates_passed": int(row["gates_passed"]),
             "current_gate_name": GATE_NAMES[row["current_gate"]],
-            "display_status": _display_status(
+            "display_status": display_status(
                 row["status"], row["current_gate"], blocking
             ),
             "reason": None if blocking is None else blocking["reason"],

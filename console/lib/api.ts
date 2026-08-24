@@ -435,6 +435,8 @@ export type LadderRow = {
   /** Plain language, for scanning. `title` is what the gate actually checks. */
   name: string;
   title: string;
+  /** One line on what the gate does, so a pending row is not just a name. */
+  description: string;
   state: "passed" | "blocked" | "awaiting" | "running" | "pending";
   reason: string | null;
   evidence: Record<string, unknown>;
@@ -445,6 +447,30 @@ export type LadderRow = {
   is_ceiling: boolean;
   /** Never ran, because the run stopped before reaching it. Not the same as "not yet". */
   downstream_of_stop: boolean;
+};
+
+/** Who ended a run, when, and the reason they gave. Read from the audit log. */
+export type Disposition = {
+  actor: string | null;
+  at: string;
+  reason: string | null;
+  gate: string | null;
+};
+
+/**
+ * Something a human should see at gate 4, and how much it matters.
+ *
+ * `severity` is the whole point: a rule that FAILs at gate 4.5 was being rendered in a
+ * block labelled "Generator warnings" beside a genuine advisory, sharing a count. One
+ * of those halts the run one gate later and the other does not.
+ */
+export type Advisory = {
+  severity: "fail" | "warn";
+  message: string;
+  source: string;
+  rule_id: string | null;
+  /** The gate this will stop the run at, when it is a failure. */
+  blocks_at: string | null;
 };
 
 export type RunStop = {
@@ -495,6 +521,12 @@ export type ProvisioningDirectory = {
   empty_ladder: LadderRow[];
 };
 
+export type Me = {
+  human_id: string;
+  display_name: string;
+  roles: string[];
+};
+
 export type HistoryRun = {
   run_id: string;
   status: string;
@@ -522,24 +554,18 @@ export type RunSummary = {
   gates_passed: number;
 };
 
-export type GateRow = {
-  gate: string;
-  title: string;
-  verdict: "passed" | "blocked" | "awaiting_human" | null;
-  reason: string | null;
-  evidence: Record<string, unknown>;
-  recorded_at: string | null;
-  is_current: boolean;
-};
-
 export type RunDetail = {
   run_id: string;
   venture_id: string;
   pack_version: string;
   status: string;
+  /** The reader's vocabulary. `awaiting_human` is a column value, not a sentence. */
+  display_status: string;
+  disposition: Disposition | null;
   current_gate: string;
+  current_gate_name: string;
   artifacts_hash: string | null;
-  ladder: GateRow[];
+  ladder: LadderRow[];
   history: {
     gate: string;
     verdict: string;

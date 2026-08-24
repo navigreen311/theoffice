@@ -420,27 +420,34 @@ if [ -n "$RUN_ID" ]; then
   code="$(curl -s -b "$COOKIE_JAR" -o /dev/null -w '%{http_code}'     "http://127.0.0.1:$CONSOLE_PORT/provisioning/$PACK_VENTURE")"
   [ "$code" = "200" ] || fail "the gate ladder returned $code"
 
+  sed 's/<!-- -->//g' "$WORK"/ladder.html > "$WORK"/ladder-text.html
+
   # Sixteen rows, not nine. A ladder that lists only what has happened shows a stopped
-  # run as a tidy column of passes.
-  # React renders `Gate {g.gate}` as separate text nodes with a comment between them,
-  # so "Gate 9.5" never appears as a literal string. Counting the verdict labels is the
-  # check that actually holds: sixteen rows, whatever has and has not run.
-  rows="$(grep -o 'passed\|blocked\|awaiting a human\|not run' "$WORK"/ladder.html     | wc -l | tr -d ' ')"
-  if [ "$rows" -ge 16 ]; then
-    say "every gate has a verdict label ($rows across the ladder and the history table)"
+  # run as a tidy column of passes. Counted by gate name, because React splits
+  # `Gate {g.gate}` across text nodes and "Gate 9.5" never appears as a literal string.
+  missing_row=0
+  for name in "Bridge operational" "Pack authored" "Pack validated" "Generators ran" \
+              "Manifest reconciled" "Human review" "Capacity and budget check" \
+              "Sandbox grants issued" "Knowledge bases seeded" "Agents appointed, paused" \
+              "Curriculum to SimForge" "Readiness Gate" "Held-out set" \
+              "Named-human sign-off" "Production grants" "Live"; do
+    grep -qF "$name" "$WORK"/ladder-text.html || { fail "gate row missing: $name"; missing_row=1; }
+  done
+  [ "$missing_row" -eq 0 ] && say "all sixteen gate rows render, including the ones still ahead"
+
+  # A pending gate that shows only a name says nothing about what is ahead of the run.
+  if grep -qF "Runs the readiness gate per role per domain" "$WORK"/ladder-text.html; then
+    say "pending gates describe what they will do"
   else
-    fail "the ladder rendered $rows verdict labels; a ladder that lists only what has happened shows a stopped run as a tidy column of passes"
-  fi
-  if grep -q 'not run' "$WORK"/ladder.html; then
-    say "gates that have not run say so, rather than being absent"
-  else
-    fail "no gate rendered as 'not run'"
+    fail "pending gates render as bare names - the ladder documents nothing"
   fi
 
-  if grep -q 'awaiting a human' "$WORK"/ladder.html; then
-    say "gate 4 renders as awaiting a human, not as blocked or passed"
+  # The same gate cannot mean two things on two screens.
+  if grep -qF "blocked — ceiling" "$WORK"/ladder-text.html \
+     || grep -qF "blocked - ceiling" "$WORK"/ladder-text.html; then
+    say "gate 9.5 reads as the ceiling here, as it does on the index"
   else
-    fail "gate 4 did not render its own verdict - awaiting_human collapsed into something else"
+    fail "gate 9.5 reads as an ordinary pending gate here and as a hard ceiling on the index"
   fi
 
   if grep -qi 'What did you review' "$WORK"/ladder.html; then
@@ -454,6 +461,78 @@ if [ -n "$RUN_ID" ]; then
     say "the review brief is expanded above the form"
   else
     fail "the review form rendered without the artifacts summary above it - that is a rubber-stamp machine"
+  fi
+
+  # The copy this screen is carried by.
+  preserved=0
+  while IFS= read -r phrase; do
+    grep -qF "$phrase" "$WORK"/ladder-text.html \
+      || { fail "detail page lost: ${phrase:0:60}"; preserved=1; }
+  done <<'PHRASES'
+This gate waits. It does not pass on its own, and nothing advances until a named human records what they read.
+Runs from gate 4 until a gate stops it. Gates are not skippable.
+Abandoning frees the venture for a new run. It does not revoke anything
+Required. Recorded against your name in the append-only log.
+All sixteen, including the ones still ahead.
+PHRASES
+  [ "$preserved" -eq 0 ] && say "the preserved copy is present verbatim"
+
+  # The gap this rebuild closed. The page knew V13 fails at gate 4.5 and filed it under
+  # "Generator warnings", then asked a human to write a review and advance into the halt.
+  if grep -qF "Advancing will stop at gate" "$WORK"/ladder-text.html; then
+    say "a known downstream failure is stated before the human is asked to act"
+  elif grep -qF "Blocking failures (" "$WORK"/ladder-text.html; then
+    fail "a blocking failure is listed but the page does not warn before the review form"
+  else
+    notrun "downstream blocker banner - this run has no failing downstream rule"
+  fi
+
+  # FAIL never inside a container labelled warnings, and never sharing its count.
+  if grep -qE "Generator warnings \([0-9]+\)" "$WORK"/ladder-text.html; then
+    fail "failures and warnings still share a container and a count"
+  else
+    say "failures and warnings do not share a container"
+  fi
+
+  # No raw JSON at the reviewer by default; still reachable for engineers.
+  if grep -qF '{"certified_and_free"' "$WORK"/ladder-text.html; then
+    fail "raw JSON is still rendered at the reviewer by default"
+  else
+    say "no raw JSON in the default view"
+  fi
+  if grep -qF "View raw" "$WORK"/ladder-text.html; then
+    say "the raw evidence is still reachable behind a toggle"
+  else
+    fail "the raw evidence is gone entirely - engineers need it"
+  fi
+
+  # The line that closes off the obvious wrong fix.
+  if grep -qF "V13" "$WORK"/ladder-text.html; then
+    if grep -qF "not by lowering the utilisation factor" "$WORK"/ladder-text.html; then
+      say "the V13 message keeps the line that rules out lowering the utilisation factor"
+    else
+      fail "V13 renders without the sentence ruling out the wrong fix"
+    fi
+  fi
+
+  # Validation errors belong on submit, not on load.
+  if grep -qF "Abandoning a run needs a reason" "$WORK"/ladder-text.html; then
+    fail "a validation error renders before the form has been submitted"
+  else
+    say "no validation error renders on load"
+  fi
+
+  if grep -qF "Record review and advance" "$WORK"/ladder-text.html; then
+    say "recording a review and advancing is one action"
+  else
+    fail "recording a review and advancing are still two unrelated controls"
+  fi
+
+  # History states the pattern rather than listing identical rows.
+  if grep -qE "Run history — [0-9]+ run" "$WORK"/ladder-text.html; then
+    say "the run history heading carries the finding"
+  else
+    fail "run history is a bare list again"
   fi
 
   # Abandon what this script started, which also exercises the abort path.

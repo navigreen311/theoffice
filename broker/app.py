@@ -1098,6 +1098,21 @@ async def list_provisioning_runs(
     return await provisioning.list_runs(conn, venture_id=venture_id)
 
 
+@app.get("/api/me")
+async def whoami(me: ME) -> dict[str, Any]:
+    """The signed-in human.
+
+    Needed so a screen can say "awaiting you" rather than "awaiting_human". Which of
+    those a reader sees decides whether they realise the run is waiting on them.
+    """
+    return {
+        "human_id": str(me.human_id),
+        "display_name": me.display_name,
+        # (role, venture_id); the venture scope is not this route's business.
+        "roles": sorted({role for role, _venture in me.roles}),
+    }
+
+
 # Declared BEFORE `/api/provisioning/runs/{run_id}`. A literal segment registered
 # after a parameterised one at the same depth is unreachable - FastAPI hands it to the
 # path parameter and answers 200 with the wrong body. `/api/packs/directory` shipped
@@ -1137,28 +1152,33 @@ async def provisioning_run(run_id: uuid.UUID, conn: DB, _me: ME) -> dict[str, An
         raise HTTPException(status_code=404, detail="no such run")
     results = await provisioning.gate_results(conn, run_id)
 
-    latest: dict[str, dict[str, Any]] = {}
-    for row in results:
-        latest[row["gate"]] = row
+    # The same builder the index uses. Gate 9.5 read `not run` here and `blocked -
+    # ceiling` there, because two screens each described the ladder in their own terms;
+    # one gate cannot mean two things depending on which page you opened.
+    ladder = provisioning.ladder_for(results, state.current_gate, state.status)
 
-    ladder = [
-        {
-            "gate": gate,
-            "title": provisioning.GATE_TITLES[gate],
-            "verdict": latest.get(gate, {}).get("verdict"),
-            "reason": latest.get(gate, {}).get("reason"),
-            "evidence": latest.get(gate, {}).get("evidence", {}),
-            "recorded_at": latest.get(gate, {}).get("recorded_at"),
-            "is_current": gate == state.current_gate,
-        }
-        for gate in provisioning.GATE_SEQUENCE
-    ]
+    blocking = next(
+        (
+            row for row in results
+            if row["gate"] == state.current_gate and row["verdict"] != "passed"
+        ),
+        None,
+    )
+    disposition = await provisioning.human_disposition(
+        conn, str(state.run_id), state.status
+    )
+
     return {
         "run_id": str(state.run_id),
         "venture_id": state.venture_id,
         "pack_version": state.pack_version,
         "status": state.status,
+        "display_status": provisioning.display_status(
+            state.status, state.current_gate, blocking
+        ),
+        "disposition": disposition,
         "current_gate": state.current_gate,
+        "current_gate_name": provisioning.GATE_NAMES[state.current_gate],
         "artifacts_hash": state.artifacts_hash,
         "ladder": ladder,
         "history": results,

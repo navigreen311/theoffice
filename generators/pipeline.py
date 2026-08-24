@@ -36,6 +36,7 @@ from generators import (
     workflow as workflow_gen,
 )
 from generators.artifacts import (
+    Advisory,
     Appointment,
     ForgeManifest,
     GeneratedArtifacts,
@@ -87,7 +88,9 @@ async def run_all(pack: BusinessPack, conn: AsyncConnection) -> GeneratedArtifac
         curriculum=curriculum,
         forge_manifest=forge_manifest,
         runtime_config=runtime,
-        warnings=_warnings(roles, appointment, forge_manifest, curriculum, gate_4_5),
+        advisories=_warnings(
+            roles, appointment, forge_manifest, curriculum, gate_4_5
+        ),
     )
 
 
@@ -103,31 +106,55 @@ def _warnings(
     forge_manifest: ForgeManifest,
     curriculum: ScenarioPack,
     gate_4_5: ValidationReport,
-) -> list[str]:
+) -> list[Advisory]:
     """Everything a human should see at Gate 4, in one place.
 
     Collected rather than logged: Gate 4 is a human reviewing artifacts, and a
     warning that only exists in a log line is a warning that review will miss.
     """
-    out: list[str] = []
+    out: list[Advisory] = []
+
+    # A rule that FAILS at Gate 4.5 is not a warning. It is a known halt one gate after
+    # the one the human is being asked to clear, and the reviewer is entitled to know
+    # that before they write a review nothing will use.
     for result in gate_4_5.results:
         if result.verdict is Verdict.FAIL:
-            out.append(f"GATE 4.5 {result.rule_id} FAIL: {result.message}")
+            out.append(Advisory(
+                severity="fail", message=result.message,
+                source="gate_4_5", rule_id=result.rule_id, blocks_at="4.5",
+            ))
+
     if roles.unresolved_modules:
-        out.append(
-            f"Modules not in forge_module_registry: {', '.join(roles.unresolved_modules)}"
-        )
+        out.append(Advisory(
+            severity="warn",
+            message=(
+                "Modules not in forge_module_registry: "
+                f"{', '.join(roles.unresolved_modules)}"
+            ),
+            source="roles",
+        ))
     if appointment.shortfall:
-        out.append(appointment.escalation)
+        out.append(Advisory(
+            severity="warn", message=appointment.escalation, source="appointment",
+        ))
     if forge_manifest.reconciliation.declared_not_required:
-        out.append(
-            "DECLARED_NOT_REQUIRED (V25): "
-            f"{', '.join(forge_manifest.reconciliation.declared_not_required)}"
-        )
+        out.append(Advisory(
+            severity="warn",
+            message=(
+                "Declared and paid for, used by nothing: "
+                f"{', '.join(forge_manifest.reconciliation.declared_not_required)}"
+            ),
+            source="forge_manifest", rule_id="V25",
+        ))
     for coverage in curriculum.coverage:
         if not coverage.complete:
-            out.append(
-                f"Coverage {coverage.dimension}: {coverage.covered}/{coverage.denominator}"
-                f" - missing {', '.join(coverage.uncovered)}"
-            )
+            out.append(Advisory(
+                severity="warn",
+                message=(
+                    f"Coverage {coverage.dimension}: {coverage.covered}/"
+                    f"{coverage.denominator} - missing "
+                    f"{', '.join(coverage.uncovered)}"
+                ),
+                source="curriculum",
+            ))
     return out

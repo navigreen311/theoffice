@@ -53,6 +53,7 @@ pass — it is whether that route should exist.
 | `POST /api/packs` | `packs.store` |
 | `POST /api/packs/draft` | `packs.store(publish=False)` — stored, and unreachable by Gate 1 |
 | `POST /api/packs/{venture_id}/publish` | `packs.publish_draft` |
+| `GET /api/me` | the signed-in human, so a screen can say "awaiting you" rather than `awaiting_human` |
 | `POST /api/provisioning/runs` | `provisioning.start_run` |
 | `POST /api/provisioning/runs/{id}/advance` | `provisioning.advance` |
 | `POST /api/provisioning/runs/{id}/review` | `provisioning.record_human_review` |

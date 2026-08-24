@@ -199,7 +199,7 @@ export default async function KnowledgePage({
               href={`/knowledge?venture=${encodeURIComponent(v)}`}
               className={`rounded border px-2 py-1 text-xs ${
                 v === selected
-                  ? "border-ink bg-surface-inverse text-white"
+                  ? "border-ink bg-surface-inverse text-ink-inverse"
                   : "border-line-strong text-ink-secondary"
               }`}
             >

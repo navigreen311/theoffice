@@ -288,8 +288,18 @@ async def test_gate_4_5_catches_what_gate_2_could_not(artifacts, greenstone_worl
         "Greenstone as authored routes more approvals to its compliance officer than "
         "the coverage hours can absorb; Gate 4.5 must catch it"
     )
-    assert "compliance_officer" in v13.message
-    assert "decorative" in v13.message
+    assert "compliance officer" in v13.message
+    # The message has to say what goes wrong above the line, not just report numbers.
+    assert "trust tiers stop meaning anything" in v13.message
+
+    # Verbatim, and it earns the pin. The utilisation factor is the one number here
+    # somebody can lower to make the rule pass without changing anything real, so the
+    # message closes that door explicitly - and a later edit that drops the clause
+    # would leave the obvious wrong fix as the easiest one.
+    assert v13.message.rstrip().endswith(
+        "Fix by raising a trust-tier ceiling, adding reviewer coverage, or cutting "
+        "scope - not by lowering the utilisation factor."
+    )
 
 
 async def test_gate_4_5_resolves_v24(artifacts, greenstone_world):
@@ -301,12 +311,34 @@ async def test_gate_4_5_resolves_v24(artifacts, greenstone_world):
     assert gate_45.get("V24").verdict.value == "PASS", "all positions were filled"
 
 
-async def test_gate_4_5_failure_surfaces_in_the_pipeline_warnings(artifacts):
+async def test_gate_4_5_failure_surfaces_as_a_failure_not_a_warning(artifacts):
     """Gate 4 is a human reading artifacts. A finding that only exists in a log line
-    is a finding that review will miss."""
-    assert any("GATE 4.5" in w and "V13" in w for w in artifacts.warnings), (
-        f"capacity failure not surfaced for human review: {artifacts.warnings}"
+    is a finding that review will miss - and a finding filed under `warnings` is one
+    the reviewer discounts.
+
+    V13 FAILs at Gate 4.5, one gate after the one the human is being asked to clear.
+    Carrying that as a bare string in a list called `warnings` is how the console came
+    to render "Generator warnings (2)" over one blocking failure and one advisory.
+    """
+    v13 = next(
+        (a for a in artifacts.advisories if a.rule_id == "V13"), None
     )
+    assert v13 is not None, (
+        f"capacity failure not surfaced for human review: {artifacts.advisories}"
+    )
+    assert v13.severity == "fail", "a Gate 4.5 FAIL is presented as a warning"
+    assert v13.blocks_at == "4.5", (
+        "the advisory does not say where the run will halt, so the console has to "
+        "infer it from the text of the message"
+    )
+    assert v13.blocking is True
+
+    # And the genuine advisory is still an advisory. The two must not share a severity
+    # any more than they share a container.
+    v25 = next((a for a in artifacts.advisories if a.rule_id == "V25"), None)
+    if v25 is not None:
+        assert v25.severity == "warn"
+        assert v25.blocks_at is None
 
 
 # ---------------------------------------------------------- 5.7 idempotency

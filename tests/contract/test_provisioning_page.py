@@ -182,20 +182,20 @@ async def test_the_ceiling_is_not_reported_as_a_failure(world):
         "gate": "9.5",
         "evidence": {"blocked_by": provisioning.CEILING_EVIDENCE},
     }
-    assert provisioning._display_status("blocked", "9.5", blocking) == "at ceiling"
+    assert provisioning.display_status("blocked", "9.5", blocking) == "at ceiling"
 
     # The same gate, a real adversarial failure. Not the ceiling.
     failed = {"gate": "9.5", "evidence": {"verdict": "FAIL"}}
-    assert provisioning._display_status("blocked", "9.5", failed) == "stopped at gate 9.5"
+    assert provisioning.display_status("blocked", "9.5", failed) == "stopped at gate 9.5"
 
 
 async def test_an_error_is_not_the_same_as_a_policy_block(world):
     """R4 - gate 4 blocking on review is not gate 3 throwing."""
     error = {"gate": "3", "evidence": {"error": True}}
-    assert provisioning._display_status("blocked", "3", error) == "failed at gate 3"
+    assert provisioning.display_status("blocked", "3", error) == "failed at gate 3"
 
     policy = {"gate": "3", "evidence": {}}
-    assert provisioning._display_status("blocked", "3", policy) == "stopped at gate 3"
+    assert provisioning.display_status("blocked", "3", policy) == "stopped at gate 3"
 
 
 async def test_cancelled_and_rejected_are_different_outcomes(world):
@@ -204,8 +204,8 @@ async def test_cancelled_and_rejected_are_different_outcomes(world):
     They were the same status until this increment, because Gate 4's human review could
     only ever approve. A review that cannot decline is not a review.
     """
-    assert provisioning._display_status("aborted", "4", None) == "cancelled"
-    assert provisioning._display_status("rejected", "4", None) == "rejected at gate 4"
+    assert provisioning.display_status("aborted", "4", None) == "cancelled"
+    assert provisioning.display_status("rejected", "4", None) == "rejected at gate 4"
 
 
 async def test_a_human_cannot_reject_a_run_no_gate_handed_them(world):

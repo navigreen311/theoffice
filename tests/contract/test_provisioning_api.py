@@ -228,8 +228,17 @@ async def test_a_run_started_through_the_api_waits_at_gate_4(world, api, pack_ya
     ).json()
     assert len(detail["ladder"]) == 16, "all sixteen gates, including the ones ahead"
     assert [g["gate"] for g in detail["ladder"]][:3] == ["0", "1", "2"]
-    unrun = [g for g in detail["ladder"] if g["verdict"] is None]
-    assert unrun, "gates that have not run report null, not a pass"
+    # `pending`, not a pass. The detail ladder now comes from the same builder the
+    # index uses, so a gate cannot read `not run` on one screen and `blocked - ceiling`
+    # on the other.
+    unrun = [g for g in detail["ladder"] if g["state"] == "pending"]
+    assert unrun, "gates that have not run report pending, not a pass"
+    assert all(g["reason"] is None for g in unrun)
+    ceiling = next(g for g in detail["ladder"] if g["gate"] == "9.5")
+    assert ceiling["is_ceiling"] is True, (
+        "gate 9.5 reads as an ordinary pending gate here while the index calls it a "
+        "hard ceiling - the same gate cannot mean two things"
+    )
     assert any(g["is_current"] and g["gate"] == "4" for g in detail["ladder"])
 
 

@@ -85,8 +85,36 @@ export async function reviewRunAction(
 
   try {
     await api.post(`/api/provisioning/runs/${runId}/review`, { note });
+
+    // Two submits, one form. Recording and advancing is what almost everybody wants;
+    // recording alone is the real second case, for a reviewer who is not the person who
+    // will advance. Splitting them across two cards left the relationship between them
+    // to be discovered by trying.
+    if (String(form.get("then") ?? "") !== "advance") {
+      revalidatePath(`/provisioning/${venture}`);
+      return { ok: "Review recorded. The run stays at gate 4." };
+    }
+
+    const result = await api.post<{
+      status: string;
+      current_gate: string;
+      outcomes: { gate: string; verdict: string; reason: string }[];
+    }>(`/api/provisioning/runs/${runId}/advance`, {});
     revalidatePath(`/provisioning/${venture}`);
-    return { ok: "Review recorded. Advance the run to continue past Gate 4." };
+    revalidatePath("/provisioning");
+
+    const last = result.outcomes[result.outcomes.length - 1];
+    if (!last) {
+      return { ok: `Review recorded. No gate ran; the run is ${result.status}.` };
+    }
+    if (last.verdict === "passed") {
+      return {
+        ok: `Review recorded. ${result.outcomes.length} gate(s) ran, now at gate ${result.current_gate}.`,
+      };
+    }
+    return {
+      ok: `Review recorded. Stopped at gate ${last.gate} — ${last.reason}`,
+    };
   } catch (error) {
     return fail(error);
   }

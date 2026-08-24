@@ -117,14 +117,20 @@ export function Button({
   variant = "default",
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: "default" | "danger";
+  /** `quiet` is the outline button. One filled button per view, for its primary act. */
+  variant?: "default" | "danger" | "quiet";
 }) {
   const base =
-    "inline-flex items-center rounded px-3 py-1.5 text-sm font-medium transition disabled:opacity-50";
+    "inline-flex items-center rounded-lg px-3 py-1.5 text-desc font-medium transition disabled:opacity-50";
+  // `text-ink-inverse`, not `text-white`. `--surface-inverse` flips with the theme -
+  // it is near-black in light mode and near-white in dark - so a hardcoded white label
+  // rendered white-on-white for every dark-mode reader of this button.
   const styles =
     variant === "danger"
-      ? "bg-bad text-white hover:bg-critical"
-      : "bg-surface-inverse text-white hover:bg-surface-inverse";
+      ? "bg-bad text-ink-inverse hover:opacity-90"
+      : variant === "quiet"
+        ? "border border-line text-ink hover:bg-surface-muted"
+        : "bg-surface-inverse text-ink-inverse hover:opacity-90";
   return (
     <button className={`${base} ${styles}`} {...props}>
       {children}

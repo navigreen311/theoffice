@@ -667,15 +667,27 @@ async def validate_gate_4_5(
         )
         review_minutes_by_role.setdefault(human.role, human.median_review_minutes)
 
+    # Written as sentences rather than as a formula. The reviewer this message is for is
+    # the person whose day it describes, and "192 x 6 = 1152 against 144" asks them to
+    # do the arithmetic before they can tell whether it matters. The numbers all survive;
+    # what changes is that they arrive inside a sentence that says what they mean.
     overloaded = []
     for role, approvals in sorted(task_ledger.projected_daily_approvals.items()):
-        needed = approvals * review_minutes_by_role.get(role, 5.0)
+        each = review_minutes_by_role.get(role, 5.0)
+        needed = approvals * each
         available = coverage_by_role.get(role, 0.0)
         if needed > available:
+            over = needed / available if available else float("inf")
+            multiple = (
+                "with no reviewer coverage at all" if available == 0
+                else f"{over:.0f} times over" if over >= 2
+                else f"{(over - 1) * 100:.0f}% over"
+            )
             overloaded.append(
-                f"{role}: {approvals} approvals x "
-                f"{review_minutes_by_role.get(role, 5.0):g} min = {needed:.0f} minutes "
-                f"against {available:.0f} available"
+                f"The {role.replace('_', ' ')} would receive {approvals:,.0f} "
+                f"approvals a day. At {each:g} minutes each that is "
+                f"{needed:,.0f} minutes of review against "
+                f"{available:,.0f} minutes available - {multiple}."
             )
 
     report.results.append(
@@ -683,11 +695,14 @@ async def validate_gate_4_5(
             "V13", Severity.FAIL,
             Verdict.FAIL if overloaded else Verdict.PASS,
             (
-                "approval volume exceeds human capacity - "
-                + "; ".join(overloaded)
-                + ". Trust tiers become decorative above this. Fix by raising a "
-                "trust-tier ceiling, adding reviewer coverage, or reducing scope - "
-                "not by lowering the utilisation factor."
+                " ".join(overloaded)
+                + "\n\nAbove this line trust tiers stop meaning anything: the reviewer "
+                "approves without reading, and the dashboard still shows green."
+                # Verbatim, and last. It closes off the obvious wrong fix - the
+                # utilisation factor is the one number here somebody can change to make
+                # the rule pass without changing anything real.
+                + "\n\nFix by raising a trust-tier ceiling, adding reviewer coverage, "
+                "or cutting scope - not by lowering the utilisation factor."
             )
             if overloaded
             else "projected approvals fit within reviewer capacity",

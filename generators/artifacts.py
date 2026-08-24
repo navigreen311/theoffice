@@ -325,6 +325,31 @@ class RuntimeConfig(Artifact):
 # ------------------------------------------------------------------- the whole set
 
 @dataclass(frozen=True, slots=True)
+class Advisory(Artifact):
+    """Something a human should see at Gate 4, and how much it matters.
+
+    This used to be a bare string in a list called `warnings`, which is how a rule that
+    FAILS at the next gate came to be filed under "Generator warnings (2)" alongside a
+    genuine advisory. A reviewer reading that count sees two warnings; what they have is
+    one blocking failure and one warning, and the difference decides whether advancing
+    is worth doing at all.
+
+    `blocks_at` is the gate that will stop the run. Carrying it means the console can say
+    *where* the run will halt rather than inferring it from the text of a message.
+    """
+
+    severity: str            # "fail" | "warn"
+    message: str
+    source: str              # which generator or gate raised it
+    rule_id: str | None = None
+    blocks_at: str | None = None
+
+    @property
+    def blocking(self) -> bool:
+        return self.severity == "fail"
+
+
+@dataclass(frozen=True, slots=True)
 class GeneratedArtifacts(Artifact):
     venture_id: str
     roles: RoleDefinition
@@ -334,4 +359,18 @@ class GeneratedArtifacts(Artifact):
     curriculum: ScenarioPack
     forge_manifest: ForgeManifest
     runtime_config: RuntimeConfig
-    warnings: list[str] = field(default_factory=list)
+    advisories: list[Advisory] = field(default_factory=list)
+
+    @property
+    def warnings(self) -> list[str]:
+        """The flat strings, for callers that predate `advisories`.
+
+        Derived rather than stored, so the two cannot disagree - and deliberately still
+        includes the failures, because a caller asking for "everything a human should
+        see" should not silently stop being shown the blocking half.
+        """
+        return [a.message for a in self.advisories]
+
+    @property
+    def blocking_advisories(self) -> list[Advisory]:
+        return [a for a in self.advisories if a.blocking]
