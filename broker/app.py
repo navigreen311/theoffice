@@ -62,6 +62,7 @@ from broker import (
 from broker.db import close_pool, connection
 from broker.errors import NotAuthorized, OfficeError
 from broker.humans import Human
+from generators.validator import all_rule_ids
 from generators.validator import validate as validate_pack
 
 # The migration this build expects. `/api/ready` compares it to what the database
@@ -1065,13 +1066,41 @@ async def pack_detail(venture_id: str, conn: DB, _me: ME) -> dict[str, Any]:
     editor that only showed the current text would make that record unreadable.
     """
     live = await packs.live(conn, venture_id)
+    pending = await packs.draft(conn, venture_id)
+
+    # The editor needs the draft as much as the live version, and until now the route
+    # did not return it - so a draft saved from the directory was invisible on the one
+    # screen built to work on it, and the editor loaded the live Pack over the top.
+    report = None
+    editing = pending or live
+    if editing is not None:
+        result = await validate_pack(editing.pack, conn)
+        report = {
+            "state": packs.validation_state(result),
+            # Everything that is not a PASS, in rule order. Twenty-odd green lines is
+            # how three red ones get skimmed past - but `rules_checked` stays on screen,
+            # so "nothing to show" cannot be read as "nothing was checked".
+            "notable": [
+                row for row in _rule_rows(result) if row["verdict"] != "PASS"
+            ],
+            "rules_checked": len(result.results),
+            "rules_total": len(all_rule_ids()),
+        }
+
     return {
+        "as_of": datetime.now(UTC).isoformat(),
         "venture_id": venture_id,
         "live": None if live is None else {
             "pack_version": live.pack_version,
             "content_hash": live.content_hash,
             "yaml_source": live.yaml_source,
         },
+        "draft": None if pending is None else {
+            "pack_version": pending.pack_version,
+            "content_hash": pending.content_hash,
+            "yaml_source": pending.yaml_source,
+        },
+        "validation": report,
         "versions": await packs.list_versions(conn, venture_id),
     }
 

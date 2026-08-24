@@ -568,6 +568,34 @@ refuses with a message naming the run in the way. The constraint is still the co
 the pre-check loses a race between two simultaneous requests, and a test proves the
 database refuses independently by inserting past the check.
 
+### The Pack editor
+
+The directory rebuild gave Packs drafts, templates, four validation states and a publish
+step. None of it reached the editor — which is the screen where the work those things
+describe actually happens.
+
+**A draft saved from the directory was invisible here.** The detail route returned only
+the live Pack, so the editor opened that over the top of the draft. The draft was still
+stored; it just was not on the screen built to work on it, and the next save wrote over
+it with text the operator had never seen as a draft. The route now returns both, and the
+editor opens the draft in preference, saying which version stays live meanwhile.
+
+**A draft was rendered as live.** The version history keyed "live" off
+`superseded_at IS NULL` — which is true of a draft as well, so an unpublished draft
+appeared with a green live badge beside the version actually in force. Two rows both
+claiming to be what a run would provision. It reads `status` now, which exists precisely
+so this cannot be inferred wrongly.
+
+**Three acts, three forms.** Validate writes nothing; saving a draft stores a document
+that cannot provision; publishing supersedes the live Pack. A stored draft gets its own
+publish control, which says explicitly that it promotes the stored draft rather than the
+text in the box — those differ the moment somebody types.
+
+**One validation state machine.** `packs.validation_state` is shared by the directory and
+the editor, so a Pack cannot read `valid` on one screen and `not validated` on the other,
+and the rule count comes from the registry rather than the copy — the editor said "all 27
+rules" against a registry of 28.
+
 ## Known gaps
 
 *Last verified: 2026-08-24.*

@@ -266,6 +266,27 @@ async def list_ventures(conn: AsyncConnection) -> list[dict[str, Any]]:
         return [dict(r) for r in await cur.fetchall()]
 
 
+def validation_state(report: Any) -> str:
+    """`failing` / `not_validated` / `warnings` / `valid`.
+
+    One implementation, because the directory and the editor must not be able to reach
+    different conclusions about the same Pack - and `not_validated` is the whole point:
+    a rule that could not run has validated nothing, and rendering that as `valid` is
+    the single thing these screens exist to prevent.
+
+    V24 is deferred rather than unrun. It is evaluated at Gate 4.5 against appointment
+    output, which does not exist at Gate 2; counting it would make `not validated`
+    permanent and `valid` unreachable.
+    """
+    if report.failures:
+        return "failing"
+    if [r for r in report.not_run if r.rule_id not in GATE_45_RULES]:
+        return "not_validated"
+    if report.warnings:
+        return "warnings"
+    return "valid"
+
+
 # --------------------------------------------------------------- the directory
 
 # Every top-level block the schema defines. Completeness is a different question from
@@ -391,16 +412,7 @@ async def directory(conn: AsyncConnection) -> dict[str, Any]:
             if r.rule_id not in GATE_45_RULES
         ]
 
-        if failures:
-            state = "failing"
-        elif not_run:
-            # NOT_RUN is not a pass. A rule that could not run has validated nothing,
-            # and rendering that as `valid` is the single thing this page must never do.
-            state = "not_validated"
-        elif warnings:
-            state = "warnings"
-        else:
-            state = "valid"
+        state = validation_state(report)
 
         present = [b for b in every_block if (current["parsed"] or {}).get(b) not in (None, [], {})]
 

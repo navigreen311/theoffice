@@ -399,14 +399,32 @@ export type PackVersion = {
   authored_by: string;
   authored_at: string;
   superseded_at: string | null;
+  /**
+   * `draft` | `live` | `superseded`. Read this, never `superseded_at`: a draft has no
+   * `superseded_at` either, so the old check rendered an unpublished draft with a green
+   * "live" badge beside the version that was actually in force.
+   */
+  status: "draft" | "live" | "superseded";
+};
+
+export type PackSource = {
+  pack_version: string;
+  content_hash: string;
+  yaml_source: string;
 };
 
 export type PackDetail = {
+  as_of: string;
   venture_id: string;
-  live: {
-    pack_version: string;
-    content_hash: string;
-    yaml_source: string;
+  live: PackSource | null;
+  /** The unpublished draft. The editor opens this in preference to `live`. */
+  draft: PackSource | null;
+  validation: {
+    state: "failing" | "not_validated" | "warnings" | "valid";
+    /** Everything that is not a PASS. `rules_checked` carries the denominator. */
+    notable: RuleRow[];
+    rules_checked: number;
+    rules_total: number;
   } | null;
   versions: PackVersion[];
 };

@@ -1076,6 +1076,100 @@ for path in / /provisioning /packs /ventures /provisioning/greenstone; do
 done
 [ "$stable" -eq 0 ] && say "identical requests render identical text"
 
+step "The Pack editor carries what the directory added"
+if [ -n "$PACK_VENTURE" ]; then
+  # A draft, saved the way the directory saves one, so the editor is exercised in the
+  # state the whole draft mechanism exists for rather than only in the empty case.
+  "$VPY" - "$TOKEN" "$API_PORT" <<'PY' | sed 's/^/  /'
+import json, sys, urllib.error, urllib.request
+token, port = sys.argv[1], sys.argv[2]
+source = open("packs/greenstone.yaml", encoding="utf-8").read()
+body = json.dumps({"yaml_source": source, "pack_version": "0.0.1-smoke"}).encode()
+req = urllib.request.Request(
+    f"http://127.0.0.1:{port}/api/packs/draft", data=body, method="POST",
+    headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+)
+try:
+    with urllib.request.urlopen(req) as response:
+        print("draft saved:", json.load(response)["pack_version"])
+except urllib.error.HTTPError as exc:
+    print("draft not saved:", exc.code, exc.read()[:120].decode(errors="replace"))
+PY
+
+  curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT/packs/$PACK_VENTURE" \
+    > "$WORK"/editor.html
+  sed 's/<!-- -->//g' "$WORK"/editor.html > "$WORK"/editor-text.html
+
+  while IFS= read -r phrase; do
+    grep -qF "$phrase" "$WORK"/editor-text.html \
+      || fail "pack editor lost: ${phrase:0:60}"
+  done <<'PHRASES'
+Publishing supersedes the live version and starts nothing. Provisioning is a separate act on a separate screen.
+The hash is taken over these exact bytes, because a reviewer signs a document rather than a parse tree.
+Superseded versions stay readable
+PHRASES
+  say "the preserved copy is present verbatim"
+
+  # The gap: the directory grew drafts and this screen did not.
+  if grep -qF "Save as draft" "$WORK"/editor-text.html; then
+    say "a draft can be saved from the editor"
+  else
+    fail "the editor cannot save a draft - the one screen built to author a Pack"
+  fi
+  if grep -qF "Editing the draft" "$WORK"/editor-text.html; then
+    say "the editor opens the draft and says what stays live"
+  else
+    fail "a draft exists and the editor is not showing it - the work is invisible here"
+  fi
+  if grep -qF "Publish draft" "$WORK"/editor-text.html; then
+    say "a stored draft can be published from the editor"
+  else
+    fail "a draft exists and there is no way to publish it here"
+  fi
+
+  # One Pack cannot be `valid` on one screen and `not validated` on another.
+  if grep -qE "can provision|cannot provision|not validated|provisions with warnings" \
+       "$WORK"/editor-text.html; then
+    say "the editor states validation in the directory's vocabulary"
+  else
+    fail "the editor reports validation in its own words - two screens, two answers"
+  fi
+
+  # The count is the registry's, not a number typed into the copy.
+  if grep -qE "of [0-9]+ rules checked" "$WORK"/editor-text.html; then
+    say "the rule count carries a denominator"
+  else
+    fail "the editor states a rule count with no denominator"
+  fi
+  if grep -qF "all 27 rules" "$WORK"/editor-text.html; then
+    fail "the editor still hardcodes 27 rules; the registry has more"
+  fi
+
+  # A draft must never be labelled live: `superseded_at IS NULL` is true of both.
+  drafts="$(grep -c '>draft<' "$WORK"/editor-text.html || true)"
+  lives="$(grep -c '>live<' "$WORK"/editor-text.html || true)"
+  if [ "$drafts" -ge 1 ] && [ "$lives" -le 1 ]; then
+    say "the version history distinguishes draft from live ($drafts draft, $lives live)"
+  else
+    fail "$lives versions are labelled live - a draft is being rendered as in force"
+  fi
+
+  # Clean up after the check, so a smoke run does not leave a draft on the venture.
+   "$VPY" - "$OFFICE_ADMIN_DSN" <<'PY' | sed 's/^/  /'
+import sys
+import psycopg
+with psycopg.connect(sys.argv[1]) as conn, conn.cursor() as cur:
+    cur.execute(
+        "UPDATE business_pack SET status = 'superseded', superseded_at = now() "
+        "WHERE pack_version = '0.0.1-smoke' AND status = 'draft'"
+    )
+    print(f"smoke draft cleared ({cur.rowcount})")
+    conn.commit()
+PY
+else
+  notrun "pack editor checks - no venture has a Pack"
+fi
+
 step "Every page has a route home"
 # There was no way back to a dashboard from anywhere: the wordmark was not a link and
 # nothing in the nav pointed at `/`.

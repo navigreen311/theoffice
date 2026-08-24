@@ -398,3 +398,84 @@ async def test_a_venture_with_no_pack_is_listed_rather_than_omitted(
     )
     assert body["portfolio_size"] >= len(body["unregistered_portfolio"])
     wipe_venture(admin, "collingswood")
+
+
+# ============================================= P13-P15 - the editor's own data
+
+async def test_the_editor_is_given_the_draft_not_just_the_live_pack(api, world):
+    """P13 - a draft the editor cannot see is work that disappears.
+
+    The directory grew drafts and the detail route did not, so a draft saved from the
+    directory was invisible on the one screen built to work on it. The editor opened the
+    live Pack over the top of it, and the next save wrote over the draft with text the
+    operator had never seen as a draft.
+    """
+    token = world.token
+    source = PACK_PATH.read_text(encoding="utf-8")
+
+    async with connection() as conn:
+        await packs.store(
+            conn, yaml_source=source, pack_version="7.7.7-draft",
+            authored_by=world.human_id, publish=False,
+        )
+
+    body = (
+        await api.get(f"/api/packs/{VENTURE}", headers=auth(token))
+    ).json()
+
+    assert body["draft"] is not None, (
+        "the detail route returns no draft, so the editor cannot open one"
+    )
+    assert body["draft"]["pack_version"] == "7.7.7-draft"
+    assert body["live"] is not None and body["live"]["pack_version"] == "1.0.0", (
+        "the live Pack vanished when a draft was saved"
+    )
+
+
+async def test_a_draft_is_never_labelled_live_in_the_version_history(api, world):
+    """P14 - `superseded_at IS NULL` is true of a draft as well as the live Pack.
+
+    The history rendered "live" for anything with no `superseded_at`, so an unpublished
+    draft appeared with a green live badge beside the version that was actually in
+    force - two rows both claiming to be what a run would provision.
+    """
+    token = world.token
+    async with connection() as conn:
+        await packs.store(
+            conn, yaml_source=PACK_PATH.read_text(encoding="utf-8"),
+            pack_version="8.8.8-draft", authored_by=world.human_id, publish=False,
+        )
+
+    body = (await api.get(f"/api/packs/{VENTURE}", headers=auth(token))).json()
+    by_version = {row["pack_version"]: row for row in body["versions"]}
+
+    draft_row = by_version["8.8.8-draft"]
+    assert draft_row["status"] == "draft"
+    assert draft_row["superseded_at"] is None, (
+        "this test is pointless unless a draft really does have no superseded_at - "
+        "that is the whole reason the old check was wrong"
+    )
+
+    live = [row for row in body["versions"] if row["status"] == "live"]
+    assert len(live) == 1, f"{len(live)} versions claim to be live"
+    assert live[0]["pack_version"] == "1.0.0"
+
+
+async def test_the_editor_and_the_directory_agree_on_validation_state(api, world):
+    """P15 - one Pack cannot be `valid` on one screen and `not validated` on another.
+
+    Both now call `packs.validation_state`. Two copies of a four-state machine disagree
+    eventually, and the state they disagree about is whether a document can go live.
+    """
+    token = world.token
+
+    detail = (await api.get(f"/api/packs/{VENTURE}", headers=auth(token))).json()
+    directory = (await api.get("/api/packs/directory", headers=auth(token))).json()
+    card = next(p for p in directory["packs"] if p["venture_id"] == VENTURE)
+
+    assert detail["validation"]["state"] == card["validation"]["state"]
+    assert detail["validation"]["rules_total"] == directory["rules_total"]
+    # Non-PASS only. Twenty-odd green rows is how three red ones get skimmed past.
+    assert all(
+        row["verdict"] != "PASS" for row in detail["validation"]["notable"]
+    )
