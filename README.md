@@ -77,10 +77,11 @@ Migrates, seeds the dev world and the Greenstone Pack if they are missing, issue
 token for the operator (**reissuing** rather than failing when they already exist), and
 starts the API and the console. Prints the URL and the token.
 
-Re-run it after the test suite: the suite empties `office_human`, the Forge registry and
-every venture-scoped table, which is correct — a suite that left rows behind would be a
-suite whose next run depended on its last — and it means a browser session dies every
-time the tests run.
+The test suite runs against **its own database** (`OFFICE_TEST_ADMIN_DSN` /
+`OFFICE_TEST_APP_DSN`, created by `bootstrap.sh`), so running the tests no longer ends
+your console session. Without those set the suite falls back to the development database
+and says so at startup rather than quietly emptying it — it empties every table it
+touches, which is correct for a suite and fatal for a session.
 
 Sign in at **http://localhost:3100**, not `127.0.0.1`: the session cookie is scoped to
 the host you sign in on, and Next redirects to `localhost` regardless.

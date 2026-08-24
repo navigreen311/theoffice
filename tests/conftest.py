@@ -23,8 +23,42 @@ import pytest_asyncio
 
 from broker.db import close_pool
 
-ADMIN_DSN = os.environ.get("OFFICE_ADMIN_DSN")
-APP_DSN = os.environ.get("OFFICE_APP_DSN")
+# The suite runs against its OWN database when one is configured.
+#
+# It empties `office_human`, the Forge registry and every venture-scoped table, which is
+# correct - a suite that left rows behind would be a suite whose next run depended on
+# its last. Pointed at the development database, that is also the reason a browser
+# session dies every time the tests run, which happened four times before this existed.
+#
+# `OFFICE_TEST_ADMIN_DSN` / `OFFICE_TEST_APP_DSN` take precedence. Falling back to the
+# development pair keeps a bare checkout working and keeps CI unchanged, but the
+# fallback announces itself rather than quietly destroying somebody's data.
+TEST_ADMIN_DSN = os.environ.get("OFFICE_TEST_ADMIN_DSN")
+TEST_APP_DSN = os.environ.get("OFFICE_TEST_APP_DSN")
+
+ADMIN_DSN = TEST_ADMIN_DSN or os.environ.get("OFFICE_ADMIN_DSN")
+APP_DSN = TEST_APP_DSN or os.environ.get("OFFICE_APP_DSN")
+
+USING_DEV_DATABASE = bool(ADMIN_DSN) and not TEST_ADMIN_DSN
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Say it out loud when the suite is about to empty the development database.
+
+    The parameter must be called `config`: pytest matches hook arguments by NAME against
+    the hookspec, so renaming it to `_config` to satisfy an unused-argument lint makes
+    pytest refuse to load this file at all. It did, and the suite did not run.
+    """
+    if USING_DEV_DATABASE and not os.environ.get("OFFICE_TEST_DB_WARNING_OK"):
+        print(
+            "\n  NOTE: no OFFICE_TEST_ADMIN_DSN is set, so this suite is running "
+            "against the\n"
+            "  development database and will empty it. Any console session you have "
+            "open will\n"
+            "  stop working. `./scripts/dev-up.sh` restores it, or run "
+            "`./scripts/bootstrap.sh`\n"
+            "  once to create a separate test database.\n"
+        )
 
 # Every table that references a Forge or one of its modules, in deletion order.
 # One list, because this has bitten four times: each phase adds another referencing
@@ -123,6 +157,15 @@ def wipe_venture(conn: psycopg.Connection, venture_id: str) -> None:
             cur.execute(f"DELETE FROM {table} WHERE venture_id = %s", (venture_id,))
     conn.commit()
 
+
+if TEST_APP_DSN:
+    # `broker.db` builds its pool from `Settings`, which reads OFFICE_APP_DSN. Without
+    # this the fixtures would set up one database and the code under test would query
+    # another - and every assertion about a row somebody just inserted would fail for a
+    # reason that looks like a bug in the code rather than in the harness.
+    os.environ["OFFICE_APP_DSN"] = TEST_APP_DSN
+if TEST_ADMIN_DSN:
+    os.environ["OFFICE_ADMIN_DSN"] = TEST_ADMIN_DSN
 
 requires_db = pytest.mark.skipif(
     not ADMIN_DSN or not APP_DSN,
