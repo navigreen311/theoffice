@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 
+import { Ago } from "@/components/local-time";
 import { History, PlayerPlay, Refresh, X } from "@/components/icons";
 import type { HistoryRun, ProvisioningCard } from "@/lib/api";
 import { relativeAge } from "@/lib/severity";
@@ -346,7 +347,7 @@ export function RunHistory({
               <span className="text-meta text-ink-muted">
                 {run.gates_passed} gate{run.gates_passed === 1 ? "" : "s"} cleared · Pack{" "}
                 <span className="font-mono">{run.pack_version}</span> ·{" "}
-                {relativeAge(run.started_at)}
+                <Ago iso={run.started_at} />
                 {run.actor ? ` · started by ${run.actor}` : ""}
               </span>
             </div>

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { Ago } from "@/components/local-time";
 import type { RunSummary } from "@/lib/api";
 import { relativeAge } from "@/lib/severity";
 
@@ -162,14 +163,14 @@ export function RunHistoryTable({ runs }: { runs: RunSummary[] }) {
               {run.gates_passed} cleared
             </span>
             <span className="ml-auto text-meta text-ink-muted">
-              started {relativeAge(run.started_at)}
-              {run.completed_at ? ` · ended ${relativeAge(run.completed_at)}` : ""}
+              started <Ago iso={run.started_at} />
+              {run.completed_at ? ` · ended $<Ago iso={run.completed_at} />` : ""}
             </span>
           </li>
         ))}
       </ul>
 
-      {older.length && !expanded ? (
+      {older.length > 0 && !expanded ? (
         <button
           type="button"
           onClick={() => setExpanded(true)}

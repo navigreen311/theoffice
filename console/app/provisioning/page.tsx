@@ -10,6 +10,7 @@ import {
   Minus,
   X,
 } from "@/components/icons";
+import { Ago, AsOf } from "@/components/local-time";
 import {
   api,
   NotAuthenticated,
@@ -170,7 +171,7 @@ function StopReason({ venture }: { venture: ProvisioningCard }) {
           to whoever kicked the run off days earlier.
         */}
         {run.stop.actor ? ` by ${run.stop.actor}` : ""}
-        {run.stop.at ? ` · ${relativeAge(run.stop.at)}` : ""}
+        {run.stop.at ? ` · $<Ago iso={run.stop.at} />` : ""}
       </p>
       <p className="mt-1 text-desc text-ink-secondary">
         {run.stop.reason}
@@ -214,17 +215,26 @@ function Meta({ venture }: { venture: ProvisioningCard }) {
   const run = venture.run;
   if (!run) return null;
 
+  // `Date.now()` for an open run is read once on the server and again on hydration, so
+  // the two renders disagree by however long the round trip took. A run that is still
+  // going has no settled duration anyway - saying so is more honest than a number that
+  // was true for one instant on a machine the reader is not using.
   const started = new Date(run.started_at).getTime();
-  const ended = run.completed_at ? new Date(run.completed_at).getTime() : Date.now();
-  const duration = elapsed(Math.max(0, ended - started) / 1000);
+  const duration = run.completed_at
+    ? elapsed(Math.max(0, new Date(run.completed_at).getTime() - started) / 1000)
+    : null;
 
   return (
     <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-line pt-2.5 text-meta text-ink-muted">
       <span>
         Run <code className="text-ident text-ink-secondary">{run.run_id.slice(0, 8)}</code>
       </span>
-      <span>started {relativeAge(run.started_at)}</span>
-      {duration ? <span>{duration} elapsed</span> : null}
+      <span>started <Ago iso={run.started_at} /></span>
+      {duration ? (
+        <span>{duration} elapsed</span>
+      ) : (
+        <span>still running</span>
+      )}
       <span>
         {run.gates_passed} of {venture.ladder.length} gates cleared
       </span>
@@ -335,7 +345,7 @@ export default async function ProvisioningPage() {
         </div>
         <div className="flex flex-col items-end gap-2">
           <span className="text-meta text-ink-muted">
-            As of {new Date(directory.as_of).toLocaleString()}
+            <AsOf iso={directory.as_of} />
           </span>
           <StartRun candidates={candidates} />
         </div>

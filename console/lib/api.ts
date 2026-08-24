@@ -555,6 +555,7 @@ export type RunSummary = {
 };
 
 export type RunDetail = {
+  as_of: string;
   run_id: string;
   venture_id: string;
   pack_version: string;

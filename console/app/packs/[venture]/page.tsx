@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import { Ago } from "@/components/local-time";
 import { Badge, Card, Cell, Row, Table } from "@/components/ui";
 import {
   api,
@@ -101,10 +102,10 @@ export default async function PackEditorPage({
             <Row key={v.pack_version}>
               <Cell mono>{v.pack_version}</Cell>
               <Cell mono>{v.content_hash.slice(0, 16)}…</Cell>
-              <Cell>{relativeAge(v.authored_at)}</Cell>
+              <Cell><Ago iso={v.authored_at} /></Cell>
               <Cell>
                 {v.superseded_at ? (
-                  <Badge>superseded {relativeAge(v.superseded_at)}</Badge>
+                  <Badge>superseded <Ago iso={v.superseded_at} /></Badge>
                 ) : (
                   <Badge severity="ok">live</Badge>
                 )}

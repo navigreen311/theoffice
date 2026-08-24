@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { Ago } from "@/components/local-time";
 import { Badge, Card, Cell, Row, Table } from "@/components/ui";
 import {
   api,
@@ -248,7 +249,7 @@ export default async function KnowledgePage({
               <Cell>{s.reason}</Cell>
               <Cell>
                 {s.revoked_at ? (
-                  <Badge>withdrawn {relativeAge(s.revoked_at)}</Badge>
+                  <Badge>withdrawn <Ago iso={s.revoked_at} /></Badge>
                 ) : (
                   <Badge severity="ok">active</Badge>
                 )}
@@ -296,7 +297,7 @@ export default async function KnowledgePage({
         >
           {history.map((r) => (
             <Row key={r.record_id}>
-              <Cell>{relativeAge(r.occurred_at)}</Cell>
+              <Cell><Ago iso={r.occurred_at} /></Cell>
               <Cell>{r.venture_id ?? "portfolio"}</Cell>
               <Cell mono>{r.record_type}</Cell>
               <Cell>{r.summary}</Cell>

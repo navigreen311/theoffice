@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { Ago } from "@/components/local-time";
 import { Badge, Card, Cell, Field, Row, Table, inputClass } from "@/components/ui";
 import {
   api,
@@ -181,7 +182,7 @@ export default async function InstructionPage({
               <Cell mono>{v.instruction_version}</Cell>
               <Cell mono>{v.forge_api_version}</Cell>
               <Cell mono>{v.version_sensitivity}</Cell>
-              <Cell>{relativeAge(v.authored_at)}</Cell>
+              <Cell><Ago iso={v.authored_at} /></Cell>
               <Cell>
                 <Badge severity={v.superseded_at ? "neutral" : "ok"}>
                   {v.superseded_at ? "superseded" : "live"}

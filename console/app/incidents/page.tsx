@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { Ago } from "@/components/local-time";
 import { Pager } from "@/components/pager";
 import { Badge, Card, Cell, Row, Table } from "@/components/ui";
 import { api, NotAuthenticated, type IncidentRow, type Paged } from "@/lib/api";
@@ -79,12 +80,12 @@ export default async function IncidentsPage({
               </Cell>
               <Cell mono>{incident.kind}</Cell>
               <Cell>{incident.venture_id ?? "—"}</Cell>
-              <Cell>{relativeAge(incident.raised_at)}</Cell>
+              <Cell><Ago iso={incident.raised_at} /></Cell>
               <Cell>
                 {incident.resolved_at ? (
                   <div className="space-y-1">
                     <Badge severity="ok">
-                      resolved {relativeAge(incident.resolved_at)}
+                      resolved <Ago iso={incident.resolved_at} />
                     </Badge>
                     <p className="text-xs text-ink-secondary">{incident.resolution}</p>
                   </div>

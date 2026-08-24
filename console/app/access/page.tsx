@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { Ago } from "@/components/local-time";
 import { Badge, Card, Cell, Row, Table } from "@/components/ui";
 import {
   api,
@@ -129,7 +130,7 @@ export default async function AccessPage() {
               <Cell>
                 <Badge severity={h.status === "active" ? "ok" : "bad"}>{h.status}</Badge>
               </Cell>
-              <Cell>{relativeAge(h.created_at)}</Cell>
+              <Cell><Ago iso={h.created_at} /></Cell>
               <Cell>
                 <div className="space-y-3">
                   <StatusForm humanId={h.human_id} status={h.status} />
@@ -182,7 +183,7 @@ export default async function AccessPage() {
                 {r.module_id ? ` · ${r.module_id}` : ""}
               </Cell>
               <Cell>{r.reason}</Cell>
-              <Cell>{relativeAge(r.revoked_at)}</Cell>
+              <Cell><Ago iso={r.revoked_at} /></Cell>
               <Cell mono>{r.revoked_by_role}</Cell>
               <Cell>
                 <ReinstateForm revocationId={r.revocation_id} />

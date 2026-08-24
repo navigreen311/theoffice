@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { Ago } from "@/components/local-time";
 import { Badge, Card, Cell, Field, Row, Table, inputClass } from "@/components/ui";
 import { Pager } from "@/components/pager";
 import {
@@ -62,7 +63,7 @@ export default async function AuditPage({
             {chain.ok ? "verified" : "BROKEN"}
           </Badge>
           <span className="text-ink-secondary">
-            {chain.checked_count.toLocaleString()} entries
+            {chain.checked_count.toLocaleString("en-US")} entries
           </span>
           <span className="text-xs text-ink-muted">
             Entries below are meaningless if this is broken — read it first.
@@ -111,7 +112,7 @@ export default async function AuditPage({
                 </Badge>
               </Cell>
               <Cell>{entry.venture_id ?? "—"}</Cell>
-              <Cell>{relativeAge(entry.ts)}</Cell>
+              <Cell><Ago iso={entry.ts} /></Cell>
               <Cell mono>{entry.entry_hash.slice(0, 12)}…</Cell>
             </Row>
           ))}

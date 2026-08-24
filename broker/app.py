@@ -1169,6 +1169,10 @@ async def provisioning_run(run_id: uuid.UUID, conn: DB, _me: ME) -> dict[str, An
     )
 
     return {
+        # Stamped by the server, like every other directory route. The page used to read
+        # its own render clock, which produces one value during SSR and a different one
+        # during hydration - the two renders then disagree about what time it is.
+        "as_of": datetime.now(UTC).isoformat(),
         "run_id": str(state.run_id),
         "venture_id": state.venture_id,
         "pack_version": state.pack_version,

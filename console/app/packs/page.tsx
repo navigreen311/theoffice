@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { Breadcrumb } from "@/components/breadcrumb";
 import { AlertTriangle, GitCompare } from "@/components/icons";
+import { Ago, AsOf } from "@/components/local-time";
 import {
   api,
   NotAuthenticated,
@@ -132,14 +133,14 @@ function Versions({ pack }: { pack: PackCard }) {
         {draft ? (
           <span className="text-desc text-ink-secondary">
             <span className="rounded bg-surface-muted px-1.5 py-0.5 text-meta">draft</span>{" "}
-            <span className="font-mono">{draft.version}</span> · {relativeAge(draft.authored_at)}
+            <span className="font-mono">{draft.version}</span> · <Ago iso={draft.authored_at} />
             {draft.author ? ` by ${draft.author}` : ""}
           </span>
         ) : null}
         {live ? (
           <span className="text-desc text-ink-secondary">
             <span className="rounded bg-ok-bg px-1.5 py-0.5 text-meta text-ok">live</span>{" "}
-            <span className="font-mono">{live.version}</span> · {relativeAge(live.authored_at)}
+            <span className="font-mono">{live.version}</span> · <Ago iso={live.authored_at} />
             {live.author ? ` by ${live.author}` : ""}
           </span>
         ) : (
@@ -416,7 +417,7 @@ export default async function PacksPage() {
       />
 
       <p className="text-meta text-ink-muted">
-        As of {new Date(directory.as_of).toLocaleString()}. Validation runs against the
+        <AsOf iso={directory.as_of} />. Validation runs against the
         live database each time this page loads — a Pack that passed yesterday can fail
         today because a Forge went unreachable or an instruction was withdrawn.
       </p>

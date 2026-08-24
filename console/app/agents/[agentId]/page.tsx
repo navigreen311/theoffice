@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { Ago } from "@/components/local-time";
 import { Badge, Card, Cell, Row, Table } from "@/components/ui";
 import { api, NotAuthenticated, type AgentDetail } from "@/lib/api";
 import { compareTiers, relativeAge } from "@/lib/severity";
@@ -120,8 +121,8 @@ export default async function AgentPage({ params }: { params: { agentId: string 
           {recent_shifts.map((s) => (
             <Row key={s.shift_id}>
               <Cell>{s.venture_id}</Cell>
-              <Cell>{relativeAge(s.shift_start)}</Cell>
-              <Cell>{relativeAge(s.shift_end)}</Cell>
+              <Cell><Ago iso={s.shift_start} /></Cell>
+              <Cell><Ago iso={s.shift_end} /></Cell>
               <Cell>
                 <Badge severity={s.flush_verified ? "ok" : "bad"}>
                   {s.flush_verified ? "verified" : "not verified"}

@@ -1006,6 +1006,71 @@ if grep -q 'bg-bad-bg' "$WORK"/prov-index.html; then
   say "the stopped gate is filled, not just labelled"
 fi
 
+step "Nothing rendered reads the clock or the locale"
+# The bug this catches blanked pages in the browser while every status code stayed 200.
+#
+# A component that renders `Date.now()`, `new Date()` or `toLocaleString()` is rendered
+# twice against two different runtimes: once by Node during SSR, once by the browser
+# during hydration. The server says "3s ago" and formats in its own locale; the browser
+# says "5s ago" and formats in the reader's. React cannot tell that apart from a bug, so
+# it reports a hydration error and re-renders the tree on the client - which is what a
+# page flashing and going blank looks like.
+#
+# `curl` never sees it, because the server HTML is correct. Only a browser hydrates. So
+# this is a source check, and it has to be: there is no status code for it.
+#
+# `components/local-time.tsx` is the exception, and the only one. It reads the clock and
+# the locale inside `useEffect`, which runs on the client and never during SSR - that is
+# the fix, not the bug, and the whole reason the file exists.
+CLOCK_EXEMPT="local-time.tsx"
+clock=0
+
+# `\(\)` escaped: unescaped, `()` is an empty regex group and the pattern matches every
+# `new Date(anything)`, which flagged every correct call site in the console.
+for pattern in 'Date\.now\(\)' 'new Date\(\)'; do
+  for f in $(grep -rlE "$pattern" "$ROOT/console/app" "$ROOT/console/components" \
+             --include="*.tsx" 2>/dev/null); do
+    case "$f" in *"$CLOCK_EXEMPT") continue;; esac
+    # Ignore the pattern inside comments - the explanation of the rule is not a breach.
+    if grep -E "$pattern" "$f" | grep -qvE '^\s*(//|\*|/\*)'; then
+      fail "reads the render clock: ${f#"$ROOT/"}"
+      clock=1
+    fi
+  done
+done
+
+# `toLocaleString()` with no locale uses the runtime's, and the two runtimes do not have
+# to agree: "1,152" against "1.152", "8/24/2026" against "24/08/2026".
+for f in $(grep -rl 'toLocaleString()\|toLocaleTimeString()\|toLocaleDateString()' \
+           "$ROOT/console/app" "$ROOT/console/components" --include="*.tsx" 2>/dev/null); do
+  case "$f" in *"$CLOCK_EXEMPT") continue;; esac
+  fail "formats without an explicit locale: ${f#"$ROOT/"}"
+  clock=1
+done
+[ "$clock" -eq 0 ] && say "no component renders the clock or an implicit locale"
+
+# The property itself, measured rather than argued. Two requests back to back must
+# produce the same rendered text - anything in the markup that depends on the clock
+# rather than on the payload shows up as a difference here.
+#
+# Compared as text with scripts stripped: the RSC payload carries the API's own as-of
+# stamp, which is *supposed* to advance between requests. What must not move is what the
+# reader sees.
+stable=0
+for path in / /provisioning /packs /ventures /provisioning/greenstone; do
+  curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT$path" > "$WORK"/first.html
+  curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT$path" > "$WORK"/second.html
+  for n in first second; do
+    sed -e 's/<script[^>]*>.*<\/script>//g' -e 's/<[^>]*>/ /g' "$WORK"/$n.html \
+      | tr -s ' \n' ' ' > "$WORK"/$n.txt
+  done
+  if ! diff -q "$WORK"/first.txt "$WORK"/second.txt >/dev/null 2>&1; then
+    fail "$path renders different text on two identical requests - something the reader sees depends on the clock"
+    stable=1
+  fi
+done
+[ "$stable" -eq 0 ] && say "identical requests render identical text"
+
 step "Every page has a route home"
 # There was no way back to a dashboard from anywhere: the wordmark was not a link and
 # nothing in the nav pointed at `/`.

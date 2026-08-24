@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { Ago } from "@/components/local-time";
 import { Badge, Card } from "@/components/ui";
 import { api, NotAuthenticated, type Proposal } from "@/lib/api";
 import { RUBBER_STAMP_SECONDS, relativeAge } from "@/lib/severity";
@@ -69,7 +70,7 @@ export default async function ProposalsPage({
         <Card
           key={p.proposal_id}
           title={`${p.forge_id} / ${p.module_id}`}
-          subtitle={`${p.venture_id} · task ${p.task_id} · raised ${relativeAge(p.created_at)}`}
+          subtitle={`${p.venture_id} · task ${p.task_id} · raised $<Ago iso={p.created_at} />`}
         >
           <div className="mb-3 flex flex-wrap gap-2">
             <Badge severity="warn">{p.trust_tier}</Badge>

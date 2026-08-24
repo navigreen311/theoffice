@@ -11,6 +11,7 @@ import {
   Minus,
   X,
 } from "@/components/icons";
+import { Ago, AsOf, LocalTime } from "@/components/local-time";
 import {
   api,
   NotAuthenticated,
@@ -300,9 +301,7 @@ function GateLadder({ ladder }: { ladder: LadderRow[] }) {
                   rendered as five rows of "0s ago", which reads as a broken clock.
                 */}
                 {row.recorded_at ? (
-                  <span title={new Date(row.recorded_at).toLocaleString()}>
-                    {new Date(row.recorded_at).toLocaleTimeString()}
-                  </span>
+                  <LocalTime iso={row.recorded_at} mode="time" />
                 ) : null}
               </span>
             </div>
@@ -368,6 +367,10 @@ export default async function ProvisioningVenturePage({
   const atGate10 = isOpen && detail?.current_gate === "10";
 
   const advisories = (currentGate?.evidence.advisories ?? []) as Advisory[];
+  // From the server, never the render clock. `new Date()` evaluated during SSR and
+  // again during hydration produces two different values by construction, and the two
+  // renders then disagree about what time it is.
+  const asOf = detail?.as_of ?? null;
   const displayName =
     pack.live?.yaml_source?.match(/venture_name:\s*(.+)/)?.[1]?.trim() ?? venture;
 
@@ -406,7 +409,7 @@ export default async function ProvisioningVenturePage({
         </div>
         <div className="flex flex-col items-end gap-1">
           <span className="text-meta text-ink-muted">
-            As of {new Date().toLocaleString()}
+            {asOf ? <AsOf iso={asOf} /> : null}
           </span>
           <Link
             href={`/packs/${encodeURIComponent(venture)}`}
@@ -466,7 +469,7 @@ export default async function ProvisioningVenturePage({
                   {" "}
                   {detail.status === "rejected" ? "Rejected" : "Abandoned"} by{" "}
                   {detail.disposition.actor ?? "an operator"}{" "}
-                  {relativeAge(detail.disposition.at)}
+                  <Ago iso={detail.disposition.at} />
                   {detail.disposition.reason ? `: ${detail.disposition.reason}` : "."}
                 </>
               ) : null}

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { Ago } from "@/components/local-time";
 import { AlertTriangle, CircleCheck, CONTROL_ICON } from "@/components/icons";
 import {
   api,
@@ -10,7 +11,7 @@ import {
   type IncidentRow,
   type Paged,
 } from "@/lib/api";
-import { controlSeverity, incidentSeverity, relativeAge } from "@/lib/severity";
+import { controlSeverity, incidentSeverity } from "@/lib/severity";
 
 import { ExportForm, RunControlsButton, SchedulingNote } from "./compliance-forms";
 
@@ -281,7 +282,7 @@ export default async function CompliancePage() {
                     {control.cadence}
                     {" · "}
                     {control.last_run
-                      ? `last run ${relativeAge(control.last_run)}`
+                      ? `last run $<Ago iso={control.last_run} />`
                       : "never run"}
                     {control.denominator !== undefined &&
                     control.denominator !== null ? (
@@ -400,20 +401,20 @@ export default async function CompliancePage() {
           <div>
             <dt className="text-meta text-ink-muted">Entries</dt>
             <dd className="text-body text-ink">
-              {overview.chain_stats.audit_entries.toLocaleString()}
+              {overview.chain_stats.audit_entries.toLocaleString("en-US")}
             </dd>
           </div>
           <div>
             <dt className="text-meta text-ink-muted">Chain verified through</dt>
             <dd className="text-body text-ink">
-              {chain.checked_count.toLocaleString()} of{" "}
-              {overview.chain_stats.audit_entries.toLocaleString()}
+              {chain.checked_count.toLocaleString("en-US")} of{" "}
+              {overview.chain_stats.audit_entries.toLocaleString("en-US")}
             </dd>
           </div>
           <div>
             <dt className="text-meta text-ink-muted">Oldest entry</dt>
             <dd className="text-body text-ink">
-              {relativeAge(overview.chain_stats.oldest_entry)}
+              <Ago iso={overview.chain_stats.oldest_entry} />
             </dd>
           </div>
           <div>
@@ -425,9 +426,11 @@ export default async function CompliancePage() {
                 overview.chain_stats.last_agent_call ? "text-ink" : "text-ink-muted"
               }`}
             >
-              {overview.chain_stats.last_agent_call
-                ? relativeAge(overview.chain_stats.last_agent_call)
-                : "none yet"}
+              {overview.chain_stats.last_agent_call ? (
+                <Ago iso={overview.chain_stats.last_agent_call} />
+              ) : (
+                "none yet"
+              )}
             </dd>
           </div>
         </dl>
@@ -461,7 +464,7 @@ export default async function CompliancePage() {
                   {incident.module_id ? ` · ${incident.module_id}` : ""}
                 </span>
                 <span className="ml-auto text-meta text-ink-muted">
-                  {relativeAge(incident.raised_at)}
+                  <Ago iso={incident.raised_at} />
                 </span>
                 <Link
                   href="/incidents"
