@@ -237,6 +237,9 @@ fi
 say "listening on $CONSOLE_PORT"
 
 ROUTES="/ /agents /audit /forge-map /revocations /ventures /proposals /instructions /packs /provisioning /knowledge /incidents /access"
+# The tabs the Knowledge rebuild added. They carry the forms, which is where a
+# React-version mistake shows up, and they are not reachable from $ROUTES.
+KNOWLEDGE_ROUTES="/knowledge/personas /knowledge/history /knowledge/playbooks /knowledge/compliance"
 
 step "Unauthenticated routes redirect"
 for path in $ROUTES; do
@@ -2243,6 +2246,72 @@ if grep -qF "Search" "$WORK"/kb-personas-text.html; then
   say "the listing is searchable"
 else
   fail "the persona listing has no search"
+fi
+
+step "Every page survives being opened in a browser"
+# Every other render check here asks the server and believes the answer. The server says
+# 200 to a page that is about to die during hydration, and three "a client-side exception
+# has occurred" reports have now arrived by hand for pages this script called green: a
+# React 19 API against React 18.3.1, a clock read during SSR, and a JS chunk answering
+# 400 because `next build` rewrote `.next` under a running `next start`. None of the
+# three is visible in HTML. This opens the pages in Chrome and reports what the browser
+# reports.
+CHROME=""
+for candidate in \
+  "${CHROME_BIN:-}" "${CHROME_PATH:-}" \
+  "/c/Program Files/Google/Chrome/Application/chrome.exe" \
+  "/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe" \
+  "$(command -v google-chrome 2>/dev/null || true)" \
+  "$(command -v google-chrome-stable 2>/dev/null || true)" \
+  "$(command -v chromium 2>/dev/null || true)" \
+  "$(command -v chromium-browser 2>/dev/null || true)" \
+  "$(command -v microsoft-edge 2>/dev/null || true)"; do
+  if [ -n "$candidate" ] && [ -x "$candidate" ]; then CHROME="$candidate"; break; fi
+done
+
+if [ -z "$CHROME" ]; then
+  # Fatal, like every other unexercised check. This one exists precisely because the
+  # failures it catches are invisible to everything else in this file, so "no browser
+  # available" must not read as "the pages are fine".
+  notrun "hydration - no Chrome or Edge binary found; set CHROME_BIN"
+else
+  CDP_PORT=9333
+  kill_port "$CDP_PORT"
+  "$CHROME" --headless=new --remote-debugging-port="$CDP_PORT" \
+    --user-data-dir="$WORK/chrome" --no-first-run --no-default-browser-check \
+    --disable-gpu --disable-dev-shm-usage --no-sandbox \
+    about:blank >"$WORK/chrome.log" 2>&1 &
+  CHROME_PID=$!
+
+  SESSION="$(grep office_session "$COOKIE_JAR" | awk '{print $7}' | tail -1)"
+  if [ -z "$SESSION" ]; then
+    fail "no session cookie to hand the browser"
+  else
+    # `node` runs the checker: it needs a WebSocket client, and Node 22+ has one built
+    # in, so this adds no dependency to the repository.
+    # Routes are passed dot-prefixed: `./`, `./agents`. Git Bash rewrites any
+    # argument starting with `/` into a Windows path, so `/knowledge` arrived as
+    # `C:/Program Files/Git/knowledge` and every page reported rendering nothing.
+    # Turning conversion off wholesale then broke the script path itself, which
+    # genuinely needs converting - so the fix is to hand it nothing to convert.
+    #
+    # The dot rather than a bare strip, because stripping turned `/` into the empty
+    # string and the shell dropped it: the dashboard silently stopped being checked
+    # while the step still reported every page hydrating. The checker counts what it
+    # was given, so a drop like that fails instead of shrinking the sweep.
+    DOTTED_ROUTES="$(printf '%s\n' $ROUTES $KNOWLEDGE_ROUTES | sed 's|^|.|')"
+    ROUTE_COUNT="$(printf '%s\n' $ROUTES $KNOWLEDGE_ROUTES | wc -l | tr -d ' ')"
+    if EXPECTED_ROUTES="$ROUTE_COUNT" CDP_PORT="$CDP_PORT" \
+         node "$ROOT/scripts/hydration-check.mjs" \
+         "http://localhost:$CONSOLE_PORT" "$SESSION" $DOTTED_ROUTES \
+         2>&1 | sed 's/^/  /'; then
+      say "every page hydrated in a real browser"
+    else
+      fail "a page broke in the browser after the server called it 200"
+    fi
+  fi
+  kill "$CHROME_PID" 2>/dev/null || true
+  kill_port "$CDP_PORT"
 fi
 
 step "Every page has a route home"

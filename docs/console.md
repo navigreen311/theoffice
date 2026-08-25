@@ -991,6 +991,46 @@ still code. `test_the_raw_mutation_guard_still_sees_a_real_statement` holds the 
 because a guard narrowed in response to a false positive is the kind that quietly stops
 guarding.
 
+## Pages were checked by asking the server, which cannot see hydration
+
+Three "Application error: a client-side exception has occurred" reports have now arrived
+by hand for pages the smoke script called green, and every time the check that should
+have caught it was a `curl` returning 200. The server renders the HTML, answers 200, and
+the page dies in the browser a moment later:
+
+- a React 19 API (`useActionState`, `<form action={async fn}>`) against the pinned React
+  18.3.1 — type-checks, builds, server-renders, throws on hydration;
+- `Date.now()` and `toLocaleString()` during SSR, where server HTML and client render
+  disagree and React discards the tree;
+- a JS chunk answering **400**, because `next build` rewrote `.next` under a running
+  `next start` and the HTML referenced chunks the server no longer had.
+
+The third is what produced the latest report, and it was self-inflicted: `dev-up.sh`
+builds and then starts, so a normal run is consistent, but running `npm run build`
+separately while the dev console keeps running leaves the live app serving HTML whose
+chunks 400. React fails with minified error #423 and Next shows its client-side exception
+page. Restarting the console fixes it; nothing warned that it was broken.
+
+**`scripts/hydration-check.mjs` opens every page in a real browser.** It drives Chrome
+over CDP — Node 22+ has a built-in WebSocket, so this adds no dependency — waits for
+hydration, and reports uncaught exceptions, console errors, and any sub-resource that
+failed to load. The smoke script runs it across all thirteen routes plus the four
+Knowledge tabs.
+
+It was mutation-tested rather than trusted: a component made to throw only when `window`
+is defined renders fine on the server and is invisible to every other check in the file.
+The step named the page, printed `MUTATION: client-only boom`, and reported the same
+React #423 the user saw.
+
+**Two ways it nearly shipped covering less than it claimed.** Git Bash rewrites any
+argument beginning with `/` into a Windows path, so `/knowledge` reached the checker as
+`C:/Program Files/Git/knowledge` and every page "rendered nothing at all". Disabling path
+conversion wholesale then broke the script path, which genuinely needs converting, so
+routes are passed dot-prefixed instead. Stripping the slash instead had turned `/` into
+the empty string, which the shell dropped — the dashboard silently stopped being checked
+while the step still reported every page hydrating. The checker is now told how many
+routes to expect and treats a mismatch as fatal.
+
 ## Known gaps
 
 *Last verified: 2026-08-25.*
