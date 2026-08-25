@@ -1246,6 +1246,37 @@ else
   notrun "pack editor checks - no venture has a Pack"
 fi
 
+step "No React 19 API in a React 18 project"
+# This class has now shipped twice, and neither time did anything catch it:
+#
+#   useActionState        type-checked, built, and threw `useActionState is not a
+#                         function` in the browser.
+#   <form action={fn}>    type-checked, built, and threw a client-side exception.
+#
+# Both are React 19. This project pins React 18.3.1 per the blueprint stack, and the
+# type definitions Next ships describe a newer React than the runtime - so `tsc` agrees,
+# `next build` agrees, `curl` agrees, and the page is broken for anyone using it.
+#
+# A source check is not a substitute for executing the page. It is what is available
+# without putting a browser in CI, and it catches the specific shapes that have bitten.
+react19=0
+for pattern in 'useActionState\(' 'useOptimistic\(' 'action=\{(async )?\(' 'action=\{function'; do
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    if grep -qE "$pattern" "$f"; then
+      fail "React 19 API in a React 18 project: ${f#"$ROOT/"} matches $pattern"
+      react19=1
+    fi
+  done < <(grep -rlE "$pattern" "$ROOT/console/app" "$ROOT/console/components" \
+           --include="*.tsx" 2>/dev/null)
+done
+[ "$react19" -eq 0 ] && say "no React 19 API used against the pinned React 18.3.1"
+
+# The positive form: every form that submits to an action uses the hook that works.
+if grep -rq 'useFormState' "$ROOT/console/app" --include="*.tsx"; then
+  say "forms dispatch through useFormState"
+fi
+
 step "Every page has a route home"
 # There was no way back to a dashboard from anywhere: the wordmark was not a link and
 # nothing in the nav pointed at `/`.

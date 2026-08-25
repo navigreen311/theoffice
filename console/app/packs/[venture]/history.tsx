@@ -1,12 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import { useFormState } from "react-dom";
 
 import { Ago } from "@/components/local-time";
 import type { PackVersion } from "@/lib/api";
 import { diffLines, summarise, withContext } from "@/lib/diff";
 
-import { restoreAsDraftAction, versionSource } from "../actions";
+import {
+  restoreAsDraftAction,
+  versionSource,
+  type NewPackState,
+} from "../actions";
 
 /**
  * Version history, in an order a reader can follow.
@@ -47,7 +52,10 @@ function Row({
 }) {
   const [diff, setDiff] = useState<{ before: string; after: string } | null>(null);
   const [busy, setBusy] = useState(false);
-  const [restored, setRestored] = useState<string | null>(null);
+  const [restored, restore] = useFormState<NewPackState | null, FormData>(
+    restoreAsDraftAction,
+    null,
+  );
 
   const selected = compareTo === version.pack_version;
 
@@ -134,12 +142,13 @@ function Row({
           {selected ? "Comparing against this" : "Compare against this"}
         </button>
 
-        <form
-          action={async (form: FormData) => {
-            const result = await restoreAsDraftAction(null, form);
-            setRestored(result.error ?? result.ok ?? null);
-          }}
-        >
+        {/*
+          `useFormState`, not `<form action={inlineFunction}>`. A function passed to a
+          form's `action` is React 19; this project pins React 18.3.1, where it
+          type-checks, builds, and throws in the browser as a client-side exception -
+          the same trap `useActionState` set for this codebase once already.
+        */}
+        <form action={restore}>
           <input type="hidden" name="venture_id" value={venture} />
           <input type="hidden" name="pack_version" value={version.pack_version} />
           <button
@@ -151,7 +160,13 @@ function Row({
         </form>
       </div>
 
-      {restored ? <p className="mt-1 text-meta text-ink-secondary">{restored}</p> : null}
+      {restored?.error || restored?.ok ? (
+        <p
+          className={`mt-1 text-meta ${restored.error ? "text-bad" : "text-ink-secondary"}`}
+        >
+          {restored.error ?? restored.ok}
+        </p>
+      ) : null}
 
       {diff ? <InlineDiff before={diff.before} after={diff.after} /> : null}
     </li>

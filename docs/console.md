@@ -680,6 +680,15 @@ voids is signatures, which bind to the artifacts the Pack generates.
   rejected session redirects to the login page — it used to throw a 500, because only a
   *missing* cookie raised `NotAuthenticated` while a *rejected* one raised `ApiError`
   that no page caught.
+- **Nothing in this project executes client JavaScript.** `tsc`, `next build`, the unit
+  tests and the smoke script all pass against a page that is broken in a browser: the
+  server render is correct and only a browser hydrates. Two failures have shipped through
+  that hole - `useActionState`, and a function passed to a form `action`, both React 19
+  APIs that type-check against the definitions Next ships while the pinned runtime is
+  React 18.3.1. The smoke script now greps for the shapes that have bitten, which catches
+  a repeat and not a new one. Closing it properly means a headless browser in CI loading
+  each page and asserting no uncaught error - roughly a minute of CI time and a real
+  dependency, so it is a decision to take deliberately rather than a side effect.
 - **The editor is a textarea with line numbers, not a code editor.** No YAML syntax
   highlighting, no parse-error marking distinct from rule failures, no block-navigation
   sidebar, and no deep link to a failing block. Those want a real editor component
