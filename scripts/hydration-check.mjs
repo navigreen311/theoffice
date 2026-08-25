@@ -50,16 +50,24 @@ const endpoint = `http://127.0.0.1:${DEBUG_PORT}`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Chrome accepts connections slightly after the port opens.
+// Up to 30s. Ten was enough on a warm laptop and not on a loaded CI runner, where the
+// browser starts behind everything else the job is doing. A check that depends on how
+// fast the machine is will eventually fail on a machine nobody is watching.
 let targets = null;
-for (let attempt = 0; attempt < 25 && targets === null; attempt += 1) {
+let lastError = "";
+for (let attempt = 0; attempt < 60 && targets === null; attempt += 1) {
   try {
     targets = await (await fetch(`${endpoint}/json/list`)).json();
-  } catch {
-    await sleep(400);
+  } catch (error) {
+    lastError = error instanceof Error ? error.message : String(error);
+    await sleep(500);
   }
 }
 if (targets === null) {
-  console.error(`FAIL no browser answering CDP on ${endpoint}`);
+  console.error(
+    `FAIL no browser answering CDP on ${endpoint} after 30s (${lastError}). ` +
+      "The caller prints the browser's own log next.",
+  );
   process.exit(2);
 }
 

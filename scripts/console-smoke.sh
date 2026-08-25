@@ -2933,6 +2933,18 @@ else
     about:blank >"$WORK/chrome.log" 2>&1 &
   CHROME_PID=$!
 
+  # Chrome writes the port it actually bound to here once it is ready. Waiting for the
+  # file is the only signal that does not depend on guessing how long a loaded machine
+  # takes; the checker polls CDP as well, and this keeps the two from racing.
+  for _ in $(seq 1 60); do
+    [ -f "$WORK/chrome/DevToolsActivePort" ] && break
+    sleep 0.5
+  done
+  if [ ! -f "$WORK/chrome/DevToolsActivePort" ]; then
+    say "the browser did not report a debugging port; its log follows"
+    tail -20 "$WORK/chrome.log" 2>/dev/null | sed 's/^/    /'
+  fi
+
   SESSION="$(grep office_session "$COOKIE_JAR" | awk '{print $7}' | tail -1)"
   if [ -z "$SESSION" ]; then
     fail "no session cookie to hand the browser"
@@ -2962,6 +2974,9 @@ else
       say "every page hydrated in a real browser"
     else
       fail "a page broke in the browser after the server called it 200"
+      # The browser's own account. Without it, "no browser answering CDP" is the whole
+      # diagnosis and the next person repeats this investigation.
+      tail -20 "$WORK/chrome.log" 2>/dev/null | sed 's/^/    /'
     fi
 
     # The revocation confirmation is client state: it exists only after the operator asks
