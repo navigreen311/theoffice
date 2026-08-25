@@ -229,6 +229,27 @@ ones it stopped.
 `forge` scope and refused if it names the caller. `GET /api/revocations/targets` and
 `/history` back the pickers and the regulator-export view.
 
+## Audit reads are evidence, and say what they are
+
+`GET /api/audit/chain` returns the live check under its published field names - the
+dashboard reads them - plus `live_check_is_recorded: false` and a `recorded_verification`
+block. The distinction is the point: the live check is real and is not evidence, because
+nothing records it and Compliance cannot see it.
+
+`POST /api/controls/audit-chain` runs the sweep and records a `sweep_run` row. One
+verification, one row, both screens reading it. It sits under `/api/controls` because that
+is what it does; a guard refuses console write routes that name a protected surface, and
+the exception it carries is documented with the argument rather than dodged by renaming.
+
+`GET /api/audit/entries` resolves the actor to a person, tags fixture entries by account
+origin, filters them out by default and reports `excluded_fixtures`. `GET /api/audit/{id}`
+adds the payload, the trace siblings, both hashes and whether the entry links to its
+predecessor. `GET /api/audit/shape` gives counts by event type, actor and venture before
+anybody pages. `GET /api/audit/events` publishes the glossary.
+
+`GET /api/audit/export` carries its filters, its fixture inclusion, the chain state and a
+caveat list. An export from a log nothing has verified says so on its face.
+
 ## Known gaps
 
 *Last verified: 2026-08-23.*

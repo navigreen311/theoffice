@@ -46,6 +46,8 @@ from pydantic import BaseModel, Field
 from broker import (
     access_overview,
     audit,
+    audit_events,
+    audit_view,
     budget,
     certification,
     curriculum_quality,
@@ -283,6 +285,16 @@ async def health(conn: DB, _me: ME) -> dict[str, Any]:
 
 @app.get("/api/audit/chain")
 async def audit_chain(conn: DB, _me: ME) -> dict[str, Any]:
+    """Chain integrity: the live check, and the recorded verification beside it.
+
+    Both, because they answer different questions and the page used to conflate them.
+    `audit_log_verify_chain()` says whether the chain is intact *right now*. The
+    `sweep_run` row says what was last verified, when, and over how many entries - and
+    that is the row the Compliance page reads, so reporting it here is what stops the two
+    screens describing the same property and disagreeing.
+
+    The live fields keep their published names: the dashboard reads them.
+    """
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
             "SELECT ok, checked_count, first_break_audit_id, tail_gap, reason "
@@ -290,7 +302,97 @@ async def audit_chain(conn: DB, _me: ME) -> dict[str, Any]:
         )
         row = await cur.fetchone()
     assert row is not None
-    return dict(row)
+
+    return {
+        **dict(row),
+        "as_of": datetime.now(UTC).isoformat(),
+        # The live check is real and is not evidence: nothing records it, so it cannot
+        # be produced later and Compliance cannot see it.
+        "live_check_is_recorded": False,
+        "recorded_verification": await audit_view.chain_state(conn),
+    }
+
+
+@app.post("/api/controls/audit-chain", status_code=201)
+async def audit_verify(conn: DB, me: ME) -> dict[str, Any]:
+    """Run the chain verification and record the result as a control run.
+
+    This is what makes the Audit page and the Compliance page agree by construction:
+    there is one verification, it leaves one row, and both screens read it. Requires
+    `compliance_officer` because it writes a control result - a sweep anybody could
+    record on demand is a control whose freshness means nothing.
+    """
+    humans.authorize(me, required_role="compliance_officer")
+    result = await sweeps.sweep_audit_chain(conn)
+    await _audit_human_action(
+        me, "console_controls_run",
+        {"requested": "audit_chain", "ran": ["audit_chain"],
+         "checked": result.denominator},
+    )
+    return {"recorded_verification": await audit_view.chain_state(conn)}
+
+
+@app.get("/api/audit/events")
+async def audit_event_glossary(_me: ME) -> dict[str, Any]:
+    """Every event type, what it means, and what writes it.
+
+    Event names reached the page as raw identifiers with no glossary, and the filter
+    asked the reader to type one - usable only by somebody who already knew the answer.
+    """
+    return {"events": audit_events.published()}
+
+
+@app.get("/api/audit/shape")
+async def audit_shape(
+    conn: DB,
+    _me: ME,
+    include_fixtures: bool = Query(default=False),
+    since: Annotated[str | None, Query()] = None,
+    until: Annotated[str | None, Query()] = None,
+) -> dict[str, Any]:
+    """Counts by event type, actor and venture before anybody pages through."""
+    return {
+        "as_of": datetime.now(UTC).isoformat(),
+        **await audit_view.shape(
+            conn, include_fixtures=include_fixtures, since=since, until=until
+        ),
+    }
+
+
+@app.get("/api/audit/export")
+async def audit_export(
+    conn: DB,
+    me: ME,
+    include_fixtures: bool = Query(default=False),
+    event_type: Annotated[str | None, Query()] = None,
+    venture_id: Annotated[str | None, Query()] = None,
+    trace_id: Annotated[str | None, Query()] = None,
+    actor_id: Annotated[str | None, Query()] = None,
+    since: Annotated[str | None, Query()] = None,
+    until: Annotated[str | None, Query()] = None,
+) -> dict[str, Any]:
+    """A structured export that states its own limits.
+
+    Part 9 requires record export on demand. An export that does not say which filters
+    produced it, whether fixtures were in it, and how much of the log the chain
+    verification actually covered is a document that looks like evidence and is not.
+    """
+    humans.authorize(me, required_role="compliance_officer", venture_id=venture_id)
+    manifest = await audit_view.export_manifest(
+        conn,
+        filters={
+            "event_type": event_type, "venture_id": venture_id, "trace_id": trace_id,
+            "actor_id": actor_id, "since": since, "until": until,
+        },
+        include_fixtures=include_fixtures,
+    )
+    await _audit_human_action(
+        me, "console_compliance_exported",
+        {"kind": "audit_log", "entries": manifest["entries_included"],
+         "fixtures_included": include_fixtures},
+        venture_id,
+    )
+    return {"as_of": datetime.now(UTC).isoformat(), **manifest}
 
 
 # =============================================================== read: agents
@@ -644,6 +746,43 @@ async def gates(venture_id: str, conn: DB, _me: ME) -> dict[str, Any]:
 
 
 # ================================================================ read: audit
+
+@app.get("/api/audit/entries")
+async def audit_entries(
+    conn: DB,
+    _me: ME,
+    event_type: Annotated[str | None, Query()] = None,
+    venture_id: Annotated[str | None, Query()] = None,
+    trace_id: Annotated[str | None, Query()] = None,
+    actor_id: Annotated[str | None, Query()] = None,
+    since: Annotated[str | None, Query()] = None,
+    until: Annotated[str | None, Query()] = None,
+    include_fixtures: bool = Query(default=False),
+    page: int = Query(default=1, ge=1),
+) -> dict[str, Any]:
+    """The log, with the person who acted and the fixtures marked.
+
+    Fixtures are filtered by default and counted, never removed: the store is append-only
+    and a filter changes the view rather than the record.
+    """
+    return {
+        "as_of": datetime.now(UTC).isoformat(),
+        **await audit_view.entries(
+            conn, event_type=event_type, venture_id=venture_id, trace_id=trace_id,
+            actor_id=actor_id, since=since, until=until,
+            include_fixtures=include_fixtures, page=page,
+        ),
+    }
+
+
+@app.get("/api/audit/{audit_id}")
+async def audit_entry_detail(audit_id: int, conn: DB, _me: ME) -> dict[str, Any]:
+    """One entry: its payload, its trace, and both hashes with the link checked."""
+    found = await audit_view.detail(conn, audit_id)
+    if found is None:
+        raise HTTPException(status_code=404, detail="no such audit entry")
+    return found
+
 
 @app.get("/api/audit")
 async def audit_explorer(

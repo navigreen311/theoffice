@@ -1259,6 +1259,78 @@ The legacy check that caught the second one looked for an "Administrators" headi
 rebuild replaced. It follows the fact now rather than the heading, and is not weaker for
 it - the banner has to name the role and a count to pass.
 
+## The Audit page, rebuilt
+
+Ordering and copy were already right: chain integrity above the log, with the reason
+stated. Both are unchanged. What was wrong was the claim being made above the log, and
+what the log itself would not tell you.
+
+### Two screens, one property, contradictory answers
+
+The page reported "chain integrity verified over 1,157 entries". The Compliance page
+reported `audit_chain` with a maximum age of one day. Both were telling the truth and they
+disagreed, because they were answering from different places: this page ran an ad-hoc
+check on load and recorded it nowhere, while Compliance read the last *recorded* control
+result.
+
+The recorded result turned out to be sharper than the brief's framing. It covered **73
+entries, from the previous day**. There were 1,157. So 1,084 entries had never been
+covered by any verification that left a record, and the page carried an unqualified green
+badge over all of them.
+
+The page now reports the recorded verification - the same `sweep_run` row Compliance reads
+- so the two agree by construction rather than by disclaimer. It states the fraction, the
+timestamp, the method (`full re-hash of every entry`, which is what
+`audit_log_verify_chain()` does) and the head hash. **Verify now** runs the check and
+records it, which is what makes the agreement structural.
+
+**Green means fresh, not zero-lag.** Running a verification writes an audit entry of its
+own, so a live append-only log is always at least one entry ahead of any check. Treating
+that as a warning would make the banner permanently amber, which is how a banner stops
+being read. The badge follows the control's own max age; the fraction is stated either
+way.
+
+**The route is `/api/controls/audit-chain`, not `/api/audit/verify`.** A guard refuses any
+console write route whose path names a protected surface, and it was right to fire: the
+fragment test is a good proxy for "could edit a protected store". This is the case where
+the proxy is wrong, and the fix was to make the guard precise - a documented exception
+carrying the argument for why the surface is safe - rather than renaming the route until
+the substring stopped matching. That is the same avoidance the raw-mutation guard was
+fixed for earlier in this project. The exception list also fails if it outlives the route
+it excuses.
+
+### The log would not tell you who acted
+
+All 1,157 entries showed `human`. That is a type, and 95 accounts could have written any
+of those rows, which defeats the only property this log exists to provide. Entries name
+the person now, with the account id beside them; the type stays as its own signal because
+distinguishing a person from an agent from the platform matters - it just must not be the
+only thing shown. There is an actor filter, so "what did Dana do" is answerable.
+
+**Timestamps are absolute with the zone.** "23m ago" cannot go into an export, a regulator
+conversation, or a post-mortem across time zones.
+
+**1,093 of 1,157 entries were fixtures** - written by accounts this project's own test
+paths created, which is a fact about the actor rather than an inference from the event
+sequence. They are tagged, filtered by default, counted in a banner, and never deleted:
+the store is append-only, so filtering changes the view and not the record, and the export
+says which it did.
+
+**Entries expand** to show the payload, the trace and both hashes, with the link to the
+previous entry checked rather than asserted. That last line is what makes the chain
+legible instead of decorative - a reader can compare the two hashes by eye and the page
+says what the comparison found. The first entry says it has no predecessor, which is a
+different thing from a broken link.
+
+**Event types have labels and a published reference.** `broker/audit_events.py` describes
+all 41, and a test walks `broker/` and fails on an event it does not describe - the same
+arrangement the incident taxonomy uses, because a glossary that drifts from the code reads
+as authoritative and is worse than none.
+
+**Export exists** and carries the filters that produced it, whether fixtures were
+included, the chain verification state, the head hash, and its caveats on its face -
+exactly as the Compliance export does.
+
 ## Known gaps
 
 *Last verified: 2026-08-25.*

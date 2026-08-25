@@ -434,7 +434,31 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
         "certification", "cert", "flush", "ledger", "shift", "memory",
         "grant", "audit", "chain", "manifest/declare",
     )
+
+    # Routes that *verify* a protected surface without being able to change it.
+    #
+    # The fragment test is a proxy for "could edit a protected store", and it is a good
+    # proxy: a path naming one of these is nearly always a route that writes to it. This
+    # is the case where the proxy is wrong, and the honest fix is to make the guard
+    # precise rather than to rename the route until the substring stops matching - which
+    # is the same avoidance the raw-mutation guard was fixed for earlier.
+    #
+    # Every entry needs the argument for why the surface is still safe, and the argument
+    # has to be something other than "it looks fine".
+    verifies_without_editing = {
+        # Re-hashes the audit log and records the result as a control run. It cannot
+        # change the log by construction, not by intention: `audit_log` refuses UPDATE
+        # and DELETE by trigger to every role including the admin one, which
+        # `test_the_audit_log_refuses_an_edit` exercises through the app role. What it
+        # writes is a `sweep_run` row and one audit entry - and recording is the whole
+        # point, because a verification nothing records is what let the Audit page and
+        # the Compliance page report contradictory states about the same property.
+        "/api/controls/audit-chain",
+    }
+
     for path in writes:
+        if path in verifies_without_editing:
+            continue
         for fragment in forbidden_fragments:
             assert fragment not in path.lower(), (
                 f"write route {path!r} touches {fragment!r}. Certification state, PHI "
@@ -442,6 +466,12 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
                 "through the console - they are outcomes of guarded functions. Confirm "
                 "this route cannot bypass a control before adding it here."
             )
+
+    # The exception list cannot outlive the routes it excuses. An entry for a route that
+    # no longer exists is an exemption nobody is checking, sitting ready for the next
+    # route that happens to take that path.
+    stale = verifies_without_editing - writes
+    assert not stale, f"these routes are excused and do not exist: {sorted(stale)}"
 
     assert writes == {
         # The Village roster. None of these creates an agent: they import what the
@@ -507,6 +537,12 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
         # anywhere, because deleting an account destroys the record of who held what and
         # who granted it, which is what the Access page exists to protect.
         "/api/access/suspend-test-fixtures",
+        # Running the chain verification and recording it as a control result. It
+        # writes a `sweep_run` row and one audit entry, and touches the audit log in no
+        # other way - the log itself refuses UPDATE and DELETE by trigger. Recording is
+        # the point: a verification nothing records is what let this page and Compliance
+        # report contradictory states about the same property.
+        "/api/controls/audit-chain",
         # Human and role administration — the most privilege-sensitive surface in this
         # file. The rules live in `humans.assert_may_grant`: a role may be granted only
         # by somebody holding a STRICTLY stronger one, and never to yourself.

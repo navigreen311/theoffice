@@ -730,10 +730,26 @@ step "Pagination reports a denominator"
 # The audit explorer capped at 100 and said nothing about the rest, so "I searched and
 # found nothing" was indistinguishable from "I looked at the most recent hundred".
 curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT/audit?limit=5" > "$WORK"/audit.html
-if grep -qE "showing (all [0-9]+|[0-9]+–[0-9]+ of [0-9]+|no matches)" "$WORK"/audit.html; then
+sed 's/<!-- -->//g' "$WORK"/audit.html > "$WORK"/audit-pager.html
+# The rebuild states the denominator as "66 matching - page 1 of 2" rather than
+# "showing 1-50 of 66". The property this protects is unchanged and so is the check:
+# a truncated list must say what it did not show. Only the wording moved, and the
+# preserved sentence about narrowing the filters is required alongside it whenever there
+# is more than one page - a count with no way to act on it is half the answer.
+if grep -qE "[0-9]+ matching|no matches" "$WORK"/audit-pager.html; then
   say "the audit explorer states what it did not show"
 else
   fail "the audit explorer rendered no denominator - a truncated list that looks complete"
+fi
+if grep -qE "page [0-9]+ of [0-9]+" "$WORK"/audit-pager.html; then
+  if grep -qF "This is not the whole result. Narrow the filters or page through." \
+       "$WORK"/audit-pager.html; then
+    say "a truncated list says how to see the rest"
+  else
+    fail "the list is paged and does not say the result is incomplete"
+  fi
+else
+  say "the whole result fits on one page"
 fi
 
 step "The provisioning ceiling is stated, not discovered"
@@ -2896,6 +2912,294 @@ if grep -qF "Ventures" "$WORK"/forge-map-text.html && grep -qF "Forges" "$WORK"/
   say "the cross-venture matrix renders"
 else
   fail "there is no Villages x Forges matrix"
+fi
+
+step "The audit page states what was verified, and names who acted"
+curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT/audit" > "$WORK"/audit.html
+sed 's/<!-- -->//g' "$WORK"/audit.html > "$WORK"/audit-text.html
+
+while IFS= read -r phrase; do
+  grep -qF "$phrase" "$WORK"/audit-text.html || fail "audit lost: ${phrase:0:60}"
+done <<'PHRASES'
+Entries below are meaningless if this is broken — read it first.
+Append-only and hash-chained. Nothing here is editable.
+PHRASES
+say "the preserved copy is present verbatim"
+
+# Chain integrity stays above the log. That ordering is the page's own argument and a
+# rebuild that quietly inverted it would be a worse page that still passed every other
+# check here.
+pycheck - "$WORK/audit-text.html" <<'PY'
+import html
+import re
+import sys
+
+page = html.unescape(open(sys.argv[1], encoding="utf-8", errors="replace").read())
+text = re.sub(r"<[^>]+>", " ", page)
+
+chain = text.find("meaningless if this is broken")
+entries = text.find("Append-only and hash-chained")
+if chain < 0 or entries < 0:
+    print("FAIL could not locate both sections")
+elif chain > entries:
+    print("FAIL the log is above chain integrity; that ordering is the page's argument")
+else:
+    print("chain integrity is above the log")
+PY
+
+# The claim itself. A verification with no timestamp and no method is not evidence, and
+# this page's own first sentence makes it the most important claim on the screen.
+pycheck - "$TOKEN" "$API_PORT" "$WORK/audit-text.html" <<'PY'
+import html
+import json
+import sys
+import urllib.request
+
+req = urllib.request.Request(
+    f"http://127.0.0.1:{sys.argv[2]}/api/audit/chain",
+    headers={"Authorization": f"Bearer {sys.argv[1]}"},
+)
+with urllib.request.urlopen(req) as response:
+    chain = json.load(response)
+
+page = html.unescape(open(sys.argv[3], encoding="utf-8", errors="replace").read())
+state = chain["recorded_verification"]
+
+if chain["live_check_is_recorded"] is not False:
+    print("FAIL the live check claims to be recorded")
+elif not state["recorded"]:
+    if "never been recorded" not in page:
+        print("FAIL nothing has been recorded and the page does not say so")
+    else:
+        print("no verification recorded, and the page says so rather than showing green")
+else:
+    missing = []
+    if str(state["verified_entries"]) not in page:
+        missing.append("entries verified")
+    if not state["method"] or state["method"] not in page:
+        missing.append("method")
+    if not state["head_hash"] or state["head_hash"][:16] not in page:
+        missing.append("head hash")
+    if missing:
+        print(f"FAIL the page reports a verification without stating: {missing}")
+    else:
+        print(
+            f"states {state['verified_entries']} of {state['entries']} verified, "
+            f"the method, and the head hash"
+        )
+PY
+
+# The two pages describe the same property. They used to disagree because one ran an
+# ad-hoc check and the other read the recorded control result.
+pycheck - "$TOKEN" "$API_PORT" <<'PY'
+import json
+import sys
+import urllib.request
+
+token, port = sys.argv[1], sys.argv[2]
+
+
+def get(path):
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{port}{path}", headers={"Authorization": f"Bearer {token}"}
+    )
+    with urllib.request.urlopen(req) as response:
+        return json.load(response)
+
+
+audit = get("/api/audit/chain")["recorded_verification"]
+compliance = get("/api/incidents/overview")["controls"]["freshness"].get("audit_chain")
+
+if compliance is None:
+    print("FAIL Compliance does not report audit_chain at all")
+elif not audit["recorded"]:
+    if compliance["state"] != "never_run":
+        print(f"FAIL audit says nothing recorded; compliance says {compliance['state']}")
+    else:
+        print("both report the control as never run")
+elif audit["verified_entries"] != compliance.get("denominator"):
+    print(
+        f"FAIL audit reports {audit['verified_entries']} verified, compliance "
+        f"{compliance.get('denominator')} - the two are reading different rows"
+    )
+else:
+    print(
+        f"both read the same recorded result: {audit['verified_entries']} entries, "
+        f"compliance state {compliance['state']}"
+    )
+PY
+
+# The actor. `human` is a type; 95 accounts could have written any of those rows.
+pycheck - "$TOKEN" "$API_PORT" <<'PY'
+import json
+import sys
+import urllib.request
+
+req = urllib.request.Request(
+    f"http://127.0.0.1:{sys.argv[2]}/api/audit/entries?include_fixtures=true",
+    headers={"Authorization": f"Bearer {sys.argv[1]}"},
+)
+with urllib.request.urlopen(req) as response:
+    page = json.load(response)
+
+rows = page["rows"]
+if not rows:
+    print("NOT EXERCISED the audit log is empty")
+    raise SystemExit
+
+unnamed = [r["audit_id"] for r in rows if r["actor_id"] and not r["actor_name"]]
+if len(unnamed) == len(rows):
+    print("FAIL no entry names a person; the actor is still only a type")
+else:
+    named = len(rows) - len(unnamed)
+    print(f"{named} of {len(rows)} rows name the person who acted")
+
+if not all("actor_type" in r for r in rows):
+    print("FAIL the actor type was dropped; it is a separate signal and must stay")
+else:
+    print("the actor type is kept beside the name rather than replacing it")
+PY
+
+# Fixtures: tagged, filtered by default, counted, never removed.
+pycheck - "$TOKEN" "$API_PORT" "$WORK/audit-text.html" <<'PY'
+import html
+import json
+import sys
+import urllib.request
+
+token, port = sys.argv[1], sys.argv[2]
+
+
+def get(path):
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{port}{path}", headers={"Authorization": f"Bearer {token}"}
+    )
+    with urllib.request.urlopen(req) as response:
+        return json.load(response)
+
+
+hidden = get("/api/audit/entries")
+shown = get("/api/audit/entries?include_fixtures=true")
+page = html.unescape(open(sys.argv[3], encoding="utf-8", errors="replace").read())
+
+if hidden["excluded_fixtures"] == 0:
+    print("NOT EXERCISED no fixture entries exist to filter")
+    raise SystemExit
+
+if any(row["fixture"] for row in hidden["rows"]):
+    print("FAIL a fixture entry survived the default filter")
+elif shown["total"] <= hidden["total"]:
+    print("FAIL include_fixtures returns no more than the default; the filter is inert")
+elif str(hidden["excluded_fixtures"]) not in page:
+    print("FAIL the page hides fixtures without stating the count")
+else:
+    print(
+        f"{hidden['excluded_fixtures']} fixture entries hidden by default, counted on "
+        "the page, and still returned when asked for"
+    )
+PY
+
+# Entry detail: both hashes, and the link to the previous entry confirmed.
+pycheck - "$TOKEN" "$API_PORT" <<'PY'
+import json
+import sys
+import urllib.request
+
+token, port = sys.argv[1], sys.argv[2]
+
+
+def get(path):
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{port}{path}", headers={"Authorization": f"Bearer {token}"}
+    )
+    with urllib.request.urlopen(req) as response:
+        return json.load(response)
+
+
+rows = get("/api/audit/entries?include_fixtures=true")["rows"]
+if not rows:
+    print("NOT EXERCISED nothing to expand")
+    raise SystemExit
+
+detail = get(f"/api/audit/{rows[0]['audit_id']}")
+missing = [
+    field for field in ("subject", "entry_hash", "prev_hash", "link_note")
+    if detail.get(field) in (None, "")
+]
+if missing:
+    print(f"FAIL entry detail omits: {missing}")
+elif detail["links_to_previous"] is False:
+    print(f"FAIL entry {detail['audit_id']} does not link to the previous entry")
+else:
+    print("an entry shows its payload, both hashes, and whether the link holds")
+PY
+
+# Export, and what it has to say about itself.
+pycheck - "$TOKEN" "$API_PORT" <<'PY'
+import json
+import sys
+import urllib.request
+
+req = urllib.request.Request(
+    f"http://127.0.0.1:{sys.argv[2]}/api/audit/export",
+    headers={"Authorization": f"Bearer {sys.argv[1]}"},
+)
+with urllib.request.urlopen(req) as response:
+    export = json.load(response)
+
+required = ("filters", "fixtures_included", "chain", "caveats", "entries_included")
+missing = [field for field in required if field not in export]
+if missing:
+    print(f"FAIL the export omits: {missing}")
+elif not export["chain"].get("method") and export["chain"].get("recorded"):
+    print("FAIL the export reports a verification without its method")
+else:
+    print(
+        f"the export carries its filters, fixture inclusion "
+        f"({export['fixtures_included']}), and the chain state"
+    )
+
+# An export from a log whose chain state is anything less than fully covered has to say
+# so on its face, exactly as the Compliance export does.
+if not export["chain"]["recorded"] and not any(
+    "never recorded" in note for note in export["caveats"]
+):
+    print("FAIL nothing has verified this log and the export does not say so")
+elif export["caveats"]:
+    print(f"and states {len(export['caveats'])} caveat(s) on its face")
+PY
+
+# Event types have labels, and the reference exists.
+pycheck - "$TOKEN" "$API_PORT" "$WORK/audit-text.html" <<'PY'
+import html
+import json
+import sys
+import urllib.request
+
+req = urllib.request.Request(
+    f"http://127.0.0.1:{sys.argv[2]}/api/audit/events",
+    headers={"Authorization": f"Bearer {sys.argv[1]}"},
+)
+with urllib.request.urlopen(req) as response:
+    events = json.load(response)["events"]
+
+page = html.unescape(open(sys.argv[3], encoding="utf-8", errors="replace").read())
+unlabelled = [e["event_type"] for e in events if e["label"] == e["event_type"]]
+absent = [e["event_type"] for e in events if e["label"] not in page]
+
+if unlabelled:
+    print(f"FAIL these events have no plain-language label: {unlabelled[:3]}")
+elif absent:
+    print(f"FAIL these labels are published and not on the page: {absent[:3]}")
+else:
+    print(f"all {len(events)} event types have a label and appear in the reference")
+PY
+
+# Aggregates before paging.
+if grep -qF "Counts before paging" "$WORK"/audit-text.html; then
+  say "counts by event type, actor and venture are available before paging"
+else
+  fail "there is no aggregate view; a spike is invisible until somebody pages to it"
 fi
 
 step "Every page survives being opened in a browser"
