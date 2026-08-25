@@ -1031,6 +1031,45 @@ the empty string, which the shell dropped — the dashboard silently stopped bei
 while the step still reported every page hydrating. The checker is now told how many
 routes to expect and treats a mismatch as fatal.
 
+### Reported broken again, and the check still said clean
+
+The knowledge page was reported broken a second time, after the browser check had been
+added and reported every route hydrating. It was right and it was insufficient: it loaded
+every page **by URL**, and nobody reaches a page that way. Clicking `Knowledge` in the nav
+failed immediately, with the page chunk answering 400 and a `ChunkLoadError`.
+
+A direct load fetches a page's chunks fresh. A client-side transition asks the app that is
+already running, using the build manifest it holds. The two only disagree when the build
+changes underneath a running server — and then the direct load keeps working, which is
+what made this look intermittent and unreproducible.
+
+**The smoke script was the thing changing the build.** It ran `next build` in `console/`,
+replacing `console/.next` while the developer's `next start` on 3100 was serving from it.
+Every smoke run broke the running console. It builds into `.next-smoke` now, via
+`distDir: process.env.NEXT_DIST_DIR || ".next"`, and this was verified the only way worth
+trusting: run the whole smoke suite, then click into the knowledge page on 3100 and watch
+it still work.
+
+**The browser check now makes the transition itself the thing under test.** Each route is
+approached from the page that links to it — the dashboard for a top-level page, the parent
+for a tab — and the click is what gets checked. `/knowledge/personas` is not linked from
+the dashboard, so a pass that only followed dashboard links would have skipped exactly the
+pages that were reported broken. It reports how many of the linkable routes it actually
+clicked, because a sweep that quietly covers less is the shape of every failure in this
+file.
+
+**`app/error.tsx`: a stale build now refreshes instead of dying.** Next's default is
+"Application error: a client-side exception has occurred (see the browser console for more
+information)" — a dead end that names nothing and offers nothing, reported by hand three
+times here. Two of those were a tab holding half of a build that had been replaced: one
+refresh away from working, and it said so to nobody. A chunk-loading failure now reloads
+once automatically, guarded by a `sessionStorage` flag so an error that survives the
+refresh shows its message rather than looping. Anything else gets a page that says what
+happened, notes that nothing was written, and offers reload and retry.
+
+That last one is not a dev-server nicety. It is what every open tab experiences during a
+production redeploy.
+
 ## Known gaps
 
 *Last verified: 2026-08-25.*

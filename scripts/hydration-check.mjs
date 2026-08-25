@@ -183,5 +183,108 @@ for (const path of paths) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// The second pass: reach each page by clicking, the way a person does.
+//
+// The first pass loads every URL directly, and that is not how anybody arrives. A direct
+// load fetches the page's chunks fresh; a client-side transition asks the already-running
+// app for them, using the build manifest it loaded at first paint. When those disagree -
+// a redeploy, or a `next build` under a running server - the direct load still works and
+// the click fails. The knowledge page was reported broken twice while this file's direct
+// loads reported it clean.
+console.log("--- reached by clicking, not by URL ---");
+
+// Each route is approached from the page that links to it: the dashboard for a
+// top-level page, the parent for a tab. `/knowledge/personas` is not on the dashboard,
+// and checking only what the dashboard links to would have skipped exactly the pages
+// that were reported broken.
+const parentOf = (path) => {
+  const parent = path.split("/").slice(0, -1).join("/");
+  return parent === "" ? "/" : parent;
+};
+
+const clickable = paths.filter((path) => path !== "/");
+let reached = 0;
+
+for (const path of clickable) {
+  // Land on the linking page by URL, then make the transition itself a click. The URL
+  // load is setup; the click is the thing under test.
+  await send("Page.navigate", { url: `${base}${parentOf(path)}` });
+  await sleep(2200);
+
+  events = [];
+  const clicked = await send("Runtime.evaluate", {
+    expression: `
+      (() => {
+        const link = document.querySelector('a[href="${path}"]');
+        if (!link) return false;
+        link.click();
+        return true;
+      })()
+    `,
+    returnByValue: true,
+  });
+
+  if (clicked.result?.result?.value !== true) {
+    console.log(`${path} has no link on ${parentOf(path)}; not clicked`);
+    continue;
+  }
+  reached += 1;
+
+  await sleep(2500);
+
+  const state = await send("Runtime.evaluate", {
+    expression:
+      "JSON.stringify({at: location.pathname, text: document.body.innerText.slice(0, 200)})",
+    returnByValue: true,
+  });
+  const { at, text: shown } = JSON.parse(state.result?.result?.value ?? "{}");
+
+  const trouble = [];
+  for (const event of events) {
+    if (event.method === "Runtime.exceptionThrown") {
+      const detail = event.params.exceptionDetails;
+      trouble.push(
+        `uncaught: ${(detail.exception?.description ?? detail.text ?? "").split("\n")[0]}`,
+      );
+    }
+    if (event.method === "Runtime.consoleAPICalled" && event.params.type === "error") {
+      const args = event.params.args
+        .map((a) => a.value ?? a.description ?? "")
+        .join(" ")
+        .split("\n")[0];
+      if (args.trim()) trouble.push(`console.error: ${args}`);
+    }
+    if (event.method === "Network.responseReceived") {
+      const { status, url } = event.params.response;
+      if (status >= 400) trouble.push(`asset ${status}: ${url.replace(base, "")}`);
+    }
+  }
+
+  const kept = [...new Set(trouble)].filter(
+    (problem) => !IGNORE.some((pattern) => pattern.test(problem)),
+  );
+  const errored = /client-side exception|Application error/i.test(shown ?? "");
+
+  if (errored || kept.length > 0) {
+    failures += 1;
+    console.log(
+      `FAIL ${path} broke when reached by clicking` +
+        (at !== path ? ` (stayed on ${at})` : ""),
+    );
+    for (const problem of kept.slice(0, 4)) console.log(`       ${problem.slice(0, 220)}`);
+  } else {
+    console.log(`${path} reached by clicking`);
+  }
+}
+
+// Stated, not implied. A sweep that quietly covered fewer pages than it was asked about
+// is the shape of every failure this file exists to catch.
+console.log(`clicked through ${reached} of ${clickable.length} linkable routes`);
+if (reached === 0) {
+  console.log("FAIL no route was reachable by clicking; the nav pass proved nothing");
+  failures += 1;
+}
+
 ws.close();
 process.exit(failures > 0 ? 1 : 0);

@@ -224,12 +224,23 @@ API_AUTH="Authorization: Bearer $TOKEN"
 say "issued ${TOKEN:0:8}..."
 
 step "Console"
+# Its own build directory, so running this script does not break a console the
+# developer already has running. `next build` used to replace `console/.next` while a
+# `next start` on 3100 was serving from it; that server keeps its own build in memory, so
+# its pages then referenced chunks the new build did not contain. The chunk answered 400,
+# React failed with error #423, and the page showed "a client-side exception has
+# occurred" - but only when reached by clicking a link, because a direct load fetches the
+# page fresh. It was reported by hand three times before anything here could see it.
+export NEXT_DIST_DIR=".next-smoke"
+
 if [ "$BUILD" -eq 1 ]; then
-  (cd console && npx next build >"$WORK/console-build.log" 2>&1) \
+  (cd console && NEXT_DIST_DIR="$NEXT_DIST_DIR" npx next build \
+     >"$WORK/console-build.log" 2>&1) \
     || { tail -40 "$WORK/console-build.log" >&2; die "next build failed"; }
-  say "built"
+  say "built into $NEXT_DIST_DIR"
 fi
 (cd console && OFFICE_API_URL="http://127.0.0.1:$API_PORT" \
+  NEXT_DIST_DIR="$NEXT_DIST_DIR" \
   npx next start -p "$CONSOLE_PORT" >"$WORK/console.log" 2>&1 &)
 if ! wait_for "http://127.0.0.1:$CONSOLE_PORT/login" "the console" "$WORK/console.log" 60; then
   die "the console did not start"
