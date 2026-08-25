@@ -697,6 +697,20 @@ only what it found was indistinguishable from one listing the whole schema. The 
 runs against a draft with one block removed, and reinstating the present-only filter
 fails the suite.
 
+### Restarting is not revoking
+
+`dev-up.sh` reissued the operator token on every run, which made restarting the servers
+and locking the operator out of the console the same act. Restarting is something you do
+constantly - after a rebuild, after a migration, in the middle of debugging something
+else - and each one silently invalidated the token whoever was using the console had.
+Three sessions lost a login to it before the pattern was obvious.
+
+The token survives a restart perfectly well; nothing about bringing servers up requires a
+new one. So a plain run leaves it alone and says so, and `--new-token` reissues - which is
+a thing to ask for rather than a side effect. It still cannot be recovered, because it is
+stored as a hash and returned exactly once; that is why "already exists" must not be
+allowed to mean "you are locked out of your own dev instance".
+
 ## Known gaps
 
 *Last verified: 2026-08-24.*
