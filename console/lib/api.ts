@@ -826,6 +826,95 @@ export type ApprovalQueue = {
   empty_reason: string | null;
 };
 
+/* --------------------------------------------------- curriculum completeness */
+
+/**
+ * One of the eight required sections, and whether it teaches anything.
+ *
+ * `authored` used to mean a row exists. The live cre-forge curriculum satisfies that
+ * with `"what_it_does": "Documented."` — every section present, none empty, a valid
+ * content_hash over the lot, and certifications bound to it.
+ */
+export type CurriculumSection = {
+  section: string;
+  title: string;
+  state: "complete" | "thin" | "stub" | "missing";
+  /** Names the specific defect, for whoever has to fix it. Null when complete. */
+  reason: string | null;
+};
+
+export type CurriculumQuality = {
+  state: "complete" | "thin" | "stub" | "missing";
+  sections: CurriculumSection[];
+  complete: number;
+  total: number;
+  placeholder_sections: string[];
+  missing_sections: string[];
+  thin_sections: string[];
+  /** `stub` or `missing`. A Pack may not pass V11 against one of these. */
+  teaches_nothing: boolean;
+};
+
+export type InstructionModule = {
+  forge_id: string;
+  module_id: string;
+  module_name: string | null;
+  instruction_version: string;
+  forge_api_version: string;
+  forge_current_version: string | null;
+  version_sensitivity: string;
+  sensitivity_rationale: string | null;
+  content_hash: string;
+  authored_at: string | null;
+  author: string | null;
+  is_mutating: boolean | null;
+  idempotency_support: string | null;
+  compliance_flags_implied: string[] | null;
+  certifications: number;
+  quality: CurriculumQuality;
+  /** Why the Forge has moved past what this curriculum tolerates. Null when it has not. */
+  stale_forge: string | null;
+  certifications_on_hollow: number;
+};
+
+export type InstructionForge = {
+  forge_id: string;
+  api_version: string;
+  health_status: string;
+  modules: InstructionModule[];
+  unwritten: { forge_id: string; module_id: string; module_name: string | null }[];
+  written: number;
+  total: number;
+  stub: number;
+  thin: number;
+};
+
+export type InstructionDirectory = {
+  as_of: string;
+  forges: InstructionForge[];
+  modules: InstructionModule[];
+  unwritten: { forge_id: string; module_id: string; module_name: string | null }[];
+  totals: {
+    modules_with_instructions: number;
+    forges_with_instructions: number;
+    forges_registered: number;
+    complete: number;
+    thin: number;
+    hollow: number;
+    modules_without_instructions: number;
+    certifications_on_hollow: number;
+  };
+};
+
+export type BoundCertification = {
+  office_agent_id: string;
+  agent_name: string | null;
+  department: string | null;
+  state: string;
+  certified_tier: string | null;
+  updated_at: string | null;
+};
+
 export type RunSummary = {
   run_id: string;
   venture_id: string;

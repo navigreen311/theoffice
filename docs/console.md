@@ -826,6 +826,65 @@ mismatch that blanked pages once already. One hook reads it after mount and ever
 else derives from that, which keeps the smoke guard's blunt rule honest instead of
 widening its exemption list.
 
+## The Instructions pages, rebuilt
+
+`authored` meant a row exists and no section is empty. The live cre-forge curriculum
+satisfied that with:
+
+    "what_it_does": "Documented."
+    "what_it_does_not_do": "Documented."
+    "inputs": {"a": "b"}
+    "correct_sequence": ["a", "b"]
+
+Eight sections present, none empty, a valid `content_hash` over the lot, and 21
+certifications across the portfolio bound to those hashes - two of them on
+`cre-forge/buyer_match` alone. A hash of the word "Documented." is a valid hash of
+nothing, and every certification bound to it inherits that emptiness: the agents read as
+certified to operate a module nobody has described.
+
+**Completeness is assessed from the content, in one place.**
+`broker/curriculum_quality.py` returns four states - `complete`, `thin`, `stub`,
+`missing` - and three readers use it: the console renders it, V11 refuses a Pack on it,
+and the compliance page counts it. A screen that decided for itself what "thin" meant
+would eventually disagree with the rule that blocks a release.
+
+`thin` and `stub` are kept apart deliberately. Thin is real content that does not go far
+enough - one failure signature, a two-word sentence - and blocking a release on a short
+but honest line would teach people to pad. A stub is not content.
+
+**V11 fails a Pack whose instructions teach nothing.** The rule checked that a row
+existed, which is exactly what a placeholder satisfies. It now assesses the content, so a
+`content_hash` computed over "Documented." can no longer carry a venture through Gate 2.
+
+**The eight sections render individually**, each with the specific reason it fails -
+"Placeholder — the entire section reads 'Documented.'" rather than a badge over a JSON
+dump. The raw JSON stays behind a toggle.
+
+**A stub with live certifications names the agents.** Two on `buyer_match`: Faye Buyers
+and Gil Network. "2 agents are certified against a stub" is a number; the names are the
+people whose certifications have to be redone.
+
+**Instructions can now be written.** The page displayed content and offered no way to
+produce it, while the whole Teach section depends on that content existing. The form
+assesses as you type and will not publish while any section is a stub - publishing a stub
+is what produced this state.
+
+**The rules exist in two languages, and a shared fixture keeps them honest.**
+`console/lib/curriculum.ts` mirrors the Python so the form can grey out Publish without a
+round trip. Both test suites read `tests/fixtures/curriculum_cases.json`, so a rule added
+to one side without the other fails on the side that was not updated.
+
+**Two fixtures were testing the defect.** `tests/world.py` and a helper in
+`test_world_rules.py` both seeded the same placeholder curriculum, so every gate test
+downstream ran against agents certified to operate modules nobody had described - the
+tests passed and described nothing. Both now seed a curriculum that teaches the module,
+and the dev world has been re-seeded with it.
+
+**A teardown FK gap, found while re-seeding.** `teardown_world` deleted agents without
+clearing the proposals referencing them. That is the same shape as the `wipe_venture`
+failure recorded earlier: a teardown that names some dependents and not others breaks on
+whichever one the next feature adds.
+
 ## Known gaps
 
 *Last verified: 2026-08-24.*
@@ -852,6 +911,18 @@ widening its exemption list.
   rejected session redirects to the login page — it used to throw a 500, because only a
   *missing* cookie raised `NotAuthenticated` while a *rejected* one raised `ApiError`
   that no page caught.
+- **The SimForge cross-link is not built.** Each `never_do` entry wants a matching
+  `never_do_violation` scenario and each failure signature wants one exercising it; the
+  curriculum generator produces scenarios and the page does not yet show which rules have
+  one. An unenforced never-do rule is a sentence rather than a control, and the page
+  cannot currently say which are which.
+- **Staleness is reported per module, not per agent.** The list marks a curriculum whose
+  Forge has moved past its `version_sensitivity`; it does not yet list the agents whose
+  certifications that invalidates, or link to re-certification.
+- **Authoring writes a new version; there is no draft.** The brief asks for save-as-draft
+  at any completeness with publish gated on complete. Publishing is gated, but everything
+  saved is published - `forge_operating_instruction` has no draft status, unlike
+  `business_pack` which gained one in migration 0017.
 - **The approval queue has never had a real item in production use.** Everything on the
   page is exercised by a smoke fixture that queues a proposal, renders it, and denies it;
   no agent has yet held a grant, so nothing has proposed anything of its own.

@@ -141,11 +141,13 @@ def _wipe(conn: psycopg.Connection, forges: dict[str, object]) -> None:
 
 
 def author_instructions(conn: psycopg.Connection, modules: tuple[str, ...]) -> None:
-    content = {
-        "what_it_does": "x", "what_it_does_not_do": "x", "inputs": {"a": "b"},
-        "correct_sequence": ["a"], "failure_signatures": {"a": "b"},
-        "retry_vs_escalate": "x", "never_do": ["x"], "compliance_coupling": ["x"],
-    }
+    # The world's own curriculum, not a second placeholder one. This helper used to
+    # write `"what_it_does": "x"` and `inputs: {"a": "b"}` - which V11 accepted, because
+    # V11 only checked that a row existed. Now that it reads the content, a fixture that
+    # writes placeholders is a fixture that tests the defect rather than the rule.
+    from tests.world import INSTRUCTION_CONTENT
+
+    content = INSTRUCTION_CONTENT
     with conn.cursor() as cur:
         for module_id in modules:
             forge = "voiceforge" if module_id in VOICE_MODULES else "cre-forge"

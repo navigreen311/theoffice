@@ -523,25 +523,57 @@ async def _v6_modules_resolve(conn: AsyncConnection, pack: BusinessPack) -> tupl
 async def _v11_instructions_authored(
     conn: AsyncConnection, pack: BusinessPack
 ) -> tuple[bool, str]:
-    """Every module a position operates must have live instructions.
+    """Every module a position operates must have live instructions that teach it.
 
     Without them SimForge has nothing to test against, so the position can never be
     certified and the appointment can never be filled.
+
+    **A row is not a curriculum.** This rule used to check that an instruction set
+    existed, which the live cre-forge set satisfies with `"what_it_does": "Documented."`
+    and `"inputs": {"a": "b"}` - eight sections present, none empty, a valid
+    `content_hash` over the lot. A hash computed over placeholder text satisfies the
+    letter of this rule and defeats its purpose: SimForge trains against that text, an
+    agent is certified against that hash, and the certification is a statement about
+    nothing.
+
+    So the content is assessed, in the same place the console and the compliance page
+    assess it. `thin` passes - it is real content that does not go far enough, and
+    blocking a release on a short but honest sentence would teach people to pad. `stub`
+    and `missing` do not.
     """
+    from broker.curriculum_quality import assess
+
     modules = {m for p in pack.positions_required for m in p.forge_modules_operated}
     if not modules:
         return True, "no modules operated"
 
     async with conn.cursor() as cur:
         await cur.execute(
-            "SELECT module_id FROM forge_operating_instruction WHERE superseded_at IS NULL"
+            "SELECT module_id, content FROM forge_operating_instruction "
+            "WHERE superseded_at IS NULL"
         )
-        authored = {r[0] for r in await cur.fetchall()}
+        live = {r[0]: r[1] for r in await cur.fetchall()}
 
-    missing = sorted(modules - authored)
-    return (not missing,
-            f"no Forge Operating Instructions authored for: {_join(missing)}" if missing
-            else f"instructions authored for all {len(modules)} module(s)")
+    missing = sorted(modules - set(live))
+    if missing:
+        return False, f"no Forge Operating Instructions authored for: {_join(missing)}"
+
+    hollow = sorted(
+        module for module in modules
+        if assess(live[module])["teaches_nothing"]
+    )
+    if hollow:
+        return False, (
+            f"instructions exist but teach nothing for: {_join(hollow)}. A content_hash "
+            "computed over placeholder text is a valid hash of nothing, and every "
+            "certification bound to it inherits that emptiness."
+        )
+
+    thin = sorted(
+        module for module in modules if assess(live[module])["state"] == "thin"
+    )
+    detail = f" ({_join(thin)} thin)" if thin else ""
+    return True, f"instructions authored for all {len(modules)} module(s){detail}"
 
 
 async def _v28_library_refs_resolve(

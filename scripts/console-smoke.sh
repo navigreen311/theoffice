@@ -1675,6 +1675,186 @@ with urllib.request.urlopen(req) as response:
 PY
 fi
 
+step "Authored means the curriculum has content"
+curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT/instructions" > "$WORK"/instr.html
+sed 's/<!-- -->//g' "$WORK"/instr.html > "$WORK"/instr-text.html
+
+while IFS= read -r phrase; do
+  grep -qF "$phrase" "$WORK"/instr-text.html || fail "instructions page lost: ${phrase:0:60}"
+done <<'PHRASES'
+Curriculum, not documentation. content_hash binds certification to this exact text.
+Publishing a new version invalidates every certification earned against the current text.
+PHRASES
+say "the preserved copy is present verbatim"
+
+# THE ONE THAT MATTERS MOST. `authored` meant a row exists, which the live curriculum
+# satisfies with "what_it_does": "Documented." while agents are certified against it.
+if grep -qE ">authored<" "$WORK"/instr.html; then
+  fail "the list still reports 'authored' as a state - a row existing is not a curriculum"
+else
+  say "'authored' is no longer a state"
+fi
+if grep -qE "complete|thin|stub|sections missing" "$WORK"/instr-text.html; then
+  say "completeness is assessed from content"
+else
+  fail "no completeness assessment on the list"
+fi
+
+# The assessment is the same one the validator uses. Checked against the payload, so a
+# console that quietly disagreed with V11 would show up here.
+"$VPY" - "$TOKEN" "$API_PORT" <<'PY' | sed 's/^/  /'
+import json, sys, urllib.request
+token, port = sys.argv[1], sys.argv[2]
+req = urllib.request.Request(
+    f"http://127.0.0.1:{port}/api/instructions/directory",
+    headers={"Authorization": f"Bearer {token}"},
+)
+with urllib.request.urlopen(req) as response:
+    directory = json.load(response)
+
+totals = directory["totals"]
+states = {m["quality"]["state"] for m in directory["modules"]}
+bad = [m for m in directory["modules"] if m["quality"]["state"] not in
+       {"complete", "thin", "stub", "missing"}]
+
+if bad:
+    print(f"FAIL a module has an unknown completeness state: {bad[:2]}")
+elif not directory["modules"]:
+    print("FAIL no instruction sets at all - this check has nothing to assess")
+else:
+    hollow = totals["hollow"]
+    resting = totals["certifications_on_hollow"]
+    print(
+        f"{len(directory['modules'])} instruction sets assessed: "
+        f"{totals['complete']} complete, {totals['thin']} thin, {hollow} teach nothing"
+    )
+    if hollow and not resting:
+        print("  (no certification rests on a hollow curriculum)")
+    elif hollow:
+        print(f"  {resting} certification(s) rest on a curriculum that teaches nothing")
+PY
+
+step "A stub curriculum names the agents certified against it"
+MODULE_PATH="$("$VPY" - "$TOKEN" "$API_PORT" <<'PY' | tail -1
+import json, sys, urllib.request
+token, port = sys.argv[1], sys.argv[2]
+req = urllib.request.Request(
+    f"http://127.0.0.1:{port}/api/instructions/directory",
+    headers={"Authorization": f"Bearer {token}"},
+)
+with urllib.request.urlopen(req) as response:
+    directory = json.load(response)
+
+# Prefer one that is both hollow and certified against - that is the case the page
+# exists for. Fall back to any module so the render is still checked.
+hollow = [m for m in directory["modules"] if m["certifications_on_hollow"] > 0]
+chosen = (hollow or directory["modules"] or [None])[0]
+print(f"{chosen['forge_id']}/{chosen['module_id']}" if chosen else "")
+PY
+)"
+
+if [ -n "$MODULE_PATH" ]; then
+  curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT/instructions/$MODULE_PATH" \
+    > "$WORK"/instr-detail.html
+  sed 's/<!-- -->//g' "$WORK"/instr-detail.html > "$WORK"/instr-detail-text.html
+
+  while IFS= read -r phrase; do
+    grep -qF "$phrase" "$WORK"/instr-detail-text.html \
+      || fail "instruction detail lost: ${phrase:0:60}"
+  done <<'PHRASES'
+Eight required sections. A curriculum missing its failure signatures reads fine and teaches nothing about the case that matters.
+Curriculum, not documentation. content_hash binds certification to this exact text.
+PHRASES
+  say "the preserved copy is present verbatim"
+
+  # Eight sections rendered individually, not a JSON dump.
+  missing_section=0
+  for title in "What it does" "What it does not do" "Inputs and their meanings" \
+               "Correct sequence" "Failure signatures" "Retry vs escalate" \
+               "Never do" "Compliance coupling"; do
+    grep -qF "$title" "$WORK"/instr-detail-text.html \
+      || { fail "section not rendered: $title"; missing_section=1; }
+  done
+  [ "$missing_section" -eq 0 ] && say "all eight sections render individually"
+
+  if grep -qF "View raw" "$WORK"/instr-detail-text.html; then
+    say "the raw JSON is behind a toggle"
+  else
+    fail "the raw JSON is gone entirely - engineers need it"
+  fi
+
+  # The blocking finding, with people named rather than counted.
+  if grep -qF "certified against it" "$WORK"/instr-detail-text.html; then
+    if grep -qE "Placeholder — the entire section reads" "$WORK"/instr-detail-text.html; then
+      say "a stub curriculum names its placeholder sections and the agents bound to it"
+    else
+      fail "the page says a curriculum is a stub without naming which sections"
+    fi
+  fi
+
+  # Authoring, which did not exist at all.
+  if grep -qE "Author a new version|Write this curriculum|Edit this curriculum" \
+       "$WORK"/instr-detail-text.html; then
+    say "a curriculum can be authored from the page"
+  else
+    fail "no way to write the content the whole Teach section depends on"
+  fi
+else
+  notrun "instruction detail checks - no module has instructions"
+fi
+
+step "V11 refuses a Pack whose instructions teach nothing"
+# A content_hash computed over placeholder text satisfies the letter of V11 and defeats
+# its purpose. Checked against the validator itself rather than the page.
+"$VPY" - <<'PY' | sed 's/^/  /'
+import asyncio, sys
+sys.path.insert(0, ".")
+import broker  # noqa: F401
+from broker import packs
+from broker.curriculum_quality import assess
+from broker.db import close_pool, connection
+from generators.validator import validate
+
+
+async def main() -> None:
+    async with connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "SELECT content FROM forge_operating_instruction "
+                "WHERE superseded_at IS NULL LIMIT 1"
+            )
+            row = await cur.fetchone()
+
+        if row is None:
+            print("NOT EXERCISED no instruction sets to assess")
+            await close_pool()
+            return
+
+        hollow = assess(row[0])["teaches_nothing"]
+        live = await packs.live(conn, "greenstone")
+        if live is None:
+            print("NOT EXERCISED greenstone has no live Pack")
+            await close_pool()
+            return
+
+        report = await validate(live.pack, conn)
+        v11 = report.get("V11")
+        verdict = v11.verdict.value
+
+        if hollow and verdict != "FAIL":
+            print(f"FAIL instructions teach nothing and V11 says {verdict}")
+        elif hollow:
+            print("V11 fails the Pack whose instructions teach nothing")
+        elif verdict == "FAIL" and "teach nothing" in v11.message:
+            print("FAIL V11 reports hollow instructions that the assessment calls real")
+        else:
+            print(f"instructions are real and V11 says {verdict}")
+    await close_pool()
+
+
+asyncio.run(main())
+PY
+
 step "Every page has a route home"
 # There was no way back to a dashboard from anywhere: the wordmark was not a link and
 # nothing in the nav pointed at `/`.

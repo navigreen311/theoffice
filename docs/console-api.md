@@ -51,6 +51,7 @@ pass — it is whether that route should exist.
 | `POST /api/revocations/{id}/reinstate` | `revocation.reinstate` |
 | `POST /api/proposals/{id}/decide` | `proposals.decide` |
 | `POST /api/dispositions/resolve` | `sweeps.disposition` |
+| `GET /api/instructions/directory` | `instructions.directory` — completeness assessed from content, not from a row existing |
 | `POST /api/instructions` | `instructions.author` |
 | `POST /api/ventures/{id}/reverse-hard-cap` | `budget.reverse_hard_cap` |
 | `POST /api/signoffs` | `humans.sign_off` |

@@ -80,12 +80,55 @@ COMPLIANCE_ENTRIES = [
     },
 ]
 
+# A curriculum that teaches the module, because a world where agents are certified
+# against `"what_it_does": "Documented."` is not a prepared world - it is the bug.
+#
+# This constant used to be exactly that: eight sections present, none empty, `inputs`
+# of `{"a": "b"}` and a `correct_sequence` of `["a", "b"]`. It satisfied V11, which
+# checked only that a row existed, and every gate test downstream ran against agents
+# certified to operate a module nobody had described. The tests passed and described
+# nothing.
+#
+# V11 now assesses the content, so this had to become real. Deliberately generic - it is
+# seeded for every module - but it is prose, and `broker.curriculum_quality` reads it as
+# complete rather than as a placeholder.
 INSTRUCTION_CONTENT = {
-    "what_it_does": "Documented.", "what_it_does_not_do": "Documented.",
-    "inputs": {"a": "b"}, "correct_sequence": ["a", "b"],
-    "failure_signatures": {"silent_partial": "short result"},
-    "retry_vs_escalate": "Retry 5xx twice; escalate 4xx.",
-    "never_do": ["Never re-submit after a 200"],
+    "what_it_does": (
+        "Performs one operation against the Forge and returns its result. The result "
+        "is data for the agent to act on in a later step, never an action in itself."
+    ),
+    "what_it_does_not_do": (
+        "Does not retry on the agent's behalf, does not write to any other system, and "
+        "does not decide what happens next. Nothing here is a commitment to a third "
+        "party."
+    ),
+    "inputs": {
+        "venture_id": "Which venture this call belongs to. Scopes the grant and the "
+                      "ledger entry.",
+        "idempotency_key": "Stable across retries of the same task. A new key is a new "
+                           "call, not a retry of the old one.",
+    },
+    "correct_sequence": [
+        "Confirm the grant is assignable for this module before calling.",
+        "Call the module once with a stable idempotency key.",
+        "Read the result; escalate rather than repeating on a 4xx.",
+    ],
+    "failure_signatures": {
+        "silent_partial": "A 200 with fewer results than requested. The upstream index "
+                          "is stale; the call did not fail.",
+        "rate_limited": "429 with Retry-After. Wait the stated interval; do not retry "
+                        "immediately.",
+        "timeout": "No response inside the deadline. The call may still have landed - "
+                   "re-send only with the same idempotency key.",
+    },
+    "retry_vs_escalate": (
+        "Retry a 5xx twice with backoff. Escalate any 4xx to a human: a 4xx means the "
+        "request was wrong, and repeating it will not make it right."
+    ),
+    "never_do": [
+        "Never re-submit after a 200.",
+        "Never generate a new idempotency key to force a retry.",
+    ],
     "compliance_coupling": ["tsr_disclosure_required"],
 }
 
@@ -235,6 +278,13 @@ def teardown_world(conn: psycopg.Connection) -> None:
                 (entry["entry_ref"],),
             )
         cur.execute("DELETE FROM forge_operating_instruction")
+        # Proposals reference the agents about to be removed. `wipe_venture` learned this
+        # the hard way with provisioning_run; a teardown that names some dependents and
+        # not others fails on whichever one the next feature adds.
+        cur.execute(
+            "DELETE FROM proposal WHERE office_agent_id IN "
+            "(SELECT office_agent_id FROM office_agent_identity)"
+        )
         for agent_id, _n, _d in ROSTER:
             cur.execute("DELETE FROM office_agent_identity WHERE office_agent_id = %s",
                         (agent_id,))

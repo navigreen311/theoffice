@@ -47,6 +47,7 @@ from broker import (
     audit,
     budget,
     certification,
+    curriculum_quality,
     humans,
     incidents,
     instructions,
@@ -746,6 +747,20 @@ async def list_dispositions(conn: DB, _me: ME) -> list[dict[str, Any]]:
         return [dict(r) for r in await cur.fetchall()]
 
 
+# Declared BEFORE `/api/instructions/{forge_id}/{module_id}`. FastAPI matches in
+# declaration order, so a literal segment registered after a parameterised one is
+# unreachable - it would be handed "directory" as a forge id.
+@app.get("/api/instructions/directory")
+async def instructions_directory(conn: DB, _me: ME) -> dict[str, Any]:
+    """Every instruction set, assessed by what it contains rather than by existing.
+
+    `authored` meant a row exists, which the live cre-forge set satisfies with
+    `"what_it_does": "Documented."` while 234 certifications rest on its hash.
+    """
+    result = await instructions.directory(conn)
+    return {"as_of": datetime.now(UTC).isoformat(), **result}
+
+
 @app.get("/api/instructions/{forge_id}/{module_id}")
 async def instruction_detail(
     forge_id: str, module_id: str, conn: DB, _me: ME
@@ -768,7 +783,25 @@ async def instruction_detail(
         )
         cert_states = {r["state"]: int(r["count"]) for r in await cur.fetchall()}
 
+    # Assessed, and the agents named. "2 agents are certified against a stub" is a
+    # number; "Ada Sourcing and Bram Records are" is a list of people whose
+    # certifications have to be redone.
+    quality = curriculum_quality.assess(live.content if live else None)
+    bound = (
+        await instructions.certifications_on(
+            conn, forge_id, module_id, live.content_hash
+        )
+        if live is not None else []
+    )
+
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT human_id::text AS human_id, display_name FROM office_human"
+        )
+        authors = {r["human_id"]: r["display_name"] for r in await cur.fetchall()}
+
     return {
+        "as_of": datetime.now(UTC).isoformat(),
         "forge_id": forge_id,
         "module_id": module_id,
         "live": None if live is None else {
@@ -778,7 +811,12 @@ async def instruction_detail(
             "content_hash": live.content_hash,
             "content": live.content,
         },
-        "versions": versions,
+        "quality": quality,
+        "certifications_bound": bound,
+        "versions": [
+            {**row, "author": authors.get(str(row.get("authored_by")))}
+            for row in versions
+        ],
         "certification_states": cert_states,
     }
 
