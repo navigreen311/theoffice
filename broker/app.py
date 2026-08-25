@@ -62,14 +62,18 @@ from broker import (
 from broker.db import close_pool, connection
 from broker.errors import NotAuthorized, OfficeError
 from broker.humans import Human
-from generators.validator import all_rule_ids
+from generators.validator import (
+    GATE_45_RECHECKS,
+    LATER_GATE_REASONS,
+    all_rule_ids,
+)
 from generators.validator import validate as validate_pack
 
 # The migration this build expects. `/api/ready` compares it to what the database
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0018"
+EXPECTED_SCHEMA_REVISION = "0019"
 
 
 @asynccontextmanager
@@ -1075,21 +1079,74 @@ async def pack_detail(venture_id: str, conn: DB, _me: ME) -> dict[str, Any]:
     editing = pending or live
     if editing is not None:
         result = await validate_pack(editing.pack, conn)
+        # Three states, never two. A rule that could not be evaluated has established
+        # nothing, and counting it as "checked" produces a badge claiming the document
+        # was examined more thoroughly than it was.
+        rows = []
+        for row in _rule_rows(result):
+            gate, why = LATER_GATE_REASONS.get(row["rule_id"], (None, None))
+            evaluable = row["verdict"] != "NOT_RUN"
+            rows.append({
+                **row,
+                "evaluable": evaluable,
+                # Which gate settles it, and why not here. A bare NOT_RUN tells a reader
+                # that something did not happen without telling them what would.
+                "settled_at_gate": gate,
+                "why_not_here": None if evaluable else why,
+                # Passes here, re-checked later against real output. Not a failure and
+                # not a clean bill either.
+                "rechecked_later": (
+                    row["rule_id"] in GATE_45_RECHECKS and evaluable
+                ),
+                "rechecked_reason": why if row["rule_id"] in GATE_45_RECHECKS else None,
+            })
+
+        passed = [r for r in rows if r["verdict"] == "PASS"]
+        failed = [r for r in rows if r["verdict"] in ("FAIL", "WARN")]
+        not_evaluable = [r for r in rows if not r["evaluable"]]
+
         report = {
             "state": packs.validation_state(result),
-            # Everything that is not a PASS, in rule order. Twenty-odd green lines is
-            # how three red ones get skimmed past - but `rules_checked` stays on screen,
-            # so "nothing to show" cannot be read as "nothing was checked".
-            "notable": [
-                row for row in _rule_rows(result) if row["verdict"] != "PASS"
-            ],
-            "rules_checked": len(result.results),
+            "rules": rows,
+            "passed": len(passed),
+            "failed": len(failed),
+            "not_evaluable": len(not_evaluable),
+            "rechecked_later": len([r for r in rows if r["rechecked_later"]]),
             "rules_total": len(all_rule_ids()),
         }
+
+    # What publishing would disturb, computed rather than described. The mechanism is
+    # not the obvious one: a certification binds to a Forge Operating Instruction's
+    # hash, not to the Pack, so publishing a Pack does not void certifications. What it
+    # voids is Gate 10 signatures, which bind to the *artifacts* hash - and the
+    # artifacts are generated from the Pack, so changing the Pack changes them and the
+    # signature stops matching. Nothing revokes it.
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT count(*) AS n FROM signoff_record "
+            "WHERE venture_id = %s AND gate = 'gate_10'",
+            (venture_id,),
+        )
+        counted = await cur.fetchone()
+        signatures = int((counted or {}).get("n", 0))
+
+        await cur.execute(
+            "SELECT run_id::text AS run_id, pack_version, status, current_gate "
+            "FROM provisioning_run "
+            "WHERE venture_id = %s AND status IN ('running','blocked','awaiting_human')",
+            (venture_id,),
+        )
+        open_runs = [dict(r) for r in await cur.fetchall()]
 
     return {
         "as_of": datetime.now(UTC).isoformat(),
         "venture_id": venture_id,
+        "bindings": {
+            "gate_10_signatures": signatures,
+            # Pinned to the version they started from, so publishing does not change
+            # what they provision. Worth saying, because the opposite is assumed.
+            "open_runs": open_runs,
+        },
         "live": None if live is None else {
             "pack_version": live.pack_version,
             "content_hash": live.content_hash,

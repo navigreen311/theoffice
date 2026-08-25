@@ -596,6 +596,64 @@ the editor, so a Pack cannot read `valid` on one screen and `not validated` on t
 and the rule count comes from the registry rather than the copy — the editor said "all 27
 rules" against a registry of 28.
 
+### The editor's validation badge, and what a stage can claim
+
+The badge read `can provision - 28 of 28 rules checked`. Both halves overclaimed, and
+the second has a principle behind it.
+
+**Not evaluable, passed and failed are three states.** One rule - V24 - had not been
+evaluated at all: it tests appointment output, which does not exist until the generators
+run at Gate 3. Counting it in "28 of 28 checked" claims the document was examined more
+thoroughly than it was, on the screen where somebody decides whether to publish it. The
+result is now three numbers that partition the rule set, and a test asserts the
+partition rather than the wording.
+
+**"Can provision" is a claim about the pipeline, not about this stage.** V13 passes at
+Gate 2, which estimates approvals from headcount, and fails at Gate 4.5, which computes
+them from the real Task Ledger - the two disagree by an order of magnitude and the Gate
+2 estimate is the optimistic one. So a Pack with no failures here has not been shown to
+be provisionable. The badge says `No blocking failures at this stage`, which is the
+finding the validator can actually support, and rules that a later gate re-checks say so.
+
+`GATE_45_RECHECKS` names those rules, and a test reads the source of
+`validate_gate_4_5` to assert the constant matches what the function evaluates - a list
+that drifts from the thing it describes is worse than no list, because the editor would
+go quietly back to implying Gate 2 is the last word.
+
+**Every unevaluable rule names the gate that settles it and why this one cannot.** A bare
+NOT_RUN says something did not happen without saying what would, which leaves a reader
+to decide whether it is a defect, a gap in the Pack, or normal.
+
+### The diff, the history, and the publish guard
+
+**A diff, on the document that gets signed.** Its hash pins every provisioning run that
+started from it and Gate 10 signatures bind to the artifacts it generates, and there was
+no way to see what differed from the live version. `lib/diff.ts` is a plain LCS -
+implemented rather than imported, because a dependency on this page is a dependency on
+the one screen that must not surprise anybody. Identical text says so rather than
+rendering an empty panel, which reads as a diff that failed to load.
+
+**Migration 0019 separates `abandoned` from `superseded`.** A released version replaced
+by a later release and a draft nobody published were both `superseded`, which is why an
+abandoned draft above the live version read as a broken sort - the list was ordered
+correctly and the label was not saying what happened. The first attempt distinguished
+them by a `-draft` suffix on the version string; that is a naming convention rather than
+a fact, wrong for a draft called `1.2.0` and for a release called `2.0.0-draft`. The
+store records which one it was.
+
+**The history keeps its own promise.** "A run names the version it provisioned" was copy
+under a list that could not say it: versions were here and runs were on another screen.
+Each row now carries its run count, its author, a diff against live or any other
+version, and Restore as draft - which restores as a *draft* rather than publishing,
+because restoring is usually recovery and that is exactly the moment not to put a
+document into force in one click.
+
+**Publish confirms.** Version transition, diff summary, the rules the text is known to
+carry, and what publishing does not do. The warning names Gate 10 signatures rather than
+certifications: `certification.instruction_content_hash` binds to a Forge Operating
+Instruction, not to a Pack, so publishing a Pack does not void certifications. What it
+voids is signatures, which bind to the artifacts the Pack generates.
+
 ## Known gaps
 
 *Last verified: 2026-08-24.*
@@ -622,6 +680,19 @@ rules" against a registry of 28.
   rejected session redirects to the login page — it used to throw a 500, because only a
   *missing* cookie raised `NotAuthenticated` while a *rejected* one raised `ApiError`
   that no page caught.
+- **The editor is a textarea with line numbers, not a code editor.** No YAML syntax
+  highlighting, no parse-error marking distinct from rule failures, no block-navigation
+  sidebar, and no deep link to a failing block. Those want a real editor component
+  (CodeMirror or Monaco), which is a bundle and a CSP decision rather than an afternoon,
+  and should be taken deliberately rather than as a side effect of this increment.
+- **Download YAML and Replace from file are not implemented.** The text is selectable and
+  the diff is readable, so nothing is blocked; it was cut for the items above it.
+- **The publish confirmation lists rules the *stored* Pack carries, not the edited text.**
+  Validating the buffer would need a round trip the confirmation does not make. Validate
+  first and the panel above is authoritative; the confirmation says "as stored".
+- **Schema completeness is on the Packs directory, not in the editor.** The directory
+  computes it per Pack; the editor would need to compute it against the unsaved buffer,
+  which is the same round-trip question as above.
 - **A run started before this increment has the old gate-4 evidence.** Advisories are
   recorded when the gate runs, so runs already parked at gate 4 carry the flat `warnings`
   list and show no downstream banner. Re-running produces the structured form; nothing

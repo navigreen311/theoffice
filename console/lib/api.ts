@@ -404,7 +404,18 @@ export type PackVersion = {
    * `superseded_at` either, so the old check rendered an unpublished draft with a green
    * "live" badge beside the version that was actually in force.
    */
-  status: "draft" | "live" | "superseded";
+  status: "draft" | "live" | "superseded" | "abandoned";
+  /**
+   * What became of it, in words: `live`, `draft`, `superseded by 1.1.0`, `abandoned
+   * draft`. One word for both a released version replaced by a later release and a
+   * draft nobody published is what made the history read as an unsorted list.
+   */
+  disposition: string;
+  superseded_by: string | null;
+  author: string | null;
+  /** Provisioning runs that started from this version. The section promises this. */
+  runs: number;
+  last_run_at: string | null;
 };
 
 export type PackSource = {
@@ -419,14 +430,48 @@ export type PackDetail = {
   live: PackSource | null;
   /** The unpublished draft. The editor opens this in preference to `live`. */
   draft: PackSource | null;
-  validation: {
-    state: "failing" | "not_validated" | "warnings" | "valid";
-    /** Everything that is not a PASS. `rules_checked` carries the denominator. */
-    notable: RuleRow[];
-    rules_checked: number;
-    rules_total: number;
-  } | null;
+  validation: PackValidationReport | null;
+  bindings: {
+    /** Bound to the *artifacts* hash, which is generated from this Pack. */
+    gate_10_signatures: number;
+    open_runs: {
+      run_id: string;
+      pack_version: string;
+      status: string;
+      current_gate: string;
+    }[];
+  };
   versions: PackVersion[];
+};
+
+/** A rule, and how far this stage could actually get with it. */
+export type StagedRule = RuleRow & {
+  /** False when the rule could not be evaluated here at all. */
+  evaluable: boolean;
+  /** The gate that settles it, when this one cannot. */
+  settled_at_gate: string | null;
+  why_not_here: string | null;
+  /** Passed here, and evaluated again later against real generator output. */
+  rechecked_later: boolean;
+  rechecked_reason: string | null;
+};
+
+/**
+ * Three states, never two.
+ *
+ * `passed + failed + not_evaluable` is the whole rule set. A rule that could not be
+ * evaluated has established nothing, and folding it into a "checked" count produces a
+ * badge claiming the document was examined more thoroughly than it was.
+ */
+export type PackValidationReport = {
+  state: "failing" | "not_validated" | "warnings" | "valid";
+  rules: StagedRule[];
+  passed: number;
+  failed: number;
+  not_evaluable: number;
+  /** Passed here but re-checked later. Not a failure, and not a clean bill either. */
+  rechecked_later: number;
+  rules_total: number;
 };
 
 export type RuleRow = {

@@ -103,11 +103,12 @@ async def store(
                 (venture_id,),
             )
         else:
-            # Superseded, not deleted. A draft somebody replaced is still a document
-            # somebody wrote, and `office_app` has no DELETE on this table by design -
-            # the Pack store is append-only for the same reason the audit log is.
+            # Abandoned, not superseded, and not deleted. A draft somebody replaced
+            # is still a document somebody wrote - `office_app` has no DELETE on this
+            # table by design - but it was never in force, so it did not supersede
+            # anything and nothing superseded it.
             await cur.execute(
-                "UPDATE business_pack SET status = 'superseded', superseded_at = now() "
+                "UPDATE business_pack SET status = 'abandoned', superseded_at = now() "
                 "WHERE venture_id = %s AND status = 'draft'",
                 (venture_id,),
             )
@@ -229,7 +230,7 @@ async def publish_draft(
     # the ON CONFLICT path - the same row, promoted, rather than a copy of it.
     async with conn.cursor() as cur:
         await cur.execute(
-            "UPDATE business_pack SET status = 'superseded', superseded_at = now() "
+            "UPDATE business_pack SET status = 'abandoned', superseded_at = now() "
             "WHERE venture_id = %s AND status = 'draft'",
             (venture_id,),
         )
@@ -247,14 +248,61 @@ async def publish_draft(
 async def list_versions(
     conn: AsyncConnection, venture_id: str
 ) -> list[dict[str, Any]]:
+    """Every version, newest first, and what became of each.
+
+    The section's own copy promises that "a run names the version it provisioned", and
+    nothing delivered it: the history listed versions and the runs listed versions, and
+    joining them was left to the reader. `superseded` was also doing too much work - a
+    published version replaced by a later publish and a draft somebody abandoned are
+    different events, and one word for both is why a superseded draft sitting above a
+    live version reads as a broken sort.
+    """
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
-            "SELECT pack_version, content_hash, authored_by, authored_at, "
-            "       superseded_at, status "
-            "FROM business_pack WHERE venture_id = %s ORDER BY authored_at DESC",
+            """
+            SELECT b.pack_version, b.content_hash, b.authored_by::text AS authored_by,
+                   b.authored_at, b.superseded_at, b.status,
+                   h.display_name AS author,
+                   (SELECT count(*) FROM provisioning_run r
+                     WHERE r.venture_id = b.venture_id
+                       AND r.pack_version = b.pack_version)   AS runs,
+                   (SELECT max(r.started_at) FROM provisioning_run r
+                     WHERE r.venture_id = b.venture_id
+                       AND r.pack_version = b.pack_version)   AS last_run_at
+            FROM business_pack b
+            LEFT JOIN office_human h ON h.human_id = b.authored_by
+            WHERE b.venture_id = %s
+            ORDER BY b.authored_at DESC
+            """,
             (venture_id,),
         )
-        return [dict(r) for r in await cur.fetchall()]
+        rows = [dict(r) for r in await cur.fetchall()]
+
+    # What replaced each superseded version: the next thing published after it. Read
+    # from `status`, never guessed from the version string - `1.2.0` can be a draft and
+    # `2.0.0-draft` can be a release, and a suffix is a naming convention rather than a
+    # fact about what happened.
+    released = sorted(
+        (r for r in rows if r["status"] in ("live", "superseded")),
+        key=lambda r: r["authored_at"],
+    )
+
+    for row in rows:
+        row["superseded_by"] = None
+        row["disposition"] = row["status"]
+
+        if row["status"] == "abandoned":
+            row["disposition"] = "abandoned draft"
+            continue
+        if row["status"] != "superseded":
+            continue
+
+        later = [r for r in released if r["authored_at"] > row["authored_at"]]
+        if later:
+            row["superseded_by"] = later[0]["pack_version"]
+            row["disposition"] = f"superseded by {later[0]['pack_version']}"
+
+    return rows
 
 
 async def list_ventures(conn: AsyncConnection) -> list[dict[str, Any]]:

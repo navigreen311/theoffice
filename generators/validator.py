@@ -138,6 +138,38 @@ def _join(items: Iterable[Any], limit: int = 5) -> str:
 
 # --------------------------------------------------------------------- document rules
 
+# Rules Gate 4.5 evaluates against real generator output. Two different situations share
+# this list and the difference matters to a reader:
+#
+#   V24  cannot be evaluated at Gate 2 at all - it tests appointment output, which does
+#        not exist until Gate 3 has run. It reports NOT_RUN, and NOT_RUN is not a pass.
+#   V13  can be evaluated at Gate 2, from headcount and a conservative per-agent-day
+#        factor, and is evaluated again at Gate 4.5 against the real Task Ledger. The
+#        two can disagree by an order of magnitude and **the Gate 2 estimate is the
+#        optimistic one** - Greenstone passes here and fails there.
+#
+# So a Pack with no failures at Gate 2 has not been shown to be provisionable. It has
+# been shown to have no failures *that Gate 2 can see*, which is a weaker statement and
+# the one the editor is entitled to make.
+GATE_45_RECHECKS = ("V13", "V24")
+
+# Why each rule cannot be, or has not finally been, settled at Gate 2. Keyed by rule so
+# the console can say which gate will answer it rather than leaving a bare NOT_RUN.
+LATER_GATE_REASONS = {
+    "V24": (
+        "4.5",
+        "Tests appointment output, which does not exist until the generators run at "
+        "Gate 3.",
+    ),
+    "V13": (
+        "4.5",
+        "Estimated here from headcount and a conservative per-agent-day factor, and "
+        "re-checked at Gate 4.5 against the real Task Ledger. The estimate here is the "
+        "optimistic one.",
+    ),
+}
+
+
 @rule("V1", Severity.FAIL, "All required fields present")
 def v1(pack: BusinessPack) -> tuple[bool, str]:
     # Pydantic enforced presence at load. What it cannot enforce is that a required

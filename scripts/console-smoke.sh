@@ -1127,31 +1127,104 @@ PHRASES
     fail "a draft exists and there is no way to publish it here"
   fi
 
-  # One Pack cannot be `valid` on one screen and `not validated` on another.
-  if grep -qE "can provision|cannot provision|not validated|provisions with warnings" \
-       "$WORK"/editor-text.html; then
-    say "the editor states validation in the directory's vocabulary"
+  # THE ONE THAT MATTERS MOST HERE. The badge read `can provision - 28 of 28 rules
+  # checked` while one rule had not been evaluated at all, on the screen where somebody
+  # decides whether to publish.
+  if grep -qF "can provision" "$WORK"/editor-text.html; then
+    fail "the editor claims a Pack 'can provision' - a claim about the whole pipeline that this stage cannot support"
   else
-    fail "the editor reports validation in its own words - two screens, two answers"
+    say "the editor does not claim a Pack can provision"
+  fi
+  if grep -qE "not evaluable at this stage" "$WORK"/editor-text.html; then
+    say "unevaluable rules are counted separately from passes"
+  else
+    fail "the editor does not report unevaluable rules as their own state"
+  fi
+  three=0
+  for part in "passed" "failed" "not"; do
+    grep -qE "[0-9]+ $part" "$WORK"/editor-text.html || three=1
+  done
+  if [ "$three" -eq 0 ]; then
+    say "the result is stated as three numbers, not one"
+  else
+    fail "validation renders as a single count again"
   fi
 
-  # The count is the registry's, not a number typed into the copy.
-  if grep -qE "of [0-9]+ rules checked" "$WORK"/editor-text.html; then
-    say "the rule count carries a denominator"
+  # The denominator is the registry's, not a number typed into the copy. The editor
+  # said "all 27 rules" against a registry of 28 for as long as that copy existed.
+  RULES_TOTAL="$(curl -s -H "$API_AUTH" "http://127.0.0.1:$API_PORT/api/packs/directory"     | grep -o '"rules_total": *[0-9]*' | sed 's/.*: *//' || true)"
+  if [ -n "$RULES_TOTAL" ] && grep -qF "all $RULES_TOTAL rules" "$WORK"/editor-text.html; then
+    say "the rule denominator matches the validator registry ($RULES_TOTAL)"
   else
-    fail "the editor states a rule count with no denominator"
-  fi
-  if grep -qF "all 27 rules" "$WORK"/editor-text.html; then
-    fail "the editor still hardcodes 27 rules; the registry has more"
+    fail "the editor's rule count does not come from the registry"
   fi
 
-  # A draft must never be labelled live: `superseded_at IS NULL` is true of both.
-  drafts="$(grep -c '>draft<' "$WORK"/editor-text.html || true)"
-  lives="$(grep -c '>live<' "$WORK"/editor-text.html || true)"
-  if [ "$drafts" -ge 1 ] && [ "$lives" -le 1 ]; then
-    say "the version history distinguishes draft from live ($drafts draft, $lives live)"
+  # Every unevaluable rule names the gate that settles it. Checked against the payload
+  # rather than the markup: the panel is behind a toggle, so a server render cannot
+  # show it, and "not exercised" would be the honest but useless answer.
+  "$VPY" - "$TOKEN" "$API_PORT" "$PACK_VENTURE" <<'PY' | sed 's/^/  /'
+import json, sys, urllib.request
+token, port, venture = sys.argv[1], sys.argv[2], sys.argv[3]
+req = urllib.request.Request(
+    f"http://127.0.0.1:{port}/api/packs/{venture}",
+    headers={"Authorization": f"Bearer {token}"},
+)
+with urllib.request.urlopen(req) as response:
+    report = json.load(response)["validation"]
+
+bad = [
+    r["rule_id"] for r in report["rules"]
+    if not r["evaluable"] and not (r["settled_at_gate"] and r["why_not_here"])
+]
+counted = report["passed"] + report["failed"] + report["not_evaluable"]
+if bad:
+    print(f"FAIL unevaluable rules with no gate named: {bad}")
+elif counted != report["rules_total"]:
+    print(f"FAIL {counted} rules accounted for, {report['rules_total']} exist")
+else:
+    print(
+        f"three states partition all {report['rules_total']} rules; "
+        f"every unevaluable rule names its gate"
+    )
+PY
+
+  # A diff, on the document whose hash binds signatures.
+  if grep -qF "Diff against live" "$WORK"/editor-text.html; then
+    say "the editor offers a diff against the live Pack"
   else
-    fail "$lives versions are labelled live - a draft is being rendered as in force"
+    fail "no diff on a document that gets signed"
+  fi
+
+  # Publish confirms rather than firing on one click.
+  if grep -qF "Publish this text" "$WORK"/editor-text.html; then
+    say "publish asks before it supersedes"
+  else
+    fail "publish supersedes the live Pack in one click"
+  fi
+
+  # Version history coherence.
+  if grep -qF "abandoned draft" "$WORK"/editor-text.html \
+     || grep -qE "superseded by [0-9]" "$WORK"/editor-text.html; then
+    say "the history names what became of each version"
+  else
+    notrun "version dispositions - this venture has only one version"
+  fi
+  if grep -qE "provisioned by [0-9]+ run|never provisioned" "$WORK"/editor-text.html; then
+    say "each version says whether a run provisioned it"
+  else
+    fail "the history promises a run names its version and does not deliver it"
+  fi
+  if grep -qF "Restore as draft" "$WORK"/editor-text.html; then
+    say "an old version can be restored as a draft"
+  else
+    fail "no way to recover an earlier version"
+  fi
+
+  # Unsaved edits are visible.
+  if grep -qF "unsaved edits" "$WORK"/editor.html \
+     || grep -qF "Unsaved edits" "$WORK"/editor-text.html \
+     || grep -qF "not counting your unsaved edits" "$WORK"/editor-text.html; then
+    say "the editor accounts for unsaved edits"
   fi
 
   # Clean up after the check, so a smoke run does not leave a draft on the venture.

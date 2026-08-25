@@ -233,3 +233,60 @@ export async function templateCategories(): Promise<PackTemplateCategory[]> {
   );
   return result.categories;
 }
+
+/* --------------------------------------------------- actions for version history */
+
+/** The stored text of one version, for diffing. Read-only. */
+export async function versionSource(
+  ventureId: string,
+  packVersion: string,
+): Promise<string> {
+  const result = await api.get<{ yaml_source: string }>(
+    `/api/packs/${encodeURIComponent(ventureId)}/versions/${encodeURIComponent(packVersion)}`,
+  );
+  return result.yaml_source;
+}
+
+/**
+ * Bring an old version back as the working draft.
+ *
+ * Deliberately a draft rather than a publish. Restoring is usually an act of
+ * recovery — something in the current text is wrong and an older one was right — and
+ * that is exactly the moment not to put a document into force in one click. It becomes
+ * the draft, where it can be read, diffed and validated before anybody publishes it.
+ */
+export async function restoreAsDraftAction(
+  _prev: NewPackState | null,
+  form: FormData,
+): Promise<NewPackState> {
+  const venture = String(form.get("venture_id") ?? "");
+  const version = String(form.get("pack_version") ?? "");
+  if (!venture || !version) return { error: "No version given." };
+
+  try {
+    const source = await versionSource(venture, version);
+    const result = await api.post<{
+      pack_version: string;
+      validation: { failures: { rule_id: string }[]; rules_checked: number };
+    }>("/api/packs/draft", {
+      yaml_source: source,
+      // Marked, so the history does not grow two rows with the same version string and
+      // no way to tell which is the restored copy.
+      pack_version: `${version}-restored`,
+    });
+
+    revalidatePath(`/packs/${venture}`);
+    revalidatePath("/packs");
+    const failing = result.validation.failures.length;
+    return {
+      ok:
+        `${version} is now the draft, as ${result.pack_version}. It is not live — ` +
+        (failing
+          ? `${failing} of ${result.validation.rules_checked} rules are failing against it.`
+          : "publish it when you are ready."),
+    };
+  } catch (error) {
+    if (error instanceof ApiError) return { error: `${error.status}: ${error.detail}` };
+    throw error;
+  }
+}

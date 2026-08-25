@@ -473,9 +473,163 @@ async def test_the_editor_and_the_directory_agree_on_validation_state(api, world
     directory = (await api.get("/api/packs/directory", headers=auth(token))).json()
     card = next(p for p in directory["packs"] if p["venture_id"] == VENTURE)
 
-    assert detail["validation"]["state"] == card["validation"]["state"]
-    assert detail["validation"]["rules_total"] == directory["rules_total"]
-    # Non-PASS only. Twenty-odd green rows is how three red ones get skimmed past.
-    assert all(
-        row["verdict"] != "PASS" for row in detail["validation"]["notable"]
+    report = detail["validation"]
+    assert report["state"] == card["validation"]["state"]
+    assert report["rules_total"] == directory["rules_total"]
+
+    # Three states, and they account for every rule. A rule that could not be evaluated
+    # has established nothing, so folding it into a "checked" count produces a badge
+    # claiming the document was examined more thoroughly than it was.
+    assert (
+        report["passed"] + report["failed"] + report["not_evaluable"]
+        == len(report["rules"])
+        == report["rules_total"]
     )
+    assert report["not_evaluable"] == len(
+        [row for row in report["rules"] if not row["evaluable"]]
+    )
+    assert report["passed"] == len(
+        [row for row in report["rules"] if row["verdict"] == "PASS"]
+    ), "a rule that could not be evaluated is being counted as passing"
+
+
+# ================================== P16-P19 - three states, and the claim they support
+
+async def test_a_rule_that_could_not_be_evaluated_names_the_gate_that_will(api, world):
+    """P16 - a bare NOT_RUN says something did not happen, not what would.
+
+    V24 tests appointment output, which does not exist until the generators run. Saying
+    only "NOT_RUN" leaves a reader to decide whether that is a defect, a gap in the Pack,
+    or normal - and it is normal, at this gate, for a reason the page can state.
+    """
+    token = world.token
+    body = (await api.get(f"/api/packs/{VENTURE}", headers=auth(token))).json()
+
+    unevaluable = [
+        rule for rule in body["validation"]["rules"] if not rule["evaluable"]
+    ]
+    assert unevaluable, "this world has nothing unevaluable; the test proves nothing"
+
+    for rule in unevaluable:
+        assert rule["settled_at_gate"], (
+            f"{rule['rule_id']} could not be evaluated and the page cannot say which "
+            "gate will settle it"
+        )
+        assert rule["why_not_here"], (
+            f"{rule['rule_id']} names a gate but not why this stage cannot answer it"
+        )
+
+
+async def test_the_summary_never_counts_an_unevaluable_rule_as_passing(api, world):
+    """P17 - the badge said `28 of 28 rules checked` with one rule unevaluated.
+
+    Not evaluable, passed and failed are three states. Two of them summed into a
+    "checked" count is a claim that the document was examined more thoroughly than it
+    was, on the screen where somebody decides whether to publish it.
+    """
+    token = world.token
+    report = (
+        await api.get(f"/api/packs/{VENTURE}", headers=auth(token))
+    ).json()["validation"]
+
+    by_verdict = {
+        "passed": [r for r in report["rules"] if r["verdict"] == "PASS"],
+        "failed": [r for r in report["rules"] if r["verdict"] in ("FAIL", "WARN")],
+        "not_evaluable": [r for r in report["rules"] if not r["evaluable"]],
+    }
+    assert report["passed"] == len(by_verdict["passed"])
+    assert report["failed"] == len(by_verdict["failed"])
+    assert report["not_evaluable"] == len(by_verdict["not_evaluable"])
+
+    # The three partition the rule set. Nothing is double-counted and nothing is lost.
+    assert sum(len(v) for v in by_verdict.values()) == report["rules_total"]
+    assert not (
+        set(r["rule_id"] for r in by_verdict["passed"])
+        & set(r["rule_id"] for r in by_verdict["not_evaluable"])
+    ), "a rule is counted as both passed and not evaluable"
+
+
+async def test_a_rule_rechecked_at_a_later_gate_says_so(api, world):
+    """P18 - V13 passes here and fails at Gate 4.5.
+
+    Gate 2 estimates approvals from headcount; Gate 4.5 computes them from the real Task
+    Ledger, and the two disagree by an order of magnitude with the Gate 2 estimate being
+    the optimistic one. A Pack with no failures here has not been shown to be
+    provisionable, and the editor must not imply that it has.
+    """
+    from generators.validator import GATE_45_RECHECKS
+
+    token = world.token
+    report = (
+        await api.get(f"/api/packs/{VENTURE}", headers=auth(token))
+    ).json()["validation"]
+
+    rechecked = [rule for rule in report["rules"] if rule["rechecked_later"]]
+    assert rechecked, (
+        "nothing is marked as re-checked later, so the editor implies Gate 2 settles "
+        "every rule it passes"
+    )
+    for rule in rechecked:
+        assert rule["rule_id"] in GATE_45_RECHECKS
+        assert rule["rechecked_reason"], f"{rule['rule_id']} says nothing about why"
+
+
+def test_the_recheck_list_matches_what_gate_4_5_actually_evaluates():
+    """P19 - a constant that drifts from the function it describes is worse than none.
+
+    `GATE_45_RECHECKS` tells the editor which rules a later gate settles. If Gate 4.5
+    grows a third rule and this list does not, the editor quietly goes back to implying
+    that Gate 2 is the last word on it.
+    """
+    import inspect
+
+    from generators import validator
+    from generators.validator import GATE_45_RECHECKS
+
+    source = inspect.getsource(validator.validate_gate_4_5)
+    appended = {
+        line.split('"')[1]
+        for line in source.splitlines()
+        if line.strip().startswith('"V') and '", Severity.' in line
+    }
+    assert appended == set(GATE_45_RECHECKS), (
+        f"validate_gate_4_5 evaluates {sorted(appended)} but GATE_45_RECHECKS says "
+        f"{sorted(GATE_45_RECHECKS)}"
+    )
+
+
+async def test_an_abandoned_draft_is_not_called_superseded(api, world):
+    """P20 - a released version replaced by a later release, and a draft nobody
+    published, are different events.
+
+    One word for both is why the version history read as an unsorted list: an abandoned
+    draft above the live version looks like a broken sort when the only thing wrong is
+    that the label does not say what happened. And it must not be inferred from the
+    version string - `1.2.0` can be a draft and `2.0.0-draft` can be a release.
+    """
+    token = world.token
+    source = PACK_PATH.read_text(encoding="utf-8")
+
+    async with connection() as conn:
+        # A draft with no `-draft` in its name, replaced by another. The suffix
+        # heuristic this replaced would have called it a superseded release.
+        await packs.store(
+            conn, yaml_source=source, pack_version="3.3.3",
+            authored_by=world.human_id, publish=False,
+        )
+        await packs.store(
+            conn, yaml_source=source, pack_version="3.3.4",
+            authored_by=world.human_id, publish=False,
+        )
+
+    body = (await api.get(f"/api/packs/{VENTURE}", headers=auth(token))).json()
+    rows = {row["pack_version"]: row for row in body["versions"]}
+
+    assert rows["3.3.3"]["status"] == "abandoned"
+    assert rows["3.3.3"]["disposition"] == "abandoned draft"
+    assert rows["3.3.3"]["superseded_by"] is None, (
+        "a draft nobody published cannot have been superseded by a release - saying so "
+        "invents a lineage"
+    )
+    assert rows["1.0.0"]["status"] == "live"
+    assert rows["1.0.0"]["runs"] >= 0
