@@ -135,31 +135,43 @@ check(
 );
 
 // 2. Choose a venture, and expect a blast radius before anything is submitted.
-await pickScope("A venture");
-
-// Polled rather than slept for. A fixed wait passed against a warm dev server and
-// reported "no venture to choose" inside the smoke run, where the same page took
-// slightly longer to paint - a check that depends on how fast the machine is will
-// eventually fail on a machine nobody is watching.
-let chose = "no venture to choose";
-for (let attempt = 0; attempt < 20; attempt += 1) {
-  await sleep(250);
-  chose = await evaluate(`
-    (() => {
-      const option = [...document.querySelectorAll('form ul button')][0];
-      if (!option) return 'no venture to choose';
-      option.click();
-      return 'chose ' + option.textContent.trim().slice(0, 40);
-    })()
-  `);
-  if (!chose.startsWith("no ")) break;
+// Either wide scope will do: venture and Forge both require the target name to be typed,
+// which is the thing under test. It reached only for a venture, and a fresh database has
+// none - `build_world` seeds Forges and agents - so on CI the check reported itself
+// unrunnable rather than exercising the confirmation against the Forge scope sitting
+// right there.
+//
+// Polled rather than slept for: a fixed wait passed against a warm dev server and found
+// nothing inside the smoke run, where the same page takes longer to paint.
+let chose = "nothing to choose";
+let wideScope = "A venture";
+for (const scope of ["A venture", "A whole Forge"]) {
+  await pickScope(scope);
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    await sleep(250);
+    chose = await evaluate(`
+      (() => {
+        const option = [...document.querySelectorAll('form ul button')][0];
+        if (!option) return 'nothing to choose';
+        option.click();
+        return 'chose ' + option.textContent.trim().slice(0, 40);
+      })()
+    `);
+    if (!chose.startsWith("nothing ")) break;
+  }
+  if (!chose.startsWith("nothing ")) {
+    wideScope = scope;
+    break;
+  }
 }
+console.log(`  wide scope under test: ${wideScope}`);
 // The radius is fetched from the server after the selection, so this waits for a round
 // trip rather than for a render.
 await sleep(3000);
 
-if (typeof chose === "string" && chose.startsWith("no ")) {
-  console.log(`NOT EXERCISED ${chose}`);
+if (typeof chose === "string" && chose.startsWith("nothing ")) {
+  console.log("FAIL neither a venture nor a Forge could be chosen, so the confirmation was never exercised");
+  failures += 1;
 } else {
   const radius = await evaluate(
     `document.body.innerText.includes('What this stops')`,
@@ -171,12 +183,12 @@ if (typeof chose === "string" && chose.startsWith("no ")) {
   );
 
   const forward = await evaluate(
-    `document.body.innerText.includes('after the revocation')`,
+    `document.body.innerText.includes('after the revocation') || document.body.innerText.includes('every future call')`,
   );
   check(
     forward,
     "the forward-looking effect is stated",
-    "a venture revocation does not say it blocks later grants",
+    "a wide revocation does not state its forward-looking effect",
   );
 
   // 3. The first control opens a review; it does not revoke.
@@ -217,7 +229,7 @@ if (typeof chose === "string" && chose.startsWith("no ")) {
   `);
   check(
     gated === "gated",
-    "a venture revocation will not proceed until the name is typed",
+    `a ${wideScope.toLowerCase()} revocation will not proceed until the name is typed`,
     `the typed confirmation is not enforced: ${gated}`,
   );
 

@@ -2968,8 +2968,16 @@ state = chain["recorded_verification"]
 if chain["live_check_is_recorded"] is not False:
     print("FAIL the live check claims to be recorded")
 elif not state["recorded"]:
-    if "never been recorded" not in page:
+    # Two things, and both matter. The page has to say nothing was recorded, and it must
+    # not be claiming a verification at the same time - an unqualified green badge over
+    # an unverified log is the single largest instance of the failure this console's own
+    # copy warns about.
+    says_so = "has ever been recorded" in page or "never been recorded" in page
+    claims_verified = "Chain integrity verified" in page
+    if not says_so:
         print("FAIL nothing has been recorded and the page does not say so")
+    elif claims_verified:
+        print("FAIL the page says nothing is recorded and claims verification anyway")
     else:
         print("no verification recorded, and the page says so rather than showing green")
 else:
