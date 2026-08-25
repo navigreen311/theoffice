@@ -44,7 +44,12 @@ from generators.artifacts import (
     ScenarioPack,
 )
 from generators.pack import BusinessPack
-from generators.validator import ValidationReport, Verdict, validate_gate_4_5
+from generators.validator import (
+    ValidationReport,
+    Verdict,
+    rule_blocks,
+    validate_gate_4_5,
+)
 
 
 async def run_all(pack: BusinessPack, conn: AsyncConnection) -> GeneratedArtifacts:
@@ -122,6 +127,7 @@ def _warnings(
             out.append(Advisory(
                 severity="fail", message=result.message,
                 source="gate_4_5", rule_id=result.rule_id, blocks_at="4.5",
+                blocks=tuple(rule_blocks().get(result.rule_id, ())),
             ))
 
     if roles.unresolved_modules:

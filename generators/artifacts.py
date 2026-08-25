@@ -343,6 +343,9 @@ class Advisory(Artifact):
     source: str              # which generator or gate raised it
     rule_id: str | None = None
     blocks_at: str | None = None
+    # Pack blocks the rule reads. Lets a console link land on the fields to change
+    # rather than at the top of the document.
+    blocks: tuple[str, ...] = ()
 
     @property
     def blocking(self) -> bool:

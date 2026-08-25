@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { Breadcrumb } from "@/components/breadcrumb";
 import { AlertTriangle, GitCompare } from "@/components/icons";
 import { Ago, AsOf } from "@/components/local-time";
+import { SchemaBar } from "@/components/schema-bar";
 import {
   api,
   NotAuthenticated,
@@ -86,41 +87,6 @@ function Rules({
   );
 }
 
-/** How much of the schema this Pack fills in. A different question from validation. */
-function SchemaBar({ schema }: { schema: PackCard["schema"] }) {
-  const pct = Math.round((schema.present / schema.total) * 100);
-  return (
-    <div>
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="text-meta text-ink-muted">Schema blocks</span>
-        <span className="text-meta text-ink-secondary">
-          {schema.present} of {schema.total}
-        </span>
-      </div>
-      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-muted">
-        <div
-          className={`h-full rounded-full ${
-            schema.required_missing.length ? "bg-bad" : "bg-ok"
-          }`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      {schema.missing.length ? (
-        <p className="mt-1 text-meta text-ink-muted">
-          {schema.required_missing.length ? (
-            <span className="text-bad">
-              required: {schema.required_missing.join(", ")}.{" "}
-            </span>
-          ) : null}
-          {schema.missing
-            .filter((block) => !schema.required_missing.includes(block))
-            .join(", ") || null}
-          {schema.required_missing.length ? null : " — all optional"}
-        </p>
-      ) : null}
-    </div>
-  );
-}
 
 /** Draft, live, provisioned. Drift is live ≠ provisioned. */
 function Versions({ pack }: { pack: PackCard }) {
@@ -275,7 +241,12 @@ function Card({ pack, rulesTotal }: { pack: PackCard; rulesTotal: number }) {
       <div className="mt-4 grid gap-4 border-t border-line pt-4 sm:grid-cols-2">
         <Versions pack={pack} />
         <div className="space-y-4">
-          <SchemaBar schema={pack.schema} />
+          <SchemaBar
+          present={pack.schema.present}
+          total={pack.schema.total}
+          missing={pack.schema.missing}
+          requiredMissing={pack.schema.required_missing}
+        />
           <Artifacts pack={pack} />
         </div>
       </div>

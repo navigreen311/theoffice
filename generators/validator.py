@@ -21,9 +21,12 @@ meta-test fails if any rule lacks either.
 
 from __future__ import annotations
 
+import inspect
+import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from enum import StrEnum
+from functools import lru_cache
 from typing import Any
 
 from psycopg import AsyncConnection
@@ -638,6 +641,51 @@ def _rule_order() -> list[str]:
     """V1..Vn, numerically. Report order must not depend on import order."""
     ids = {r[0] for r in _RULES} | set(_WORLD_RULES) | GATE_45_RULES
     return sorted(ids, key=lambda r: int(r[1:]))
+
+
+# Which Pack block each rule is about, derived from the rule's own source.
+#
+# The editor's block sidebar marks the blocks a failing rule lives in, and needs a map
+# from rule to block to do it. A hand-written table would be right the day it was
+# written: twenty-eight entries maintained beside twenty-eight functions, with nothing
+# forcing them to agree, is the same shape as the blocker-string table the ventures page
+# replaced for exactly this reason.
+#
+# A rule function names the fields it reads - `pack.budget`, `pack.positions_required` -
+# so the mapping is already stated in the code that does the work. Reading it back is
+# not a guess about intent; it is the same fact, from the same place.
+#
+# The four world rules are appended by `validate` rather than registered by the
+# decorator, and are about the bridge and the registry rather than about a block, so
+# they are named here with the block whose contents they check against the world.
+_WORLD_RULE_BLOCKS = {
+    "V2": ("forge_dependencies",),
+    "V6": ("forge_dependencies",),
+    "V11": ("positions_required", "forge_operating_instructions"),
+    "V28": ("forge_dependencies",),
+    "V24": ("positions_required",),
+}
+
+
+@lru_cache(maxsize=1)
+def rule_blocks() -> dict[str, tuple[str, ...]]:
+    """rule_id -> the Pack blocks it reads. Empty tuple when it reads none."""
+    fields = set(BusinessPack.model_fields)
+    reads = re.compile(r"pack\.([a-z_]+)")
+
+    out: dict[str, tuple[str, ...]] = {}
+    for rule_id, _severity, _description, fn in _RULES:
+        try:
+            source = inspect.getsource(fn)
+        except OSError:  # pragma: no cover - only when running from a zip
+            source = ""
+        out[rule_id] = tuple(
+            sorted({name for name in reads.findall(source) if name in fields})
+        )
+
+    for rule_id, blocks in _WORLD_RULE_BLOCKS.items():
+        out.setdefault(rule_id, blocks)
+    return out
 
 
 def all_rule_ids() -> list[str]:

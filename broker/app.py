@@ -66,6 +66,7 @@ from generators.validator import (
     GATE_45_RECHECKS,
     LATER_GATE_REASONS,
     all_rule_ids,
+    rule_blocks,
 )
 from generators.validator import validate as validate_pack
 
@@ -1088,6 +1089,9 @@ async def pack_detail(venture_id: str, conn: DB, _me: ME) -> dict[str, Any]:
             evaluable = row["verdict"] != "NOT_RUN"
             rows.append({
                 **row,
+                # Which Pack blocks the rule reads, so the editor's sidebar can mark the
+                # block a failure lives in rather than only listing the failure.
+                "blocks": list(rule_blocks().get(row["rule_id"], ())),
                 "evaluable": evaluable,
                 # Which gate settles it, and why not here. A bare NOT_RUN tells a reader
                 # that something did not happen without telling them what would.
@@ -1138,9 +1142,25 @@ async def pack_detail(venture_id: str, conn: DB, _me: ME) -> dict[str, Any]:
         )
         open_runs = [dict(r) for r in await cur.fetchall()]
 
+    # The schema's own block list, in document order. Presence is *not* computed here:
+    # the editor's sidebar describes the buffer somebody is typing into, and a parsed
+    # model cannot answer that - an optional field with a default reads as present even
+    # when the document never mentions it. The client reads the text.
+    every_block, required_blocks = packs.schema_blocks()
+
     return {
         "as_of": datetime.now(UTC).isoformat(),
         "venture_id": venture_id,
+        # In document order, with what is missing named. A block that is absent is
+        # information - the sidebar is where "this Pack has no kpi_targets" belongs, and
+        # it cannot say it from a list of the blocks that happen to exist.
+        "schema": {
+            "blocks": [
+                {"name": name, "required": name in required_blocks}
+                for name in every_block
+            ],
+            "total": len(every_block),
+        },
         "bindings": {
             "gate_10_signatures": signatures,
             # Pinned to the version they started from, so publishing does not change

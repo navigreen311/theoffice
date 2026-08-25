@@ -98,6 +98,10 @@ function DownstreamBanner({
   const blocking = advisories.filter((a) => a.severity === "fail");
   if (blocking.length === 0) return null;
 
+  // Deep-link to the block the failure lives in, so "fix the Pack" lands on the fields
+  // to change rather than at the top of a 342-line document.
+  const target = blocking.flatMap((advisory) => advisory.blocks ?? [])[0] ?? null;
+
   const gates = [...new Set(blocking.map((a) => a.blocks_at).filter(Boolean))];
   const where = gates.length === 1 ? `gate ${gates[0]}` : `gates ${gates.join(", ")}`;
   const rules = blocking.map((a) => a.rule_id).filter(Boolean);
@@ -118,10 +122,13 @@ function DownstreamBanner({
             one gate later. Fix the Pack first, or advance knowing it stops.
           </p>
           <Link
-            href={`/packs/${encodeURIComponent(venture)}`}
+            href={`/packs/${encodeURIComponent(venture)}${target ? `#${target}` : ""}`}
             className="mt-2 inline-block text-desc text-ink underline underline-offset-2"
           >
             Fix in Pack editor
+            {target ? (
+              <span className="text-ink-muted"> — {target}</span>
+            ) : null}
           </Link>
         </div>
       </div>

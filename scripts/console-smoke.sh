@@ -1081,9 +1081,16 @@ if [ -n "$PACK_VENTURE" ]; then
   # A draft, saved the way the directory saves one, so the editor is exercised in the
   # state the whole draft mechanism exists for rather than only in the empty case.
   "$VPY" - "$TOKEN" "$API_PORT" <<'PY' | sed 's/^/  /'
-import json, sys, urllib.error, urllib.request
+import json, re, sys, urllib.error, urllib.request
 token, port = sys.argv[1], sys.argv[2]
 source = open("packs/greenstone.yaml", encoding="utf-8").read()
+
+# Remove one optional block, so the sidebar has an absent block to report. Without this
+# the fixture has all eighteen and a sidebar listing only what it finds is
+# indistinguishable from one listing the whole schema.
+source = re.sub(r"^triggers:\n(?:[ \t-].*\n|\n)*", "", source, flags=re.M)
+assert "\ntriggers:" not in source, "the fixture still has the block it is meant to omit"
+
 body = json.dumps({"yaml_source": source, "pack_version": "0.0.1-smoke"}).encode()
 req = urllib.request.Request(
     f"http://127.0.0.1:{port}/api/packs/draft", data=body, method="POST",
@@ -1228,6 +1235,61 @@ PY
      || grep -qF "Unsaved edits" "$WORK"/editor-text.html \
      || grep -qF "not counting your unsaved edits" "$WORK"/editor-text.html; then
     say "the editor accounts for unsaved edits"
+  fi
+
+  # Block navigation. 342 lines in one scroll, with the actions below all of them.
+  BLOCKS_TOTAL="$("$VPY" - <<'PY'
+from generators.pack import BusinessPack
+print(len(BusinessPack.model_fields))
+PY
+)"
+  rows="$(grep -o 'min-w-0 flex-1 truncate' "$WORK"/editor.html | wc -l | tr -d ' ')"
+  if [ "$rows" = "$BLOCKS_TOTAL" ]; then
+    say "every one of the $BLOCKS_TOTAL schema blocks has a sidebar row"
+  else
+    fail "the sidebar renders $rows rows for $BLOCKS_TOTAL schema blocks - a block the document omits has no line to scroll to, so the sidebar is the only place it can appear"
+  fi
+
+  if grep -q 'aria-label="Pack blocks"' "$WORK"/editor.html; then
+    say "the block sidebar renders"
+  else
+    fail "no block navigation - 342 lines in a single scroll"
+  fi
+
+  # The fixture omits one block. A missing block is the one thing a reader cannot find
+  # by scrolling - there is no line to scroll to - so the sidebar has to say it.
+  if grep -qE "not in this document" "$WORK"/editor-text.html; then
+    say "a block the document omits is reported as absent"
+  else
+    fail "the sidebar lists only the blocks it found; an omitted block is invisible"
+  fi
+
+  # Below 1024px a seventeen-row list above the document is worse than none.
+  if grep -qF "Jump to block" "$WORK"/editor-text.html; then
+    say "narrow viewports get a block picker rather than a stacked list"
+  else
+    fail "no mobile block picker"
+  fi
+
+  # The actions were below the whole document.
+  if grep -qE "No unsaved edits|Unsaved edits" "$WORK"/editor-text.html; then
+    say "the pinned bar states the dirty state"
+  else
+    fail "the action bar does not say whether there are unsaved edits"
+  fi
+  shortcuts="$(grep -o 'form="pack-' "$WORK"/editor.html | wc -l | tr -d ' ')"
+  if [ "$shortcuts" -ge 2 ]; then
+    say "the pinned actions submit the same forms as the reference row ($shortcuts)"
+  else
+    fail "the pinned buttons do not reuse the forms below - two implementations of one action"
+  fi
+
+  # `min-w-0` is load-bearing: without it the monospace document sets the flex item's
+  # minimum width and pushes the sidebar off the screen instead of scrolling.
+  if grep -qF "min-w-0 flex-1" "$WORK"/editor.html; then
+    say "the editor column can shrink below its content width"
+  else
+    fail "the editor column has no min-w-0; the document will push the sidebar out"
   fi
 
   # Clean up after the check, so a smoke run does not leave a draft on the venture.

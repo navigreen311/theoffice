@@ -431,6 +431,15 @@ export type PackDetail = {
   /** The unpublished draft. The editor opens this in preference to `live`. */
   draft: PackSource | null;
   validation: PackValidationReport | null;
+  /**
+   * The schema's block list, in document order. Presence is deliberately not here: the
+   * editor's sidebar describes the buffer being typed into, and a parsed model reads an
+   * optional field with a default as present even when the document never mentions it.
+   */
+  schema: {
+    blocks: { name: string; required: boolean }[];
+    total: number;
+  };
   bindings: {
     /** Bound to the *artifacts* hash, which is generated from this Pack. */
     gate_10_signatures: number;
@@ -454,6 +463,11 @@ export type StagedRule = RuleRow & {
   /** Passed here, and evaluated again later against real generator output. */
   rechecked_later: boolean;
   rechecked_reason: string | null;
+  /**
+   * The Pack blocks this rule reads, derived from the rule's own source. Lets the
+   * editor mark the block a failure lives in rather than only listing the failure.
+   */
+  blocks: string[];
 };
 
 /**
@@ -534,6 +548,8 @@ export type Advisory = {
   rule_id: string | null;
   /** The gate this will stop the run at, when it is a failure. */
   blocks_at: string | null;
+  /** Pack blocks the rule reads, so "Fix in Pack editor" can land on one. */
+  blocks?: string[];
 };
 
 export type RunStop = {

@@ -654,6 +654,49 @@ certifications: `certification.instruction_content_hash` binds to a Forge Operat
 Instruction, not to a Pack, so publishing a Pack does not void certifications. What it
 voids is signatures, which bind to the artifacts the Pack generates.
 
+### Block navigation, and where the actions live
+
+342 lines in one scroll, with Validate, Save draft and Publish below all of them. Editing
+`budget` at line 129 meant scrolling past 128 lines to reach it and the rest of the
+document to act on it.
+
+**A sidebar of every block the schema defines, present or not.** A list of the blocks a
+document happens to contain cannot say "this Pack has no `kpi_targets`" - the absence has
+no line to scroll to, so the sidebar is the only place it can appear.
+
+**The mapping from rule to block is derived, not written down.** The sidebar marks blocks
+a failing rule reads, which needs a rule-to-block map. Twenty-eight table entries
+maintained beside twenty-eight functions, with nothing forcing them to agree, is the
+shape of the blocker-string table the ventures page replaced. A rule already names the
+fields it reads - `pack.budget`, `pack.positions_required` - so `rule_blocks()` reads it
+back out of the source. All 28 rules map; the four world rules, which are appended by
+`validate` rather than registered by the decorator, are named explicitly because they are
+about the bridge rather than about a block.
+
+**Icons only where they mean something.** A failing rule, or an absent block. Marking
+every row would make the two that matter indistinguishable from the sixteen that do not.
+
+**Line numbers and presence come from the buffer, not the stored Pack.** The sidebar has
+to follow what is being typed, including a document that does not parse yet - which is
+the state it is most useful in, and the state a YAML parser returns nothing for. So
+`lib/blocks.ts` reads top-level keys out of the text, and the server sends only the
+schema's block list.
+
+**The actions are pinned to the bottom of the editor card**, and submit the same three
+forms as the reference row below the document via `form=` rather than duplicating them.
+Publish still opens its confirmation: a pinned button that skipped it would be a
+one-click supersede, which is what the confirmation exists to prevent.
+
+**`min-w-0` on the editor column is load-bearing.** Without it the monospace content sets
+the flex item's minimum width and the document pushes the sidebar off the screen instead
+of scrolling.
+
+**A note on the fixture.** The smoke check for "every block has a row" was passing for
+the wrong reason: Greenstone's Pack contains all eighteen blocks, so a sidebar listing
+only what it found was indistinguishable from one listing the whole schema. The check now
+runs against a draft with one block removed, and reinstating the present-only filter
+fails the suite.
+
 ## Known gaps
 
 *Last verified: 2026-08-24.*
@@ -690,10 +733,13 @@ voids is signatures, which bind to the artifacts the Pack generates.
   each page and asserting no uncaught error - roughly a minute of CI time and a real
   dependency, so it is a decision to take deliberately rather than a side effect.
 - **The editor is a textarea with line numbers, not a code editor.** No YAML syntax
-  highlighting, no parse-error marking distinct from rule failures, no block-navigation
-  sidebar, and no deep link to a failing block. Those want a real editor component
-  (CodeMirror or Monaco), which is a bundle and a CSP decision rather than an afternoon,
-  and should be taken deliberately rather than as a side effect of this increment.
+  highlighting, and no parse-error marking distinct from rule failures. Block navigation
+  and deep links now exist; highlighting still wants a real editor component (CodeMirror
+  or Monaco), which is a bundle and a CSP decision rather than a side effect.
+- **Scroll-spy measures line height from computed style.** It assumes every line is one
+  line tall, which a textarea guarantees only while wrapping is off. It is, and the
+  gutter depends on the same assumption; a wrapped line would put both out by the number
+  of visual rows it occupies.
 - **Download YAML and Replace from file are not implemented.** The text is selectable and
   the diff is readable, so nothing is blocked; it was cut for the items above it.
 - **The publish confirmation lists rules the *stored* Pack carries, not the edited text.**

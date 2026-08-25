@@ -206,6 +206,7 @@ async def _gate_3(ctx: _Context) -> GateOutcome:
                     "source": advisory.source,
                     "rule_id": advisory.rule_id,
                     "blocks_at": advisory.blocks_at,
+                    "blocks": list(advisory.blocks),
                 }
                 for advisory in artifacts.advisories
             ],
@@ -279,6 +280,7 @@ async def _gate_4(ctx: _Context) -> GateOutcome:
                     "source": advisory.source,
                     "rule_id": advisory.rule_id,
                     "blocks_at": advisory.blocks_at,
+                    "blocks": list(advisory.blocks),
                 }
                 for advisory in artifacts.advisories
             ],
