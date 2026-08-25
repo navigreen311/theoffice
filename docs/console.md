@@ -934,6 +934,33 @@ the body hash, which is the only thing an author can keep to verify against late
 **Publishing and withdrawing a share were adjacent buttons.** Withdrawing takes access
 away from a venture relying on it. It is its own card now.
 
+### The purge the brief asked for does not exist, and should not
+
+The brief asked for a "Purge smoke fixtures" action. Neither store can be purged.
+`office_app` holds INSERT and UPDATE on `persona` and no DELETE - the store is write-only
+by design, which is the same privilege boundary that stops a persona body being read back
+- and `historical_record` refuses DELETE to everyone by trigger, including the admin role
+and including its own migration. Widening a grant to put the button on screen would undo
+a boundary drawn on purpose.
+
+So the overview was claiming something the system does not support. `personas_deletable`
+was hardcoded `True`, reasoned from "personas are never production data" - true, and
+beside the point. Both flags are read from `information_schema.table_privileges` now, so
+a later GRANT moves the page instead of leaving it asserting yesterday's privileges, and
+a smoke check compares the page's claim against the grants directly.
+
+What replaces the purge is the half the brief's own rule asks for: **the exclusion is
+recorded, not applied silently.** `POST /api/knowledge/fixtures/exclude` appends a
+`knowledge_fixture_exclusion` record naming how many rows are being left out of the
+counts and who decided it, and touches nothing it describes. Migration 0022 adds the
+record type; it is its own type rather than a `note` because "why does this count differ
+from the row count" should be findable by kind.
+
+That migration's downgrade widens rather than narrows. Removing the type would mean
+deleting the rows that use it, and that table refuses deletion - so the downgrade restores
+the comment and leaves the type valid. A migration that would have to destroy history to
+reverse is not reversible; it is destructive with a tidier name.
+
 ### The smoke harness was not counting its own failures
 
 Twelve checks computed their verdict in Python and printed `FAIL ...` down a pipe into

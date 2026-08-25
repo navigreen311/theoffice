@@ -6,6 +6,7 @@ import { AlertTriangle } from "@/components/icons";
 import { AsOf } from "@/components/local-time";
 import { api, NotAuthenticated } from "@/lib/api";
 
+import { RecordExclusion } from "./forms";
 import { KnowledgeTabs } from "./tabs";
 
 export const dynamic = "force-dynamic";
@@ -102,10 +103,12 @@ export default async function KnowledgePage() {
             and filtered out of every table by default.
           </p>
           <p className="mt-2 max-w-3xl text-meta text-ink-muted">
-            Personas can be deleted — they are never production data. Historical records
-            cannot: that store is append-only by design, refusing UPDATE and DELETE, and a
-            bad entry is answered with a compensating entry rather than an edit. Excluding
-            them is a reading decision, and the decision is itself recorded.
+            Neither store can be purged from here, and neither should be. Personas are
+            write-only to this console — it holds no privilege to read a body back, let
+            alone delete one. Historical records are append-only to everyone, refusing
+            UPDATE and DELETE, and a bad entry is answered with a compensating entry
+            rather than an edit. So excluding these rows is a reading decision, and the
+            decision is itself recorded.
           </p>
           <div className="mt-3 flex flex-wrap gap-3">
             <Link
@@ -120,6 +123,9 @@ export default async function KnowledgePage() {
             >
               Review test records
             </Link>
+            <RecordExclusion
+              counts={{ personas: fixtures.personas, records: fixtures.records }}
+            />
           </div>
         </section>
       ) : null}

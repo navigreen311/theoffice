@@ -479,6 +479,12 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
         "/api/knowledge/compliance",
         "/api/knowledge/personas",
         "/api/knowledge/history",
+        # Records that smoke fixtures are being excluded from the knowledge counts. It
+        # writes one append-only row and touches nothing it describes: there is no purge
+        # route, because `persona` is write-only to this role and `historical_record`
+        # refuses DELETE to everyone. The write IS the control - an exclusion nobody
+        # recorded is a filter nobody noticed.
+        "/api/knowledge/fixtures/exclude",
         # Human and role administration — the most privilege-sensitive surface in this
         # file. The rules live in `humans.assert_may_grant`: a role may be granted only
         # by somebody holding a STRICTLY stronger one, and never to yourself.

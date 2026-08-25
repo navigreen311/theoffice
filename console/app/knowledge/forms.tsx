@@ -11,6 +11,7 @@ import {
   authorEntryAction,
   authorPersonaAction,
   authorPlaybookAction,
+  recordExclusionAction,
   recordNoteAction,
   shareAction,
   type KnowledgeActionState,
@@ -443,5 +444,30 @@ export function PersonaWrite({ ventures }: { ventures: string[] }) {
         <Result state={state} />
       </form>
     </section>
+  );
+}
+
+/**
+ * The control for a decision, not for a deletion.
+ *
+ * The brief asked for a purge. Neither store can be purged - `persona` is write-only to
+ * this role and `historical_record` is append-only to everyone - and widening a grant to
+ * put a Purge button on screen would undo a boundary that was drawn deliberately. What is
+ * left is the half that was always the point: excluding these rows is a judgement, and a
+ * judgement nobody wrote down is indistinguishable from a filter nobody noticed.
+ */
+export function RecordExclusion({ counts }: { counts: { personas: number; records: number } }) {
+  const [state, action] = useFormState(recordExclusionAction, null);
+  const total = counts.personas + counts.records;
+  if (total === 0) return null;
+
+  return (
+    <form action={action} className="inline-flex flex-col">
+      <Submit
+        label={`Record this exclusion (${total})`}
+        busy="Recording…"
+      />
+      <Result state={state} />
+    </form>
   );
 }

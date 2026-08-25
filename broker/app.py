@@ -77,7 +77,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0021"
+EXPECTED_SCHEMA_REVISION = "0022"
 
 
 @asynccontextmanager
@@ -2134,6 +2134,33 @@ async def record_history_route(
             conn, record_type="note", venture_id=body.venture_id,
             summary=body.summary, detail=body.detail, actor_type="human",
             recorded_by=me.human_id,
+        )
+    except knowledge.KnowledgeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"record_id": record_id}
+
+
+@app.post("/api/knowledge/fixtures/exclude", status_code=201)
+async def record_fixture_exclusion_route(conn: DB, me: ME) -> dict[str, int]:
+    """Write down that the smoke fixtures are being left out of the counts.
+
+    There is no purge route and there should not be. `persona` is write-only to this
+    role and `historical_record` is append-only to everyone, so the honest action is the
+    one the store allows: append a record saying what is being excluded and who decided
+    it. Filtering rows out of a count without that is the silent version of the same
+    act, and the silent version is what let sixty smoke personas read as a library.
+    """
+    humans.authorize(me, required_role="venture_operator")
+    summary = await knowledge.overview(conn)
+    fixtures = summary["fixtures"]
+    try:
+        record_id = await knowledge.record_fixture_exclusion(
+            conn,
+            recorded_by=me.human_id,
+            counts={
+                "personas": fixtures["personas"],
+                "records": fixtures["records"],
+            },
         )
     except knowledge.KnowledgeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

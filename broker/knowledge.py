@@ -414,6 +414,38 @@ async def record(
     return int(row[0])
 
 
+async def record_fixture_exclusion(
+    conn: AsyncConnection, *, recorded_by: uuid.UUID, counts: dict[str, int]
+) -> int:
+    """Write down that smoke fixtures are being excluded from the knowledge counts.
+
+    Neither store can be purged by this role, and neither should be: `persona` is
+    write-only by design and `historical_record` is append-only by design. So the
+    exclusion is a reading decision, and this is the record of it - which is what makes
+    it a decision somebody made rather than a filter somebody left on.
+
+    It is itself a historical record, so it cannot be edited or removed either. Changing
+    the decision means appending the new one.
+    """
+    personas = counts.get("personas", 0)
+    records = counts.get("records", 0)
+    if personas + records == 0:
+        raise KnowledgeError("there are no test fixtures to exclude")
+
+    return await record(
+        conn,
+        record_type="knowledge_fixture_exclusion",
+        summary=(
+            f"{personas + records} smoke-test entries excluded from the knowledge "
+            f"counts ({personas} personas, {records} historical records). Neither "
+            "store can be purged: personas are write-only and records are append-only."
+        ),
+        detail={"personas": personas, "records": records, "basis": "derived_origin"},
+        actor_type="human",
+        recorded_by=recorded_by,
+    )
+
+
 async def history(
     conn: AsyncConnection, *, venture_id: str | None = None, limit: int = 100
 ) -> list[dict[str, Any]]:
@@ -505,6 +537,21 @@ async def overview(conn: AsyncConnection) -> dict[str, Any]:
             "SELECT venture_id, parsed FROM business_pack WHERE status = 'live'"
         )
         packs = [dict(r) for r in await cur.fetchall()]
+
+        # What this connection's role may actually do to the two fixture stores.
+        # Asked rather than assumed, so a later GRANT changes the page instead of
+        # leaving it asserting yesterday's privileges.
+        await cur.execute(
+            """
+            SELECT table_name, privilege_type
+              FROM information_schema.table_privileges
+             WHERE grantee = current_user
+               AND table_name IN ('persona', 'historical_record')
+            """
+        )
+        privileges: dict[str, set[str]] = {}
+        for row in await cur.fetchall():
+            privileges.setdefault(row["table_name"], set()).add(row["privilege_type"])
 
         await cur.execute(
             """
@@ -664,10 +711,13 @@ async def overview(conn: AsyncConnection) -> dict[str, Any]:
             "personas": len(personas) - len(real_personas),
             "records": len(fixtures),
             "playbooks": len(playbooks) - len(real_playbooks),
-            # Personas are never production data, so they can go. Historical records are
-            # append-only by design: the store refuses UPDATE and DELETE, and the right
-            # response to a bad entry is a compensating one rather than an edit.
-            "personas_deletable": True,
-            "records_deletable": False,
+            # Read from the grants, not argued from the data's nature. This said
+            # `personas_deletable: True` because personas are never production data -
+            # true, and irrelevant: `office_app` holds INSERT and UPDATE on `persona`
+            # and no DELETE, so the console could not have purged one. A page that
+            # offers what the role cannot do is the failure this page was rebuilt to
+            # remove, one level further in.
+            "personas_deletable": "DELETE" in privileges.get("persona", set()),
+            "records_deletable": "DELETE" in privileges.get("historical_record", set()),
         },
     }

@@ -2128,6 +2128,105 @@ else:
             print("and the console's own role cannot reach the table at all")
 PY
 
+# The page may not offer a capability the role does not hold. `personas_deletable` was
+# hardcoded True, reasoned from "personas are never production data" - true, and beside
+# the point: office_app holds INSERT and UPDATE on `persona` and no DELETE. The flags are
+# read from the grants now, so this asserts the page agrees with the database.
+pycheck - "$TOKEN" "$API_PORT" "$OFFICE_ADMIN_DSN" <<'PY'
+import json
+import sys
+import urllib.request
+
+import psycopg
+
+token, port, admin_dsn = sys.argv[1], sys.argv[2], sys.argv[3]
+req = urllib.request.Request(
+    f"http://127.0.0.1:{port}/api/knowledge/overview",
+    headers={"Authorization": f"Bearer {token}"},
+)
+with urllib.request.urlopen(req) as response:
+    fixtures = json.load(response)["fixtures"]
+
+with psycopg.connect(admin_dsn) as conn, conn.cursor() as cur:
+    cur.execute(
+        """
+        SELECT table_name, privilege_type
+          FROM information_schema.table_privileges
+         WHERE grantee = 'office_app'
+           AND table_name IN ('persona', 'historical_record')
+           AND privilege_type = 'DELETE'
+        """
+    )
+    deletable = {row[0] for row in cur.fetchall()}
+
+claimed = {
+    "persona": fixtures["personas_deletable"],
+    "historical_record": fixtures["records_deletable"],
+}
+wrong = [t for t, said in claimed.items() if said != (t in deletable)]
+if wrong:
+    print(f"FAIL the page claims the wrong delete capability for {wrong}")
+else:
+    print("the page claims exactly the delete privileges the role holds: "
+          f"{sorted(deletable) or 'none'}")
+PY
+
+# There is no purge, and the honest action in its place is recorded rather than applied.
+if grep -qiE ">Purge|>Delete all|>Clear fixtures<" "$WORK"/kb.html; then
+  fail "the console offers a purge; neither knowledge store permits one"
+else
+  say "no purge control is offered"
+fi
+
+pycheck - "$TOKEN" "$API_PORT" <<'PY'
+import json
+import sys
+import urllib.error
+import urllib.request
+
+token, port = sys.argv[1], sys.argv[2]
+
+
+def call(path: str, method: str = "GET", body: dict | None = None):
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{port}{path}", data=data, method=method,
+        headers={"Authorization": f"Bearer {token}",
+                 "Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req) as response:
+        return json.load(response)
+
+
+before = call("/api/knowledge/overview")["fixtures"]
+if before["test_fixtures"] == 0:
+    print("NOT EXERCISED no fixtures to exclude")
+    raise SystemExit
+
+try:
+    call("/api/knowledge/fixtures/exclude", "POST", {})
+except urllib.error.HTTPError as exc:
+    print(f"FAIL recording the exclusion returned {exc.code}")
+    raise SystemExit
+
+rows = call("/api/knowledge/history?record_type=knowledge_fixture_exclusion"
+            "&include_fixtures=true")["rows"]
+if not rows:
+    print("FAIL the exclusion was not recorded")
+    raise SystemExit
+if rows[0]["actor_type"] != "human":
+    print("FAIL the exclusion was recorded as a system act; a person decided it")
+
+# And nothing was removed. Excluding is a reading decision: the rows it describes are
+# still there, which is what makes the record the only evidence the decision happened.
+after = call("/api/knowledge/overview")["fixtures"]
+if after["personas"] < before["personas"]:
+    print("FAIL recording an exclusion deleted personas")
+else:
+    print(f"the exclusion of {before['test_fixtures']} rows is recorded, "
+          "and every row it describes is still there")
+PY
+
 # Paging and search, because a listing with neither is one nobody reads to the end of.
 curl -s -b "$COOKIE_JAR" \
   "http://127.0.0.1:$CONSOLE_PORT/knowledge/personas?include_fixtures=true" \

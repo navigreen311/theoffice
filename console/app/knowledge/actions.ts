@@ -240,3 +240,26 @@ export async function recordNoteAction(
     return fail(error);
   }
 }
+
+/**
+ * Write down that the smoke fixtures are being excluded from the counts.
+ *
+ * There is no purge here because there is no purge anywhere: the console holds no DELETE
+ * on either store. Recording the decision is the whole action, and it is the difference
+ * between a filter somebody left on and a call somebody made.
+ */
+export async function recordExclusionAction(
+  _prev: KnowledgeActionState | null,
+  _form: FormData,
+): Promise<KnowledgeActionState> {
+  try {
+    await api.post("/api/knowledge/fixtures/exclude", {});
+    revalidatePath("/knowledge");
+    revalidatePath("/knowledge/history");
+    return {
+      ok: "Recorded. The exclusion is now a historical record, and cannot be edited.",
+    };
+  } catch (error) {
+    return fail(error);
+  }
+}
