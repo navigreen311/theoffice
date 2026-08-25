@@ -711,6 +711,70 @@ a thing to ask for rather than a side effect. It still cannot be recovered, beca
 stored as a hash and returned exactly once; that is why "already exists" must not be
 allowed to mean "you are locked out of your own dev instance".
 
+## The Agents page, rebuilt
+
+The list rendered the agents holding an Office identity - seven of them - with no count
+and nothing indicating anybody else existed, so a reader concluded the Village has seven
+people. The agents The Office *cannot* appoint are the most consequential rows on this
+page: they are the work that has not been done.
+
+**The denominator is now a fact rather than a number.** The blueprint describes a Village
+of 106. The Compliance page hit this first and refused to write it down - "reporting 0 of
+106 against a roster of seven would invent a denominator, on the page whose own copy
+insists on real ones" - which was right, and left the gap unfixable rather than merely
+unreported. Migration 0020 adds `village_agent`, so the roster has somewhere to live and
+"7 of 106" becomes something this database can support. Until a roster is imported the
+banner says the roster has not been imported, which is true and is a different statement
+from "the Village has seven agents".
+
+**No control creates an agent.** The page's own subtitle states the model, so an "add
+agent" button would contradict it and become a second source of truth for who exists.
+What exists instead: *Sync from Village roster*, which previews a diff and writes nothing
+until confirmed; *Register Village agent*, which requires the Village's own reference
+because without it no later import can reconcile the row; and *Issue identity*, which
+makes an existing agent appointable. `issue_identity` refuses an agent the roster has
+never reported - an identity for somebody the Village has not mentioned is The Office
+inventing a colleague. A test enumerates the agent write surface so a fourth route cannot
+be added quietly.
+
+**A departure is a decision.** Importing a roster that omits an agent produces a diff
+naming what that agent still holds: an identity, and how many live grants. That is a
+revocation somebody has to perform, and an import that silently dropped the row would
+take the evidence with it. Departed agents are marked, never deleted.
+
+**Not declared is not a low tier.** The table showed an empty declared tier beside a
+populated certified one, which inverts the stated rule - the Pack declares a ceiling,
+SimForge certifies what was earned - and a reader could not tell which governed. The list
+shows one effective tier, the lower of the two, with both on hover; `not declared` and
+`no tier` are distinct from a value; and certified above the declared ceiling is flagged,
+because the Pack is the ceiling.
+
+**Certified with no grants is explained.** Every agent showed a certified tier and zero
+grants, two facts in unrelated columns. It is one state, with one sentence: certification
+makes an agent eligible; a grant is what lets it reach a Forge. It is also a filter.
+
+**The detail page has certifications.** It had none, while the list claimed a certified
+tier for the same agent. Both units render, scoped: Unit A per Forge and module with the
+instruction hash and Forge version it was earned under, Unit B per department and Forge.
+A bare "certified: auto_execute" is the same failure as a green check with no
+denominator.
+
+**Forge health and this agent's access are two facts.** "No grants. This agent cannot
+reach any Forge" sat directly above three Forges marked GREEN. Both true, and together
+they read as a bug. Each row now carries the Forge's health and this agent's access
+separately.
+
+**Revocation is on the agent's page.** It is the kill switch under the brokered model -
+the Forge attributes calls to the tenant, so pulling the grant is the only way to stop
+one agent reaching one Forge - and it was absent from the screen where somebody decides
+to use it.
+
+**A bug the SQL-shape guard caught.** The departure diff counted live grants with
+`count(*) FILTER (WHERE g.revoked_at IS NULL)` after a LEFT JOIN, which counts the
+all-NULL row - so an agent holding no grants reported one, in the diff somebody confirms
+a departure from. `tests/test_sql_shapes.py` failed on the new file the first time the
+suite ran.
+
 ## Known gaps
 
 *Last verified: 2026-08-24.*
@@ -737,6 +801,21 @@ allowed to mean "you are locked out of your own dev instance".
   rejected session redirects to the login page — it used to throw a 500, because only a
   *missing* cookie raised `NotAuthenticated` while a *rejected* one raised `ApiError`
   that no page caught.
+- **No Village roster has been imported, so the Agents page reports the roster as
+  unknown.** The mechanism is built and tested; the data is the external dependency. Once
+  a roster is imported the banner reads "N of M Village agents hold an Office identity"
+  from the two tables.
+- **`village_agent_ref` is not a foreign key from `office_agent_identity`.** Identities
+  exist that predate the roster table, and refusing to load the console until somebody
+  backfills them would be a worse failure than an unmatched row. They are reported as
+  having no roster row rather than hidden - making the two counts agree by losing a row
+  is not making them agree.
+- **The capability matrix and the per-agent audit trail are not built.** The certification
+  sections cover agent x Forge x module for what has been certified; a full trained /
+  certified / neither matrix across every module, and an identity-and-grant history on
+  the agent's own page, are still only reachable through the audit explorer.
+- **Roster import is a paste, not a connection.** There is no Village API client, because
+  there is no Village API in this repository to call. CSV or JSON in, diff, confirm.
 - **Nothing in this project executes client JavaScript.** `tsc`, `next build`, the unit
   tests and the smoke script all pass against a page that is broken in a browser: the
   server render is correct and only a browser hydrates. Two failures have shipped through

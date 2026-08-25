@@ -435,6 +435,14 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
             )
 
     assert writes == {
+        # The Village roster. None of these creates an agent: they import what the
+        # Village reports, record one it cannot report, and issue identities for agents
+        # that already exist. An "add agent" route would contradict the page's own
+        # subtitle and become a second source of truth for who exists.
+        "/api/agents/roster",
+        "/api/agents/roster/preview",
+        "/api/agents/identities",
+        "/api/agents/village",
         "/api/revocations",
         "/api/revocations/{revocation_id}/reinstate",
         "/api/proposals/{proposal_id}/decide",

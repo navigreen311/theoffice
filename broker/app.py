@@ -56,6 +56,7 @@ from broker import (
     proposals,
     provisioning,
     revocation,
+    roster,
     sweeps,
     ventures,
 )
@@ -74,7 +75,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0019"
+EXPECTED_SCHEMA_REVISION = "0020"
 
 
 @asynccontextmanager
@@ -317,6 +318,29 @@ async def list_agents(conn: DB, _me: ME) -> list[dict[str, Any]]:
         return [dict(r) for r in await cur.fetchall()]
 
 
+# Declared BEFORE `/api/agents/{office_agent_id}`. FastAPI matches in declaration order,
+# so a literal segment registered after a parameterised one is unreachable.
+@app.get("/api/agents/roster")
+async def agent_roster(
+    conn: DB,
+    _me: ME,
+    search: str | None = Query(default=None),
+    department: str | None = Query(default=None),
+    identity: str | None = Query(default=None),
+    grants: str | None = Query(default=None),
+) -> dict[str, Any]:
+    """The Village roster, and how far each agent has got into The Office.
+
+    The old list rendered the seven agents holding an identity, so a reader concluded
+    the Village has seven people. The agents it *cannot* appoint are the most
+    consequential rows here: they are the work that has not been done.
+    """
+    result = await roster.directory(
+        conn, search=search, department=department, identity=identity, grants=grants,
+    )
+    return {"as_of": datetime.now(UTC).isoformat(), **result}
+
+
 @app.get("/api/agents/{office_agent_id}")
 async def agent_detail(office_agent_id: uuid.UUID, conn: DB, _me: ME) -> dict[str, Any]:
     async with conn.cursor(row_factory=dict_row) as cur:
@@ -360,10 +384,85 @@ async def agent_detail(office_agent_id: uuid.UUID, conn: DB, _me: ME) -> dict[st
         )
         shifts_recent = [dict(r) for r in await cur.fetchall()]
 
+        # Both certification units, scoped. The page claimed a certified tier for this
+        # agent and had no certifications section at all - and a bare "certified:
+        # auto_execute" is the same failure as a green check with no denominator,
+        # because a certification is always *for* a specific Forge and module.
+        await cur.execute(
+            """
+            SELECT unit, forge_id, module_id, department, state, certified_tier,
+                   instruction_content_hash, forge_api_version, rubric_kind,
+                   rubric_version, score, threshold, simforge_verdict,
+                   issued_at, updated_at
+            FROM certification
+            WHERE office_agent_id = %s
+            ORDER BY unit, forge_id, module_id
+            """,
+            (office_agent_id,),
+        )
+        certifications = [dict(r) for r in await cur.fetchall()]
+
+        # Recent activity. Under the brokered model the Office ledger is the only
+        # record naming this agent, so "never called a Forge" is a fact worth stating
+        # rather than an empty table.
+        await cur.execute(
+            """
+            SELECT call_id::text AS call_id, forge_id, module_id, venture_id,
+                   status_code, latency_ms, trust_tier_at_call, ts_start,
+                   trace_id::text AS trace_id
+            FROM agent_call_ledger
+            WHERE office_agent_id = %s
+            ORDER BY ts_start DESC
+            LIMIT 10
+            """,
+            (office_agent_id,),
+        )
+        calls = [dict(r) for r in await cur.fetchall()]
+
+        await cur.execute(
+            """
+            SELECT count(*) AS calls,
+                   coalesce(sum(usd_cost), 0) AS spend_total,
+                   coalesce(sum(usd_cost) FILTER (
+                     WHERE ts_start >= date_trunc('day', now())
+                   ), 0) AS spend_today
+            FROM agent_call_ledger
+            WHERE office_agent_id = %s
+            """,
+            (office_agent_id,),
+        )
+        cost = dict(await cur.fetchone() or {})
+
+    unit_a = [c for c in certifications if c["unit"] == "A"]
+    unit_b = [c for c in certifications if c["unit"] == "B"]
+
+    # Which Forges this agent can actually reach, as two separate facts. A Forge being
+    # GREEN and this agent being unable to reach it are different statements, and the
+    # old page put them in one column - "No grants. This agent cannot reach any Forge"
+    # directly above three Forges marked GREEN.
+    live_by_forge: dict[str, int] = {}
+    for grant in grants:
+        if grant["revoked_at"] is None:
+            live_by_forge[grant["forge_id"]] = live_by_forge.get(grant["forge_id"], 0) + 1
+
+    forge_access = [
+        {
+            **forge,
+            "grants_here": live_by_forge.get(forge["forge_id"], 0),
+            "reachable": live_by_forge.get(forge["forge_id"], 0) > 0,
+        }
+        for forge in forges
+    ]
+
     return {
+        "as_of": datetime.now(UTC).isoformat(),
         "identity": dict(identity),
         "grants": grants,
         "forge_migration_status": forges,
+        "forge_access": forge_access,
+        "certifications": {"unit_a": unit_a, "unit_b": unit_b},
+        "recent_calls": calls,
+        "cost": cost,
         "recent_shifts": shifts_recent,
     }
 
@@ -2759,5 +2858,105 @@ async def publish_pack_draft(
             "is now void by comparison - nothing revoked it, it stopped matching."
         ),
     }
+
+class RosterEntry(BaseModel):
+    village_agent_ref: str = Field(min_length=1)
+    agent_name: str = Field(min_length=1)
+    department: str = Field(min_length=1)
+
+
+class RosterRequest(BaseModel):
+    agents: list[RosterEntry]
+
+
+@app.post("/api/agents/roster/preview")
+async def preview_roster(
+    body: RosterRequest, conn: DB, _me: ME
+) -> dict[str, Any]:
+    """What importing this roster would change. **Writes nothing.**
+
+    Separate from applying it because an import can remove agents, and an agent that
+    leaves the Village holding grants is a revocation somebody has to perform rather
+    than a row that quietly disappears.
+    """
+    try:
+        parsed = roster.parse_roster([entry.model_dump() for entry in body.agents])
+        return await roster.diff(conn, parsed)
+    except roster.RosterError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/agents/roster")
+async def import_roster(
+    body: RosterRequest, conn: DB, me: ME
+) -> dict[str, Any]:
+    """Apply a roster the operator has already seen a diff for."""
+    try:
+        parsed = roster.parse_roster([entry.model_dump() for entry in body.agents])
+        return await roster.apply(conn, parsed, human=me)
+    except roster.RosterError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+class IdentityRequest(BaseModel):
+    village_agent_refs: list[str] = Field(min_length=1)
+
+
+@app.post("/api/agents/identities", status_code=201)
+async def issue_identities(
+    body: IdentityRequest, conn: DB, me: ME
+) -> dict[str, Any]:
+    """Make Village agents appointable.
+
+    Not a create. The agents already exist; this records that The Office recognises
+    them. Refused for an agent the roster has never reported - an identity for somebody
+    the Village has not mentioned is The Office inventing a colleague.
+    """
+    issued: list[dict[str, str]] = []
+    refused: list[dict[str, str]] = []
+
+    for ref in body.village_agent_refs:
+        try:
+            office_agent_id = await roster.issue_identity(conn, ref, human=me)
+            issued.append(
+                {"village_agent_ref": ref, "office_agent_id": str(office_agent_id)}
+            )
+        except roster.RosterError as exc:
+            # One refusal does not abandon the rest: a bulk issue over a department
+            # where one agent already has an identity should do the other eleven.
+            refused.append({"village_agent_ref": ref, "reason": str(exc)})
+
+    return {"issued": issued, "refused": refused}
+
+
+class RegisterAgentRequest(BaseModel):
+    village_agent_ref: str = Field(min_length=1)
+    agent_name: str = Field(min_length=1)
+    department: str = Field(min_length=1)
+
+
+@app.post("/api/agents/village", status_code=201)
+async def register_village_agent(
+    body: RegisterAgentRequest, conn: DB, me: ME
+) -> dict[str, str]:
+    """Record a Village agent an import cannot see.
+
+    Named for what it does. "Add agent" would imply The Office creates agents, which it
+    does not, and the control would become a second source of truth for who exists.
+    `village_agent_ref` is required: without it there is nothing for a later import to
+    reconcile against, and the row becomes an orphan no roster can confirm or retire.
+    """
+    try:
+        await roster.register_village_agent(
+            conn,
+            village_agent_ref=body.village_agent_ref,
+            agent_name=body.agent_name,
+            department=body.department,
+            human=me,
+        )
+    except roster.RosterError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"status": "registered", "village_agent_ref": body.village_agent_ref}
+
 
 __all__ = ["NotAuthorized", "app"]

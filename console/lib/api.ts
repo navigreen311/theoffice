@@ -620,6 +620,120 @@ export type HistoryRun = {
   reason: string | null;
 };
 
+/* ------------------------------------------------------- the Village roster */
+
+/**
+ * One agent, and how far into The Office it has got.
+ *
+ * `in_roster` and `has_identity` are different facts and the gap between them is the
+ * page: the Village creates agents, The Office appoints them, and an agent in the first
+ * set and not the second is visible but unappointable.
+ */
+export type RosterAgent = {
+  village_agent_ref: string | null;
+  agent_name: string;
+  department: string;
+  in_roster: boolean;
+  roster_status: string;
+  source: string | null;
+  office_agent_id: string | null;
+  has_identity: boolean;
+  identity_status: string | null;
+  live_grants: number;
+  assignable_grants: number;
+  certifications: number;
+  /** The Pack's ceiling. `null` means no Pack appoints this agent — not a low tier. */
+  declared_tier: string | null;
+  /** What SimForge certified was earned. */
+  certified_tier: string | null;
+  /** The lower of the two, or null when neither exists. */
+  effective_tier: string | null;
+  /** Certified above the declared ceiling. The Pack is the ceiling, so this is wrong. */
+  tier_inconsistent: boolean;
+  /** Certification makes an agent eligible; a grant is what lets it reach a Forge. */
+  certified_without_grants: boolean;
+  last_shift: string | null;
+};
+
+export type RosterDepartment = {
+  department: string;
+  in_roster: number;
+  with_identity: number;
+  without_identity: number;
+  agents: RosterAgent[];
+};
+
+export type RosterDirectory = {
+  as_of: string;
+  agents: RosterAgent[];
+  departments: RosterDepartment[];
+  departments_total: number;
+  departments_represented: number;
+  /** Rows in the Village roster. Zero means no roster has been imported. */
+  roster_total: number;
+  roster_imported: boolean;
+  with_identity: number;
+  without_identity: number;
+  /** Identities whose Village agent the roster cannot account for. */
+  unmatched_identities: number;
+  capacity: {
+    certified_and_free: number;
+    holding_grants: number;
+    not_yet_certified: number;
+    no_identity: number;
+  };
+  all_departments: string[];
+};
+
+export type RosterDiff = {
+  added: { village_agent_ref: string; agent_name: string; department: string }[];
+  departed: {
+    village_agent_ref: string;
+    agent_name: string;
+    department: string;
+    live_grants: number;
+    has_identity: boolean;
+  }[];
+  moved: {
+    village_agent_ref: string;
+    agent_name: string;
+    from_department: string;
+    to_department: string;
+  }[];
+  renamed: { village_agent_ref: string; from_name: string; to_name: string }[];
+  unchanged: number;
+  incoming_total: number;
+  current_total: number;
+};
+
+/** A certification is always *for* a Forge and a module. Never a bare tier. */
+export type Certification = {
+  unit: "A" | "B";
+  forge_id: string;
+  module_id: string | null;
+  department: string | null;
+  state: string;
+  certified_tier: string | null;
+  instruction_content_hash: string | null;
+  forge_api_version: string | null;
+  rubric_kind: string | null;
+  rubric_version: string | null;
+  score: number | null;
+  threshold: number | null;
+  simforge_verdict: string | null;
+  issued_at: string | null;
+  updated_at: string | null;
+};
+
+export type ForgeAccess = {
+  forge_id: string;
+  credential_mode: string;
+  /** The Forge itself is up. Says nothing about whether this agent can reach it. */
+  health_status: string;
+  grants_here: number;
+  reachable: boolean;
+};
+
 export type RunSummary = {
   run_id: string;
   venture_id: string;

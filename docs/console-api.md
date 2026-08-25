@@ -42,6 +42,11 @@ pass — it is whether that route should exist.
 
 | Write route | Delegates to |
 |---|---|
+| `GET /api/agents/roster` | `roster.directory` — the Village roster and the identity gap |
+| `POST /api/agents/roster/preview` | `roster.diff` — **writes nothing** |
+| `POST /api/agents/roster` | `roster.apply` |
+| `POST /api/agents/identities` | `roster.issue_identity` — makes an existing agent appointable; never creates one |
+| `POST /api/agents/village` | `roster.register_village_agent` — requires the Village's own ref |
 | `POST /api/revocations` | `revocation.revoke` |
 | `POST /api/revocations/{id}/reinstate` | `revocation.reinstate` |
 | `POST /api/proposals/{id}/decide` | `proposals.decide` |

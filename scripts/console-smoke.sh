@@ -1339,6 +1339,135 @@ if grep -rq 'useFormState' "$ROOT/console/app" --include="*.tsx"; then
   say "forms dispatch through useFormState"
 fi
 
+step "The Agents page accounts for the Village, not just the appointed"
+curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT/agents" > "$WORK"/agents.html
+sed 's/<!-- -->//g' "$WORK"/agents.html > "$WORK"/agents-text.html
+
+while IFS= read -r phrase; do
+  grep -qF "$phrase" "$WORK"/agents-text.html || fail "agents page lost: ${phrase:0:60}"
+done <<'PHRASES'
+The Office appoints agents. The Village creates them. Certified tier caps declared tier.
+PHRASES
+say "the preserved copy is present verbatim"
+
+# The gap the rebuild closed. Seven rows and no count reads as a roster of seven.
+if grep -qE "Village agents hold an Office identity|No Village roster has been imported" \
+     "$WORK"/agents-text.html; then
+  say "the page states the roster gap rather than implying the roster is what it lists"
+else
+  fail "the page lists agents with no statement of how many exist"
+fi
+
+# And it must not invent one. The blueprint says 106; this database knows what the
+# roster has told it, and the Compliance page set the rule that a denominator nothing
+# can support is not written down.
+if grep -qE "of 106|0 of 106" "$WORK"/agents-text.html; then
+  fail "the page hardcodes a denominator of 106 that no table in this system supports"
+else
+  say "no invented denominator"
+fi
+
+# Every department, whether or not anybody in it has reached The Office.
+"$VPY" - "$WORK/agents-text.html" <<'PY' | sed 's/^/  /'
+import html
+import sys
+from generators.pack import VILLAGE_DEPARTMENTS
+# Unescaped first: eight of the twelve department names contain "&", which renders as
+# `&amp;`, and a raw substring check reported them missing from a page they are on.
+page = html.unescape(open(sys.argv[1], encoding="utf-8", errors="replace").read())
+absent = [d for d in VILLAGE_DEPARTMENTS if d not in page]
+if absent:
+    print(f"FAIL departments missing from the page entirely: {absent}")
+else:
+    print(f"all {len(VILLAGE_DEPARTMENTS)} departments appear, represented or not")
+PY
+
+# Departments with nobody are named, not silently absent.
+if grep -qE "departments have no agent with an Office identity" "$WORK"/agents-text.html; then
+  say "departments with nobody appointed are named"
+else
+  notrun "empty-department panel - every department has somebody"
+fi
+
+# The roster is searchable and filterable.
+for control in "Search by name" "Office identity" "Certified, no grants"; do
+  grep -qF "$control" "$WORK"/agents-text.html || fail "roster filter missing: $control"
+done
+say "the roster is searchable and filterable"
+code="$(curl -s -b "$COOKIE_JAR" -o /dev/null -w '%{http_code}' \
+  "http://127.0.0.1:$CONSOLE_PORT/agents?identity=without&grants=certified_no_grants")"
+[ "$code" = "200" ] && say "filters are addressable in the URL" \
+  || fail "a filtered roster returned $code"
+
+# No control may imply The Office creates agents.
+if grep -qiE ">Add agent<|>New agent<|>Create agent<" "$WORK"/agents.html; then
+  fail "a control implies The Office creates agents - it does not, the Village does"
+else
+  say "no control implies The Office creates agents"
+fi
+for control in "Sync from Village roster" "Register Village agent"; do
+  grep -qF "$control" "$WORK"/agents-text.html || fail "roster control missing: $control"
+done
+say "the roster can be synced and an agent registered"
+
+# Certified with no grants, explained rather than left as two columns.
+if grep -qF "no grants" "$WORK"/agents-text.html; then
+  if grep -qF "Certification makes an agent eligible" "$WORK"/agents.html; then
+    say "certified-with-no-grants explains itself"
+  else
+    fail "an agent shows no grants beside a certified tier with nothing connecting them"
+  fi
+fi
+
+step "Agent detail names the Forge and module a certification is for"
+AGENT_ID="$(curl -s -H "$API_AUTH" "http://127.0.0.1:$API_PORT/api/agents" \
+  | grep -o '"office_agent_id": *"[^"]*"' | head -1 | sed 's/.*: *"//; s/"$//' || true)"
+if [ -n "$AGENT_ID" ]; then
+  curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT/agents/$AGENT_ID" \
+    > "$WORK"/agent.html
+  sed 's/<!-- -->//g' "$WORK"/agent.html > "$WORK"/agent-text.html
+
+  while IFS= read -r phrase; do
+    grep -qF "$phrase" "$WORK"/agent-text.html || fail "agent detail lost: ${phrase:0:60}"
+  done <<'PHRASES'
+A grant with either certification unit missing is not assignable
+One venture per agent per shift. A failed PHI flush blocks the next assignment.
+PHRASES
+  say "the preserved copy is present verbatim"
+
+  # The section that did not exist, despite the list claiming a certified tier.
+  if grep -qF "Unit A — operation certification" "$WORK"/agent-text.html \
+     && grep -qF "Unit B — department context certification" "$WORK"/agent-text.html; then
+    say "both certification units render"
+  else
+    fail "the detail page claims a certified tier and has no certifications section"
+  fi
+
+  # A certification is always for a Forge and a module. Never a bare tier.
+  if grep -qE "cre-forge|simforge|voiceforge" "$WORK"/agent-text.html; then
+    say "certifications name the Forge they were earned on"
+  else
+    notrun "certification scope - this agent holds none"
+  fi
+
+  # Forge health and this agent's access are different statements.
+  if grep -qF "Forge access for this agent" "$WORK"/agent-text.html \
+     && grep -qF "This agent" "$WORK"/agent-text.html; then
+    say "Forge health and this agent's access are separate facts"
+  else
+    fail "Forge health and agent access are still one column - GREEN beside 'cannot reach any Forge'"
+  fi
+
+  # The kill switch under the brokered model.
+  if grep -qF "Revocation" "$WORK"/agent-text.html; then
+    say "revocation is available from the agent's own page"
+  else
+    fail "no revocation control on the page where somebody decides to revoke"
+  fi
+else
+  notrun "agent detail checks - no agent holds an identity"
+fi
+
 step "Every page has a route home"
 # There was no way back to a dashboard from anywhere: the wordmark was not a link and
 # nothing in the nav pointed at `/`.
