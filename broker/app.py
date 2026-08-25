@@ -75,7 +75,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0020"
+EXPECTED_SCHEMA_REVISION = "0021"
 
 
 @asynccontextmanager
@@ -699,6 +699,23 @@ async def list_incidents(
         limit=limit,
         offset=offset,
     )
+
+
+# Declared BEFORE `/api/proposals/{proposal_id}`-shaped routes.
+@app.get("/api/proposals/queue")
+async def proposal_queue(conn: DB, _me: ME) -> dict[str, Any]:
+    """Everything the approvals page needs, including why the queue is empty.
+
+    The old empty state gave one explanation - that trust tiers might be set to
+    `auto_execute` - which is a real cause and was not this cause. No agent held a grant
+    to any Forge and none had ever made a call, so the queue was empty because nothing
+    could act. The reason is derived here from what is actually true.
+    """
+    # Expire before reading, so the queue never shows an item whose deadline has passed
+    # as though a reviewer could still take it. Expiry fails the task; it never approves.
+    await proposals.expire_overdue(conn)
+    result = await proposals.queue(conn)
+    return {"as_of": datetime.now(UTC).isoformat(), **result}
 
 
 @app.get("/api/proposals")

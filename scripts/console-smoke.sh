@@ -1473,6 +1473,208 @@ else
   notrun "agent detail checks - no agent holds an identity"
 fi
 
+step "The approvals page is a control, not a formality"
+# A pending proposal, so the queue has something in it. Without one there are no
+# approval controls on the page and every check below passes by finding nothing - which
+# is exactly how a check comes to pass for the wrong reason.
+PROPOSAL_ID="$("$VPY" - <<'PY' | tail -1
+import asyncio, hashlib, json, sys, uuid
+sys.path.insert(0, ".")
+import broker  # noqa: F401
+from broker import proposals
+from broker.db import close_pool, connection
+
+
+async def main() -> None:
+    async with connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT office_agent_id FROM office_agent_identity LIMIT 1")
+            row = await cur.fetchone()
+        if row is None:
+            print("")
+            await close_pool()
+            return
+
+        payload = {"to": "+15550000000", "script": "smoke"}
+        proposal_id = await proposals.submit(
+            conn,
+            office_agent_id=row[0],
+            venture_id="greenstone",
+            forge_id="cre-forge",
+            module_id="place_call",
+            task_id=f"smoke-{uuid.uuid4().hex[:8]}",
+            trust_tier="propose",
+            payload=payload,
+            payload_hash=hashlib.sha256(
+                json.dumps(payload, sort_keys=True).encode()
+            ).hexdigest(),
+            idempotency_key=f"smoke-{uuid.uuid4().hex[:8]}",
+            trace_id=uuid.uuid4(),
+        )
+        print(proposal_id)
+    await close_pool()
+
+
+asyncio.run(main())
+PY
+)"
+if [ -n "$PROPOSAL_ID" ]; then
+  say "queued proposal ${PROPOSAL_ID:0:8} so the queue is not empty"
+else
+  notrun "pending-approval fixture - no agent holds an identity"
+fi
+
+curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT/proposals" > "$WORK"/approvals.html
+sed 's/<!-- -->//g' "$WORK"/approvals.html > "$WORK"/approvals-text.html
+
+# The clearest statement of the rubber-stamp problem in the console, and it must stay on
+# screen when the queue is empty - an empty queue is exactly when somebody forgets why
+# the threshold exists.
+preserved=0
+while IFS= read -r phrase; do
+  grep -qF "$phrase" "$WORK"/approvals-text.html \
+    || { fail "approvals page lost: ${phrase:0:60}"; preserved=1; }
+done <<'PHRASES'
+An agent below auto_execute asked to act. It has not acted.
+Approvals decided in under 5 seconds raise a governance flag. That threshold exists because a trust tier that is really a click-through is worse than no tier at all
+it looks like oversight. Read the payload.
+PHRASES
+[ "$preserved" -eq 0 ] && say "the rubber-stamp copy is present verbatim"
+
+# THE ONE THAT MATTERS MOST. Bulk approval is that copy's warning, industrialised.
+# Checked against the page's *controls*, not its prose. The first version matched the
+# sentence that says the control does not exist, which is the same trap the React 19
+# guard fell into: a rule that greps for a phrase flags the paragraph explaining it.
+"$VPY" - "$WORK/approvals.html" <<'PY' | sed 's/^/  /'
+import re
+import sys
+
+page = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+
+# Split rather than match. A regex for `<button[^>]*>` breaks on an attribute value
+# containing ">", which Tailwind's arbitrary-value classes produce - it found nothing on
+# a page with nine buttons, and "found nothing" is the answer this check must never give
+# for the wrong reason.
+labels = []
+for chunk in page.split("<button")[1:]:
+    body = chunk.split("</button>")[0]
+    text = re.sub(r"<[^>]+>", " ", body.split(">", 1)[-1])
+    labels.append(" ".join(text.split()))
+
+checkboxes = re.findall(r'<input[^>]*type="checkbox"[^>]*>', page)
+
+banned = ("approve all", "approve selected", "bulk approve", "select all")
+offenders = [label for label in labels if any(word in label.lower() for word in banned)]
+
+# A checkbox on a pending item is a selection mechanism, which exists only to act on
+# many at once. The history filter's checkbox is fine and is named.
+selectors = [c for c in checkboxes if "proposal" in c.lower() or "select" in c.lower()]
+
+if offenders:
+    print(f"FAIL a control offers bulk approval: {offenders}")
+elif selectors:
+    print(f"FAIL a per-proposal selection control exists: {selectors}")
+elif not labels:
+    # Finding nothing among nothing is not evidence. No controls at all means the
+    # fixture did not render, and this would pass on a page replaced by an error.
+    print("FAIL no buttons on the page at all - the pending fixture did not render")
+else:
+    print(f"no bulk approve control among {len(labels)} buttons")
+PY
+
+# And the page says what happens when nobody decides.
+if grep -qF "Expiry never approves" "$WORK"/approvals-text.html; then
+  say "the page states that expiry never approves"
+else
+  fail "nothing says what happens to a proposal nobody decides"
+fi
+
+# The empty state must be derived. The old one named a real cause that was not this
+# cause, and sent a reader to inspect trust tiers on a system where no agent held a
+# grant at all.
+if grep -qF "Nothing to approve" "$WORK"/approvals-text.html; then
+  "$VPY" - "$TOKEN" "$API_PORT" "$WORK/approvals-text.html" <<'PY' | sed 's/^/  /'
+import json, sys, urllib.request
+token, port, page_path = sys.argv[1], sys.argv[2], sys.argv[3]
+req = urllib.request.Request(
+    f"http://127.0.0.1:{port}/api/proposals/queue",
+    headers={"Authorization": f"Bearer {token}"},
+)
+with urllib.request.urlopen(req) as response:
+    queue = json.load(response)
+
+page = open(page_path, encoding="utf-8", errors="replace").read()
+state, reason = queue["state"], queue["empty_reason"] or ""
+
+if state["live_grants"] == 0 and "auto_execute" in reason:
+    print("FAIL the empty state blames trust tiers on a system with no grants at all")
+elif state["live_grants"] == 0 and "nothing could be" not in reason:
+    print(f"FAIL no grants exist and the empty state does not say so: {reason[:80]}")
+elif reason and reason[:40] not in page:
+    print("FAIL the derived reason is not what the page renders")
+else:
+    print("the empty state is derived from real state and matches this system")
+PY
+fi
+
+# Reviewer capacity - the page where V13 either holds or fails in practice.
+if grep -qF "Reviewer capacity" "$WORK"/approvals-text.html; then
+  if grep -qE "of [0-9]+ today" "$WORK"/approvals-text.html \
+     || grep -qF "No live Pack declares any reviewer" "$WORK"/approvals-text.html; then
+    say "reviewer capacity shows headroom against a daily limit"
+  else
+    fail "reviewer capacity renders without a denominator"
+  fi
+else
+  fail "no reviewer capacity - this is the page where V13 holds or fails"
+fi
+
+# The threshold is measured, not only stated.
+for label in "Median decision time" "Under 5s" "Decisions today"; do
+  grep -qF "$label" "$WORK"/approvals-text.html || fail "metric missing: $label"
+done
+say "the five-second threshold is measured, not only asserted"
+
+if grep -qF "Decision history" "$WORK"/approvals-text.html; then
+  say "decisions are visible after they are made"
+else
+  fail "only pending items are shown; a reviewer cannot see what was decided"
+fi
+
+# The pending card itself: the payload a reviewer is told to read, the flags that apply,
+# and what each decision causes.
+if [ -n "$PROPOSAL_ID" ]; then
+  if grep -qF "+15550000000" "$WORK"/approvals-text.html; then
+    say "the payload is on screen, not behind a disclosure"
+  else
+    fail "the payload is not rendered - 'read the payload' has nothing to read"
+  fi
+  if grep -qF "Denying stops this task" "$WORK"/approvals-text.html; then
+    say "both decisions state their consequence"
+  else
+    fail "the card does not say what approving or denying causes"
+  fi
+  if grep -qE "expires" "$WORK"/approvals-text.html; then
+    say "the item carries a deadline"
+  else
+    fail "nothing says what happens if nobody decides this one"
+  fi
+
+  # Deny it, which also exercises the decision path and leaves the queue as it was.
+  "$VPY" - "$TOKEN" "$API_PORT" "$PROPOSAL_ID" <<'PY' | sed 's/^/  /'
+import json, sys, urllib.request
+token, port, proposal_id = sys.argv[1], sys.argv[2], sys.argv[3]
+req = urllib.request.Request(
+    f"http://127.0.0.1:{port}/api/proposals/{proposal_id}/decide",
+    data=json.dumps({"approve": False, "reason": "console smoke test"}).encode(),
+    method="POST",
+    headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+)
+with urllib.request.urlopen(req) as response:
+    print("smoke proposal denied:", json.load(response)["status"])
+PY
+fi
+
 step "Every page has a route home"
 # There was no way back to a dashboard from anywhere: the wordmark was not a link and
 # nothing in the nav pointed at `/`.

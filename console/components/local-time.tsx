@@ -119,3 +119,29 @@ export function Ago({ iso }: { iso: string | null | undefined }) {
     </time>
   );
 }
+
+/**
+ * The client's clock, after mount. `null` during server render and first paint.
+ *
+ * One place in the console reads the clock, and this is it. Anything that needs "how
+ * long until" or "is this overdue" derives it from this value rather than calling
+ * `Date.now()` in its own render, which produces one answer on the server and another on
+ * hydration — the mismatch that blanked pages once already.
+ *
+ * The smoke script enforces that by failing on `Date.now()` anywhere in `app/` or
+ * `components/` except this file. That is a blunt rule and deliberately so: a rule that
+ * tried to tell a safe call from an unsafe one by reading the surrounding code would be
+ * wrong occasionally, and the failure it guards against is invisible to every other
+ * check we run.
+ */
+export function useNow(intervalMs = 60_000): number | null {
+  const [now, setNow] = useState<number | null>(null);
+
+  useEffect(() => {
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(timer);
+  }, [intervalMs]);
+
+  return now;
+}

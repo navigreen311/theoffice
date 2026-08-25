@@ -775,6 +775,57 @@ all-NULL row - so an agent holding no grants reported one, in the diff somebody 
 a departure from. `tests/test_sql_shapes.py` failed on the new file the first time the
 suite ran.
 
+## The Approvals page, rebuilt
+
+The page was an empty state and nothing else: no design for a pending item, no reviewer
+capacity, no decision history, and an empty state that named the wrong cause.
+
+**The empty state is derived.** It said to check whether the agents' trust tiers were set
+to `auto_execute` - a real cause of an empty queue, and not this cause. No agent held a
+grant to any Forge and none had ever made a call, so the queue was empty because nothing
+could act. Sending a reader to inspect trust tiers wasted their time and implied the
+system was further along than it was. There are now four states with four sentences and
+no generic fallback, because a fallback would be wrong in three of them.
+
+**Expiry never approves.** `expired` had been a valid proposal status since the schema was
+written and nothing could ever set it - there was no deadline to pass. Migration 0021 adds
+`expires_at`, stored per proposal rather than computed from a setting, because the
+question afterwards is "when was this due" and a deadline derived from a setting that has
+since changed cannot answer it. A queue that drains itself looks like a queue being
+worked, which is exactly why auto-approval on timeout is the most attractive shortcut here
+and why there is no setting for it: an agent below `auto_execute` asked to act, nobody
+answered, and it did not act.
+
+**There is no bulk approve, and there is no route that could become one.** Bulk approval
+is this page's own warning industrialised - one click authorising fifty payloads nobody
+read, each one audited and counted. A test pins the proposal write surface to a single
+route. Bulk *deny* would be acceptable, because denying is the safe direction; the
+asymmetry is recorded so whoever adds it knows which half is safe.
+
+**Reviewer capacity comes from the Pack.** `human_capacity` is where reviewers are
+declared and what V13 checks against, so this is the page where that rule either holds or
+fails in practice. When pending exceeds what anybody can still decide today, the page says
+the overflow will not be reviewed before the window closes rather than showing a longer
+list. A reviewer is matched to their decisions by display name; where the two do not match
+it reports no decisions rather than inventing a join.
+
+**The five-second threshold is measured.** It was stated in copy with no data against it.
+`review_seconds` was already computed in the database from `created_at` - so a client
+cannot report a review it did not perform - and sub-threshold approvals already raised an
+incident. What was missing was the surface: decisions today, median, count under the
+threshold, approval rate, and the reviewers responsible. Flagged and recorded; nothing is
+blocked or undone.
+
+**Decision history carries the payload as it stood.** The proposal row holds the payload
+and is never rewritten, so the decision and the document it was made against cannot drift
+apart - which is what "show me who approved this and what they saw" asks for.
+
+**`useNow` is now the only place the console reads the clock.** The pending card needs to
+know how close an item is to expiring, which depends on the current time - the hydration
+mismatch that blanked pages once already. One hook reads it after mount and everything
+else derives from that, which keeps the smoke guard's blunt rule honest instead of
+widening its exemption list.
+
 ## Known gaps
 
 *Last verified: 2026-08-24.*
@@ -801,6 +852,16 @@ suite ran.
   rejected session redirects to the login page — it used to throw a 500, because only a
   *missing* cookie raised `NotAuthenticated` while a *rejected* one raised `ApiError`
   that no page caught.
+- **The approval queue has never had a real item in production use.** Everything on the
+  page is exercised by a smoke fixture that queues a proposal, renders it, and denies it;
+  no agent has yet held a grant, so nothing has proposed anything of its own.
+- **Expiry runs when the queue is read, not on a schedule.** Opening the page expires
+  anything overdue. Nothing expires while nobody is looking, so a proposal can sit past
+  its deadline until somebody visits - the status is correct whenever it is observed, and
+  a sweep would make it correct continuously.
+- **Escalation to the named backup is not implemented.** The Pack names a backup human
+  and the capacity card shows who it is; nothing routes to them when a coverage window
+  closes with items pending.
 - **No Village roster has been imported, so the Agents page reports the roster as
   unknown.** The mechanism is built and tested; the data is the external dependency. Once
   a roster is imported the banner reads "N of M Village agents hold an Office identity"

@@ -734,6 +734,98 @@ export type ForgeAccess = {
   reachable: boolean;
 };
 
+/* ---------------------------------------------------------- the approval queue */
+
+export type PendingApproval = {
+  proposal_id: string;
+  office_agent_id: string;
+  agent_name: string | null;
+  department: string | null;
+  venture_id: string;
+  forge_id: string;
+  module_id: string;
+  module_name: string | null;
+  task_id: string;
+  trust_tier: string;
+  payload: Record<string, unknown>;
+  payload_hash: string;
+  created_at: string;
+  /** When this stops being decidable. Expiry fails the task; it never approves it. */
+  expires_at: string;
+  trace_id: string;
+  /** From the module registry — what the call would touch, not what the agent claims. */
+  compliance_flags_implied: string[] | null;
+  is_mutating: boolean | null;
+};
+
+export type DecidedApproval = {
+  proposal_id: string;
+  office_agent_id: string;
+  agent_name: string | null;
+  venture_id: string;
+  forge_id: string;
+  module_id: string;
+  status: string;
+  decision_reason: string | null;
+  review_seconds: string | number | null;
+  decided_at: string | null;
+  reviewer: string | null;
+  /** The payload as it stood at decision time — the row is never rewritten. */
+  payload: Record<string, unknown>;
+  payload_hash: string;
+};
+
+export type Reviewer = {
+  venture_id: string;
+  name: string;
+  role: string;
+  coverage_hours: number;
+  timezone: string;
+  backup_human: string | null;
+  max_daily_approvals: number;
+  median_review_minutes: number | null;
+  decisions_today: number;
+  remaining_today: number;
+  median_seconds_today: number | null;
+  matched_to_a_human: boolean;
+};
+
+export type ApprovalQueue = {
+  as_of: string;
+  pending: PendingApproval[];
+  history: DecidedApproval[];
+  reviewers: Reviewer[];
+  metrics: {
+    decisions_today: number;
+    approvals_today: number;
+    approval_rate: number | null;
+    median_seconds: number | null;
+    under_threshold: number;
+    threshold_seconds: number;
+    by_reviewer: {
+      reviewer: string | null;
+      decisions: number;
+      approvals: number;
+      fast_approvals: number;
+      median_seconds: string | number | null;
+    }[];
+  };
+  capacity: {
+    reviewers: number;
+    remaining_today: number;
+    pending: number;
+    over_capacity: boolean;
+  };
+  state: {
+    live_grants: number;
+    grants_below_auto: number;
+    calls_ever: number;
+    proposals_today: number;
+  };
+  /** Why the queue is empty, in this system's terms. Null when it is not empty. */
+  empty_reason: string | null;
+};
+
 export type RunSummary = {
   run_id: string;
   venture_id: string;

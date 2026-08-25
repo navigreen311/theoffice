@@ -16,12 +16,16 @@ import { ApiError, api } from "@/lib/api";
  * not take, and re-implementing the check in the console would just be a second opinion
  * that eventually disagrees.
  */
+export type DecisionState = { error?: string; ok?: string };
+
 export async function decideAction(
-  _prev: { error?: string; ok?: string } | null,
+  _prev: DecisionState | null,
   form: FormData,
-): Promise<{ error?: string; ok?: string }> {
+): Promise<DecisionState> {
   const proposalId = String(form.get("proposal_id") ?? "");
-  const approve = String(form.get("decision") ?? "") === "approve";
+  // Approve and deny are separate forms with separate buttons, so the decision arrives
+  // as its own field rather than as the identity of whichever button was pressed.
+  const approve = String(form.get("approve") ?? "") === "true";
   const reason = String(form.get("reason") ?? "").trim();
 
   if (!approve && !reason) {
