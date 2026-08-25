@@ -1081,6 +1081,10 @@ export type IncidentRow = Incident & {
   resolution: string | null;
   resolved_at: string | null;
   resolved_by: string | null;
+  // How the detection arrived, and who filed it if a person did. An incident somebody
+  // reported must never render as one a control caught.
+  detection_source: string;
+  reported_by: string | null;
 };
 
 export type ControlRow = {

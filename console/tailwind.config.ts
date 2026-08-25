@@ -54,7 +54,14 @@ export default {
         "neutral2-line": "var(--border-neutral)",
       },
       fontSize: {
-        // The scale this console uses, named so a component cannot invent a sixth size.
+        // The scale this console uses, named so a component cannot invent a seventh size.
+        //
+        // `page` was missing while fifteen call sites already used `text-page` for their
+        // title. `page` exists under `colors.surface`, so the class reads as though it
+        // resolves, and it compiled to nothing at all: every page title took its size
+        // from whatever it inherited. A dead utility class is invisible in review and in
+        // the browser - it is not a wrong colour or a wrong size, it is no rule.
+        page: ["18px", { lineHeight: "1.35" }],
         section: ["16px", { lineHeight: "1.4" }],
         rowtitle: ["15px", { lineHeight: "1.4" }],
         body: ["14px", { lineHeight: "1.5" }],

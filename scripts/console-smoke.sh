@@ -251,6 +251,8 @@ ROUTES="/ /agents /audit /forge-map /revocations /ventures /proposals /instructi
 # The tabs the Knowledge rebuild added. They carry the forms, which is where a
 # React-version mistake shows up, and they are not reachable from $ROUTES.
 KNOWLEDGE_ROUTES="/knowledge/personas /knowledge/history /knowledge/playbooks /knowledge/compliance"
+# The incident detail route is per-id, so it is appended once the smoke run has
+# raised one; a fixed path could not be checked before that exists.
 
 step "Unauthenticated routes redirect"
 for path in $ROUTES; do
@@ -2259,6 +2261,373 @@ else
   fail "the persona listing has no search"
 fi
 
+step "Incidents state control freshness rather than deferring it"
+curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT/incidents" > "$WORK"/incidents.html
+sed 's/<!-- -->//g' "$WORK"/incidents.html > "$WORK"/incidents-text.html
+
+while IFS= read -r phrase; do
+  grep -qF "$phrase" "$WORK"/incidents-text.html || fail "incidents lost: ${phrase:0:60}"
+done <<'PHRASES'
+Detections, not workflow. An incident is never edited
+An empty list is only good news if the checks that raise these are fresh
+PHRASES
+say "the preserved copy is present verbatim"
+
+# The gap this rebuild closed. The page named the question and sent the reader to another
+# screen for an answer it could compute.
+pycheck - "$WORK/incidents.html" "$TOKEN" "$API_PORT" <<'PY'
+import html
+import json
+import re
+import sys
+import urllib.request
+
+page = html.unescape(re.sub(r"<script.*?</script>", "", open(
+    sys.argv[1], encoding="utf-8", errors="replace").read(), flags=re.S))
+text = re.sub(r"<[^>]+>", " ", page)
+text = re.sub(r"\s+", " ", text)
+
+req = urllib.request.Request(
+    f"http://127.0.0.1:{sys.argv[3]}/api/incidents/overview",
+    headers={"Authorization": f"Bearer {sys.argv[2]}"},
+)
+with urllib.request.urlopen(req) as response:
+    controls = json.load(response)["controls"]
+
+# Whatever is true must be on the page. Not a fixed sentence: the brief for this rebuild
+# asserted all four controls had never run, and three of them had. A banner that names a
+# healthy control as never-run spends exactly the attention it exists to buy.
+if controls["all_fresh"]:
+    if "verified within their max age" in text:
+        print("all controls fresh, and the page says so")
+    else:
+        print("FAIL every control is fresh and the page does not say so")
+else:
+    unhealthy = sorted(set(controls["never_ran"]) | set(controls["stale"]))
+    missing = [name for name in unhealthy if name not in text]
+    if missing:
+        print(f"FAIL the page does not name these unhealthy controls: {missing}")
+    elif "did not run" not in text:
+        print("FAIL the page names the controls but not what their absence means")
+    else:
+        print(f"the page names every unhealthy control: {', '.join(unhealthy)}")
+
+    # And it must not overstate. The claim is made by the headline sentence, so the
+    # headline is what is read - an earlier version searched for a healthy control's name
+    # within forty characters of "never run" in the flattened page, which matched the
+    # freshness grid where one control's row sits beside another's.
+    headline = re.search(r"<h2[^>]*>(.*?)</h2>", page, re.S)
+    headline_text = re.sub(r"<[^>]+>", " ", headline.group(1)) if headline else ""
+    healthy = [
+        name for name, state in controls["freshness"].items() if state.get("healthy")
+    ]
+    overstated = [name for name in healthy if name in headline_text]
+    if overstated:
+        print(f"FAIL the headline names these healthy controls as a problem: {overstated}")
+    elif healthy:
+        print(f"and does not overstate: {len(healthy)} healthy control(s) unmentioned there")
+PY
+
+# "Nothing matches" implied a filter that did not exist, so an empty list read as "your
+# filter hid everything" when it meant "there are none".
+if grep -qF "Nothing matches. Check control freshness" "$WORK"/incidents-text.html; then
+  fail "the empty state still implies a filter that does not exist"
+else
+  say "the empty state no longer implies a filter"
+fi
+for control in "Severity" "Kind" "Venture" "State" "Raised since"; do
+  grep -qF "$control" "$WORK"/incidents-text.html || fail "incident filter missing: $control"
+done
+say "the list can be filtered"
+
+# The two empty states are different sentences, and the difference is the whole point.
+code="$(curl -s -b "$COOKIE_JAR" -o "$WORK"/incidents-filtered.html -w '%{http_code}' \
+  "http://127.0.0.1:$CONSOLE_PORT/incidents?kind=restore_drill_failed&severity=CRITICAL")"
+if [ "$code" = "200" ]; then
+  if grep -qF "matches this filter" "$WORK"/incidents-filtered.html; then
+    say "a filter that excludes everything says so, rather than reporting an empty log"
+  else
+    notrun "filtered empty state - something matched that filter"
+  fi
+else
+  fail "a filtered incident list returned $code"
+fi
+
+# The taxonomy, published rather than implied by two column headers.
+pycheck - "$TOKEN" "$API_PORT" "$WORK/incidents-text.html" <<'PY'
+import json
+import sys
+import urllib.request
+
+req = urllib.request.Request(
+    f"http://127.0.0.1:{sys.argv[2]}/api/incidents/taxonomy",
+    headers={"Authorization": f"Bearer {sys.argv[1]}"},
+)
+with urllib.request.urlopen(req) as response:
+    taxonomy = json.load(response)
+
+page = open(sys.argv[3], encoding="utf-8", errors="replace").read()
+
+if len(taxonomy["kinds"]) < 5:
+    print(f"FAIL only {len(taxonomy['kinds'])} kinds are published")
+elif [s["value"] for s in taxonomy["severities"]] != ["LOW", "MEDIUM", "HIGH", "CRITICAL"]:
+    print("FAIL the severity ladder is not the four the database enforces")
+else:
+    print(f"{len(taxonomy['kinds'])} kinds and 4 severities are published")
+
+# Only the kinds a person can file may be offered in the raise form. Offering
+# `audit_chain_broken` there would let somebody claim a check ran that did not.
+#
+# The *filter* legitimately offers every kind - you filter by what exists. Both render a
+# select, and an earlier version of this check searched the whole page and so read the
+# filter's options as the form's. Only the raise form's select submits, so only it
+# carries `name="kind"`, and that is what is read.
+import re as _re
+
+control_kinds = [k["kind"] for k in taxonomy["kinds"] if k["source"] == "automatic"]
+form_select = _re.search(r'<select[^>]*name="kind"[^>]*>(.*?)</select>', page, _re.S)
+if form_select is None:
+    print("FAIL the raise form has no kind select")
+else:
+    offered = _re.findall(r'value="([a-z_]+)"', form_select.group(1))
+    leaked = [k for k in offered if k in control_kinds]
+    if leaked:
+        print(f"FAIL the raise form offers control-only kinds: {leaked}")
+    elif not offered:
+        print("FAIL the raise form offers no kind at all")
+    else:
+        print(f"the raise form offers only the {len(offered)} kinds a person can file")
+
+# And the filter must offer more than that, or narrowing by an automatic kind is
+# impossible - which is most of what this log is read for.
+if not any(f'value="{k}"' in page for k in control_kinds):
+    print("FAIL no control-raised kind can be filtered on")
+else:
+    print("the filter offers the control-raised kinds too")
+PY
+
+if grep -qF "Raise an incident" "$WORK"/incidents-text.html; then
+  say "an incident can be raised by hand"
+else
+  fail "there is no way to record an external report or a regulator inquiry"
+fi
+
+# No control may edit or delete a detection.
+if grep -qiE ">Edit incident<|>Delete incident<|>Change severity<" "$WORK"/incidents.html; then
+  fail "the console offers to edit a detection; incidents are append-only"
+else
+  say "no control edits or deletes a detection"
+fi
+
+step "An incident has a detail view, and its response is appended"
+INCIDENT_ID="$("$VPY" - "$TOKEN" "$API_PORT" <<'PY' | tail -1
+import json, sys, urllib.request
+token, port = sys.argv[1], sys.argv[2]
+body = json.dumps({
+    "severity": "MEDIUM", "kind": "external_report",
+    "detection_source": "external_report",
+    "summary": "Smoke: a client reported a duplicated outbound call.",
+}).encode()
+req = urllib.request.Request(
+    f"http://127.0.0.1:{port}/api/incidents", data=body, method="POST",
+    headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+)
+with urllib.request.urlopen(req) as response:
+    print(json.load(response)["incident_id"])
+PY
+)"
+
+if [ -z "$INCIDENT_ID" ]; then
+  fail "could not raise an incident to exercise the detail page"
+else
+  say "raised ${INCIDENT_ID:0:8} to exercise the detail page"
+  code="$(curl -s -b "$COOKIE_JAR" -o "$WORK"/incident-detail.html -w '%{http_code}' \
+    "http://127.0.0.1:$CONSOLE_PORT/incidents/$INCIDENT_ID")"
+  if [ "$code" = "200" ]; then
+    sed 's/<!-- -->//g' "$WORK"/incident-detail.html > "$WORK"/incident-detail-text.html
+    say "the detail page renders"
+
+    # Every stage named, and the ones nobody has written about saying so rather than
+    # rendering blank.
+    for stage in "Detection" "Triage" "Containment" "Disclosure" "Post-mortem"; do
+      grep -qF "$stage" "$WORK"/incident-detail-text.html \
+        || fail "the response timeline omits: $stage"
+    done
+    say "all five response stages render"
+
+    if grep -qF "outstanding" "$WORK"/incident-detail-text.html; then
+      say "a stage nobody has accounted for says so"
+    else
+      fail "an unaccounted stage renders blank, which reads as nothing to report"
+    fi
+
+    if grep -qF "Append an account" "$WORK"/incident-detail-text.html; then
+      say "the only write is an append"
+    else
+      fail "the detail page offers no way to record what was done"
+    fi
+  else
+    fail "the incident detail page returned $code"
+  fi
+fi
+
+step "Revocation targets are chosen, not typed"
+curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT/revocations" > "$WORK"/revocations.html
+sed 's/<!-- -->//g' "$WORK"/revocations.html > "$WORK"/revocations-text.html
+
+while IFS= read -r phrase; do
+  grep -qF "$phrase" "$WORK"/revocations-text.html || fail "revocations lost: ${phrase:0:60}"
+done <<'PHRASES'
+Checked live at the broker on every call, never cached
+The console does not pre-check your authority. The API checks it twice
+Required. Stored on the revocation and surfaced in regulator exports.
+PHRASES
+say "the preserved copy is present verbatim"
+
+# The four scopes and their authority, verbatim.
+for pair in "agent_module:venture_operator" "agent:venture_operator" \
+            "venture:compliance_officer" "forge:ivan"; do
+  scope="${pair%%:*}"
+  grep -qF "$scope" "$WORK"/revocations-text.html || fail "scope missing: $scope"
+done
+say "all four scopes and their authority levels render"
+
+# Plain-language scope buttons rather than a dropdown of snake_case values.
+for label in "One grant" "One agent" "A venture" "A whole Forge"; do
+  grep -qF "$label" "$WORK"/revocations-text.html || fail "scope control missing: $label"
+done
+say "scopes are chosen by plain label"
+
+# The emergency control must not ask anybody to recall a UUID.
+pycheck - "$WORK/revocations.html" "$TOKEN" "$API_PORT" <<'PY'
+import html
+import json
+import re
+import sys
+import urllib.request
+
+raw = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+req = urllib.request.Request(
+    f"http://127.0.0.1:{sys.argv[3]}/api/revocations/targets",
+    headers={"Authorization": f"Bearer {sys.argv[2]}"},
+)
+with urllib.request.urlopen(req) as response:
+    targets = json.load(response)
+
+if not targets["agents"]:
+    print("NOT EXERCISED no agent exists, so the picker cannot be checked")
+    raise SystemExit
+
+# Every agent offered by name, with its id beside it. Both halves matter: the name is
+# what a person recognises, the id is what turns up in the audit entry afterwards.
+page = html.unescape(raw)
+missing_names = [a["name"] for a in targets["agents"] if a["name"] and a["name"] not in page]
+missing_ids = [a["id"] for a in targets["agents"] if a["id"] not in page]
+if missing_names:
+    print(f"FAIL agents not offered by name: {missing_names[:3]}")
+elif missing_ids:
+    print(f"FAIL agents offered without their id: {missing_ids[:3]}")
+else:
+    print(f"all {len(targets['agents'])} agents are pickable by name, with ids shown")
+
+# And no bare text input for an id. That is the control this rebuild exists to remove.
+typed = re.findall(r'<input[^>]*name="(office_agent_id|forge_id|module_id|venture_id)"[^>]*>',
+                   raw)
+visible = [
+    field for field, tag in
+    ((f, t) for f in typed for t in re.findall(r"<input[^>]*>", raw) if f'name="{f}"' in t)
+    if 'type="hidden"' not in tag
+]
+if visible:
+    print(f"FAIL these ids are still typed by hand: {sorted(set(visible))}")
+else:
+    print("no id is typed by hand; every target field is hidden and picker-fed")
+PY
+
+# Blast radius, for every scope, before the act.
+pycheck - "$TOKEN" "$API_PORT" <<'PY'
+import json
+import sys
+import urllib.request
+
+token, port = sys.argv[1], sys.argv[2]
+
+
+def get(path):
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{port}{path}", headers={"Authorization": f"Bearer {token}"}
+    )
+    with urllib.request.urlopen(req) as response:
+        return json.load(response)
+
+
+targets = get("/api/revocations/targets")
+agent = targets["agents"][0]["id"] if targets["agents"] else None
+forge = targets["forges"][0]["id"] if targets["forges"] else None
+venture = targets["ventures"][0]["id"] if targets["ventures"] else None
+
+checked = 0
+for scope, query in (
+    ("agent", f"office_agent_id={agent}" if agent else None),
+    ("venture", f"venture_id={venture}" if venture else None),
+    ("forge", f"forge_id={forge}" if forge else None),
+):
+    if query is None:
+        continue
+    radius = get(f"/api/revocations/blast-radius?scope={scope}&{query}")
+    for field in ("agents", "grants", "in_flight_calls"):
+        if not isinstance(radius.get(field), int):
+            print(f"FAIL {scope} radius has no {field}")
+            break
+    else:
+        checked += 1
+
+if checked == 0:
+    print("FAIL no scope could be measured; the blast radius proved nothing")
+else:
+    print(f"blast radius reports agents, grants and in-flight calls for {checked} scopes")
+
+# The forward-looking half, which is how a revoked venture quietly comes back to life.
+if venture:
+    radius = get(f"/api/revocations/blast-radius?scope=venture&venture_id={venture}")
+    if "after the revocation" in (radius.get("forward_looking") or ""):
+        print("a venture revocation names its effect on grants issued later")
+    else:
+        print("FAIL a venture revocation does not state its forward-looking effect")
+PY
+
+# Two steps, with the wide scopes requiring the name to be typed.
+if grep -qF "Review and revoke" "$WORK"/revocations-text.html; then
+  say "revoking is a two-step act"
+else
+  fail "a single control issues a revocation that can stop a portfolio"
+fi
+# The typed confirmation is client state - it exists only after the operator asks to
+# review - so the served HTML cannot contain it and looking for it there asserted
+# something that could never be true. It is exercised in the browser instead, below.
+
+# Active revocations, history and the re-enable ritual.
+for section in "Currently revoked" "Every revocation ever issued"; do
+  grep -qF "$section" "$WORK"/revocations-text.html || fail "revocations page omits: $section"
+done
+say "active revocations and full history both render"
+
+if grep -qF "No agent holds a grant yet, so there is nothing to revoke" \
+     "$WORK"/revocations-text.html; then
+  say "the empty state is derived rather than generic"
+else
+  notrun "derived empty state - something is revoked or grants exist"
+fi
+
+# No client-side authority pre-checking. The brief forbids it and the reason is right:
+# a second implementation of the rule drifts from the first.
+if grep -qiE "you do not have permission|your role is too weak|requires compliance_officer to act" \
+     "$WORK"/revocations.html; then
+  fail "the console pre-checks authority; the API decides that, once"
+else
+  say "no client-side authority pre-check"
+fi
+
 step "Every page survives being opened in a browser"
 # Every other render check here asks the server and believes the answer. The server says
 # 200 to a page that is about to die during hydration, and three "a client-side exception
@@ -2323,6 +2692,17 @@ else
       say "every page hydrated in a real browser"
     else
       fail "a page broke in the browser after the server called it 200"
+    fi
+
+    # The revocation confirmation is client state: it exists only after the operator asks
+    # to review it, so no amount of reading the served HTML can check it. Grepping the
+    # page for the confirmation prompt asserted something that could never be true, which
+    # is worse than not checking - it reads as covered.
+    if CDP_PORT="$CDP_PORT" node "$ROOT/scripts/revocation-confirm-check.mjs" \
+         "http://localhost:$CONSOLE_PORT" "$SESSION" 2>&1 | sed 's/^/  /'; then
+      say "the kill switch asks twice, and asks harder at the wide scopes"
+    else
+      fail "the revocation confirmation did not hold when driven in a browser"
     fi
   fi
   kill "$CHROME_PID" 2>/dev/null || true

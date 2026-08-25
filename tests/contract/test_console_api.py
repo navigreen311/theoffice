@@ -41,9 +41,14 @@ def _clean_humans(admin: psycopg.Connection):
 def _wipe(conn: psycopg.Connection) -> None:
     with conn.cursor() as cur:
         cur.execute("DELETE FROM signoff_record")
+        # Revocations first: `revoked_by`, `reinstated_by` and now
+        # `reinstatement_second_human` all reference `office_human`, so deleting humans
+        # while a revocation still points at one fails on the foreign key. This is the
+        # fourth time a teardown has broken because it named some dependents and not
+        # the one a later feature added - the order is the fix, not a softer constraint.
+        cur.execute("DELETE FROM revocation")
         cur.execute("DELETE FROM office_human_role")
         cur.execute("DELETE FROM office_human")
-        cur.execute("DELETE FROM revocation")
         cur.execute("DELETE FROM manifest_disposition")
     conn.commit()
 
@@ -189,18 +194,22 @@ async def test_reinstatement_requires_the_same_authority_as_the_revocation(
     assert created.status_code == 201
     revocation_id = created.json()["revocation_id"]
 
-    _oid, operator_token = await make_human(name="Op", role="venture_operator")
+    oid, operator_token = await make_human(name="Op", role="venture_operator")
     refused = await api.post(
         f"/api/revocations/{revocation_id}/reinstate",
         headers=auth(operator_token),
-        json={"reason": "seems fine to me"},
+        json={"reason": "seems fine to me", "second_human": str(oid)},
     )
     assert refused.status_code == 403
 
+    # A venture stop now needs a second named human to lift, on top of the role check
+    # this test is about. Both refusals are 403 and they are different refusals: the one
+    # above is "your role is too weak", this one would be "one judgement is not a
+    # ritual". The test supplies the second human so it keeps testing the first.
     allowed = await api.post(
         f"/api/revocations/{revocation_id}/reinstate",
         headers=auth(compliance_token),
-        json={"reason": "investigated, see INC-4"},
+        json={"reason": "investigated, see INC-4", "second_human": str(oid)},
     )
     assert allowed.status_code == 200
 
@@ -485,6 +494,13 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
         # refuses DELETE to everyone. The write IS the control - an exclusion nobody
         # recorded is a filter nobody noticed.
         "/api/knowledge/fixtures/exclude",
+        # Filing an incident a person noticed, and appending one account to an
+        # incident's response. Neither edits anything: `incident` refuses UPDATE by
+        # grant and `incident_account` refuses it by trigger, so both of these are
+        # appends to append-only stores. The write IS the control - a detection nobody
+        # could record is a detection that stays in somebody's inbox.
+        "/api/incidents",
+        "/api/incidents/{incident_id}/accounts",
         # Human and role administration — the most privilege-sensitive surface in this
         # file. The rules live in `humans.assert_may_grant`: a role may be granted only
         # by somebody holding a STRICTLY stronger one, and never to yourself.

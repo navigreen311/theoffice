@@ -1070,6 +1070,114 @@ happened, notes that nothing was written, and offers reload and retry.
 That last one is not a dev-server nicety. It is what every open tab experiences during a
 production redeploy.
 
+## The Incidents and Revocation pages, rebuilt
+
+Both had strong copy and controls that did not match the stakes.
+
+### Incidents
+
+**The page deferred an answer it could compute.** It said an empty list is only good news
+if the checks are fresh, and sent the reader to the compliance dashboard. Freshness is
+`sweeps.freshness()`, one call away, so the banner now states it. The brief for this
+rebuild said all four controls had never run; three of them had. The banner is generated
+from what is true, and a smoke check asserts both halves — every unhealthy control is
+named, and no healthy one is called stale. A false alarm here costs exactly the attention
+the banner exists to buy.
+
+**"Nothing matches" implied a filter that did not exist**, so an empty list read as "your
+filter hid everything" when it meant "there are none" — opposite readings of one screen.
+There are filters now (severity, kind, venture, state, date), and the two empty states are
+different sentences.
+
+**`kind` had no constraint at all.** `severity` always had one; `kind` was a free-text
+column with a schema-shaped name, and the fixtures proved it: one seeded `'test'` and
+another `'rubber_stamp'`, which is not the kind the code raises — `rubber_stamp_approval`
+is. Both passed for as long as nothing checked.
+
+`broker/incident_taxonomy.py` publishes the list, migration 0023 imports it into a CHECK
+rather than retyping it, and `test_every_incident_kind_raised_in_the_source_is_published`
+walks the source so a kind added to `sweeps.py` and not to the taxonomy fails immediately
+rather than at the first occurrence months later.
+
+The brief listed `phi_flush_failure`, `rate_limit_breach`, `spend_cap_breach` and
+`audit_write_failure`. Nothing in the broker raises any of them, and two name concepts the
+system does not have. Publishing a kind nothing can produce is the same defect as a
+denominator nothing supports — it reads as coverage. The taxonomy carries the eight kinds
+that are actually raised plus the three a person can file, and records the brief's names as
+aliases so somebody searching for one finds the answer.
+
+**An incident a person noticed could not be recorded.** The blueprint names three
+detection sources and only agent flag arrives on its own, so a regulator's question lived
+in an inbox while the page showed an empty list. `POST /api/incidents` files one; it
+carries the filer's name and a human detection source, and a control-raised kind cannot be
+filed by hand — that would claim a check ran that did not.
+
+**There was no view of a single incident.** There is now, and it keeps two things visibly
+apart: the detection, which is never editable, and the response, which is appended.
+`incident_account` is a new append-only table with the same trigger the other ledgers
+carry. Each of Part 9's five stages is either accounted for or says it is outstanding — a
+stage rendered blank reads as nothing to report, and it means nobody has reported.
+
+### Revocation
+
+**The emergency control asked for four UUIDs as free text.** Nobody recalls a UUID under
+pressure, and a typo either fails or stops the wrong thing — the second is worse and
+silent. Every target is now picked by name with its id beside it, and only the fields the
+chosen scope uses are rendered. The four scopes are buttons with plain labels; the effect
+and required authority are restated for whichever is chosen rather than left in a table.
+
+**Blast radius is shown before the act.** Revoking a venture stops every grant for an
+engagement including ones issued later; at Forge scope the broker refuses every call from
+every venture. Neither number was on screen. It is a query against existing state, not an
+authorization decision — the console still pre-checks nobody's authority, because a second
+implementation of that rule would drift from the first.
+
+Shifts report `n/a` rather than `0` at Forge scope. Zero would say "this affects no
+shifts", which is not what is true: the question does not apply.
+
+**The radius is stored with the revocation.** Recomputed six months later the same query
+answers about today's grants, not the ones it stopped, and nothing in the number shows the
+difference.
+
+**Revoking now asks twice**, and at venture and Forge scope the target's name must be
+typed. **Re-enabling has the ritual §1.4 asks for**: a written account, the person doing
+it, and at the two wide scopes a second named human who is not the first. Enforced in
+`revocation.reinstate` and again by a CHECK constraint, because a rule that lives only in
+application code is one the next route can forget to call.
+
+**Nothing is ever removed.** Re-enabling appends; the revocation stays with both accounts
+attached. `test_no_route_deletes_a_revocation` enumerates the surface.
+
+### Three checks that failed for the wrong reason
+
+All three were mine, and the pages were right in every case.
+
+- The overstatement check searched for a healthy control's name within forty characters of
+  "never run" in the flattened page. In the freshness grid one control's row sits beside
+  another's, so `manifest_reconciliation verified 24h ago restore_drill never run` matched.
+  It reads the headline sentence now, which is where the claim is made.
+- The raise-form check searched the whole page for control-only kinds and found them — in
+  the *filter*, which should offer every kind. Only the raise form's select submits, so
+  only it carries `name="kind"`, and that is what is read.
+- The typed-confirmation check grepped the served HTML for a prompt that only exists after
+  the operator asks to review. It could never have been true.
+  `scripts/revocation-confirm-check.mjs` drives the real form in a browser instead: it
+  selects each scope and counts the fields, chooses a target and waits for the radius,
+  opens the review, and asserts the revoke control stays shut until the right name is
+  typed — and stays shut for the wrong one.
+
+That last one needed its own lesson twice: the first version clicked a scope and read the
+DOM in the same round trip, before React had re-rendered, so every scope reported the
+fields of the one before it.
+
+### `text-page` was a dead class
+
+Fifteen call sites styled their page title with `text-page`, and the compiled CSS contains
+no such rule. `page` exists under `colors.surface`, so the class reads as though it
+resolves; it produced nothing, and every page title took its size from whatever it
+inherited. A dead utility class is invisible in review and in the browser — it is not a
+wrong size, it is no rule at all. `page: ["18px"]` is in the scale now.
+
 ## Known gaps
 
 *Last verified: 2026-08-25.*

@@ -389,7 +389,7 @@ async def test_resolving_an_incident_appends_and_never_edits(
     with admin.cursor() as cur:
         cur.execute(
             "INSERT INTO incident (incident_id, severity, kind, venture_id) "
-            "VALUES (%s, 'HIGH', 'rubber_stamp', %s)",
+            "VALUES (%s, 'HIGH', 'rubber_stamp_approval', %s)",
             (incident_id, VENTURE),
         )
     admin.commit()
@@ -417,7 +417,7 @@ async def test_resolving_an_incident_appends_and_never_edits(
             "SELECT severity, kind FROM incident WHERE incident_id = %s", (incident_id,)
         )
         row = cur.fetchone()
-    assert row == ("HIGH", "rubber_stamp")
+    assert row == ("HIGH", "rubber_stamp_approval")
 
     # Resolving twice is refused rather than replacing who closed it.
     again = await api.post(
@@ -440,7 +440,7 @@ async def test_a_resolved_incident_leaves_the_open_list(api, admin: psycopg.Conn
     with admin.cursor() as cur:
         cur.execute(
             "INSERT INTO incident (incident_id, severity, kind, venture_id) "
-            "VALUES (%s, 'LOW', 'test', %s)",
+            "VALUES (%s, 'LOW', 'manual', %s)",
             (incident_id, VENTURE),
         )
     admin.commit()

@@ -197,6 +197,38 @@ which is the envelope working: `test_a_persona_body_appears_in_no_response`,
 `test_a_note_is_recorded_against_the_human_who_wrote_it`, and
 `test_resolving_an_incident_appends_and_never_edits`.
 
+## Incidents publish their taxonomy; revocation reports its blast radius
+
+`GET /api/incidents/taxonomy` serves the severities, kinds, detection sources and response
+stages from `broker/incident_taxonomy.py`. The console renders from it rather than keeping
+its own copy: a screen holding a private enumeration disagrees with the database the first
+time a value is added, and the disagreement shows up as a row rendering blank.
+
+`kind` now has a CHECK constraint, written by migration 0023 from that same module. Two
+test fixtures were seeding kinds the code never raises - `'test'` and `'rubber_stamp'`,
+where the real one is `rubber_stamp_approval` - and both passed for as long as the column
+was free text.
+
+`POST /api/incidents` files one a person noticed; only the three human kinds are accepted,
+because filing `audit_chain_broken` by hand would claim a check ran that did not.
+`POST /api/incidents/{id}/accounts` appends one stage account. Neither edits anything:
+`incident` refuses UPDATE by grant, `incident_account` by trigger.
+
+`GET /api/incidents/overview` returns control freshness, open counts and the cross-venture
+grouping by kind. The page states freshness instead of pointing at the compliance
+dashboard for it.
+
+`GET /api/revocations/blast-radius` counts what a revocation would stop, before it is
+issued - agents, live grants, in-flight calls, shifts today, and the forward-looking
+effect. It is a read against existing state and says nothing about authority; the console
+still pre-checks nobody's permission. The same figures are stored on the revocation when
+it is issued, because recomputing them later answers about today's grants rather than the
+ones it stopped.
+
+`POST /api/revocations/{id}/reinstate` takes `second_human`, required at `venture` and
+`forge` scope and refused if it names the caller. `GET /api/revocations/targets` and
+`/history` back the pickers and the regulator-export view.
+
 ## Known gaps
 
 *Last verified: 2026-08-23.*

@@ -62,6 +62,9 @@ from broker import (
     sweeps,
     ventures,
 )
+from broker import (
+    incident_taxonomy as incident_taxonomy_module,
+)
 from broker.db import close_pool, connection
 from broker.errors import NotAuthorized, OfficeError
 from broker.humans import Human
@@ -77,7 +80,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0022"
+EXPECTED_SCHEMA_REVISION = "0024"
 
 
 @asynccontextmanager
@@ -663,11 +666,38 @@ async def audit_explorer(
     )
 
 
+@app.get("/api/incidents/taxonomy")
+async def incident_taxonomy(_me: ME) -> dict[str, Any]:
+    """The published severities, kinds and response stages.
+
+    Served rather than duplicated in the console, because a taxonomy the screen keeps
+    its own copy of is one that disagrees with the database the first time a kind is
+    added.
+    """
+    return incident_taxonomy_module.published()
+
+
+@app.get("/api/incidents/overview")
+async def incidents_overview(conn: DB, _me: ME) -> dict[str, Any]:
+    """Control freshness, open counts, and the cross-venture pattern by kind.
+
+    The page told the reader to check control freshness elsewhere. It is computable
+    here, and a screen that knows the answer and points at another screen is deferring,
+    not reporting - especially when the answer is that the checks raising these have not
+    run.
+    """
+    return {"as_of": datetime.now(UTC).isoformat(), **await incidents.overview(conn)}
+
+
 @app.get("/api/incidents")
 async def list_incidents(
     conn: DB,
     _me: ME,
     severity: Annotated[str | None, Query()] = None,
+    kind: Annotated[str | None, Query()] = None,
+    venture_id: Annotated[str | None, Query()] = None,
+    state: Annotated[str | None, Query()] = None,
+    since: Annotated[str | None, Query()] = None,
     include_resolved: bool = Query(default=False),
     limit: LimitParam = 100,
     offset: OffsetParam = 0,
@@ -677,10 +707,27 @@ async def list_incidents(
     Resolution is a joined row rather than a column: `incident` is append-only by
     design, so an incident is never edited and "resolved" is the presence of an
     `incident_resolution` rather than a flag somebody set.
+
+    The filters exist because the empty state claimed them. "Nothing matches" implies
+    something was excluded, and with no filter to exclude anything it meant "there are
+    none" - two opposite readings of the same screen. The unfiltered total comes from
+    `/api/incidents/overview`, which the page already reads, so it can say which of the
+    two the reader is looking at without this route counting the same rows twice.
+
+    `state` supersedes `include_resolved`, which stays because it is a published
+    parameter and removing it would break a caller to tidy a signature.
     """
+    if state == "all":
+        include_resolved = True
+    resolved_only = state == "resolved"
+
     where = """
         WHERE (%(severity)s::text IS NULL OR i.severity = %(severity)s)
-          AND (%(include_resolved)s OR r.incident_id IS NULL)
+          AND (%(kind)s::text IS NULL OR i.kind = %(kind)s)
+          AND (%(venture_id)s::text IS NULL OR i.venture_id = %(venture_id)s)
+          AND (%(since)s::date IS NULL OR i.raised_at >= %(since)s::date)
+          AND (NOT %(resolved_only)s OR r.incident_id IS NOT NULL)
+          AND (%(include_resolved)s OR %(resolved_only)s OR r.incident_id IS NULL)
     """
     join = "FROM incident i LEFT JOIN incident_resolution r ON r.incident_id = i.incident_id"
     return await paginate(
@@ -689,6 +736,7 @@ async def list_incidents(
             SELECT i.incident_id::text AS incident_id, i.severity, i.kind, i.venture_id,
                    i.office_agent_id::text AS office_agent_id, i.forge_id, i.module_id,
                    i.trace_id::text AS trace_id, i.detail, i.raised_at,
+                   i.detection_source, i.reported_by::text AS reported_by,
                    r.resolution, r.resolved_at, r.resolved_by::text AS resolved_by
             {join} {where}
             ORDER BY
@@ -697,7 +745,11 @@ async def list_incidents(
               i.raised_at DESC
         """,
         count=f"SELECT count(*) {join} {where}",
-        params={"severity": severity, "include_resolved": include_resolved},
+        params={
+            "severity": severity, "kind": kind, "venture_id": venture_id,
+            "since": since, "resolved_only": resolved_only,
+            "include_resolved": include_resolved,
+        },
         limit=limit,
         offset=offset,
     )
@@ -935,6 +987,10 @@ async def create_revocation(body: RevokeRequest, conn: DB, me: ME) -> dict[str, 
 
 class ReinstateRequest(BaseModel):
     reason: str = Field(min_length=1)
+    #: Required at `venture` and `forge` scope. The domain function refuses without it,
+    #: and so does a CHECK constraint - a ritual that lives only in a route is one the
+    #: next route can forget.
+    second_human: uuid.UUID | None = None
 
 
 @app.post("/api/revocations/{revocation_id}/reinstate")
@@ -961,6 +1017,7 @@ async def reinstate(
     await revocation.reinstate(
         conn, revocation_id=revocation_id, reinstated_by=me.human_id,
         reinstated_by_role=role, reason=body.reason,
+        second_human=body.second_human,
     )
     await _audit_human_action(
         me, "console_revocation_reinstated",
@@ -2180,6 +2237,52 @@ async def list_humans(conn: DB, me: ME) -> list[dict[str, Any]]:
     return await humans.list_humans(conn)
 
 
+@app.get("/api/revocations/targets")
+async def revocation_targets(conn: DB, _me: ME) -> dict[str, Any]:
+    """What can be revoked, by name.
+
+    The form asked for four UUIDs as free text. This is the emergency control: nobody
+    recalls a UUID under pressure, and a typo either fails or stops the wrong thing.
+    """
+    return {"as_of": datetime.now(UTC).isoformat(), **await revocation.targets(conn)}
+
+
+@app.get("/api/revocations/blast-radius")
+async def revocation_blast_radius(
+    conn: DB,
+    _me: ME,
+    scope: Annotated[str, Query()],
+    office_agent_id: Annotated[uuid.UUID | None, Query()] = None,
+    forge_id: Annotated[str | None, Query()] = None,
+    module_id: Annotated[str | None, Query()] = None,
+    venture_id: Annotated[str | None, Query()] = None,
+) -> dict[str, Any]:
+    """What a revocation would stop, before it is issued.
+
+    A query against existing state, not an authorization decision - it says nothing
+    about whether the caller may act, and the console still does no authority
+    pre-checking. Showing somebody the size of what they are about to stop is not a
+    second opinion about their permission to stop it.
+    """
+    try:
+        return await revocation.blast_radius(
+            conn, scope=scope, office_agent_id=office_agent_id,
+            forge_id=forge_id, module_id=module_id, venture_id=venture_id,
+        )
+    except NotAuthorized as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/revocations/history")
+async def revocation_history(conn: DB, _me: ME) -> list[dict[str, Any]]:
+    """Every revocation ever issued, lifted or not, with what it stopped at the time.
+
+    Regulator-export material: the reason field was always specified to surface there,
+    and until now there was nowhere for it to surface from.
+    """
+    return await revocation.history(conn)
+
+
 @app.get("/api/revocations")
 async def list_revocations(
     conn: DB, _me: ME, include_lifted: bool = Query(default=False)
@@ -2372,6 +2475,105 @@ async def reissue_human_token(
 
 class ResolveIncidentRequest(BaseModel):
     resolution: str = Field(min_length=1)
+
+
+class RaiseIncidentRequest(BaseModel):
+    severity: str
+    kind: str
+    detection_source: str
+    summary: str = Field(min_length=1)
+    venture_id: str | None = None
+
+
+@app.post("/api/incidents", status_code=201)
+async def raise_incident_route(
+    body: RaiseIncidentRequest, conn: DB, me: ME
+) -> dict[str, str]:
+    """File an incident a person noticed.
+
+    The blueprint names three detection sources and only agent flag arrives on its own.
+    A regulator's question and a client's complaint had nowhere to go, so the list stayed
+    empty and the empty list read as quiet.
+
+    Hand-filed incidents carry the filer's id and a human detection source, so one is
+    never mistaken for something a control caught. Like every other incident it cannot be
+    edited afterwards - the response is appended.
+    """
+    humans.authorize(
+        me, required_role="compliance_officer", venture_id=body.venture_id
+    )
+    try:
+        incident_id = await incidents.file_by_hand(
+            conn,
+            severity=body.severity,
+            kind=body.kind,
+            detection_source=body.detection_source,
+            summary=body.summary,
+            reported_by=me.human_id,
+            venture_id=body.venture_id,
+        )
+    except incidents.IncidentError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await _audit_human_action(
+        me, "console_incident_raised",
+        {"incident_id": str(incident_id), "kind": body.kind,
+         "severity": body.severity, "detection_source": body.detection_source},
+        body.venture_id,
+    )
+    return {"incident_id": str(incident_id)}
+
+
+@app.get("/api/incidents/{incident_id}")
+async def incident_detail(incident_id: uuid.UUID, conn: DB, _me: ME) -> dict[str, Any]:
+    """One incident: the detection, and every account appended since."""
+    found = await incidents.detail(conn, incident_id)
+    if found is None:
+        raise HTTPException(status_code=404, detail="no such incident")
+    return {"as_of": datetime.now(UTC).isoformat(), **found}
+
+
+class AccountRequest(BaseModel):
+    stage: str
+    account: str = Field(min_length=1)
+
+
+@app.post("/api/incidents/{incident_id}/accounts", status_code=201)
+async def append_incident_account(
+    incident_id: uuid.UUID, body: AccountRequest, conn: DB, me: ME
+) -> dict[str, int]:
+    """Append one stage account to an incident's response.
+
+    The only write an incident detail page offers. There is no edit and no delete, here
+    or in the database: `incident_account` carries the same append-only trigger as the
+    other ledgers, because a response timeline that can be tidied afterwards is a draft
+    of what somebody wishes had happened.
+    """
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT venture_id FROM incident WHERE incident_id = %s", (incident_id,)
+        )
+        row = await cur.fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="no such incident")
+    humans.authorize(
+        me, required_role="venture_operator", venture_id=row["venture_id"]
+    )
+
+    try:
+        account_id = await incidents.append_account(
+            conn, incident_id=incident_id, stage=body.stage,
+            account=body.account, written_by=me.human_id,
+        )
+    except incidents.IncidentError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await _audit_human_action(
+        me, "console_incident_account_appended",
+        {"incident_id": str(incident_id), "stage": body.stage},
+        row["venture_id"],
+    )
+    return {"account_id": account_id}
 
 
 @app.post("/api/incidents/{incident_id}/resolve", status_code=201)
