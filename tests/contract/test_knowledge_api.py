@@ -263,7 +263,7 @@ async def test_a_persona_body_appears_in_no_response(api):
 
     index = (
         await api.get(f"/api/knowledge/personas?venture_id={MINE}", headers=auth(token))
-    ).json()
+    ).json()["rows"]
     assert index[0]["persona_name"] == "Stalled broker"
     assert "persona_body" not in index[0]
     assert len(index[0]["body_hash"]) == 64
@@ -305,7 +305,7 @@ async def test_a_note_is_recorded_against_the_human_who_wrote_it(api):
 
     rows = (
         await api.get(f"/api/knowledge/history?venture_id={MINE}", headers=auth(token))
-    ).json()
+    ).json()["rows"]
     assert rows[0]["summary"] == "Decided to defer the capacity amendment"
     assert rows[0]["actor_type"] == "human"
     assert rows[0]["recorded_by"] is not None

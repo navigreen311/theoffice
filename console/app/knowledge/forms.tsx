@@ -1,6 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
+
+import { assessSection } from "@/lib/curriculum";
 
 import { Badge, Button, Field, inputClass } from "@/components/ui";
 
@@ -280,5 +283,165 @@ export function NoteForm({ ventures }: { ventures: string[] }) {
       <Submit label="Record" busy="Recording…" />
       <Result state={state} />
     </form>
+  );
+}
+
+
+/**
+ * Writing a persona, with a step between the keyboard and the irreversible act.
+ *
+ * The copy already said the body can never be read back from this console - the runtime
+ * role holds no read privilege on it. That is exactly what made an accidental submit
+ * unrecoverable through the UI: no undo, and no way to look at what was written to work
+ * out what to write instead.
+ *
+ * So: structured fields rather than a JSON scaffold, a confirmation restating what
+ * cannot be undone, and the body hash afterwards - the one thing an author can keep to
+ * verify against later, since the body itself is gone from their reach the moment it
+ * lands.
+ */
+export function PersonaWrite({ ventures }: { ventures: string[] }) {
+  const [state, action] = useFormState(authorPersonaAction, null);
+  const [confirming, setConfirming] = useState(false);
+  const [disposition, setDisposition] = useState("");
+  const [objections, setObjections] = useState("");
+  const [name, setName] = useState("");
+
+  // The same emptiness test the curriculum authoring form applies. A persona whose
+  // disposition is blank is the persona-library version of `"what_it_does":
+  // "Documented."`, and this store has no read path to notice it later.
+  const dispositionState = assessSection("what_it_does", disposition).state;
+  const empty = dispositionState === "missing" || dispositionState === "stub";
+
+  return (
+    <section className="rounded-xl border border-line bg-surface px-5 py-4">
+      <h2 className="text-section font-medium text-ink">Write a persona</h2>
+      <p className="mt-0.5 max-w-3xl text-desc text-ink-secondary">
+        One-way. SimForge only, never production — the runtime role this console uses
+        holds no read privilege on a persona body, so what you write here cannot be
+        displayed again. Reviewing one is an out-of-band act on the admin connection.
+      </p>
+
+      <form action={action} className="mt-4 space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="text-meta text-ink-muted">
+            Venture
+            <select
+              name="venture_id"
+              defaultValue=""
+              required
+              className="mt-1 block w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-desc text-ink"
+            >
+              <option value="" disabled>
+                Choose a venture
+              </option>
+              {ventures.map((venture) => (
+                <option key={venture} value={venture}>
+                  {venture}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-meta text-ink-muted">
+            Persona name
+            <input
+              name="persona_name"
+              required
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Stalled broker"
+              className="mt-1 block w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-desc text-ink"
+            />
+          </label>
+          <label className="text-meta text-ink-muted">
+            Target persona
+            <span className="block text-meta text-ink-muted">
+              Which of the Pack&rsquo;s market.target_personas this stands in for.
+            </span>
+            <input
+              name="target_persona"
+              required
+              className="mt-1 block w-full rounded-lg border border-line bg-surface px-2 py-1.5 text-desc text-ink"
+            />
+          </label>
+          <label className="text-meta text-ink-muted">
+            Version
+            <input
+              name="persona_version"
+              defaultValue="1.0.0"
+              className="mt-1 block w-full rounded-lg border border-line bg-surface px-2 py-1.5 font-mono text-meta text-ink"
+            />
+          </label>
+        </div>
+
+        <label className="block text-meta text-ink-muted">
+          Disposition
+          <span className="block text-meta text-ink-muted">
+            How this persona behaves in a scenario — what they want, what they resist.
+          </span>
+          <textarea
+            name="disposition"
+            rows={3}
+            value={disposition}
+            onChange={(event) => setDisposition(event.target.value)}
+            className="mt-1 w-full rounded-lg border border-line bg-surface p-2 text-desc text-ink"
+          />
+        </label>
+
+        <label className="block text-meta text-ink-muted">
+          Objections
+          <span className="block text-meta text-ink-muted">
+            One per line. What this persona pushes back with.
+          </span>
+          <textarea
+            name="objections"
+            rows={3}
+            value={objections}
+            onChange={(event) => setObjections(event.target.value)}
+            className="mt-1 w-full rounded-lg border border-line bg-surface p-2 text-desc text-ink"
+          />
+        </label>
+
+        {confirming ? (
+          <div className="rounded-lg border border-warn-line bg-warn-bg px-3 py-2">
+            <p className="text-desc text-warn">
+              {name || "This persona"} is about to be written once. You will not be able
+              to read it back from this console, edit it, or check what it says — the
+              role has no read privilege on the body. The hash below is what you will
+              have to verify against.
+            </p>
+            <div className="mt-2 flex items-center gap-2">
+              <Submit label="Write it" busy="Writing…" />
+              <button
+                type="button"
+                onClick={() => setConfirming(false)}
+                className="text-meta text-ink-muted underline underline-offset-2"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              disabled={empty}
+              onClick={() => setConfirming(true)}
+              className="rounded-lg border border-line px-3 py-1.5 text-desc font-medium text-ink transition hover:bg-surface-muted disabled:opacity-50"
+            >
+              Write persona…
+            </button>
+            {empty ? (
+              <span className="text-meta text-bad">
+                The disposition is empty or placeholder. A persona with nothing in it
+                cannot be reviewed afterwards, because it cannot be read back.
+              </span>
+            ) : null}
+          </div>
+        )}
+
+        <Result state={state} />
+      </form>
+    </section>
   );
 }

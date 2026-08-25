@@ -171,6 +171,32 @@ The checks are scoped to `LEFT JOIN` because with an inner join every group has 
 one row and both idioms are correct. They are proved able to fail against the two
 queries as they were actually written.
 
+## Knowledge listings are paged, and hide fixtures by default
+
+`GET /api/knowledge/personas` and `GET /api/knowledge/history` returned a bare array.
+They now return an envelope:
+
+    {"rows": [...], "total": 0, "page": 1, "pages": 1,
+     "total_before_filters": 60, "excluded_fixtures": 60}
+
+`excluded_fixtures` is the count the caller is *not* seeing, so a client cannot render
+"no personas" over a library that has sixty rows it was not shown. `include_fixtures=true`
+returns them, each row carrying an `origin` of `authored`, `system` or `test_fixture`.
+
+Origin is derived per request by `broker/knowledge_origin.py` rather than stored.
+`historical_record` is append-only and `office_app` holds no UPDATE on it, so a column
+could not have been backfilled onto existing rows or corrected afterwards.
+
+`GET /api/knowledge/overview` returns the five bases with a count, a denominator, and the
+gap in words, plus a `fixtures` block. Denominators come from the live Packs — target
+personas, positions, lifecycle stages, runtime flags — so a base with nothing in it can
+say what it is missing rather than reporting zero.
+
+Three contract tests indexed those routes as arrays and broke when the envelope landed,
+which is the envelope working: `test_a_persona_body_appears_in_no_response`,
+`test_a_note_is_recorded_against_the_human_who_wrote_it`, and
+`test_resolving_an_incident_appends_and_never_edits`.
+
 ## Known gaps
 
 *Last verified: 2026-08-23.*

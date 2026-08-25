@@ -885,9 +885,88 @@ clearing the proposals referencing them. That is the same shape as the `wipe_ven
 failure recorded earlier: a teardown that names some dependents and not others breaks on
 whichever one the next feature adds.
 
+## The Knowledge Bases page, rebuilt
+
+The page reported 60 personas and 61 historical records. Every persona was named
+`Smoke 481920`, written by `scripts/console-smoke.sh`; 60 of the 61 records were
+`provisioning_abandoned` entries summarised "console smoke test". The library held no
+personas and said sixty. What the number measured was how often the smoke test had run.
+
+**Origin is derived, not stored.** A column would have been the obvious fix and could
+never have worked here: `historical_record` carries an append-only trigger and
+`office_app` holds only INSERT and SELECT on it, so no backfill could set the flag on the
+rows that need it and nothing could correct it later. `broker/knowledge_origin.py`
+classifies a row from its content — `authored`, `system`, or `test_fixture` — which also
+means a fixture written tomorrow is recognised without a migration.
+
+**Fixtures are declared, excluded, and filtered by default.** The overview states the
+fraction — "120 of 132 entries are test data" — no headline count includes them, and
+every table hides them until `include_fixtures` is set. The smoke check asserts both
+halves: that the default listing contains no fixture, *and* that asking for them returns
+more rows than the default. Checking only the first passes when the route is broken,
+which is exactly how the block-sidebar and bulk-approve checks first passed.
+
+**Each base states its gap in the terms of the thing that is missing.** "0 entries" is a
+number. "greenstone has 3 positions across 6 lifecycle stages and no written SOP for any
+of them" is a finding, and it is computed from the live Pack rather than written down —
+the Compliance page set the rule that a denominator nothing can support is not a
+denominator.
+
+**Two of the five block Gate 6; three are advisory.** They were rendered as five equal
+tables, which is what let a blocking gap sit beside a cosmetic one for the same length of
+time.
+
+**The five bases became five addresses.** One page with five tables on it could not be
+searched, filtered, paged, or linked to. Each is now its own tab with URL-driven search,
+filters and paging; Instructions links out to the pages that already own it.
+
+**Historical records are never deleted.** Personas can be — they are never production
+data — and the page says so. Records cannot: the store refuses it, and the page says what
+to do instead, which is to append a compensating entry. Excluding a fixture from a count
+is a reading decision, and the decision is itself recorded.
+
+**Writing a persona now has a step before the irreversible act.** The runtime role holds
+no read privilege on a persona body, so an accidental submit was unrecoverable through
+the UI — no undo, and no way to see what had been written. The form takes structured
+fields, refuses a placeholder disposition, confirms what cannot be undone, and returns
+the body hash, which is the only thing an author can keep to verify against later.
+
+**Publishing and withdrawing a share were adjacent buttons.** Withdrawing takes access
+away from a venture relying on it. It is its own card now.
+
+### The smoke harness was not counting its own failures
+
+Twelve checks computed their verdict in Python and printed `FAIL ...` down a pipe into
+`sed`. `FAILURES` is incremented by the `fail()` shell function alone, so those twelve
+were decorative: the script could print FAIL in its own output and exit 0. That is the
+failure this script exists to catch, one level up from where it was looking.
+
+`pycheck()` now wraps them and counts what they print, including a non-zero exit. Turning
+it on surfaced two real failures that had been printing invisibly:
+
+- The Manager's denominator check grepped raw HTML for `[0-9]+ of [0-9]+`. React writes
+  `9<!-- --> of <!-- -->9` across three elements, so the check answered no to a page that
+  plainly said it. It reads the text-stripped copy now.
+- The blocking/advisory check wanted copy this rebuild had shortened away. The badge
+  carries the full phrasing again.
+
+**The append-only probe asserts the message, not the error class.** The trigger raises
+with `ERRCODE = 'insufficient_privilege'`, which is also what a missing GRANT raises — so
+a table whose trigger had been dropped *and* whose grant had been revoked would answer
+identically to one properly guarded. The check requires the string `append-only
+violation` from the admin role, which holds DELETE on that table and is refused anyway.
+
+**A guard that flagged the paragraph explaining it.** `test_the_api_module_contains_no_
+raw_mutation` lowercases `broker/app.py` and looks for `update `, and a docstring saying
+the record store "refuses update and delete" tripped it. It reads tokens now, with
+comments and docstrings stripped — stricter, not laxer, since every real statement is
+still code. `test_the_raw_mutation_guard_still_sees_a_real_statement` holds the teeth,
+because a guard narrowed in response to a false positive is the kind that quietly stops
+guarding.
+
 ## Known gaps
 
-*Last verified: 2026-08-24.*
+*Last verified: 2026-08-25.*
 
 - **Playbooks and personas are authored but not consumed.** There is no knowledge-
   retrieval path for agents in The Office at all, and SimForge has no instance. See

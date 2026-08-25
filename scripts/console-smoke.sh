@@ -44,6 +44,30 @@ die()  { printf 'error: %s\n' "$1" >&2; exit 1; }
 # supposed to be the last line of defence.
 notrun() { printf '  NOT EXERCISED %s\n' "$1"; UNEXERCISED=$((UNEXERCISED + 1)); }
 
+# Verdicts computed in Python have to count too.
+#
+# Eleven checks did their arithmetic in Python and printed `FAIL ...` down a pipe into
+# `sed`, where it was indented like every other line and counted by nothing - `FAILURES`
+# is incremented by `fail()` alone. The script could print FAIL in its own output and
+# still exit 0, which is the failure this whole script exists to catch, one level up.
+#
+# Usage is the same as before with the interpreter swapped: `pycheck - "$ARG" <<'PY'`.
+# stdin passes through, so the heredoc still reaches Python.
+pycheck() {
+  pycheck_out="$("$VPY" "$@" 2>&1)" || {
+    fail "a python check exited non-zero: $(printf '%s' "$pycheck_out" | tail -3)"
+    return 0
+  }
+  printf '%s\n' "$pycheck_out" | sed 's/^/  /'
+  case "$pycheck_out" in
+    *FAIL*) FAILURES=$((FAILURES + 1)) ;;
+  esac
+  case "$pycheck_out" in
+    *"NOT EXERCISED"*) UNEXERCISED=$((UNEXERCISED + 1)) ;;
+  esac
+  return 0
+}
+
 case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*) OS_KIND=windows ;;
   *)                    OS_KIND=posix ;;
@@ -304,7 +328,7 @@ step "Seed a Pack if there is none"
 # Without this the two new screens are skipped, and a check that quietly skips reports
 # a pass it never performed. Idempotent: publishes only when no venture has a Pack.
 if [ "$(curl -s -H "$API_AUTH" "http://127.0.0.1:$API_PORT/api/packs")" = "[]" ]; then
-  "$VPY" - "$TOKEN" "$API_PORT" <<'PY' | sed 's/^/  /'
+  pycheck - "$TOKEN" "$API_PORT" <<'PY'
 import json, sys, urllib.request
 token, port = sys.argv[1], sys.argv[2]
 source = open("packs/greenstone.yaml", encoding="utf-8").read()
@@ -536,7 +560,7 @@ PHRASES
   fi
 
   # Abandon what this script started, which also exercises the abort path.
-  "$VPY" - "$TOKEN" "$API_PORT" "$RUN_ID" <<'PY' | sed 's/^/  /'
+  pycheck - "$TOKEN" "$API_PORT" "$RUN_ID" <<'PY'
 import json, sys, urllib.request
 token, port, run_id = sys.argv[1], sys.argv[2], sys.argv[3]
 req = urllib.request.Request(
@@ -553,6 +577,9 @@ fi
 
 step "Knowledge Base Manager"
 curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT/knowledge" > "$WORK"/kb.html
+# Text, not markup: React writes `9<!-- --> of <!-- -->9` across three elements, so a
+# grep for `9 of 9` against raw HTML answers no to a page that plainly says it.
+sed 's/<!-- -->//g' "$WORK"/kb.html > "$WORK"/kb-text.html
 
 # All five stores named. A Manager that quietly rendered four would be the version of
 # this screen that was refused three times: a screen implying the thing exists.
@@ -564,7 +591,7 @@ done
 
 # Denominators, not bare counts. "3 of 7" is the whole point of the screen; a list of
 # entries with no denominator is a filing cabinet with search.
-if grep -qE '[0-9]+ of [0-9]+' "$WORK"/kb.html; then
+if grep -qE '[0-9]+[[:space:]]+of[[:space:]]+[0-9]+' "$WORK"/kb-text.html; then
   say "coverage renders with denominators"
 else
   fail "no coverage fraction on the page - a store count without a denominator cannot show a gap"
@@ -581,7 +608,7 @@ step "A persona body never reaches the browser"
 # The column privilege makes a read fail server-side. This is the observable half: write
 # a persona through the API with a distinctive body, then check every rendered page.
 PERSONA_MARKER="smoke-persona-body-$$"
-"$VPY" - "$TOKEN" "$API_PORT" "$PACK_VENTURE" "$PERSONA_MARKER" <<'PY' | sed 's/^/  /'
+pycheck - "$TOKEN" "$API_PORT" "$PACK_VENTURE" "$PERSONA_MARKER" <<'PY'
 import json, sys, urllib.error, urllib.request
 token, port, venture, marker = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 req = urllib.request.Request(
@@ -1080,7 +1107,7 @@ step "The Pack editor carries what the directory added"
 if [ -n "$PACK_VENTURE" ]; then
   # A draft, saved the way the directory saves one, so the editor is exercised in the
   # state the whole draft mechanism exists for rather than only in the empty case.
-  "$VPY" - "$TOKEN" "$API_PORT" <<'PY' | sed 's/^/  /'
+  pycheck - "$TOKEN" "$API_PORT" <<'PY'
 import json, re, sys, urllib.error, urllib.request
 token, port = sys.argv[1], sys.argv[2]
 source = open("packs/greenstone.yaml", encoding="utf-8").read()
@@ -1169,7 +1196,7 @@ PHRASES
   # Every unevaluable rule names the gate that settles it. Checked against the payload
   # rather than the markup: the panel is behind a toggle, so a server render cannot
   # show it, and "not exercised" would be the honest but useless answer.
-  "$VPY" - "$TOKEN" "$API_PORT" "$PACK_VENTURE" <<'PY' | sed 's/^/  /'
+  pycheck - "$TOKEN" "$API_PORT" "$PACK_VENTURE" <<'PY'
 import json, sys, urllib.request
 token, port, venture = sys.argv[1], sys.argv[2], sys.argv[3]
 req = urllib.request.Request(
@@ -1293,7 +1320,7 @@ PY
   fi
 
   # Clean up after the check, so a smoke run does not leave a draft on the venture.
-   "$VPY" - "$OFFICE_ADMIN_DSN" <<'PY' | sed 's/^/  /'
+   pycheck - "$OFFICE_ADMIN_DSN" <<'PY'
 import sys
 import psycopg
 with psycopg.connect(sys.argv[1]) as conn, conn.cursor() as cur:
@@ -1368,7 +1395,7 @@ else
 fi
 
 # Every department, whether or not anybody in it has reached The Office.
-"$VPY" - "$WORK/agents-text.html" <<'PY' | sed 's/^/  /'
+pycheck - "$WORK/agents-text.html" <<'PY'
 import html
 import sys
 from generators.pack import VILLAGE_DEPARTMENTS
@@ -1545,7 +1572,7 @@ PHRASES
 # Checked against the page's *controls*, not its prose. The first version matched the
 # sentence that says the control does not exist, which is the same trap the React 19
 # guard fell into: a rule that greps for a phrase flags the paragraph explaining it.
-"$VPY" - "$WORK/approvals.html" <<'PY' | sed 's/^/  /'
+pycheck - "$WORK/approvals.html" <<'PY'
 import re
 import sys
 
@@ -1593,7 +1620,7 @@ fi
 # cause, and sent a reader to inspect trust tiers on a system where no agent held a
 # grant at all.
 if grep -qF "Nothing to approve" "$WORK"/approvals-text.html; then
-  "$VPY" - "$TOKEN" "$API_PORT" "$WORK/approvals-text.html" <<'PY' | sed 's/^/  /'
+  pycheck - "$TOKEN" "$API_PORT" "$WORK/approvals-text.html" <<'PY'
 import json, sys, urllib.request
 token, port, page_path = sys.argv[1], sys.argv[2], sys.argv[3]
 req = urllib.request.Request(
@@ -1661,7 +1688,7 @@ if [ -n "$PROPOSAL_ID" ]; then
   fi
 
   # Deny it, which also exercises the decision path and leaves the queue as it was.
-  "$VPY" - "$TOKEN" "$API_PORT" "$PROPOSAL_ID" <<'PY' | sed 's/^/  /'
+  pycheck - "$TOKEN" "$API_PORT" "$PROPOSAL_ID" <<'PY'
 import json, sys, urllib.request
 token, port, proposal_id = sys.argv[1], sys.argv[2], sys.argv[3]
 req = urllib.request.Request(
@@ -1702,7 +1729,7 @@ fi
 
 # The assessment is the same one the validator uses. Checked against the payload, so a
 # console that quietly disagreed with V11 would show up here.
-"$VPY" - "$TOKEN" "$API_PORT" <<'PY' | sed 's/^/  /'
+pycheck - "$TOKEN" "$API_PORT" <<'PY'
 import json, sys, urllib.request
 token, port = sys.argv[1], sys.argv[2]
 req = urllib.request.Request(
@@ -1806,7 +1833,7 @@ fi
 step "V11 refuses a Pack whose instructions teach nothing"
 # A content_hash computed over placeholder text satisfies the letter of V11 and defeats
 # its purpose. Checked against the validator itself rather than the page.
-"$VPY" - <<'PY' | sed 's/^/  /'
+pycheck - <<'PY'
 import asyncio, sys
 sys.path.insert(0, ".")
 import broker  # noqa: F401
@@ -1854,6 +1881,212 @@ async def main() -> None:
 
 asyncio.run(main())
 PY
+
+step "The knowledge bases count substance, not rows"
+curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT/knowledge" > "$WORK"/kb.html
+sed 's/<!-- -->//g' "$WORK"/kb.html > "$WORK"/kb-text.html
+
+while IFS= read -r phrase; do
+  grep -qF "$phrase" "$WORK"/kb-text.html || fail "knowledge page lost: ${phrase:0:60}"
+done <<'PHRASES'
+A flag with no entry reaches the agent as a label, not a constraint.
+A module with no instructions can never be certified.
+PHRASES
+say "the preserved copy is present verbatim"
+
+# The gap the rebuild closed. The page reported sixty personas and held none: every row
+# was a `Smoke NNNNNN` fixture written by this very script. A count that includes them is
+# a count of how often the smoke test has run.
+if grep -qE "entries are test data" "$WORK"/kb-text.html; then
+  say "test data is declared on the page rather than counted as content"
+else
+  fail "the overview does not say how much of what it counts is test data"
+fi
+
+# Not just declared - excluded. This asserts the arithmetic, so a page that quietly
+# started counting fixtures again fails here rather than merely reading plausibly.
+pycheck - "$WORK/kb.html" <<'PY'
+import html
+import re
+import sys
+
+page = html.unescape(re.sub(r"<script.*?</script>", "", open(
+    sys.argv[1], encoding="utf-8", errors="replace").read(), flags=re.S))
+text = re.sub(r"<[^>]+>", " ", page)
+
+declared = re.search(r"(\d+)\s+of\s+(\d+)\s+entries are test data", text)
+if not declared:
+    print("FAIL the overview does not state a test-data fraction")
+    raise SystemExit
+fixtures, total = int(declared.group(1)), int(declared.group(2))
+if fixtures == 0:
+    print("NOT EXERCISED no fixtures present, so exclusion cannot be observed")
+    raise SystemExit
+
+personas = re.search(r"(\d+)\s*of\s*(\d+)\s*real personas", text)
+if personas is None:
+    print("FAIL the persona library states no count of real personas")
+elif int(personas.group(1)) >= fixtures:
+    print(f"FAIL the persona headline counts {personas.group(1)} "
+          f"with {fixtures} fixtures present")
+else:
+    print(f"{fixtures} of {total} rows are fixtures and none reaches a headline count")
+PY
+
+# Every base states its gap in the terms of the thing that is missing. "0 entries" is a
+# number; "no written SOP for any of them" is a finding somebody can act on.
+for base in "Forge Operating Instructions" "Compliance Library" "Business Playbooks" \
+            "Persona Library" "Historical Records"; do
+  grep -qF "$base" "$WORK"/kb-text.html || fail "knowledge overview omits: $base"
+done
+say "all five bases appear on the overview"
+
+if grep -qE "no written SOP for any of them|names [0-9]+ target persona" \
+     "$WORK"/kb-text.html; then
+  say "an empty base states what is missing, not just that it is empty"
+else
+  fail "an empty knowledge base reports a count with no statement of the gap"
+fi
+
+# Which of them can hold up Gate 6, and which are advisory. Reading them as equals is
+# what let a blocking gap sit beside a cosmetic one for the same length of time.
+if grep -qF "blocks provisioning at Gate 6" "$WORK"/kb-text.html; then
+  say "the two bases that block Gate 6 are marked as blocking"
+else
+  fail "nothing distinguishes a base that blocks Gate 6 from one that does not"
+fi
+
+# Six tabs, each its own address. The five bases were one page with five tables on it.
+for tab in "" "/personas" "/history" "/playbooks" "/compliance"; do
+  code="$(curl -s -b "$COOKIE_JAR" -o /dev/null -w '%{http_code}' \
+    "http://127.0.0.1:$CONSOLE_PORT/knowledge$tab")"
+  if [ "$code" = "200" ]; then
+    say "/knowledge$tab renders"
+  else
+    fail "/knowledge$tab returned $code"
+  fi
+done
+
+# Fixtures are filtered out by default - and the filter is doing work rather than the
+# table being empty for some other reason. Both halves are asserted: the default excludes
+# them, and asking for them brings them back. The first alone passes when the route is
+# broken, which is how the block-sidebar and bulk-approve checks first passed.
+DEFAULT_JSON="$(curl -s -H "$API_AUTH" \
+  "http://127.0.0.1:$API_PORT/api/knowledge/personas")"
+FIXTURE_JSON="$(curl -s -H "$API_AUTH" \
+  "http://127.0.0.1:$API_PORT/api/knowledge/personas?include_fixtures=true")"
+pycheck - "$DEFAULT_JSON" "$FIXTURE_JSON" <<'PY'
+import json
+import sys
+
+try:
+    default, withfix = json.loads(sys.argv[1]), json.loads(sys.argv[2])
+except json.JSONDecodeError:
+    print("FAIL a persona listing did not return JSON")
+    raise SystemExit
+
+excluded = default.get("excluded_fixtures", 0)
+if excluded == 0 and withfix.get("total", 0) == 0:
+    print("NOT EXERCISED the persona library holds no fixtures to filter")
+    raise SystemExit
+
+if any(row.get("origin") == "test_fixture" for row in default.get("rows", [])):
+    print("FAIL a test fixture appears in the default persona listing")
+elif withfix.get("total", 0) <= default.get("total", 0):
+    print("FAIL include_fixtures returned no more than the default: the filter is inert")
+elif not any(r.get("origin") == "test_fixture" for r in withfix.get("rows", [])):
+    print("FAIL include_fixtures returned rows but none is marked as a fixture")
+else:
+    print(f"default hides {excluded} fixtures; include_fixtures returns "
+          f"{withfix['total']} across {withfix['pages']} page(s)")
+PY
+
+# Historical records are never deleted. The store refuses it and the page must not offer
+# it: an exclusion is a reading decision, and the decision is itself recorded.
+if grep -qiE ">Delete record<|>Purge records<|>Delete entry<" "$WORK"/kb.html; then
+  fail "the console offers to delete a historical record; that store is append-only"
+else
+  say "no control deletes a historical record"
+fi
+if grep -qF "compensating entry" "$WORK"/kb-text.html; then
+  say "the page says what to do instead of deleting"
+else
+  fail "the page refuses deletion without saying what to do instead"
+fi
+
+# The refusal is the database's, not the page's. A UI that merely omits the button is a
+# convention; this is the control that cannot be argued out of.
+pycheck - "${OFFICE_APP_DSN:-}" "$OFFICE_ADMIN_DSN" <<'PY'
+import sys
+
+import psycopg
+
+app_url, admin_url = sys.argv[1], sys.argv[2]
+
+# The trigger raises with ERRCODE 'insufficient_privilege', which is also what a missing
+# GRANT raises. So the error class cannot tell "the store refuses this" from "this role
+# was never given DELETE" - and a table whose trigger had been dropped and whose grant
+# had been revoked would answer identically. The message is what distinguishes them, so
+# the message is what gets asserted.
+REFUSAL = "append-only violation"
+
+
+def refuses(url: str) -> str:
+    """Attempt the delete and report what stopped it, if anything."""
+    with psycopg.connect(url) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT record_id FROM historical_record LIMIT 1")
+            row = cur.fetchone()
+            if row is None:
+                return "empty"
+            try:
+                cur.execute(
+                    "DELETE FROM historical_record WHERE record_id = %s", (row[0],)
+                )
+            except psycopg.Error as refusal:
+                if REFUSAL in str(refusal):
+                    return "trigger"
+                return f"other:{type(refusal).__name__}"
+            finally:
+                conn.rollback()
+    return "accepted"
+
+
+admin = refuses(admin_url)
+if admin == "empty":
+    print("NOT EXERCISED no historical record exists to delete")
+elif admin == "accepted":
+    print("FAIL historical_record accepted a DELETE from the admin role")
+elif admin != "trigger":
+    # Refused, but by the wrong thing. The admin role holds DELETE on this table, so a
+    # refusal that is not the trigger means the trigger is gone and a grant is standing
+    # in for it - which the next migration to re-grant would silently undo.
+    print(f"FAIL a delete was refused by {admin}, not the append-only trigger")
+else:
+    print("the append-only trigger itself refuses a delete, even as admin")
+    if app_url:
+        app = refuses(app_url)
+        if app == "accepted":
+            print("FAIL historical_record accepted a DELETE from the app role")
+        else:
+            print("and the console's own role cannot reach the table at all")
+PY
+
+# Paging and search, because a listing with neither is one nobody reads to the end of.
+curl -s -b "$COOKIE_JAR" \
+  "http://127.0.0.1:$CONSOLE_PORT/knowledge/personas?include_fixtures=true" \
+  > "$WORK"/kb-personas.html
+sed 's/<!-- -->//g' "$WORK"/kb-personas.html > "$WORK"/kb-personas-text.html
+if grep -qiE "page [0-9]+ of [0-9]+" "$WORK"/kb-personas-text.html; then
+  say "a long listing is paged"
+else
+  notrun "paging - the listing fits on one page"
+fi
+if grep -qF "Search" "$WORK"/kb-personas-text.html; then
+  say "the listing is searchable"
+else
+  fail "the persona listing has no search"
+fi
 
 step "Every page has a route home"
 # There was no way back to a dashboard from anywhere: the wordmark was not a link and

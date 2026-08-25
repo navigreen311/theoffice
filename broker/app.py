@@ -52,6 +52,7 @@ from broker import (
     incidents,
     instructions,
     knowledge,
+    knowledge_origin,
     pack_templates,
     packs,
     proposals,
@@ -1781,6 +1782,19 @@ async def knowledge_coverage(conn: DB, _me: ME) -> dict[str, Any]:
     }
 
 
+# Declared BEFORE any parameterised `/api/knowledge/...` route.
+@app.get("/api/knowledge/overview")
+async def knowledge_overview(conn: DB, _me: ME) -> dict[str, Any]:
+    """The five knowledge bases, counted by substance rather than by row.
+
+    The page reported 60 personas. All sixty are `Smoke NNNNNN` written by console smoke
+    runs, standing in for the same broker — a library holding sixty copies of one fixture
+    has zero personas.
+    """
+    result = await knowledge.overview(conn)
+    return {"as_of": datetime.now(UTC).isoformat(), **result}
+
+
 @app.get("/api/knowledge/playbooks")
 async def list_playbooks(
     conn: DB, _me: ME, venture_id: str | None = Query(default=None)
@@ -1820,18 +1834,108 @@ async def list_compliance_entries(conn: DB, _me: ME) -> list[dict[str, Any]]:
 
 @app.get("/api/knowledge/personas")
 async def list_personas(
-    conn: DB, _me: ME, venture_id: str | None = Query(default=None)
-) -> list[dict[str, Any]]:
-    """Names, targets and hashes. Never bodies - the role cannot read them."""
-    return await knowledge.persona_index(conn, venture_id)
+    conn: DB,
+    _me: ME,
+    venture_id: str | None = Query(default=None),
+    search: str | None = Query(default=None),
+    origin: str | None = Query(default=None),
+    include_fixtures: bool = Query(default=False),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=25, ge=1, le=200),
+) -> dict[str, Any]:
+    """Names, targets and hashes. Never bodies - the role cannot read them.
+
+    Fixtures are excluded by default. Sixty of the sixty personas here are `Smoke
+    NNNNNN`, written by console smoke runs, and a page that lists them first buries the
+    real ones - of which there are none, which is the fact worth seeing.
+    """
+    rows = await knowledge.persona_index(conn, venture_id)
+    shaped = [
+        {**row, "origin": knowledge_origin.persona_origin(row)} for row in rows
+    ]
+    return _paged_knowledge(
+        shaped, search=search, origin=origin, include_fixtures=include_fixtures,
+        page=page, page_size=page_size,
+        matches=lambda row, term: term in str(row.get("persona_name", "")).lower()
+        or term in str(row.get("target_persona", "")).lower(),
+    )
 
 
 @app.get("/api/knowledge/history")
 async def list_history(
-    conn: DB, _me: ME, venture_id: str | None = Query(default=None),
-    limit: int = Query(default=100, le=500),
-) -> list[dict[str, Any]]:
-    return await knowledge.history(conn, venture_id=venture_id, limit=limit)
+    conn: DB,
+    _me: ME,
+    venture_id: str | None = Query(default=None),
+    search: str | None = Query(default=None),
+    origin: str | None = Query(default=None),
+    record_type: str | None = Query(default=None),
+    actor_type: str | None = Query(default=None),
+    include_fixtures: bool = Query(default=False),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=500),
+) -> dict[str, Any]:
+    """The record. Fixtures are filtered out, never removed.
+
+    This store is append-only by design - it refuses UPDATE and DELETE, and `office_app`
+    holds only INSERT and SELECT. A bad entry is answered with a compensating entry, so
+    excluding smoke fixtures from the default view is a reading decision rather than a
+    deletion, and the exclusion itself is recorded when an operator makes it.
+    """
+    rows = await knowledge.history(conn, venture_id=venture_id, limit=500)
+    shaped = [
+        {**row, "origin": knowledge_origin.record_origin(row)} for row in rows
+    ]
+    if record_type:
+        shaped = [row for row in shaped if row.get("record_type") == record_type]
+    if actor_type:
+        shaped = [row for row in shaped if row.get("actor_type") == actor_type]
+
+    return _paged_knowledge(
+        shaped, search=search, origin=origin, include_fixtures=include_fixtures,
+        page=page, page_size=page_size,
+        matches=lambda row, term: term in str(row.get("summary", "")).lower(),
+    )
+
+
+def _paged_knowledge(
+    rows: list[dict[str, Any]],
+    *,
+    search: str | None,
+    origin: str | None,
+    include_fixtures: bool,
+    page: int,
+    page_size: int,
+    matches: Any,
+) -> dict[str, Any]:
+    """Filter, then page, and say what was left out.
+
+    `excluded_fixtures` is returned even when they are hidden. A list that silently drops
+    120 of 132 rows and reports the remaining 12 as the total is the same failure as
+    counting the fixtures as content - the reader has to be able to see that a decision
+    was made.
+    """
+    total_before = len(rows)
+    fixtures = len([row for row in rows if row.get("origin") == "test_fixture"])
+
+    if not include_fixtures:
+        rows = [row for row in rows if row.get("origin") != "test_fixture"]
+    if origin:
+        rows = [row for row in rows if row.get("origin") == origin]
+    if search:
+        term = search.strip().lower()
+        rows = [row for row in rows if matches(row, term)]
+
+    total = len(rows)
+    start = (page - 1) * page_size
+    return {
+        "rows": rows[start:start + page_size],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "pages": max(1, (total + page_size - 1) // page_size),
+        "total_before_filters": total_before,
+        "excluded_fixtures": 0 if include_fixtures else fixtures,
+    }
 
 
 # ====================================================== write: knowledge bases
@@ -1988,13 +2092,24 @@ async def author_persona_route(
     except knowledge.KnowledgeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    # The hash, returned once. The body is beyond this console's reach the moment it
+    # lands, so this is the only thing the author can keep to verify against - and
+    # `body_hash` is a column the role *can* read, unlike the body it describes.
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT body_hash FROM persona WHERE persona_id = %s", (persona_id,)
+        )
+        hashed = await cur.fetchone()
+
     await _audit_human_action(
         me, "console_persona_authored",
-        {"persona_name": body.persona_name, "target_persona": body.target_persona},
+        {"persona_name": body.persona_name, "target_persona": body.target_persona,
+         "body_hash": (hashed or {}).get("body_hash")},
         body.venture_id,
     )
     return {
         "persona_id": str(persona_id),
+        "body_hash": (hashed or {}).get("body_hash", ""),
         "note": (
             "Written. This console cannot read the body back - Part 6.4 is SimForge "
             "only, enforced by a column privilege rather than by a missing route."

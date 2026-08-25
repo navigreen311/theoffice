@@ -519,6 +519,37 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
     }, f"the write surface changed: {sorted(writes)}"
 
 
+def _statements_only(source) -> str:
+    """The Python in a module with its comments and docstrings removed.
+
+    Tokens are rejoined with a single space, which is enough for substring matching:
+    `UPDATE agent` lexes as two tokens and rejoins as `update agent`, still containing
+    the `update ` the caller looks for.
+    """
+    import tokenize
+
+    standalone = {
+        tokenize.ENCODING,
+        tokenize.INDENT,
+        tokenize.DEDENT,
+        tokenize.NEWLINE,
+        tokenize.NL,
+    }
+    code: list[str] = []
+    previous = tokenize.ENCODING
+    with open(source, encoding="utf-8") as handle:
+        for token in tokenize.generate_tokens(handle.readline):
+            if token.type == tokenize.COMMENT:
+                continue
+            # A string sitting where a statement would start is a docstring.
+            if token.type == tokenize.STRING and previous in standalone:
+                continue
+            if token.type != tokenize.NL:
+                previous = token.type
+            code.append(token.string)
+    return " ".join(code)
+
+
 async def test_the_api_module_contains_no_raw_mutation():
     """The other half of the same rule: no `UPDATE`/`DELETE`/`INSERT` in the API.
 
@@ -529,12 +560,60 @@ async def test_the_api_module_contains_no_raw_mutation():
     from pathlib import Path
 
     source = Path(__file__).resolve().parents[2] / "broker" / "app.py"
-    text = source.read_text(encoding="utf-8").lower()
+
+    # Comments and docstrings are stripped before the scan. The first version lowercased
+    # the whole file, so a docstring explaining that the historical-record store refuses
+    # UPDATE and DELETE tripped the very guard that exists to stop raw statements - the
+    # same trap the React 19 check fell into, where a rule that greps for a phrase flags
+    # the paragraph explaining it.
+    #
+    # Stripping makes this stricter, not laxer: every real statement is still code, and a
+    # guard that forces people to avoid a word in prose is one somebody eventually argues
+    # down instead. `test_the_raw_mutation_guard_still_sees_a_real_statement` holds the
+    # teeth, because a check loosened in response to a false positive is exactly the kind
+    # that quietly stops checking.
+    text = _statements_only(source).lower()
     for statement in ("update ", "delete from", "insert into"):
         assert statement not in text, (
             f"broker/app.py contains a raw {statement.strip()!r}. Every write must go "
             "through the guarded domain function that owns that rule."
         )
+
+
+def test_the_raw_mutation_guard_still_sees_a_real_statement(tmp_path):
+    """The guard above learned to skip prose. This proves it did not stop looking.
+
+    A check that passes because it was narrowed is worse than no check, and this one was
+    narrowed in response to a false positive - the circumstance under which a guard most
+    often stops guarding. So: hand `_statements_only` a module whose only mutations are
+    real code, and require all three to survive the strip; then hand it one where the
+    same words appear only in a docstring and a comment, and require silence.
+    """
+
+    def scan(text: str, name: str) -> list[str]:
+        source = tmp_path / name
+        source.write_text(text, encoding="utf-8")
+        body = _statements_only(source).lower()
+        return sorted(s for s in ("update ", "delete from", "insert into") if s in body)
+
+    real = (
+        '"""A docstring that says nothing about statements."""\n'
+        "def route(cur):\n"
+        '    cur.execute("UPDATE agent SET tier = 2")\n'
+        '    cur.execute("DELETE FROM grant WHERE grant_id = 1")\n'
+        '    cur.execute("INSERT INTO audit_log (kind) VALUES (1)")\n'
+    )
+    assert scan(real, "real.py") == ["delete from", "insert into", "update "], (
+        "the guard stopped catching raw statements when it learned to skip prose"
+    )
+
+    prose = (
+        '"""This store refuses update and delete; rows insert into it once."""\n'
+        "# A comment mentioning delete from and insert into for good measure.\n"
+        "def route():\n"
+        "    return knowledge.record_note()\n"
+    )
+    assert scan(prose, "prose.py") == [], "prose still trips the guard"
 
 
 async def test_serve_does_not_let_uvicorn_replace_the_event_loop_policy():

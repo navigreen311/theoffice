@@ -430,7 +430,7 @@ async def test_resolving_an_incident_appends_and_never_edits(
     history = (
         await api.get(f"/api/knowledge/history?venture_id={VENTURE}",
                       headers=auth(ivan_token))
-    ).json()
+    ).json()["rows"]
     assert any(r["record_type"] == "incident_resolved" for r in history)
 
 
