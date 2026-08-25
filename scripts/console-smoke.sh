@@ -1396,8 +1396,13 @@ done
 say "the roster is searchable and filterable"
 code="$(curl -s -b "$COOKIE_JAR" -o /dev/null -w '%{http_code}' \
   "http://127.0.0.1:$CONSOLE_PORT/agents?identity=without&grants=certified_no_grants")"
-[ "$code" = "200" ] && say "filters are addressable in the URL" \
-  || fail "a filtered roster returned $code"
+# if/then/else, not `A && B || C`: that form runs C when B fails, so a `say` that
+# returned non-zero would report a failure that did not happen.
+if [ "$code" = "200" ]; then
+  say "filters are addressable in the URL"
+else
+  fail "a filtered roster returned $code"
+fi
 
 # No control may imply The Office creates agents.
 if grep -qiE ">Add agent<|>New agent<|>Create agent<" "$WORK"/agents.html; then
