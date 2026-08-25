@@ -1203,11 +1203,14 @@ PY
   fi
 
   # Version history coherence.
-  if grep -qF "abandoned draft" "$WORK"/editor-text.html \
-     || grep -qE "superseded by [0-9]" "$WORK"/editor-text.html; then
+  # Every row carries a disposition, whichever one applies. Asserting a *specific* one
+  # makes the check depend on the shape of the world it runs in: locally there are
+  # abandoned drafts, in CI there are not, and "not exercised" is the honest answer to a
+  # question that should not have been asked that way.
+  if grep -qE "abandoned draft|superseded by [0-9]|>live<|>draft<"        "$WORK"/editor-text.html; then
     say "the history names what became of each version"
   else
-    notrun "version dispositions - this venture has only one version"
+    fail "a version renders with no disposition - a reader cannot tell what happened to it"
   fi
   if grep -qE "provisioned by [0-9]+ run|never provisioned" "$WORK"/editor-text.html; then
     say "each version says whether a run provisioned it"
