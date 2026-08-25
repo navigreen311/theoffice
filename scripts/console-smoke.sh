@@ -2299,11 +2299,15 @@ else
     # string and the shell dropped it: the dashboard silently stopped being checked
     # while the step still reported every page hydrating. The checker counts what it
     # was given, so a drop like that fails instead of shrinking the sweep.
-    DOTTED_ROUTES="$(printf '%s\n' $ROUTES $KNOWLEDGE_ROUTES | sed 's|^|.|')"
-    ROUTE_COUNT="$(printf '%s\n' $ROUTES $KNOWLEDGE_ROUTES | wc -l | tr -d ' ')"
+    # An array rather than a string relying on word splitting, which shellcheck
+    # flags (SC2086) and which would mangle any route that ever contained a space.
+    read -r -a ALL_ROUTES <<<"$ROUTES $KNOWLEDGE_ROUTES"
+    DOTTED_ROUTES=()
+    for route in "${ALL_ROUTES[@]}"; do DOTTED_ROUTES+=(".$route"); done
+    ROUTE_COUNT="${#DOTTED_ROUTES[@]}"
     if EXPECTED_ROUTES="$ROUTE_COUNT" CDP_PORT="$CDP_PORT" \
          node "$ROOT/scripts/hydration-check.mjs" \
-         "http://localhost:$CONSOLE_PORT" "$SESSION" $DOTTED_ROUTES \
+         "http://localhost:$CONSOLE_PORT" "$SESSION" "${DOTTED_ROUTES[@]}" \
          2>&1 | sed 's/^/  /'; then
       say "every page hydrated in a real browser"
     else

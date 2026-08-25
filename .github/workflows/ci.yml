@@ -29,7 +29,11 @@ concurrency:
 
 env:
   PYTHON_VERSION: "3.11"
-  NODE_VERSION: "20"
+  # 22, not 20: `scripts/hydration-check.mjs` drives Chrome over CDP using the
+  # WebSocket Node exposes globally from 22 onwards, so the check needs no
+  # dependency of its own. On 20 the step died with `WebSocket is not defined`.
+  # GitHub has also been annotating every run here to say 20 is deprecated.
+  NODE_VERSION: "22"
 
   # Throwaway credentials for an ephemeral service container that lives for the length
   # of one job and listens only on the runner's loopback. These are not secrets and
