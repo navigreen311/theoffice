@@ -136,15 +136,24 @@ check(
 
 // 2. Choose a venture, and expect a blast radius before anything is submitted.
 await pickScope("A venture");
-await sleep(700);
-const chose = await evaluate(`
-  (() => {
-    const option = [...document.querySelectorAll('form ul button')][0];
-    if (!option) return 'no venture to choose';
-    option.click();
-    return 'chose ' + option.textContent.trim().slice(0, 40);
-  })()
-`);
+
+// Polled rather than slept for. A fixed wait passed against a warm dev server and
+// reported "no venture to choose" inside the smoke run, where the same page took
+// slightly longer to paint - a check that depends on how fast the machine is will
+// eventually fail on a machine nobody is watching.
+let chose = "no venture to choose";
+for (let attempt = 0; attempt < 20; attempt += 1) {
+  await sleep(250);
+  chose = await evaluate(`
+    (() => {
+      const option = [...document.querySelectorAll('form ul button')][0];
+      if (!option) return 'no venture to choose';
+      option.click();
+      return 'chose ' + option.textContent.trim().slice(0, 40);
+    })()
+  `);
+  if (!chose.startsWith("no ")) break;
+}
 // The radius is fetched from the server after the selection, so this waits for a round
 // trip rather than for a render.
 await sleep(3000);

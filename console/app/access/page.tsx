@@ -1,49 +1,82 @@
 import { redirect } from "next/navigation";
 
-import { Ago } from "@/components/local-time";
-import { Badge, Card, Cell, Row, Table } from "@/components/ui";
-import {
-  api,
-  ApiError,
-  NotAuthenticated,
-  type HumanRow,
-  type RevocationRow,
-  type VentureRow,
-} from "@/lib/api";
-import { relativeAge } from "@/lib/severity";
+import { AsOf } from "@/components/local-time";
+import { Card } from "@/components/ui";
+import { api, ApiError, NotAuthenticated, type VentureRow } from "@/lib/api";
 
+import { CreateHumanForm, RoleForm } from "./forms";
 import {
-  CreateHumanForm,
-  ReinstateForm,
-  ReissueForm,
-  RoleForm,
-  StatusForm,
-} from "./forms";
+  MissingPeopleBanner,
+  PrivilegeBanner,
+  RoleReference,
+  type Concentration,
+  type MissingPerson,
+  type RoleRow,
+} from "./overview";
+import { People, SuspendFixtures, type Row } from "./people";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Access — who may operate this system, and what is currently revoked.
+ * Access — who may operate this system.
  *
  * This screen exists because until it did, **a deployed Office needed somebody with a
- * shell to create its second operator.** `create_human` and `grant_role` were domain
- * functions called by tests and by the smoke script, and by nothing a human could reach.
+ * shell to create its second operator.** The rules it renders are enforced in the API
+ * rather than here — a second copy of an authorisation rule is a second copy that
+ * eventually disagrees, and the one in the browser would be the one nobody audits. What
+ * this screen owes the operator is that the rules are *visible* before they click.
  *
- * It is the most privilege-sensitive screen in the console, and the rules it renders are
- * enforced in the API rather than here — a second copy of an authorisation rule is a
- * second copy that eventually disagrees, and the one in the browser would be the one
- * nobody audits. What this screen owes the operator is that the rules are *visible*
- * before they click, not that it re-checks them.
+ * What it did not owe them, and delivered anyway, was 179 rows that all looked like
+ * colleagues. 178 are fixtures this project's own test paths created, and 94 of those
+ * hold `ivan` — the authority for Forge-scope revocation. That was on the page, spread
+ * across ninety-five rows, which is the same as not being there.
+ *
+ * Active revocations used to be duplicated here and on the Revocation page. One
+ * implementation, on the page that owns the re-enable ritual; this one links to it.
  */
-export default async function AccessPage() {
-  let humans: HumanRow[];
-  let revocations: RevocationRow[];
+
+type Overview = {
+  as_of: string;
+  accounts: Row[];
+  counts: {
+    total: number;
+    people: number;
+    fixtures: number;
+    active_fixtures: number;
+    never_seen: number;
+    mfa_enrolled: number;
+  };
+  concentration: Concentration;
+  missing_people: MissingPerson[];
+  unreferenced_roles: string[];
+  roles: RoleRow[];
+};
+
+function Metric({ label, value, of }: { label: string; value: number; of?: number }) {
+  return (
+    <div className="rounded-xl border border-line bg-surface-muted px-4 py-3">
+      <div className="text-desc text-ink-muted">{label}</div>
+      <div className="text-[24px] font-medium leading-tight text-ink">
+        {value}
+        {of !== undefined ? (
+          <span className="text-desc text-ink-muted"> of {of}</span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+export default async function AccessPage({
+  searchParams,
+}: {
+  searchParams: Record<string, string | undefined>;
+}) {
+  let overview: Overview;
   let ventures: VentureRow[];
 
   try {
-    [humans, revocations, ventures] = await Promise.all([
-      api.get<HumanRow[]>("/api/humans"),
-      api.get<RevocationRow[]>("/api/revocations"),
+    [overview, ventures] = await Promise.all([
+      api.get<Overview>("/api/access/overview"),
       api.get<VentureRow[]>("/api/ventures"),
     ]);
   } catch (error) {
@@ -65,133 +98,94 @@ export default async function AccessPage() {
     throw error;
   }
 
-  const ventureIds = ventures.map((v) => v.venture_id);
-  const administrators = humans.filter(
-    (h) => h.status === "active" && h.roles.some((r) => r.role === "ivan"),
-  );
+  // Real accounts by default. The count that is hidden is stated beside the list, so
+  // the filter cannot quietly shrink what the page appears to be about.
+  const origin = searchParams.origin ?? "";
+  const visible =
+    origin === "all"
+      ? overview.accounts
+      : origin === "test_fixture"
+        ? overview.accounts.filter((row) => row.origin === "test_fixture")
+        : overview.accounts.filter((row) => row.origin !== "test_fixture");
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-base font-semibold">Access</h2>
-        <p className="mt-1 text-xs text-ink-muted">
-          Every action here is audited with you as the actor. A role may be granted only
-          by somebody holding a stronger one, and never to yourself.
-        </p>
-      </div>
-
-      {/* The number that must never reach zero. A system with no administrator cannot
-          appoint one, and the only recovery is a shell on the database — which is the
-          dependency this screen exists to remove. */}
-      <Card title="Administrators">
-        <div className="flex flex-wrap items-center gap-3">
-          <Badge severity={administrators.length > 1 ? "ok" : "warn"}>
-            {administrators.length} active
-          </Badge>
-          <span className="text-sm text-ink-secondary">
-            {administrators.map((a) => a.display_name).join(", ") || "none"}
-          </span>
-        </div>
-        {administrators.length < 2 ? (
-          <p className="mt-2 text-xs text-warn">
-            One administrator is a single point of failure. The last one cannot be
-            suspended or demoted — that guard keeps the system administrable, and it is
-            not a substitute for a second person.
+    <div className="space-y-3">
+      <div className="flex items-baseline justify-between gap-4">
+        <div>
+          <h1 className="text-page font-medium text-ink">Access</h1>
+          <p className="mt-1 max-w-3xl text-desc text-ink-secondary">
+            Every action here is audited with you as the actor. A role may be granted only
+            by somebody holding a stronger one, and never to yourself.
           </p>
-        ) : null}
-      </Card>
-
-      <Card title="People" subtitle="Status is read live: a suspension takes effect on their next request.">
-        <Table
-          head={["Name", "Email", "Roles", "Status", "Created", ""]}
-          empty="Nobody has access. That cannot happen while you are reading this."
-        >
-          {humans.map((h) => (
-            <Row key={h.human_id}>
-              <Cell>{h.display_name}</Cell>
-              <Cell mono>{h.email}</Cell>
-              <Cell>
-                {h.roles.length === 0 ? (
-                  <Badge>no role — cannot act</Badge>
-                ) : (
-                  <span className="flex flex-wrap gap-1">
-                    {h.roles.map((r) => (
-                      <Badge
-                        key={`${r.role}-${r.venture_id ?? "*"}`}
-                        severity={r.role === "ivan" ? "warn" : "neutral"}
-                      >
-                        {r.role}
-                        {r.venture_id ? ` · ${r.venture_id}` : " · all"}
-                      </Badge>
-                    ))}
-                  </span>
-                )}
-              </Cell>
-              <Cell>
-                <Badge severity={h.status === "active" ? "ok" : "bad"}>{h.status}</Badge>
-              </Cell>
-              <Cell><Ago iso={h.created_at} /></Cell>
-              <Cell>
-                <div className="space-y-3">
-                  <StatusForm humanId={h.human_id} status={h.status} />
-                  <ReissueForm humanId={h.human_id} self={false} />
-                </div>
-              </Cell>
-            </Row>
-          ))}
-        </Table>
-      </Card>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card
-          title="Add a person"
-          subtitle="Their token is shown once, here, and is not recoverable."
-        >
-          <CreateHumanForm ventures={ventureIds} />
-        </Card>
-
-        <Card title="Change a role">
-          <RoleForm
-            humans={humans.map((h) => ({
-              human_id: h.human_id,
-              display_name: h.display_name,
-            }))}
-            ventures={ventureIds}
-          />
-        </Card>
+        </div>
+        <AsOf iso={overview.as_of} />
       </div>
 
-      <Card
-        title="Active revocations"
-        subtitle="Revocation is the kill switch, checked on every call and never cached. Lifting one is a decision worth a sentence."
-      >
-        <Table
-          head={["Scope", "Subject", "Reason", "Revoked", "By role", ""]}
-          empty="Nothing is revoked."
-        >
-          {revocations.map((r) => (
-            <Row key={r.revocation_id}>
-              <Cell>
-                <Badge severity="bad">{r.scope}</Badge>
-              </Cell>
-              <Cell>
-                {r.agent_name ??
-                  r.forge_id ??
-                  r.venture_id ??
-                  r.office_agent_id ??
-                  "—"}
-                {r.module_id ? ` · ${r.module_id}` : ""}
-              </Cell>
-              <Cell>{r.reason}</Cell>
-              <Cell><Ago iso={r.revoked_at} /></Cell>
-              <Cell mono>{r.revoked_by_role}</Cell>
-              <Cell>
-                <ReinstateForm revocationId={r.revocation_id} />
-              </Cell>
-            </Row>
-          ))}
-        </Table>
-      </Card>
+      <PrivilegeBanner
+        concentration={overview.concentration}
+        counts={overview.counts}
+        action={<SuspendFixtures count={overview.counts.active_fixtures} />}
+      />
+
+      <MissingPeopleBanner missing={overview.missing_people} />
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Metric label="People" value={overview.counts.people} of={overview.counts.total} />
+        <Metric label="Test fixtures" value={overview.counts.fixtures} />
+        <Metric
+          label="Never signed in"
+          value={overview.counts.never_seen}
+          of={overview.counts.total}
+        />
+        <Metric
+          label="MFA enrolled"
+          value={overview.counts.mfa_enrolled}
+          of={overview.counts.people}
+        />
+      </div>
+
+      <RoleReference roles={overview.roles} />
+
+      <People
+        people={visible}
+        hiddenFixtures={origin === "all" ? 0 : overview.counts.fixtures}
+        ventures={ventures.map((venture) => venture.venture_id)}
+      />
+
+      <section className="rounded-xl border border-line bg-surface px-5 py-4">
+        <h2 className="text-section font-medium text-ink">Add a person</h2>
+        <p className="mt-0.5 max-w-3xl text-desc text-ink-secondary">
+          Their token is shown once, here, and is not recoverable.
+        </p>
+        <div className="mt-3">
+          <CreateHumanForm
+            ventures={ventures.map((venture) => venture.venture_id)}
+            holders={Object.fromEntries(
+              overview.roles.map((role) => [role.role, role.holders]),
+            )}
+          />
+        </div>
+      </section>
+
+      {/* Granting and removing a role. This went missing in the rebuild, which left the
+          only route to a role being to create a new account with one - the exact shape
+          of over-granting this page now warns about. */}
+      <section className="rounded-xl border border-line bg-surface px-5 py-4">
+        <h2 className="text-section font-medium text-ink">Change a role</h2>
+        <p className="mt-0.5 max-w-3xl text-desc text-ink-secondary">
+          You may grant a role weaker than your own, and never to yourself — so that
+          every role anybody holds was granted by somebody else, and the log says who.
+        </p>
+        <div className="mt-3">
+          <RoleForm
+            humans={visible.map((person) => ({
+              human_id: person.human_id,
+              display_name: person.display_name,
+            }))}
+            ventures={ventures.map((venture) => venture.venture_id)}
+          />
+        </div>
+      </section>
     </div>
   );
 }

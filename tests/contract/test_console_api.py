@@ -501,6 +501,12 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
         # could record is a detection that stays in somebody's inbox.
         "/api/incidents",
         "/api/incidents/{incident_id}/accounts",
+        # Suspending every account this project's own test paths created. It writes
+        # `status`, which is exactly the control it appears to bypass - and does not:
+        # suspension is the reversible, audited half. There is no delete route here or
+        # anywhere, because deleting an account destroys the record of who held what and
+        # who granted it, which is what the Access page exists to protect.
+        "/api/access/suspend-test-fixtures",
         # Human and role administration — the most privilege-sensitive surface in this
         # file. The rules live in `humans.assert_may_grant`: a role may be granted only
         # by somebody holding a STRICTLY stronger one, and never to yourself.

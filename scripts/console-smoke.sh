@@ -659,7 +659,16 @@ step "Access administration"
 # The screen that removed the shell dependency. Until it existed, a deployed Office
 # needed somebody with a terminal to create its second operator.
 curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT/access" > "$WORK"/access.html
-if grep -qi "Administrators" "$WORK"/access.html    && grep -qi "Add a person" "$WORK"/access.html    && grep -qi "Change a role" "$WORK"/access.html; then
+sed 's/<!-- -->//g' "$WORK"/access.html > "$WORK"/access-admin-text.html
+# The administrator count used to have its own card headed "Administrators". It is
+# the concentration banner now, which states the same number and adds the two things
+# that card never did: how many of those accounts are people, and what the role
+# authorises. So the check follows the fact rather than the heading - and it is not
+# weaker for it, because the banner has to name the role and a count to pass.
+if grep -qE "[0-9]+ accounts? hold" "$WORK"/access-admin-text.html \
+   && grep -qi "ivan" "$WORK"/access-admin-text.html \
+   && grep -qi "Add a person" "$WORK"/access.html \
+   && grep -qi "Change a role" "$WORK"/access.html; then
   say "the access screen renders people, roles and the administrator count"
 else
   fail "the access screen did not render its controls"
@@ -2626,6 +2635,267 @@ if grep -qiE "you do not have permission|your role is too weak|requires complian
   fail "the console pre-checks authority; the API decides that, once"
 else
   say "no client-side authority pre-check"
+fi
+
+step "Access separates people from the fixtures this script creates"
+curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT/access" > "$WORK"/access.html
+sed 's/<!-- -->//g' "$WORK"/access.html > "$WORK"/access-text.html
+
+while IFS= read -r phrase; do
+  grep -qF "$phrase" "$WORK"/access-text.html || fail "access lost: ${phrase:0:60}"
+done <<'PHRASES'
+Every action here is audited with you as the actor. A role may be granted only by somebody holding a stronger one, and never to yourself.
+Status is read live: a suspension takes effect on their next request.
+Revocation is the kill switch, checked on every call and never cached. Lifting one is a decision worth a sentence
+PHRASES
+say "the preserved copy is present verbatim"
+
+# This script is the thing that made the finding. Every run creates an account holding
+# `ivan`, so by the time anybody looked, 95 accounts held the authority for Forge-scope
+# revocation and one of them was a person.
+pycheck - "$TOKEN" "$API_PORT" "$WORK/access-text.html" <<'PY'
+import html
+import json
+import re
+import sys
+import urllib.request
+
+req = urllib.request.Request(
+    f"http://127.0.0.1:{sys.argv[2]}/api/access/overview",
+    headers={"Authorization": f"Bearer {sys.argv[1]}"},
+)
+with urllib.request.urlopen(req) as response:
+    overview = json.load(response)
+
+page = html.unescape(open(sys.argv[3], encoding="utf-8", errors="replace").read())
+counts = overview["counts"]
+concentration = overview["concentration"]
+
+if counts["fixtures"] == 0:
+    print("NOT EXERCISED no test fixtures exist to separate")
+    raise SystemExit
+
+if str(counts["people"]) not in page:
+    print(f"FAIL the page does not state how many real accounts exist ({counts['people']})")
+elif str(counts["fixtures"]) not in page:
+    print(f"FAIL the page does not state how many fixtures it is hiding ({counts['fixtures']})")
+else:
+    print(f"{counts['people']} people and {counts['fixtures']} fixtures, counted apart")
+
+# The concentration finding, and what the role authorises.
+if concentration["raised"]:
+    if str(concentration["total"]) not in page:
+        print("FAIL the page does not say how many accounts hold the strongest role")
+    elif not any(scope in page for scope in concentration["authorises"]):
+        print("FAIL the page names the count without saying what the role authorises")
+    else:
+        print(
+            f"{concentration['total']} hold {concentration['role']} "
+            f"({concentration['fixtures']} fixtures), and the page names the "
+            f"{', '.join(concentration['authorises'])} scope it authorises"
+        )
+else:
+    print(f"only people hold {concentration['role']}; no concentration to report")
+PY
+
+# Fixtures are hidden by default, and the hidden count is stated rather than silent.
+if grep -qE "test accounts? hidden by the current filter" "$WORK"/access-text.html; then
+  say "the default filter states what it is hiding"
+else
+  notrun "hidden-count line - no fixture is being hidden"
+fi
+
+# Somebody a Pack names who has no account.
+pycheck - "$TOKEN" "$API_PORT" "$WORK/access-text.html" <<'PY'
+import html
+import json
+import sys
+import urllib.request
+
+req = urllib.request.Request(
+    f"http://127.0.0.1:{sys.argv[2]}/api/access/overview",
+    headers={"Authorization": f"Bearer {sys.argv[1]}"},
+)
+with urllib.request.urlopen(req) as response:
+    missing = json.load(response)["missing_people"]
+
+page = html.unescape(open(sys.argv[3], encoding="utf-8", errors="replace").read())
+if not missing:
+    print("NOT EXERCISED every human the Packs name has an account")
+    raise SystemExit
+
+unnamed = [person["human_name"] for person in missing if person["human_name"] not in page]
+if unnamed:
+    print(f"FAIL these people are missing from Access and unnamed on it: {unnamed}")
+else:
+    print(f"named explicitly: {', '.join(p['human_name'] for p in missing)}")
+PY
+
+# Roles defined, with holder counts, from the matrix the API enforces.
+for role in "ivan" "compliance_officer" "venture_operator"; do
+  grep -qF "$role" "$WORK"/access-text.html || fail "role missing from the reference: $role"
+done
+if grep -qF "What each role confers" "$WORK"/access-text.html; then
+  say "every role is defined in plain language with a holder count"
+else
+  fail "roles are still bare strings with no definition"
+fi
+
+# Suspend and Reissue must not be styled identically. Only one is destructive.
+pycheck - "$WORK/access.html" <<'PY'
+import re
+import sys
+
+page = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+
+# The overflow menu means neither is rendered until an action is chosen, which is itself
+# the fix for 179 rows of inline forms. What must never be true is a reissue control
+# carrying the destructive styling.
+reissue = re.findall(r"<button[^>]*>[^<]*Reissue[^<]*</button>", page)
+destructive = [tag for tag in reissue if "bad" in tag or "danger" in tag]
+if destructive:
+    print("FAIL a reissue control carries destructive styling; only suspension is")
+else:
+    print("reissue is not styled as destructive")
+
+if "Actions" in page:
+    print("row actions are behind a menu rather than inline on every row")
+else:
+    print("FAIL every row still renders its own forms")
+PY
+
+# No control deletes an account, here or in the API.
+if grep -qiE ">Delete account<|>Remove person<|>Delete person<" "$WORK"/access.html; then
+  fail "the console offers to delete an account; that destroys who held what"
+else
+  say "no control deletes an account"
+fi
+
+step "The Forge Map shows the diff it promises"
+curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT/forge-map" > "$WORK"/forge-map.html
+sed 's/<!-- -->//g' "$WORK"/forge-map.html > "$WORK"/forge-map-text.html
+
+while IFS= read -r phrase; do
+  grep -qF "$phrase" "$WORK"/forge-map-text.html || fail "forge map lost: ${phrase:0:60}"
+done <<'PHRASES'
+The diff is the information.
+Generator 5.6 produces these rows from a Pack.
+PHRASES
+say "the preserved copy is present verbatim"
+
+# Three columns, from three sources, and the classification that is the point of them.
+for column in "Declared" "Required" "In-Use (30d)" "Mismatch"; do
+  grep -qF "$column" "$WORK"/forge-map-text.html || fail "forge map column missing: $column"
+done
+say "Declared, Required and In-Use are separate columns with a mismatch classification"
+
+pycheck - "$TOKEN" "$API_PORT" "$WORK/forge-map-text.html" <<'PY'
+import html
+import json
+import sys
+import urllib.request
+
+token, port = sys.argv[1], sys.argv[2]
+
+
+def get(path):
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{port}{path}", headers={"Authorization": f"Bearer {token}"}
+    )
+    with urllib.request.urlopen(req) as response:
+        return json.load(response)
+
+
+ventures = get("/api/ventures")
+if not ventures:
+    print("NOT EXERCISED no venture exists")
+    raise SystemExit
+
+venture = ventures[0]["venture_id"]
+reconciliation = get(f"/api/ventures/{venture}/forge-map")
+page = html.unescape(open(sys.argv[3], encoding="utf-8", errors="replace").read())
+
+# The subtitle promised a three-way diff and the table had one Required column, because
+# all three states came from the manifest. Declared must come from the Pack, which is
+# why the table has content at all while the generators have never run.
+if reconciliation["declared_count"] == 0:
+    print("NOT EXERCISED this venture's Pack declares no Forge module")
+elif reconciliation["declared_count"] <= reconciliation["required_count"]:
+    print("declared and required agree; nothing to diff here")
+else:
+    gap = reconciliation["declared_count"] - reconciliation["required_count"]
+    print(
+        f"{reconciliation['declared_count']} declared, "
+        f"{reconciliation['required_count']} required: a {gap}-module gap the old "
+        "single-source table could not have shown"
+    )
+
+# The cause, not the mechanism.
+reason = reconciliation.get("blocked_reason")
+if reason:
+    if reason not in page:
+        print("FAIL the page does not state why no manifest exists")
+    elif "gate" not in reason.lower():
+        print("FAIL the reason names no gate, so it is a restatement of the mechanism")
+    else:
+        print(f"the empty state names the cause: {reason[:80]}...")
+else:
+    print("a manifest exists, so there is no empty state to explain")
+
+# All four handlers, each saying what it does.
+handlers = {row["mismatch"] for row in reconciliation["handlers"]}
+expected = {
+    "DECLARED_NOT_REQUIRED", "REQUIRED_NOT_DECLARED",
+    "IN_USE_NOT_REQUIRED", "REQUIRED_NOT_IN_USE_30D",
+}
+if handlers != expected:
+    print(f"FAIL the handlers are {sorted(handlers)}, not the four the spec names")
+else:
+    print("all four mismatch handlers are published with what each one does")
+PY
+
+# Every Forge, including the ones with no bridge.
+pycheck - "$TOKEN" "$API_PORT" "$WORK/forge-map-text.html" <<'PY'
+import html
+import json
+import sys
+import urllib.request
+
+req = urllib.request.Request(
+    f"http://127.0.0.1:{sys.argv[2]}/api/forge-map/estate",
+    headers={"Authorization": f"Bearer {sys.argv[1]}"},
+)
+with urllib.request.urlopen(req) as response:
+    forges = json.load(response)["forges"]
+
+page = html.unescape(open(sys.argv[3], encoding="utf-8", errors="replace").read())
+missing = [f["forge_id"] for f in forges if f["forge_id"] not in page]
+unbridged = [f["forge_id"] for f in forges if not f["bridged"]]
+
+if missing:
+    print(f"FAIL these Forges are in the estate and not on the page: {missing}")
+elif not unbridged:
+    print(f"all {len(forges)} Forges are bridged and all are shown")
+else:
+    print(
+        f"all {len(forges)} Forges are shown, including {len(unbridged)} with no bridge: "
+        f"{', '.join(unbridged)}"
+    )
+
+# Health and credential mode, which the Agents page had and the page named for Forges
+# did not.
+bridged = [f for f in forges if f["bridged"]]
+blank = [f["forge_id"] for f in bridged if not f["health"] or not f["credential_mode"]]
+if blank:
+    print(f"FAIL these bridged Forges report no health or credential mode: {blank}")
+elif bridged:
+    print(f"{len(bridged)} bridged Forges report health and credential mode")
+PY
+
+if grep -qF "Ventures" "$WORK"/forge-map-text.html && grep -qF "Forges" "$WORK"/forge-map-text.html; then
+  say "the cross-venture matrix renders"
+else
+  fail "there is no Villages x Forges matrix"
 fi
 
 step "Every page survives being opened in a browser"

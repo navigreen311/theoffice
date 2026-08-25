@@ -44,10 +44,12 @@ from psycopg.rows import dict_row
 from pydantic import BaseModel, Field
 
 from broker import (
+    access_overview,
     audit,
     budget,
     certification,
     curriculum_quality,
+    forge_map,
     humans,
     incidents,
     instructions,
@@ -80,7 +82,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0024"
+EXPECTED_SCHEMA_REVISION = "0025"
 
 
 @asynccontextmanager
@@ -552,8 +554,14 @@ async def venture_capacity(venture_id: str, conn: DB, _me: ME) -> dict[str, Any]
 
 
 @app.get("/api/ventures/{venture_id}/forge-map")
-async def forge_map(venture_id: str, conn: DB, _me: ME) -> dict[str, Any]:
-    """Forge Map (Part 15): Declared, Required, In-Use, and the reconciliation diff."""
+async def venture_forge_map(venture_id: str, conn: DB, _me: ME) -> dict[str, Any]:
+    """Forge Map (Part 15): Declared, Required, In-Use, and the reconciliation diff.
+
+    The three states now come from the three places they actually live. They used to come
+    from one - a `venture_forge_manifest` row was both the declaration and the
+    requirement - so the diff the page promised could not exist, and with the manifest
+    empty the table rendered nothing while the Pack declared nine modules.
+    """
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
             """
@@ -581,8 +589,20 @@ async def forge_map(venture_id: str, conn: DB, _me: ME) -> dict[str, Any]:
         )
         dispositions = [dict(r) for r in await cur.fetchall()]
 
+    # The three-way reconciliation, from the three places the states actually live.
+    # `declared` above is the manifest, which is one of them; `forge_map.reconcile` reads
+    # the Pack and the ledger too, which is what makes the diff a diff rather than one
+    # table compared against itself.
+    reconciliation = await forge_map.reconcile(conn, venture_id)
+
     return {
+        "as_of": datetime.now(UTC).isoformat(),
+        **reconciliation,
         "venture_id": venture_id,
+        # Still `declared`, under its published name. Renaming it to `manifest_rows`
+        # to make room for the reconciliation broke `/ventures/{venture}` with a 500 -
+        # a field this route has always returned, read by a page that had no reason to
+        # change. The reconciliation's own keys sit beside it rather than over it.
         "declared": declared,
         "declared_not_used": [d for d in declared if d["calls_30d"] == 0],
         "dispositions": dispositions,
@@ -2224,6 +2244,59 @@ async def record_fixture_exclusion_route(conn: DB, me: ME) -> dict[str, int]:
     return {"record_id": record_id}
 
 # ======================================================= read: humans and access
+
+@app.get("/api/access/overview")
+async def access_overview_route(conn: DB, me: ME) -> dict[str, Any]:
+    """What the Access page states before it lists anybody.
+
+    Requires `compliance_officer`, like the roster it summarises: how concentrated the
+    strongest role is, and who holds it, is the same map of whom to compromise.
+    """
+    humans.authorize(me, required_role="compliance_officer")
+    return {
+        "as_of": datetime.now(UTC).isoformat(),
+        **await access_overview.overview(conn),
+    }
+
+
+@app.post("/api/access/suspend-test-fixtures")
+async def suspend_test_fixtures_route(conn: DB, me: ME) -> dict[str, Any]:
+    """Suspend every account this project's own test paths created.
+
+    `ivan`, because this touches accounts holding `ivan`. Suspension only - there is no
+    delete route here or anywhere, because deleting an account destroys the record of who
+    held what and who granted it.
+    """
+    humans.authorize(me, required_role="ivan")
+    result = await humans.suspend_test_fixtures(conn, actor=me.human_id)
+    await _audit_human_action(
+        me, "console_test_fixtures_suspended",
+        {"suspended": result["suspended"]},
+    )
+    return result
+
+
+@app.get("/api/forge-map/estate")
+async def forge_estate_route(conn: DB, _me: ME) -> dict[str, Any]:
+    """Every Forge the portfolio names, bridged or not.
+
+    The map only ever showed the Forges one venture declared, so a Forge with no bridge
+    was indistinguishable from one that does not exist.
+    """
+    return {
+        "as_of": datetime.now(UTC).isoformat(),
+        "forges": await forge_map.estate(conn),
+    }
+
+
+@app.get("/api/forge-map/matrix")
+async def forge_matrix_route(conn: DB, _me: ME) -> dict[str, Any]:
+    """Ventures against Forges: which engagements halt if one goes down."""
+    return {
+        "as_of": datetime.now(UTC).isoformat(),
+        **await forge_map.matrix(conn),
+    }
+
 
 @app.get("/api/humans")
 async def list_humans(conn: DB, me: ME) -> list[dict[str, Any]]:

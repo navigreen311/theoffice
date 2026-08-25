@@ -147,6 +147,20 @@ async def authenticate(conn: AsyncConnection, token: str) -> Human | None:
     if row is None:
         return None
 
+    # Presence, recorded where authentication happens rather than inferred from the
+    # audit log. 178 of 179 accounts had never signed in and the roster had no column
+    # for it, so a page full of accounts nobody has ever used looked like a team.
+    #
+    # Written on its own connection state and committed here: the caller's transaction
+    # may go on to fail for reasons that have nothing to do with whether this person
+    # turned up, and a request that is refused is still a request they made.
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "UPDATE office_human SET last_seen_at = now() WHERE human_id = %s",
+            (row["human_id"],),
+        )
+    await conn.commit()
+
     roles = tuple(
         (pair[0], pair[1] or None) for pair in (row["roles"] or [])
     )
@@ -406,6 +420,68 @@ async def get_human(conn: AsyncConnection, human_id: uuid.UUID) -> Human | None:
     )
 
 
+async def suspend_test_fixtures(
+    conn: AsyncConnection, *, actor: uuid.UUID
+) -> dict[str, Any]:
+    """Suspend every account this project's own test paths created.
+
+    179 accounts existed and 178 were fixtures; 94 of those held `ivan`, the authority
+    for Forge-scope revocation. Suspending them one at a time through 94 inline forms is
+    not a thing anybody does, so it never happened and the strongest role in the system
+    stayed spread across 95 accounts.
+
+    Suspension, never deletion. It is reversible, it is audited, and it leaves the record
+    of who held what and who granted it intact - which is the property the Access page's
+    own copy exists to protect. A cleaner roster bought by destroying that record is a
+    worse roster.
+
+    The actor is never suspended by this, whatever their account looks like: a bulk
+    action that can lock out the person running it is a bulk action that eventually does.
+    """
+    from broker import account_origin
+
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT human_id, display_name, email, origin, status FROM office_human "
+            "WHERE status = 'active'"
+        )
+        rows = [dict(r) for r in await cur.fetchall()]
+
+    targets = [
+        row for row in rows
+        if account_origin.origin_of(row) == account_origin.TEST_FIXTURE
+        and row["human_id"] != actor
+    ]
+    if not targets:
+        return {"suspended": 0, "names": []}
+
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "UPDATE office_human SET status = 'suspended', suspended_at = now(), "
+            "suspended_by = %s WHERE human_id = ANY(%s)",
+            (actor, [row["human_id"] for row in targets]),
+        )
+    await conn.commit()
+    return {
+        "suspended": len(targets),
+        "names": sorted(row["display_name"] for row in targets)[:20],
+    }
+
+
+async def note_seen(conn: AsyncConnection, *, human_id: uuid.UUID) -> None:
+    """Record that this account authenticated.
+
+    178 accounts had never signed in and nothing on the roster showed it, which is the
+    single clearest signal that nobody is behind one. Written on every verified request,
+    so "last active" means what it says.
+    """
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "UPDATE office_human SET last_seen_at = now() WHERE human_id = %s",
+            (human_id,),
+        )
+
+
 async def list_humans(conn: AsyncConnection) -> list[dict[str, Any]]:
     """Everyone, with their roles. Never a token and never a hash.
 
@@ -418,6 +494,7 @@ async def list_humans(conn: AsyncConnection) -> list[dict[str, Any]]:
             """
             SELECT h.human_id::text AS human_id, h.display_name, h.email, h.status,
                    h.auth_method, h.created_at, h.suspended_at,
+                   h.origin, h.last_seen_at, h.mfa_enrolled_at,
                    h.token_hash IS NOT NULL AS has_token,
                    COALESCE(
                      json_agg(

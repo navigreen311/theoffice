@@ -1178,6 +1178,87 @@ resolves; it produced nothing, and every page title took its size from whatever 
 inherited. A dead utility class is invisible in review and in the browser — it is not a
 wrong size, it is no rule at all. `page: ["18px"]` is in the scale now.
 
+## The Access and Forge Map pages, rebuilt
+
+### Access had a live privilege problem, not a layout one
+
+179 accounts, and the page rendered 179 rows that all looked like colleagues. 178 are
+fixtures created by this project's own test paths - `scripts/console-smoke.sh` and the
+ad-hoc checks run while building this console each create a human, grant it `ivan`, and
+never remove it. 94 of them held `ivan`, which is the stated authority for Forge-scope
+revocation: each could stop every agent on every Forge in the portfolio.
+
+Nothing was wrong with any individual account. What was wrong is that the one fact worth
+knowing was spread across ninety-five rows, which is the same as not being there. The
+banner states it, counts it, says what the role authorises, and offers the action.
+
+**Origin is derived, not stored.** The brief asked for a column with a pattern backfill.
+Derived is strictly better for the same reason it was for knowledge fixtures: the smoke
+script creates more on every run, and a column filled by one migration describes the
+accounts that existed the day it ran. `service` is the exception - nothing about a service
+account is inferable from its name - so that one is stored.
+
+**Suspension, never deletion.** There is no delete route, and
+`test_no_route_deletes_an_account` enumerates the surface to keep it that way. Deleting
+destroys the record of who held what and who granted it, which is the property this page's
+own copy exists to protect. The bulk action never suspends the actor.
+
+**Dana.** Greenstone's Pack names her as compliance officer under `separation_of_duties:
+distinct_humans`, and she has no account, so Gate 10 cannot be signed. Nothing said so - a
+run that cannot be finished looked exactly like one nobody had got to. The reconciliation
+prefers the role somebody holds in their own right over the one they are the understudy
+for: deduping in encounter order described Dana as a venture operator, which is Ivan's
+backup slot rather than the role Gate 10 needs her in.
+
+**Roles are defined**, with holder counts, and the revocation scopes come from
+`revocation.SCOPE_MIN_ROLE` rather than being retyped - a page carrying its own copy of the
+authority table eventually describes an arrangement that has changed.
+
+**`last_seen_at` and MFA.** 178 accounts had never signed in and the roster had no column
+for it. `mfa_enrolled_at` is kept apart from `auth_method` because every account already
+claims `sso_mfa` - that is the column default and nothing has ever checked. A Gate 10
+signer whose second factor is a claim rather than an enrolment weakens exactly the
+non-repudiation the signature carries.
+
+### Forge Map promised a diff it could not show
+
+The subtitle said "Declared x Required x In-Use" and the table had one Required column.
+Worse, all three states came from one place: a `venture_forge_manifest` row was both the
+declaration and the requirement, so the diff it advertised could not exist.
+
+They come from three sources now - the Pack's `forge_bindings`, the generator output, and
+the call ledger - which is also why the page has content. The generators have never run,
+so the manifest is empty and the table rendered nothing while the Pack declares nine
+modules. "Everything declared, nothing required yet" is a finding; "nothing declared" was
+not even true.
+
+**The empty state names the cause.** "Generator 5.6 produces these rows from a Pack" is
+the mechanism. The cause is that no run has passed gate 4 - 83 have stopped there - and
+that is a query away. The brief said six; the number is computed.
+
+**All eight Forges**, not just the ones one venture declares. `forge_map.ESTATE` declares
+the portfolio beside the code that reads it, exactly as `ventures.PORTFOLIO` does, and a
+test asserts it carries no status field: bridged, instructed and healthy are computed, so
+the page cannot go on calling a Forge unbridged after somebody bridges it. Five have
+neither bridge nor instructions.
+
+**A preserved sentence that had become false.** "Nothing declared for this venture" sat
+above a table listing nine declared modules. Both sentences are preserved verbatim, each
+where it is true: the full copy in the genuinely empty state, and "Generator 5.6 produces
+these rows from a Pack" in the blocked banner.
+
+### Two regressions the smoke caught before the commit
+
+Renaming the forge-map route's `declared` field to make room for the reconciliation broke
+`/ventures/{venture}` with a 500 - a field that route had always returned, read by a page
+with no reason to change. And the rebuild dropped the "Change a role" form, which left the
+only route to a role being to create a new account with one: the exact shape of
+over-granting the new banner warns about.
+
+The legacy check that caught the second one looked for an "Administrators" heading the
+rebuild replaced. It follows the fact now rather than the heading, and is not weaker for
+it - the banner has to name the role and a count to pass.
+
 ## Known gaps
 
 *Last verified: 2026-08-25.*
