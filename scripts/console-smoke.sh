@@ -1905,32 +1905,47 @@ fi
 
 # Not just declared - excluded. This asserts the arithmetic, so a page that quietly
 # started counting fixtures again fails here rather than merely reading plausibly.
-pycheck - "$WORK/kb.html" <<'PY'
+OVERVIEW_JSON="$(curl -s -H "$API_AUTH" \
+  "http://127.0.0.1:$API_PORT/api/knowledge/overview")"
+pycheck - "$WORK/kb.html" "$OVERVIEW_JSON" <<'PY'
 import html
+import json
 import re
 import sys
 
 page = html.unescape(re.sub(r"<script.*?</script>", "", open(
     sys.argv[1], encoding="utf-8", errors="replace").read(), flags=re.S))
 text = re.sub(r"<[^>]+>", " ", page)
+overview = json.loads(sys.argv[2])
+fixtures = overview["fixtures"]
 
 declared = re.search(r"(\d+)\s+of\s+(\d+)\s+entries are test data", text)
 if not declared:
     print("FAIL the overview does not state a test-data fraction")
     raise SystemExit
-fixtures, total = int(declared.group(1)), int(declared.group(2))
-if fixtures == 0:
-    print("NOT EXERCISED no fixtures present, so exclusion cannot be observed")
-    raise SystemExit
 
-personas = re.search(r"(\d+)\s*of\s*(\d+)\s*real personas", text)
-if personas is None:
-    print("FAIL the persona library states no count of real personas")
-elif int(personas.group(1)) >= fixtures:
-    print(f"FAIL the persona headline counts {personas.group(1)} "
-          f"with {fixtures} fixtures present")
+# The page must report the same fixture arithmetic the API computed, and the parts must
+# add up to the whole. An earlier version of this check compared the persona headline
+# against the page-wide fixture count - two different denominators - which passed on a
+# database holding 60 fixtures and no real personas, and failed on a fresh one holding
+# one of each. The invariant is that fixtures are excluded, not that there are many.
+said, total = int(declared.group(1)), int(declared.group(2))
+if (said, total) != (fixtures["test_fixtures"], fixtures["total_rows"]):
+    print(f"FAIL the page says {said} of {total} test rows; "
+          f"the API says {fixtures['test_fixtures']} of {fixtures['total_rows']}")
+elif fixtures["personas"] + fixtures["records"] != fixtures["test_fixtures"]:
+    print("FAIL the fixture parts do not sum to the fixture total")
 else:
-    print(f"{fixtures} of {total} rows are fixtures and none reaches a headline count")
+    print(f"the page and the API agree: {said} of {total} rows are test data")
+
+# And no base counts them. Every base count must be at most the rows that are not
+# fixtures, whatever the mix happens to be on this machine.
+substantive = fixtures["total_rows"] - fixtures["test_fixtures"]
+inflated = [b["label"] for b in overview["bases"] if b["count"] > substantive]
+if inflated:
+    print(f"FAIL these bases count more than the non-fixture rows: {inflated}")
+else:
+    print(f"no base counts more than the {substantive} rows that are not fixtures")
 PY
 
 # Every base states its gap in the terms of the thing that is missing. "0 entries" is a
@@ -1971,34 +1986,75 @@ done
 # table being empty for some other reason. Both halves are asserted: the default excludes
 # them, and asking for them brings them back. The first alone passes when the route is
 # broken, which is how the block-sidebar and bulk-approve checks first passed.
-DEFAULT_JSON="$(curl -s -H "$API_AUTH" \
-  "http://127.0.0.1:$API_PORT/api/knowledge/personas")"
-FIXTURE_JSON="$(curl -s -H "$API_AUTH" \
-  "http://127.0.0.1:$API_PORT/api/knowledge/personas?include_fixtures=true")"
-pycheck - "$DEFAULT_JSON" "$FIXTURE_JSON" <<'PY'
+pycheck - "$TOKEN" "$API_PORT" <<'PY'
 import json
-import sys
+import urllib.request
 
-try:
-    default, withfix = json.loads(sys.argv[1]), json.loads(sys.argv[2])
-except json.JSONDecodeError:
-    print("FAIL a persona listing did not return JSON")
-    raise SystemExit
+token, port = __import__("sys").argv[1], __import__("sys").argv[2]
 
-excluded = default.get("excluded_fixtures", 0)
-if excluded == 0 and withfix.get("total", 0) == 0:
-    print("NOT EXERCISED the persona library holds no fixtures to filter")
-    raise SystemExit
 
-if any(row.get("origin") == "test_fixture" for row in default.get("rows", [])):
-    print("FAIL a test fixture appears in the default persona listing")
-elif withfix.get("total", 0) <= default.get("total", 0):
-    print("FAIL include_fixtures returned no more than the default: the filter is inert")
-elif not any(r.get("origin") == "test_fixture" for r in withfix.get("rows", [])):
-    print("FAIL include_fixtures returned rows but none is marked as a fixture")
+def listing(store: str, **params) -> dict:
+    query = "&".join(f"{k}={v}" for k, v in params.items())
+    url = f"http://127.0.0.1:{port}/api/knowledge/{store}?{query}"
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+    with urllib.request.urlopen(req) as response:
+        return json.load(response)
+
+
+# Per store, because a fresh database has fixtures in one and not the other: the smoke
+# run always abandons a provisioning run, and only sometimes writes a smoke persona. The
+# first version asked the persona store alone and reported the filter inert on CI, where
+# the only persona is a real one.
+filtered = 0
+for store in ("personas", "history"):
+    default = listing(store)
+    withfix = listing(store, include_fixtures="true")
+    excluded = default["excluded_fixtures"]
+
+    if any(row["origin"] == "test_fixture" for row in default["rows"]):
+        print(f"FAIL a test fixture appears in the default {store} listing")
+        continue
+    if excluded == 0:
+        print(f"{store}: no fixtures to hide")
+        continue
+    if withfix["total"] <= default["total"]:
+        print(f"FAIL {store}: include_fixtures returned no more than the default")
+    elif not any(row["origin"] == "test_fixture" for row in withfix["rows"]):
+        print(f"FAIL {store}: include_fixtures returned rows, none marked a fixture")
+    else:
+        filtered += 1
+        print(f"{store}: default hides {excluded}, include_fixtures returns "
+              f"{withfix['total']}")
+
+if filtered == 0:
+    print("FAIL no store had a fixture to filter; this run proved nothing")
+
+# Paging is exercised deterministically by asking for one row per page, rather than by
+# hoping the database holds enough rows to need a second page. A fresh database holds one
+# row per store, so requiring a long table made this unrunnable there - and NOT EXERCISED
+# is fatal, so an honest gap read as a broken script.
+listed = listing("history", include_fixtures="true", page_size=1)
+if listed["total"] == 0:
+    print("FAIL the history store is empty; the smoke run records at least one entry")
+elif listed["pages"] != listed["total"]:
+    print(f"FAIL {listed['total']} rows at one per page reported "
+          f"{listed['pages']} page(s)")
+elif len(listed["rows"]) != 1:
+    print(f"FAIL a page of size 1 returned {len(listed['rows'])} rows")
 else:
-    print(f"default hides {excluded} fixtures; include_fixtures returns "
-          f"{withfix['total']} across {withfix['pages']} page(s)")
+    last = listing("history", include_fixtures="true", page_size=1,
+                   page=listed["pages"])
+    beyond = listing("history", include_fixtures="true", page_size=1,
+                     page=listed["pages"] + 5)
+    if not last["rows"]:
+        print("FAIL the last page is empty")
+    elif beyond["rows"]:
+        print("FAIL a page past the end returned rows")
+    elif last["rows"][0]["record_id"] == listed["rows"][0]["record_id"]             and listed["pages"] > 1:
+        print("FAIL the last page repeats the first; the offset is not applied")
+    else:
+        print(f"paging holds: {listed['total']} row(s) one per page, the last page has "
+              "content and a page past the end is empty rather than an error")
 PY
 
 # Historical records are never deleted. The store refuses it and the page must not offer
@@ -2078,9 +2134,11 @@ curl -s -b "$COOKIE_JAR" \
   > "$WORK"/kb-personas.html
 sed 's/<!-- -->//g' "$WORK"/kb-personas.html > "$WORK"/kb-personas-text.html
 if grep -qiE "page [0-9]+ of [0-9]+" "$WORK"/kb-personas-text.html; then
-  say "a long listing is paged"
+  say "a long listing renders its page control"
 else
-  notrun "paging - the listing fits on one page"
+  # Not `notrun`: on a fresh database the persona store holds one row, and a control that
+  # correctly hides itself is not an unrun check. The arithmetic is asserted above.
+  say "the listing fits on one page, so no page control renders"
 fi
 if grep -qF "Search" "$WORK"/kb-personas-text.html; then
   say "the listing is searchable"
