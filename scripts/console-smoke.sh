@@ -1603,7 +1603,7 @@ while IFS= read -r phrase; do
   grep -qF "$phrase" "$WORK"/approvals-text.html \
     || { fail "approvals page lost: ${phrase:0:60}"; preserved=1; }
 done <<'PHRASES'
-An agent below auto_execute asked to act. It has not acted.
+An agent that may not act on its own
 Approvals decided in under 5 seconds raise a governance flag. That threshold exists because a trust tier that is really a click-through is worse than no tier at all
 it looks like oversight. Read the payload.
 PHRASES
@@ -3208,6 +3208,182 @@ if grep -qF "Counts before paging" "$WORK"/audit-text.html; then
   say "counts by event type, actor and venture are available before paging"
 else
   fail "there is no aggregate view; a spike is invisible until somebody pages to it"
+fi
+
+step "No page shows a database value as its primary text"
+# The rule this whole pass exists for, checked mechanically rather than by reading.
+#
+# A code identifier is allowed on screen - engineers need it, and it is what appears in
+# every log and export. What it may not be is the *primary* text: the thing a reader's eye
+# lands on. So the check looks for identifiers rendered in a primary type size and colour,
+# and ignores the ones sitting in 11px muted mono beside a label, which is exactly where
+# they belong.
+pycheck - "$WORK" "$CONSOLE_PORT" "$COOKIE_JAR" <<'PY'
+import html
+import re
+import subprocess
+import sys
+
+work, port, jar = sys.argv[1], sys.argv[2], sys.argv[3]
+
+ROUTES = [
+    "/", "/provisioning", "/packs", "/agents", "/proposals", "/instructions",
+    "/knowledge", "/incidents", "/revocations", "/access", "/forge-map", "/audit",
+    "/ventures",
+]
+
+# The classes that mean "secondary": 11px mono, or muted. An identifier wearing one of
+# these is doing the job it should be doing.
+SECONDARY = ("text-ident", "text-ink-muted", "opacity-70", "opacity-80")
+
+# Words that look like identifiers and are not: schema field names quoted inside prose,
+# and role names, which are the vocabulary the authority matrix itself is written in and
+# appear beside their meaning everywhere they are shown.
+ALLOWED = {
+    "source_department", "venture_operator", "compliance_officer",
+    "human_capacity", "forge_bindings", "modules_expected", "separation_of_duties",
+    "distinct_humans", "gate_signoff_policy", "target_personas", "what_it_does",
+    "content_hash", "prev_hash", "entry_hash", "trace_id", "audit_chain",
+    "certification_staleness", "manifest_reconciliation", "restore_drill",
+    "include_fixtures", "accepted_risk", "auto_approve_on_expiry", "at_most_once",
+    "office_app", "historical_record", "incident_account", "agent_call_ledger",
+    "sso_mfa", "mfa_only", "test_fixture", "external_report", "regulator_inquiry",
+}
+
+pattern = re.compile(
+    r'<(?P<tag>span|td|div|h[1-3]|p|li|strong|dd|dt)(?P<attrs>[^>]*)>'
+    r'(?P<text>[^<]*\b[a-z][a-z0-9]*_[a-z0-9_]+\b[^<]*)<'
+)
+ident = re.compile(r'\b[a-z][a-z0-9]*_[a-z0-9_]+\b')
+
+findings = []
+checked = 0
+for route in ROUTES:
+    page = subprocess.run(
+        ["curl", "-s", "-b", jar, f"http://127.0.0.1:{port}{route}"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    ).stdout
+    if not page or "<html" not in page.lower():
+        continue
+    checked += 1
+    page = re.sub(r"<script.*?</script>", "", page, flags=re.S)
+    page = page.replace("<!-- -->", "")
+
+    for match in pattern.finditer(page):
+        attrs = match.group("attrs")
+        if any(marker in attrs for marker in SECONDARY):
+            continue
+        text = html.unescape(match.group("text"))
+        for name in ident.findall(text):
+            if name in ALLOWED:
+                continue
+            findings.append((route, name, match.group("tag")))
+
+if checked == 0:
+    print("NOT EXERCISED no page could be fetched")
+    raise SystemExit
+
+if findings:
+    shown = sorted({(route, name) for route, name, _tag in findings})[:8]
+    print(f"FAIL {len(set(f[1] for f in findings))} identifier(s) render as primary text:")
+    for route, name in shown:
+        print(f"         {route}: {name}")
+    print("       An identifier belongs beside a label in 11px muted mono, never alone.")
+else:
+    print(f"no identifier is primary text on any of {checked} routes")
+PY
+
+# SCREAMING_CASE is never a label. It reads as an error even when it is a normal state.
+pycheck - "$WORK" "$CONSOLE_PORT" "$COOKIE_JAR" <<'PY'
+import re
+import subprocess
+import sys
+
+work, port, jar = sys.argv[1], sys.argv[2], sys.argv[3]
+ROUTES = ["/", "/forge-map", "/incidents", "/audit", "/provisioning", "/agents"]
+
+# Severities are the exception and are deliberate: they are rendered lowercase by the
+# incident pages, and the ones that appear uppercase come from the database's own CHECK
+# constraint where they are the stored value shown beside a label.
+ALLOWED = {"GREEN", "AMBER", "RED", "LOW", "MEDIUM", "HIGH", "CRITICAL", "UTC", "PHI",
+           "MFA", "SSO", "API", "JSON", "YAML", "SOP", "LOI"}
+# The same rule the identifier check above applies: 11px muted mono beside a label is
+# where an identifier belongs, and flagging it there would make these two guards
+# contradict each other.
+SECONDARY = ("text-ident", "text-ink-muted", "opacity-70", "opacity-80")
+pattern = re.compile(
+    r"<(?P<tag>span|td|div|h[1-3]|p|li|strong|dd|dt|code)(?P<attrs>[^>]*)>"
+    r"(?P<text>[^<]*\b[A-Z][A-Z0-9]{2,}(?:_[A-Z0-9]+)+\b[^<]*)<"
+)
+
+findings = set()
+for route in ROUTES:
+    page = subprocess.run(
+        ["curl", "-s", "-b", jar, f"http://127.0.0.1:{port}{route}"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    ).stdout
+    page = re.sub(r"<script.*?</script>", "", page, flags=re.S).replace("<!-- -->", "")
+    for match in pattern.finditer(page):
+        if any(marker in match.group("attrs") for marker in SECONDARY):
+            continue
+        for word in re.findall(
+            r"\b[A-Z][A-Z0-9]{2,}(?:_[A-Z0-9]+)+\b", match.group("text")
+        ):
+            if word not in ALLOWED:
+                findings.add((route, word))
+
+if findings:
+    print(f"FAIL SCREAMING_CASE renders as text: {sorted(findings)[:6]}")
+else:
+    print("no SCREAMING_CASE identifier renders as a label")
+PY
+
+# The copy that must never be shortened. These are the most valuable sentences in the
+# product: plain English about hard ideas, each one carrying a consequence that a shorter
+# version would drop.
+pycheck - "$WORK" "$CONSOLE_PORT" "$COOKIE_JAR" <<'PY'
+import html
+import re
+import subprocess
+import sys
+
+work, port, jar = sys.argv[1], sys.argv[2], sys.argv[3]
+
+PROTECTED = [
+    ("/", "An absence of findings from a check that did not run is not evidence."),
+    ("/incidents", "Detections, not workflow. An incident is never edited"),
+    ("/proposals", "Approvals decided in under 5 seconds raise a governance flag."),
+    ("/instructions", "Curriculum, not documentation."),
+    ("/knowledge/compliance", "A flag with no entry reaches the agent as a label, not a constraint."),
+    ("/revocations", "The console does not pre-check your authority."),
+    ("/access", "You may grant a role weaker than your own, and never to yourself"),
+    ("/audit", "Entries below are meaningless if this is broken — read it first."),
+    ("/knowledge/playbooks", "There is no unscoped read"),
+]
+
+missing = []
+for route, sentence in PROTECTED:
+    page = subprocess.run(
+        ["curl", "-s", "-b", jar, f"http://127.0.0.1:{port}{route}"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    ).stdout
+    text = html.unescape(re.sub(r"<[^>]+>", " ", page.replace("<!-- -->", "")))
+    text = re.sub(r"\s+", " ", text)
+    if sentence not in text:
+        missing.append((route, sentence[:50]))
+
+if missing:
+    print(f"FAIL protected copy was changed or removed: {missing}")
+else:
+    print(f"all {len(PROTECTED)} protected sentences are present verbatim")
+PY
+
+# Domain terms carry their definition somewhere on the page that uses them.
+if grep -qF "What these words mean on this page" "$WORK"/provisioning.html 2>/dev/null \
+   || grep -rqF "Glossary" "$ROOT/console/app" --include="*.tsx" 2>/dev/null; then
+  say "domain terms carry their definitions"
+else
+  fail "no page defines its domain terms"
 fi
 
 step "Every page survives being opened in a browser"

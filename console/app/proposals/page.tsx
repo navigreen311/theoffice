@@ -163,7 +163,9 @@ export default async function ProposalsPage() {
         <div className="max-w-3xl">
           <h1 className="text-page font-medium text-ink">Approvals</h1>
           <p className="mt-1 text-desc text-ink-secondary">
-            An agent below auto_execute asked to act. It has not acted.
+            An agent that may not act on its own{" "}
+            <code className="text-ident text-ink-muted">auto_execute</code> asked to act.
+            It has not acted.
           </p>
         </div>
         <span className="text-meta text-ink-muted">
@@ -257,7 +259,7 @@ export default async function ProposalsPage() {
           <p className="text-section font-medium text-ink">Nothing to approve</p>
           {/*
             Derived from what is actually true. The old copy named one cause — trust
-            tiers set to auto_execute — which is real in general and was wrong here: no
+            tiers set to act on their own — which is real in general and was wrong here: no
             agent held a grant to any Forge at all.
           */}
           <p className="mx-auto mt-2 max-w-2xl text-desc text-ink-secondary">

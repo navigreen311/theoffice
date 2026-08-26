@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { Breadcrumb } from "@/components/breadcrumb";
 import { AlertTriangle, Check, Minus, X } from "@/components/icons";
 import { AsOf } from "@/components/local-time";
+import { Term } from "@/components/term";
 import {
   api,
   NotAuthenticated,
@@ -11,6 +12,7 @@ import {
   type InstructionForge,
   type InstructionModule,
 } from "@/lib/api";
+import { IDEMPOTENCY, MODULE } from "@/lib/vocabulary";
 
 export const dynamic = "force-dynamic";
 
@@ -86,7 +88,7 @@ function ModuleRow({ module }: { module: InstructionModule }) {
           <span className="self-center">
             <StateIcon state={quality.state} />
           </span>
-          <span className="font-mono text-desc text-ink">{module.module_id}</span>
+          <Term value={module.module_id} from={MODULE} />
           <span
             className={`rounded-lg border px-2 py-0.5 text-meta ${STATE_TONE[quality.state]}`}
           >
@@ -103,10 +105,11 @@ function ModuleRow({ module }: { module: InstructionModule }) {
 
           {module.idempotency_support === "at_most_once" ? (
             <span
-              title="at_most_once can never be auto-retried. On failure it escalates to a human, because a second attempt might be a second real-world action."
-              className="rounded-lg border border-warn-line bg-warn-bg px-2 py-0.5 font-mono text-meta text-warn"
+              title="On failure this escalates to a person rather than retrying, because a second attempt might be a second real-world action."
+              className="inline-flex flex-wrap items-baseline gap-x-1.5 rounded-lg border border-warn-line bg-warn-bg px-2 py-0.5 text-meta text-warn"
             >
-              at_most_once
+              <span>{IDEMPOTENCY.at_most_once}</span>
+              <code className="font-mono text-ident opacity-80">at_most_once</code>
             </span>
           ) : null}
 

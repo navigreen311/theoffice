@@ -3,7 +3,9 @@ import { redirect } from "next/navigation";
 
 import { AlertTriangle, CircleCheck } from "@/components/icons";
 import { AsOf, LocalTime } from "@/components/local-time";
+import { Term } from "@/components/term";
 import { api, NotAuthenticated, type VentureRow } from "@/lib/api";
+import { label, MISMATCH, MODULE } from "@/lib/vocabulary";
 
 export const dynamic = "force-dynamic";
 
@@ -244,8 +246,8 @@ export default async function ForgeMapPage({
                     <td className="py-2 pr-3 font-mono text-ident text-ink">
                       {row.forge_id}
                     </td>
-                    <td className="py-2 pr-3 font-mono text-ident text-ink">
-                      {row.module_id}
+                    <td className="py-2 pr-3">
+                      <Term value={row.module_id} from={MODULE} />
                     </td>
                     <td className="py-2 pr-3 text-desc text-ink-secondary">
                       {row.declared ? "yes" : "—"}
@@ -258,11 +260,14 @@ export default async function ForgeMapPage({
                     </td>
                     <td className="py-2">
                       <span
-                        className={`rounded-lg border px-2 py-0.5 font-mono text-ident ${
+                        className={`inline-flex flex-wrap items-baseline gap-x-1.5 rounded-lg border px-2 py-0.5 ${
                           TONE[row.tone] ?? TONE.warn
                         }`}
                       >
-                        {row.mismatch}
+                        <span className="text-desc">{label(row.mismatch, MISMATCH)}</span>
+                        <code className="font-mono text-ident opacity-70">
+                          {row.mismatch}
+                        </code>
                       </span>
                     </td>
                   </tr>
@@ -282,9 +287,12 @@ export default async function ForgeMapPage({
           <ul className="mt-4 space-y-1 border-t border-line pt-3">
             {map.handlers.map((handler) => (
               <li key={handler.mismatch} className="text-meta text-ink-muted">
-                <code className={`text-ident ${handler.tone === "bad" ? "text-bad" : "text-warn"}`}>
-                  {handler.mismatch}
-                </code>{" "}
+                <span
+                  className={handler.tone === "bad" ? "text-bad" : "text-warn"}
+                >
+                  {label(handler.mismatch, MISMATCH)}
+                </span>{" "}
+                <code className="text-ident">{handler.mismatch}</code> —{" "}
                 {handler.meaning}
               </li>
             ))}

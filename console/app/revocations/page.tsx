@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 
 import { AsOf, LocalTime } from "@/components/local-time";
+import { Term } from "@/components/term";
 import { api, NotAuthenticated } from "@/lib/api";
+import { REVOCATION_SCOPE, ROLE } from "@/lib/vocabulary";
 
 import { RevokeForm } from "./form";
 import { ReinstateForm } from "./reinstate";
@@ -130,9 +132,13 @@ export default async function RevocationsPage() {
           <tbody>
             {SCOPES.map((s) => (
               <tr key={s.scope} className="border-b border-line last:border-0">
-                <td className="py-2 pr-3 font-mono text-ident text-ink">{s.scope}</td>
+                <td className="py-2 pr-3">
+                  <Term value={s.scope} from={REVOCATION_SCOPE} />
+                </td>
                 <td className="py-2 pr-3 text-desc text-ink-secondary">{s.effect}</td>
-                <td className="py-2 font-mono text-ident text-ink">{s.authority}</td>
+                <td className="py-2">
+                  <Term value={s.authority} from={ROLE} />
+                </td>
               </tr>
             ))}
           </tbody>
@@ -171,7 +177,7 @@ export default async function RevocationsPage() {
                 key={row.revocation_id}
                 className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-line py-2.5 first:border-t-0"
               >
-                <code className="text-ident text-ink">{row.scope}</code>
+                <Term value={row.scope} from={REVOCATION_SCOPE} />
                 <span className="text-rowtitle font-medium text-ink">{targetOf(row)}</span>
                 <span className="text-meta text-ink-secondary">{row.reason}</span>
                 <span className="ml-auto text-meta text-ink-muted">
@@ -216,7 +222,7 @@ export default async function RevocationsPage() {
                 className="border-t border-line py-2.5 first:border-t-0"
               >
                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                  <code className="text-ident text-ink">{row.scope}</code>
+                  <Term value={row.scope} from={REVOCATION_SCOPE} />
                   <span className="text-rowtitle font-medium text-ink">
                     {targetOf(row)}
                   </span>

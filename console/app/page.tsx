@@ -12,6 +12,7 @@ import {
   type Paged,
 } from "@/lib/api";
 import { controlSeverity, incidentSeverity } from "@/lib/severity";
+import { FRAMEWORK, label } from "@/lib/vocabulary";
 
 import { ExportForm, RunControlsButton, SchedulingNote } from "./compliance-forms";
 
@@ -363,7 +364,10 @@ export default async function CompliancePage() {
                       {venture.frameworks.map((f) => (
                         <li key={f.framework}>
                           <Pill tone={f.has_flag && f.has_entry ? "ok" : "warn"}>
-                            {f.framework}
+                            {label(f.framework, FRAMEWORK)}
+                            <code className="ml-1.5 font-mono text-ident opacity-75">
+                              {f.framework}
+                            </code>
                             {!f.has_flag ? " · no runtime flag" : ""}
                             {!f.has_entry ? " · no library entry" : ""}
                           </Pill>
