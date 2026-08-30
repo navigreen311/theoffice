@@ -111,6 +111,12 @@ Which Forge is bridged first is configuration. This is the same structural requi
 as the brokered→native credential swap (master prompt §1.6), and it is why that swap
 is a config change rather than a rewrite.
 
+**Onboarding a Forge:** see [forge-adapter.md](forge-adapter.md). It carries the header
+contract, the registry and manifest rows a call needs, and three defects from the first
+bridge that each returned a plausible 200 while being wrong — a grant tier that never
+reaches the Forge, a missing manifest row, and a mistyped trace header. All three passed
+design review and were caught only by running.
+
 ## Refusal taxonomy
 
 Every refusal has a named type, and every one writes an audit entry naming the reason
