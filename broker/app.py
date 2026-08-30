@@ -66,6 +66,7 @@ from broker import (
     roster,
     sweeps,
     ventures,
+    village,
 )
 from broker import (
     incident_taxonomy as incident_taxonomy_module,
@@ -487,7 +488,8 @@ async def agent_detail(office_agent_id: uuid.UUID, conn: DB, _me: ME) -> dict[st
         forges = [dict(r) for r in await cur.fetchall()]
 
         await cur.execute(
-            "SELECT shift_id, venture_id, shift_start, shift_end, flush_verified "
+            "SELECT shift_id, venture_id, shift_start, shift_end, flush_verified, "
+            "       quarter "
             "FROM shift_assignment WHERE office_agent_id = %s "
             "ORDER BY shift_start DESC LIMIT 5",
             (office_agent_id,),
@@ -564,6 +566,36 @@ async def agent_detail(office_agent_id: uuid.UUID, conn: DB, _me: ME) -> dict[st
         for forge in forges
     ]
 
+    # The Village's live view of this agent: mood, lifecycle stage, what they are doing
+    # right now. Displayed, and acted on by nothing.
+    #
+    # This is the boundary the whole integration turns on. The Village is a simulation
+    # with grief, exhaustion, ambition and death in it; The Office governs regulated
+    # work. An agent who is grieving is still certified, still holds the grants somebody
+    # granted them, and is still refused for exactly the reasons the call path already
+    # refuses anybody. Wiring simulated mood into an authorization decision would mean a
+    # patient record went unprocessed because an agent's friend died in a simulation,
+    # and there would be no audit entry that could explain it.
+    #
+    # It is here because an operator looking at a strange call pattern should be able to
+    # see that the agent has been on NIGHT shift for a week. That is context for a human,
+    # not an input to a rule.
+    #
+    # Degrades. A Village that is down must not take the agent page with it - every
+    # number above this line comes from The Office's own database and is still true.
+    village_state: dict[str, Any] | None = None
+    village_unreachable: str | None = None
+    if identity.get("village_agent_ref"):
+        try:
+            answer = await village.agent_state(str(identity["village_agent_ref"]))
+            village_state = {
+                **answer.data,
+                "fetched_at": answer.fetched_at.isoformat(),
+                "stale": answer.stale,
+            }
+        except village.VillageUnreachableError as exc:
+            village_unreachable = str(exc)
+
     return {
         "as_of": datetime.now(UTC).isoformat(),
         "identity": dict(identity),
@@ -574,6 +606,12 @@ async def agent_detail(office_agent_id: uuid.UUID, conn: DB, _me: ME) -> dict[st
         "recent_calls": calls,
         "cost": cost,
         "recent_shifts": shifts_recent,
+        "village_state": village_state,
+        "village_unreachable": village_unreachable,
+        # Stated in the payload rather than only in a comment, because the console
+        # renders this section and the next person to read it should not have to infer
+        # that it is inert.
+        "village_state_gates": [],
     }
 
 

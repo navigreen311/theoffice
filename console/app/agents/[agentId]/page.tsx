@@ -63,7 +63,11 @@ type AgentDetail = {
     shift_start: string;
     shift_end: string;
     flush_verified: boolean;
+    quarter: string | null;
   }[];
+  village_state: Record<string, unknown> | null;
+  village_unreachable: string | null;
+  village_state_gates: string[];
 };
 
 const CERT_TONE: Record<string, string> = {
@@ -409,8 +413,52 @@ export default async function AgentDetailPage({
       </Section>
 
       <Section
+        title="In the Village"
+        subtitle="How this agent is doing inside the simulation. Nothing here decides anything."
+      >
+        {detail.village_unreachable ? (
+          <p className="text-desc text-ink-secondary">
+            The Village did not answer, so this section is empty. Everything else on this
+            page comes from The Office&rsquo;s own records and is unaffected.
+          </p>
+        ) : detail.village_state === null ? (
+          <p className="text-desc text-ink-secondary">
+            This identity has no Village agent on the other side of it, so there is no
+            simulation state to show.
+          </p>
+        ) : (
+          <>
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3">
+              {Object.entries(detail.village_state)
+                .filter(
+                  ([key]) => key !== "fetched_at" && key !== "stale" && key !== "success",
+                )
+                .map(([key, value]) => (
+                  <div key={key}>
+                    <dt className="text-meta text-ink-muted">{key.replace(/_/g, " ")}</dt>
+                    <dd className="text-desc text-ink">
+                      {value === null || value === undefined
+                        ? "\u2014"
+                        : typeof value === "object"
+                          ? JSON.stringify(value)
+                          : String(value)}
+                    </dd>
+                  </div>
+                ))}
+            </dl>
+            <p className="mt-3 max-w-3xl text-meta text-ink-muted">
+              Read from the Village and displayed. It gates nothing: an agent who is
+              grieving is still certified, still holds the grants somebody granted them,
+              and is refused for exactly the reasons anybody else is refused. A simulated
+              mood must never be the reason a patient record goes unprocessed.
+            </p>
+          </>
+        )}
+      </Section>
+
+      <Section
         title="Shifts"
-        subtitle="One venture per agent per shift. A failed PHI flush blocks the next assignment."
+        subtitle="One venture per agent per Village quarter. A failed PHI flush blocks the next assignment."
       >
         {detail.recent_shifts.length === 0 ? (
           <p className="text-desc text-ink-secondary">Never assigned to a shift.</p>
@@ -422,6 +470,9 @@ export default async function AgentDetailPage({
                 className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-line py-2"
               >
                 <span className="text-desc text-ink">{shift.venture_id}</span>
+                {shift.quarter ? (
+                  <span className="text-meta text-ink-secondary">{shift.quarter}</span>
+                ) : null}
                 <span className="text-meta text-ink-muted">
                   <Ago iso={shift.shift_start} />
                 </span>
