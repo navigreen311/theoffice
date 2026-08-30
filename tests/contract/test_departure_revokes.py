@@ -47,11 +47,55 @@ ROSTER = [
 ]
 
 
-def _village_says(monkeypatch, agents: list[dict]) -> None:
+def _village_says(monkeypatch, conn: psycopg.Connection, agents: list[dict]) -> None:
+    """The Village still has everybody it had, minus whoever this test removed.
+
+    `agents` names only the rows this file created. Everything else currently in
+    `village_agent` is added back, because `apply()` diffs against the whole table and
+    treats anything the Village does not mention as departed.
+
+    Handing it a two-agent roster made every other row in the database look like a
+    departure - including rows another test file left behind. The assertions then
+    counted that residue: `result["departed"] == 1` passed on a clean database and
+    failed on a dirty one, which is a test reporting the state of the fixtures rather
+    than the property under test. That is the shape this suite has removed twice
+    before, and it went back in with these tests.
+    """
+    named = {a["agent_id"] for a in agents}
+    mine = {REF, OTHER_REF}
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            "SELECT village_agent_ref, agent_name, department, role_key, title "
+            "FROM village_agent "
+            "WHERE status = 'active' AND NOT (village_agent_ref = ANY(%s))",
+            (list(mine),),
+        )
+        others = [
+            {
+                "agent_id": r["village_agent_ref"],
+                "lore_name": r["agent_name"],
+                "department": r["department"],
+                "role_key": r["role_key"],
+                "reports_to_id": None,
+                "title": r["title"],
+            }
+            for r in cur.fetchall()
+            if r["village_agent_ref"] not in named
+        ]
+
     async def roster(degrade: bool = True) -> village.Answer:
-        return village.Answer(data={"agents": agents}, fetched_at=datetime.now(UTC))
+        return village.Answer(
+            data={"agents": agents + others}, fetched_at=datetime.now(UTC)
+        )
 
     monkeypatch.setattr(village, "roster", roster)
+
+
+def _departed_refs(result: dict) -> set[str]:
+    """The refs this sync marked departed, from the change list rather than the count."""
+    return {
+        c["village_agent_ref"] for c in result["changes"] if c["kind"] == "departed"
+    }
 
 
 @pytest.fixture
@@ -178,12 +222,12 @@ async def test_a_departure_revokes_the_agents_grants(world, operator, monkeypatc
     departing = ids[REF]
 
     # Only the stayer is still in the Village.
-    _village_says(monkeypatch, [ROSTER[1]])
+    _village_says(monkeypatch, admin, [ROSTER[1]])
 
     async with connection() as conn:
         result = await sync_roster.apply(conn, actor=operator, confirmed=True)
 
-    assert result["departed"] == 1
+    assert _departed_refs(result) == {REF}
     assert result["grants_revoked"] == 2
 
     entries = _revocations(admin, departing)
@@ -206,7 +250,7 @@ async def test_a_departure_revokes_the_agents_grants(world, operator, monkeypatc
 async def test_an_agent_who_stayed_keeps_everything(world, operator, monkeypatch):
     """A revocation sweep that catches the wrong agent is worse than none."""
     ids, admin = world
-    _village_says(monkeypatch, [ROSTER[1]])
+    _village_says(monkeypatch, admin, [ROSTER[1]])
 
     async with connection() as conn:
         await sync_roster.apply(conn, actor=operator, confirmed=True)
@@ -230,7 +274,7 @@ async def test_the_departed_identity_is_suspended(world, operator, monkeypatch):
     exists to protect.
     """
     ids, admin = world
-    _village_says(monkeypatch, [ROSTER[1]])
+    _village_says(monkeypatch, admin, [ROSTER[1]])
 
     async with connection() as conn:
         await sync_roster.apply(conn, actor=operator, confirmed=True)
@@ -259,7 +303,7 @@ async def test_the_revocation_and_the_departure_are_one_transaction(
     where you would look.
     """
     ids, admin = world
-    _village_says(monkeypatch, [ROSTER[1]])
+    _village_says(monkeypatch, admin, [ROSTER[1]])
 
     async def refuse(*args, **kwargs):
         raise RuntimeError("audit store unavailable")
@@ -292,11 +336,11 @@ async def test_an_agent_who_held_nothing_produces_no_revocation(
         )
     admin.commit()
 
-    _village_says(monkeypatch, [ROSTER[1]])
+    _village_says(monkeypatch, admin, [ROSTER[1]])
     async with connection() as conn:
         result = await sync_roster.apply(conn, actor=operator, confirmed=True)
 
-    assert result["departed"] == 1
+    assert _departed_refs(result) == {REF}
     assert result["grants_revoked"] == 0
     assert _revocations(admin, ids[REF]) == []
 
@@ -304,7 +348,7 @@ async def test_an_agent_who_held_nothing_produces_no_revocation(
 async def test_the_audit_entry_records_what_was_revoked(world, operator, monkeypatch,
                                                         admin):
     """A reader of the log can see the consequence, not just the roster change."""
-    _village_says(monkeypatch, [ROSTER[1]])
+    _village_says(monkeypatch, admin, [ROSTER[1]])
 
     async with connection() as conn:
         await sync_roster.apply(conn, actor=operator, confirmed=True)
@@ -318,18 +362,21 @@ async def test_the_audit_entry_records_what_was_revoked(world, operator, monkeyp
 
     assert subject["grants_revoked"] == 2
     assert subject["departed"] == 1
+    assert REF in {
+        c["village_agent_ref"] for c in subject["changes"] if c["kind"] == "departed"
+    }
 
 
 async def test_nothing_is_revoked_when_nobody_departed(world, operator, monkeypatch,
                                                        admin):
     """A guard that fires on an ordinary sync is not a guard."""
     ids, _ = world
-    _village_says(monkeypatch, ROSTER)
+    _village_says(monkeypatch, admin, ROSTER)
 
     async with connection() as conn:
         result = await sync_roster.apply(conn, actor=operator, confirmed=True)
 
-    assert result["departed"] == 0
+    assert _departed_refs(result) == set()
     assert result["grants_revoked"] == 0
     assert _live_grants(admin, ids[REF]) == 2
 
@@ -343,11 +390,11 @@ async def test_a_returning_agent_does_not_get_their_grants_back(
     otherwise silently recover authority that was deliberately taken away.
     """
     ids, _ = world
-    _village_says(monkeypatch, [ROSTER[1]])
+    _village_says(monkeypatch, admin, [ROSTER[1]])
     async with connection() as conn:
         await sync_roster.apply(conn, actor=operator, confirmed=True)
 
-    _village_says(monkeypatch, ROSTER)
+    _village_says(monkeypatch, admin, ROSTER)
     async with connection() as conn:
         await sync_roster.apply(conn, actor=operator, confirmed=True)
 
