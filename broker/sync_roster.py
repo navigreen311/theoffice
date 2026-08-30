@@ -30,6 +30,21 @@ WHAT A NEW OCCUPANT INHERITS
     Nothing. Grants and certifications key on `office_agent_id`, never on a position, so
     an agent hired into a vacated seat arrives `never_certified` and holds nothing. That
     is the point: the seat is not the thing that was trusted, the agent was.
+
+WHAT A DEPARTURE REVOKES
+
+    Every grant the departed agent held, in the same transaction that marks them
+    departed. This module said so in four places before it did it: the diff told the
+    operator "any grants this agent holds are revoked when this is applied", they
+    confirmed, and the grants stayed live. A promise in the copy that the code does not
+    keep is worse than no promise, because the operator stops checking.
+
+    The revocation and the departure are one write. A commit between them can leave an
+    agent marked departed and still holding authority, and nobody would go looking for
+    that state - the roster says the agent is gone.
+
+    Revocations are recorded, never deleted, so a departed agent's history stays
+    readable. That is the same rule the console's revocation page is built on.
 """
 
 from __future__ import annotations
@@ -41,7 +56,7 @@ from typing import Any
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 
-from broker import audit, village
+from broker import audit, revocation, village
 
 
 class SyncError(Exception):
@@ -220,18 +235,6 @@ async def apply(
                 ),
             )
 
-        departed = [c.village_agent_ref for c in changes.of("departed")]
-        if departed:
-            # Marked, not deleted. An agent who left is a fact about the past, and the
-            # grants they held are the reason anybody would look them up later.
-            await cur.execute(
-                "UPDATE village_agent SET status = 'departed', departed_at = now() "
-                "WHERE village_agent_ref = ANY(%s)",
-                (departed,),
-            )
-
-        # An identity whose agent changed department follows it. The identity is the same
-        # agent; the department is a property of where they now sit.
         await cur.execute(
             """
             UPDATE office_agent_identity i
@@ -243,6 +246,31 @@ async def apply(
              WHERE v.village_agent_ref = i.village_agent_ref
             """
         )
+
+        departed = [c.village_agent_ref for c in changes.of("departed")]
+        if departed:
+            # Marked, not deleted. An agent who left is a fact about the past, and the
+            # grants they held are the reason anybody would look them up later.
+            await cur.execute(
+                "UPDATE village_agent SET status = 'departed', departed_at = now() "
+                "WHERE village_agent_ref = ANY(%s)",
+                (departed,),
+            )
+
+        # Identities are suspended before their grants are revoked, so there is no
+        # window in which an identity is active with its authority already gone -
+        # a call arriving in that window would be refused for a reason that reads
+        # like a revocation of a working agent rather than a departure.
+        await cur.execute(
+            "UPDATE office_agent_identity SET status = 'suspended' "
+            "WHERE village_agent_ref = ANY(%s) AND status <> 'suspended'",
+            (departed or [],),
+        )
+
+    revoked = await _revoke_departed(conn, departed, actor=actor)
+
+        # An identity whose agent changed department follows it. The identity is the same
+        # agent; the department is a property of where they now sit.
 
     # The audit entry is written in the same transaction as the rows it describes, and
     # one commit covers both.
@@ -259,10 +287,67 @@ async def apply(
         actor_id=actor,
         subject={
             "source": "village_api",
+            "grants_revoked": revoked,
             **changes.summary(),
         },
         conn=conn,
     )
     await conn.commit()
 
-    return {"applied": True, **changes.summary()}
+    return {"applied": True, "grants_revoked": revoked, **changes.summary()}
+
+
+async def _revoke_departed(
+    conn: AsyncConnection, departed: list[str], *, actor: uuid.UUID
+) -> int:
+    """Revoke every grant held by an agent who has left. Returns how many.
+
+    One revocation per agent at `agent` scope, rather than one per grant: the fact being
+    recorded is that this agent left, and a reader looking at the revocation page should
+    see a departure, not eleven separate entries that have to be reassembled into one.
+
+    `commit=False` on each, because these belong to the transaction that marked the
+    agent departed. A departure that lands without its revocations is an agent the
+    roster says is gone and the call path says may act.
+
+    An agent who departed holding nothing produces no revocation. There is nothing to
+    record, and an empty revocation on the page would read as an event that happened.
+    """
+    if not departed:
+        return 0
+
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            """
+            SELECT i.office_agent_id, i.agent_name, count(g.grant_id) AS grants
+              FROM office_agent_identity i
+              JOIN agent_forge_grant g ON g.office_agent_id = i.office_agent_id
+             WHERE i.village_agent_ref = ANY(%s) AND g.revoked_at IS NULL
+             GROUP BY i.office_agent_id, i.agent_name
+             ORDER BY i.office_agent_id
+            """,
+            (departed,),
+        )
+        holders = list(await cur.fetchall())
+
+    total = 0
+    for holder in holders:
+        await revocation.revoke(
+            conn,
+            scope="agent",
+            office_agent_id=holder["office_agent_id"],
+            reason=(
+                f"{holder['agent_name']} is no longer in the Village roster. Revoked "
+                "automatically by sync-roster when the departure was applied."
+            ),
+            revoked_by=actor,
+            # The person who confirmed the sync. `attributable_actor` requires the
+            # `ivan` role, which outranks the `venture_operator` this scope needs, so
+            # the authority check passes on the actor's real role rather than on a
+            # role this function asserts about them.
+            revoked_by_role="ivan",
+            commit=False,
+        )
+        total += int(holder["grants"])
+
+    return total

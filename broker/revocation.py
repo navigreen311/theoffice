@@ -134,8 +134,16 @@ async def revoke(
     forge_id: str | None = None,
     module_id: str | None = None,
     venture_id: str | None = None,
+    commit: bool = True,
 ) -> uuid.UUID:
-    """Record a revocation. Takes effect on the target's very next call."""
+    """Record a revocation. Takes effect on the target's very next call.
+
+    `commit=False` leaves the transaction open for a caller that is writing something
+    this revocation has to be atomic with. `sync-roster` is the case: an agent marked
+    departed and their grants revoked are one fact, and a commit between the two can
+    leave a departed agent holding live authority. Nobody would be looking for that
+    state, because the roster would say the agent is gone.
+    """
     assert_authority(scope, revoked_by_role)
 
     # Counted before the write, inside the same transaction, so the figure is what this
@@ -166,7 +174,8 @@ async def revoke(
                 venture_id, reason, revoked_by, revoked_by_role, Jsonb(radius),
             ),
         )
-    await conn.commit()
+    if commit:
+        await conn.commit()
     return revocation_id
 
 
