@@ -108,6 +108,7 @@
     "produced_not_yet_certified": 0
   },
   "escalation": "No shortfall. All positions filled by certified agents.",
+  "escalation_path": "governance",
   "shortfall": false,
   "venture_id": "greenstone"
 }

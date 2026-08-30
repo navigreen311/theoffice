@@ -37,6 +37,7 @@ from typing import Any
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 
+from broker import escalation
 from generators.artifacts import (
     AppointedAgent,
     Appointment,
@@ -175,6 +176,11 @@ async def generate(
         capacity=capacity,
         shortfall=shortfall,
         escalation=_escalation(shortfall, appointments, capacity),
+        # Stated on the artifact rather than left to whoever reads the sentence. The
+        # recipient is resolved at delivery by `broker.escalation.governance`, which
+        # refuses to name a test fixture; what is fixed here is which of the two routes
+        # a shortfall may take, and it is never the one inside the Village.
+        escalation_path=escalation.Path.GOVERNANCE.value,
     )
 
 
@@ -239,6 +245,8 @@ def _cap(ceiling: str, certified: str) -> str:
 def _escalation(
     shortfall: bool, appointments: list[PositionAppointment], capacity: CapacityNumbers
 ) -> str:
+    """§7.3, unchanged in wording. The path it travels is on the artifact beside it."""
+    escalation.assert_path("capacity_shortfall", escalation.Path.GOVERNANCE)
     if not shortfall:
         return "No shortfall. All positions filled by certified agents."
     unfilled = ", ".join(

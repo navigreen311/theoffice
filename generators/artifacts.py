@@ -167,6 +167,14 @@ class Appointment(Artifact):
     escalation: str
     """§7.3: flag to Ivan for decision. Never auto-reject the Pack, never auto-appoint
     an uncertified agent, never silently reduce scope."""
+    escalation_path: str = "governance"
+    """Which of the two routes this takes: `governance` leaves the Village, `operational`
+    goes up its chain of command to the COO.
+
+    A capacity shortfall is always governance. The COO runs the organisation whose
+    capacity is in question, and an escalation that stayed inside it would be that
+    organisation deciding whether it has enough people - which is the reason The Office
+    sits above the Village. `broker.escalation.assert_path` refuses the other value."""
 
 
 # ----------------------------------------------------------------------- 5.3 Workflow
