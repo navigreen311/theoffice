@@ -39,13 +39,24 @@ import pytest
 from broker import humans, roster
 from broker.app import app
 from broker.db import connection
-from generators.pack import VILLAGE_DEPARTMENTS
 from tests.conftest import requires_db
 
 pytestmark = [requires_db, pytest.mark.db]
 
 SEED = uuid.UUID("00000000-0000-5000-8000-00000000dddd")
-DEPARTMENT = VILLAGE_DEPARTMENTS[7]  # Research & Market Intelligence
+# A department the live Village has. The Office no longer carries a list to index into:
+# it held twelve names, nine of which stopped existing when the Village was rebuilt, and
+# a test indexing that tuple was asserting against the same stale copy the code was.
+DEPARTMENT = "research"
+
+# What the directory is told the full list is. Passed in explicitly here rather than
+# fetched, so this test exercises the roster's own grouping without depending on the
+# Village being up - the rules that ask the Village have their own tests.
+ALL_DEPARTMENTS = (
+    "administration", "ai_data", "banking", "engineering", "executive",
+    "infrastructure", "marketing", "media_production", "music_production",
+    "operations", "publishing", "research",
+)
 
 
 def auth(token: str) -> dict[str, str]:
@@ -114,7 +125,7 @@ async def test_an_unimported_roster_is_not_an_empty_village(api, world):
     assert body["roster_total"] == 0
     # And the identities are still reported, as identities - not as the roster.
     assert body["with_identity"] == 0
-    assert body["departments_total"] == len(VILLAGE_DEPARTMENTS)
+    assert body["departments_total"] == len(ALL_DEPARTMENTS)
 
 
 async def test_every_department_is_listed_whether_or_not_anybody_is_in_it(api, world):
@@ -127,7 +138,7 @@ async def test_every_department_is_listed_whether_or_not_anybody_is_in_it(api, w
     body = (await api.get("/api/agents/roster", headers=auth(world.token))).json()
     listed = [d["department"] for d in body["departments"]]
 
-    assert listed == list(VILLAGE_DEPARTMENTS), (
+    assert listed == list(ALL_DEPARTMENTS), (
         "the page lists only the departments that have somebody in them"
     )
     assert all(d["with_identity"] == 0 for d in body["departments"])

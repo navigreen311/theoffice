@@ -86,6 +86,13 @@ def bridged_world(admin: psycopg.Connection):
     Returns a handle that can un-bridge one of them, so the Gate 0 test breaks the
     world rather than the Pack — a Pack edit would prove the wrong thing.
     """
+    # The department list is part of a prepared world too: V29 and V30 ask the Village,
+    # and a world that has not answered leaves them NOT_RUN - which is correct, and is
+    # not the state this fixture exists to build.
+    from tests.world import seed_departments
+
+    seed_departments()
+
     forges = {
         "cre-forge": ("1.4.0", CRE_MODULES),
         "simforge": ("3.2.0", SIM_MODULES),

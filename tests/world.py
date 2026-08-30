@@ -32,19 +32,19 @@ VOICE_MODULES = ("place_call", "transcribe_call")
 # named so a snapshot diff shows who moved.
 ROSTER = [
     ("11111111-1111-5111-8111-111111111111", "Ada Sourcing",
-     "Research & Market Intelligence"),
+     "research"),
     ("22222222-2222-5222-8222-222222222222", "Bram Records",
-     "Research & Market Intelligence"),
+     "research"),
     ("33333333-3333-5333-8333-333333333333", "Cleo Comps",
-     "Research & Market Intelligence"),
+     "research"),
     ("44444444-4444-5444-8444-444444444444", "Dorian Model",
-     "Finance & Administration"),
+     "banking"),
     ("55555555-5555-5555-8555-555555555555", "Esme Ledger",
-     "Finance & Administration"),
+     "banking"),
     ("66666666-6666-5666-8666-666666666666", "Faye Buyers",
-     "Client Success & Operations"),
+     "operations"),
     ("77777777-7777-5777-8777-777777777777", "Gil Network",
-     "Client Success & Operations"),
+     "operations"),
 ]
 
 # Part 6.3's six fields. The Greenstone Pack's `library_entry_ref` values resolve to
@@ -133,6 +133,36 @@ INSTRUCTION_CONTENT = {
 }
 
 
+#: The Village's twelve, as of the rebuild. Seeded rather than fetched: a suite that
+#: needs a second application running to validate a Pack fails for reasons unrelated to
+#: the code under test. Seats are the live figures, so the headcount rule is exercised
+#: against real numbers - research really does have 14.
+VILLAGE_DEPARTMENTS = (
+    ("administration", "Administration", 11),
+    ("ai_data", "AI_Data", 14),
+    ("banking", "Banking", 14),
+    ("engineering", "Engineering", 26),
+    ("executive", "Executive", 8),
+    ("infrastructure", "Infrastructure", 17),
+    ("marketing", "Marketing", 14),
+    ("media_production", "Media_Production", 20),
+    ("music_production", "Music_Production", 20),
+    ("operations", "Operations", 12),
+    ("publishing", "Publishing", 16),
+    ("research", "Research", 14),
+)
+
+
+def seed_departments() -> None:
+    """Install the department list the rules validate against."""
+    from broker import departments as depts
+
+    depts.seed([
+        depts.Department(department=name, label=label, seats=seats)
+        for name, label, seats in VILLAGE_DEPARTMENTS
+    ])
+
+
 def build_world(admin: psycopg.Connection) -> None:
     """A fully prepared world: Forges bridged, instructions authored, roster present.
 
@@ -140,6 +170,7 @@ def build_world(admin: psycopg.Connection) -> None:
     golden snapshots - and the provisioning runs - describe a venture that could
     actually provision.
     """
+    seed_departments()
     teardown_world(admin)
     with admin.cursor() as cur:
         for forge_id, api, modules, flags in (
@@ -305,17 +336,17 @@ def certify_for_positions(conn: psycopg.Connection) -> None:
     how the cross-Forge appointment bug hid: one Forge per position was assumed, and
     `place_call` was never certifiable.
     """
-    research = [a for a, _n, d in ROSTER if d == "Research & Market Intelligence"]
-    finance = [a for a, _n, d in ROSTER if d == "Finance & Administration"]
-    success = [a for a, _n, d in ROSTER if d == "Client Success & Operations"]
+    research = [a for a, _n, d in ROSTER if d == "research"]
+    finance = [a for a, _n, d in ROSTER if d == "banking"]
+    success = [a for a, _n, d in ROSTER if d == "operations"]
 
     certify(conn, research, ["property_lookup", "comp_analysis"],
-            unit_b_departments=["Research & Market Intelligence"])
+            unit_b_departments=["research"])
     certify(conn, research, ["place_call"], forge="voiceforge",
-            unit_b_departments=["Research & Market Intelligence"])
+            unit_b_departments=["research"])
     certify(conn, finance, ["comp_analysis", "underwrite_deal"], tier="propose",
-            unit_b_departments=["Finance & Administration"])
+            unit_b_departments=["banking"])
     certify(conn, success, ["buyer_match", "generate_loi"], tier="propose",
-            unit_b_departments=["Client Success & Operations"])
+            unit_b_departments=["operations"])
     certify(conn, success, ["place_call", "transcribe_call"], forge="voiceforge",
-            tier="propose", unit_b_departments=["Client Success & Operations"])
+            tier="propose", unit_b_departments=["operations"])

@@ -178,9 +178,9 @@ async def test_shortfall_reports_all_three_capacity_numbers(greenstone_world, ad
     to auto-reject the Pack, auto-appoint an uncertified agent, or reduce scope.
     """
     certify(admin, [ROSTER[0][0]], ["property_lookup", "comp_analysis"],
-            unit_b_departments=["Research & Market Intelligence"])
+            unit_b_departments=["research"])
     certify(admin, [ROSTER[0][0]], ["place_call"], forge="voiceforge",
-            unit_b_departments=["Research & Market Intelligence"])
+            unit_b_departments=["research"])
     pack = load_pack(PACK_PATH)
 
     async with connection() as conn:

@@ -80,7 +80,7 @@ positions_required:
       - Pull comparable sales and rent rolls
       - Produce a first-pass value estimate
     forge_modules_operated: [property_lookup, comp_analysis, place_call]
-    source_department: Research & Market Intelligence
+    source_department: research
     compliance_flags_in_scope: [tsr_disclosure_required]
     headcount: 3
     trust_tier_ceiling: auto_execute
@@ -93,7 +93,7 @@ positions_required:
       - Set the maximum allowable offer
       - Flag title and zoning risk
     forge_modules_operated: [comp_analysis, underwrite_deal]
-    source_department: Finance & Administration
+    source_department: banking
     compliance_flags_in_scope: []
     headcount: 2
     # Deliberately below auto_execute: an underwriting number that is wrong by 10%
@@ -108,7 +108,7 @@ positions_required:
       - Match a contracted deal to buyers by fit
       - Circulate the assignment package
     forge_modules_operated: [buyer_match, generate_loi, place_call, transcribe_call]
-    source_department: Client Success & Operations
+    source_department: operations
     compliance_flags_in_scope: [recording_consent_required]
     headcount: 2
     trust_tier_ceiling: propose

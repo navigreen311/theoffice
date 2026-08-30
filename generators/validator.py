@@ -114,7 +114,12 @@ class ValidationReport:
 
 
 # Rules that cannot be answered from the document alone.
-NEEDS_WORLD = {"V2", "V6", "V11", "V28"}
+# Kept in step with `_WORLD_RULES` by `test_needs_world_matches_the_world_rules`, which
+# exists because these two lists drifted the first time a world rule was added: V29 and
+# V30 were registered below and absent here, so the fixture meta-test demanded document
+# fixtures for rules that cannot be evaluated without the Village. A literal is needed
+# here rather than `set(_WORLD_RULES)` only because the registry is defined further down.
+NEEDS_WORLD = {"V2", "V6", "V11", "V28", "V29", "V30"}
 
 # V24 is evaluated at Gate 4.5 against appointment output, which does not exist at
 # Gate 2. Recorded as metadata rather than a comment so the meta-test can see it.
@@ -253,14 +258,20 @@ def v9(pack: BusinessPack) -> tuple[bool, str]:
 
 @rule("V10", Severity.FAIL, "Every position names >=1 Forge module and a source department")
 def v10(pack: BusinessPack) -> tuple[bool, str]:
-    from generators.pack import VILLAGE_DEPARTMENTS
+    """Presence only. Whether the department *exists* is V29, which has to ask.
 
+    This rule used to check the name against a tuple of twelve departments kept in
+    `generators/pack.py`. The Village was rebuilt and nine of them stopped existing;
+    nothing failed, because the copy could not know. A Pack naming
+    `Research & Market Intelligence` validated cleanly for two days after that department
+    ceased to exist.
+    """
     bad = []
     for p in pack.positions_required:
         if not p.forge_modules_operated:
             bad.append(f"{p.position_title}: no modules")
-        if p.source_department not in VILLAGE_DEPARTMENTS:
-            bad.append(f"{p.position_title}: {p.source_department!r} is not a Village department")
+        if not (p.source_department or "").strip():
+            bad.append(f"{p.position_title}: no source department")
     return (not bad, _join(bad) if bad else f"{len(pack.positions_required)} position(s) resolve")
 
 
@@ -618,6 +629,77 @@ async def _v28_library_refs_resolve(
     )
 
 
+async def _v29_departments_exist(
+    conn: AsyncConnection, pack: BusinessPack
+) -> tuple[bool | None, str]:
+    """Every position's department is one the Village actually has.
+
+    The failure names all twelve, in the casing the Village UI shows, because the
+    operator's next action is to pick one and they should not have to go and find the
+    list to do it.
+    """
+    from broker import departments as depts
+
+    known = await depts.names()
+    if known is None:
+        return (
+            None,
+            "the department list could not be read from the Village "
+            f"({depts.unreachable_reason() or 'no answer'}), so no position's department "
+            "has been checked. NOT_RUN is not a pass.",
+        )
+
+    labels = await depts.labels() or ()
+    bad = [
+        f"{p.position_title}: {p.source_department!r}"
+        for p in pack.positions_required
+        if depts.normalize(p.source_department) not in known
+    ]
+    if bad:
+        return (
+            False,
+            f"{_join(bad)} - not a Village department. The twelve are: "
+            f"{', '.join(labels)}.",
+        )
+    return (True, f"{len(pack.positions_required)} position(s) name a real department")
+
+
+async def _v30_department_has_seats(
+    conn: AsyncConnection, pack: BusinessPack
+) -> tuple[bool | None, str]:
+    """The department is big enough for what the Pack asks. Warns here.
+
+    Two different questions, split deliberately. This one asks whether the department is
+    large enough at all - a Pack wanting 20 researchers from a department of 14 is wrong
+    on its face and should be caught while somebody is still editing it. Gate 4.5 asks
+    the harder question, whether those seats are uncommitted, which needs appointment
+    output that does not exist at Gate 2.
+    """
+    from broker import departments as depts
+
+    seats = await depts.seats()
+    if seats is None:
+        return (
+            None,
+            "department headcount could not be read from the Village, so no position has "
+            "been checked against the size of its department.",
+        )
+
+    wanted: dict[str, int] = {}
+    for position in pack.positions_required:
+        key = depts.normalize(position.source_department)
+        wanted[key] = wanted.get(key, 0) + int(getattr(position, "headcount", 1) or 1)
+
+    over = [
+        f"{name} wants {count} of {seats.get(name, 0)} seat(s)"
+        for name, count in sorted(wanted.items())
+        if name in seats and count > seats[name]
+    ]
+    if over:
+        return (False, f"{_join(over)}. The department is not that large.")
+    return (True, f"{len(wanted)} department(s) have seats for what the Pack asks")
+
+
 _WORLD_RULES = {
     "V2": (Severity.FAIL, "Bridge operational for every hard Forge binding (Gate 0)",
            _v2_bridge_operational),
@@ -627,6 +709,10 @@ _WORLD_RULES = {
             _v11_instructions_authored),
     "V28": (Severity.FAIL, "Every library_entry_ref resolves in the Compliance Library",
             _v28_library_refs_resolve),
+    "V29": (Severity.FAIL, "Every position names a department the Village has",
+            _v29_departments_exist),
+    "V30": (Severity.WARN, "Every department has seats for the positions requested",
+            _v30_department_has_seats),
 }
 
 
@@ -650,6 +736,14 @@ async def validate(
                 ))
                 continue
             ok, message = await fn(conn, pack)
+            if ok is None:
+                # The rule ran and could not reach what it needed. Not a pass - the Pack
+                # is unvalidated in this respect - and not a failure either, because
+                # nothing about the Pack is known to be wrong.
+                report.results.append(RuleResult(
+                    rule_id, severity, Verdict.NOT_RUN, message,
+                ))
+                continue
         elif rule_id in GATE_45_RULES:
             report.results.append(RuleResult(
                 rule_id, Severity.FAIL, Verdict.NOT_RUN,

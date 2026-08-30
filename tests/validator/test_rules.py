@@ -124,7 +124,7 @@ def test_every_rule_from_v1_is_implemented_with_no_gaps():
     """
     ids = validator.all_rule_ids()
     assert ids == [f"V{i}" for i in range(1, len(ids) + 1)], f"got {ids}"
-    assert len(ids) == 28
+    assert len(ids) == 30
 
 
 @pytest.mark.parametrize("rule_id", DOCUMENT_RULES)
@@ -196,7 +196,7 @@ async def test_report_is_deterministic(greenstone):
     assert [(r.rule_id, r.verdict, r.message) for r in a.results] == [
         (r.rule_id, r.verdict, r.message) for r in b.results
     ]
-    assert [r.rule_id for r in a.results] == [f"V{i}" for i in range(1, 29)]
+    assert [r.rule_id for r in a.results] == [f"V{i}" for i in range(1, 31)]
 
 
 async def test_render_names_the_offending_value(greenstone):
@@ -216,3 +216,17 @@ async def test_v24_is_deferred_to_gate_4_5(greenstone):
     v24 = report.get("V24")
     assert v24.verdict is Verdict.NOT_RUN
     assert "4.5" in v24.message
+
+
+def test_needs_world_matches_the_world_rules():
+    """Two lists of the same thing, kept in step by a test rather than by memory.
+
+    `NEEDS_WORLD` tells the fixture meta-test which rules cannot be exercised against a
+    document alone; `_WORLD_RULES` is what the runner dispatches. They drifted the first
+    time a world rule was added - V29 and V30 were registered and not declared - and the
+    symptom was this file demanding document fixtures for rules that need the Village.
+    """
+    assert set(validator._WORLD_RULES) == validator.NEEDS_WORLD, (
+        "NEEDS_WORLD and _WORLD_RULES disagree: "
+        f"{validator.NEEDS_WORLD ^ set(validator._WORLD_RULES)}"
+    )

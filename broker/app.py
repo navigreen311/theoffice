@@ -51,6 +51,7 @@ from broker import (
     budget,
     certification,
     curriculum_quality,
+    departments,
     forge_map,
     humans,
     incidents,
@@ -3491,7 +3492,10 @@ async def preview_roster(
     than a row that quietly disappears.
     """
     try:
-        parsed = roster.parse_roster([entry.model_dump() for entry in body.agents])
+        parsed = roster.parse_roster(
+            [entry.model_dump() for entry in body.agents],
+            known_departments=await departments.names(),
+        )
         return await roster.diff(conn, parsed)
     except roster.RosterError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -3503,7 +3507,10 @@ async def import_roster(
 ) -> dict[str, Any]:
     """Apply a roster the operator has already seen a diff for."""
     try:
-        parsed = roster.parse_roster([entry.model_dump() for entry in body.agents])
+        parsed = roster.parse_roster(
+            [entry.model_dump() for entry in body.agents],
+            known_departments=await departments.names(),
+        )
         return await roster.apply(conn, parsed, human=me)
     except roster.RosterError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

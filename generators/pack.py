@@ -27,20 +27,18 @@ from pydantic import BaseModel, ConfigDict, Field
 
 SCHEMA_VERSION = 3
 
-VILLAGE_DEPARTMENTS = (
-    "Media Production",
-    "Music Production",
-    "Product Development & Engineering",
-    "AI & Data Science",
-    "Publishing",
-    "Infrastructure & Cybersecurity",
-    "Client Success & Operations",
-    "Research & Market Intelligence",
-    "Marketing & Communications",
-    "Finance & Administration",
-    "Autonomous Operations",
-    "Executive & Strategy",
-)
+# There is deliberately no VILLAGE_DEPARTMENTS here any more.
+#
+# This module held twelve department names. The Village was rebuilt and nine of them
+# stopped existing - `Research & Market Intelligence` became `research`,
+# `Finance & Administration` became `banking` - and nothing failed, because a copy cannot
+# know it has gone stale. Packs naming departments that had not existed for two days
+# validated cleanly.
+#
+# The list is read from the Village by `broker.departments`, and validated by rules V29
+# and V30. When the Village cannot be reached those rules report NOT_RUN rather than
+# falling back to a copy, because a check against a stale list is worse than no check:
+# it produces a pass.
 
 ComplianceFramework = Literal[
     "HIPAA", "HCQC", "TILA", "FCRA", "ECOA", "UDAAP", "CROA", "FTC_TSR",

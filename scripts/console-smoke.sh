@@ -1439,10 +1439,20 @@ fi
 pycheck - "$WORK/agents-text.html" <<'PY'
 import html
 import sys
-from generators.pack import VILLAGE_DEPARTMENTS
+# The department list comes from the Village now; The Office holds no copy to import.
+# The page is asked what it rendered, and that is checked against the same source the
+# page used, so a stale list cannot make this check pass.
+import asyncio
+
+from broker import departments as depts
+
+VILLAGE_DEPARTMENTS = asyncio.run(depts.labels()) or ()
 # Unescaped first: eight of the twelve department names contain "&", which renders as
 # `&amp;`, and a raw substring check reported them missing from a page they are on.
 page = html.unescape(open(sys.argv[1], encoding="utf-8", errors="replace").read())
+if not VILLAGE_DEPARTMENTS:
+    print("NOT EXERCISED the Village did not answer, so no department list to check")
+    raise SystemExit
 absent = [d for d in VILLAGE_DEPARTMENTS if d not in page]
 if absent:
     print(f"FAIL departments missing from the page entirely: {absent}")

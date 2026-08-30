@@ -22,13 +22,13 @@ truth for who exists, and the two would disagree within a week.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from typing import Any
 
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 
 from broker import audit, humans
-from generators.pack import VILLAGE_DEPARTMENTS
 
 # Roster work is authorised as `venture_operator`, unscoped. There are three roles in
 # this system and a fourth is not warranted here: issuing an identity is an operator act
@@ -42,14 +42,25 @@ class RosterError(Exception):
 
 # ---------------------------------------------------------------------- importing
 
-def parse_roster(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
+def parse_roster(
+    rows: list[dict[str, Any]],
+    *,
+    known_departments: Sequence[str] | None = None,
+) -> list[dict[str, str]]:
     """Validate an incoming roster before anything is compared against it.
 
-    A roster with a department the Pack schema does not know is not a roster this system
-    can use: `source_department` on a position is validated against the same list, so an
-    agent in an unknown department could never be appointed to anything. Rejecting the
-    import is better than storing a row that is permanently unappointable for a reason
-    the page cannot explain.
+    A roster naming a department the Village does not have is not a roster this system
+    can use: rule V29 validates a position's `source_department` against the same list,
+    so an agent in an unknown department could never be appointed to anything. Rejecting
+    the import is better than storing a row that is permanently unappointable for a
+    reason the page cannot explain.
+
+    `known_departments` is passed in rather than read here, and this function no longer
+    holds a list of its own. The Office carried twelve names and nine of them stopped
+    existing when the Village was rebuilt; a copy cannot know it has gone stale. When the
+    caller has no list - the Village is unreachable - names are not checked and the
+    import says so, because rejecting every row against a list nobody could read would
+    be worse than accepting rows a later sync will correct.
     """
     out: list[dict[str, str]] = []
     seen: set[str] = set()
@@ -63,12 +74,24 @@ def parse_roster(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
             raise RosterError(f"row {index}: no village_agent_ref")
         if not name:
             raise RosterError(f"row {index} ({ref}): no agent_name")
-        if department not in VILLAGE_DEPARTMENTS:
+        if not department:
             raise RosterError(
-                f"row {index} ({ref}): {department!r} is not a Village department. "
-                f"A position's source_department is validated against the same list, so "
-                f"an agent in an unknown department could never be appointed."
+                f"row {index} ({ref}): no department. An agent with no department "
+                f"could never be appointed to a position, because a position names the "
+                f"department it draws from."
             )
+        if known_departments is not None:
+            from broker import departments as depts
+
+            if depts.normalize(department) not in {
+                depts.normalize(name) for name in known_departments
+            }:
+                raise RosterError(
+                    f"row {index} ({ref}): {department!r} is not a Village department. "
+                    f"A position's source_department is validated against the same list, "
+                    f"so an agent in an unknown department could never be appointed. "
+                    f"The Village has: {', '.join(sorted(known_departments))}."
+                )
         if ref in seen:
             raise RosterError(f"row {index}: {ref} appears twice in this roster")
 
@@ -337,6 +360,7 @@ async def directory(
     department: str | None = None,
     identity: str | None = None,
     grants: str | None = None,
+    all_department_names: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     """The whole roster, grouped by department, with every denominator real.
 
@@ -350,6 +374,15 @@ async def directory(
     statement from "the Village has seven agents", and is the reason this is not a
     hardcoded 106.
     """
+
+    # The Village's list when it can be reached; otherwise whatever the roster itself
+    # contains. The second case is narrower than the first and the console says so - it
+    # cannot show a department that nobody has reached and that the Village never named.
+    if all_department_names is None:
+        from broker import departments as depts
+
+        all_department_names = await depts.names() or ()
+
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
             """
@@ -476,11 +509,13 @@ async def directory(
         key=lambda a: (a["department"], a["agent_name"]),
     )
 
-    # Departments, all twelve, whether or not anybody in them has reached The Office.
-    # Nine currently have nobody, and a page that renders only the departments it found
-    # cannot say so.
+    # Every department the Village reports, whether or not anybody in it has reached The
+    # Office - a page rendering only the departments it found cannot say that nine of
+    # them are empty. `all_department_names` is passed in by the caller, which got it
+    # from the Village; when the Village is unreachable it is whatever the roster itself
+    # contains, and the console says so rather than implying the list is complete.
     departments: list[dict[str, Any]] = []
-    for name in VILLAGE_DEPARTMENTS:
+    for name in all_department_names:
         members = [a for a in agents if a["department"] == name]
         with_identity = [a for a in members if a["has_identity"]]
         departments.append({
@@ -495,7 +530,7 @@ async def directory(
     return {
         "agents": visible,
         "departments": departments,
-        "departments_total": len(VILLAGE_DEPARTMENTS),
+        "departments_total": len(all_department_names),
         "departments_represented": len(
             [d for d in departments if d["with_identity"]]
         ),
@@ -516,7 +551,7 @@ async def directory(
             ),
             "no_identity": len([a for a in agents if not a["has_identity"]]),
         },
-        "all_departments": list(VILLAGE_DEPARTMENTS),
+        "all_departments": list(all_department_names),
     }
 
 

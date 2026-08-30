@@ -29,7 +29,7 @@
       ],
       "position_title": "Acquisition Analyst",
       "reports_to": "venture_operator",
-      "source_department": "Research & Market Intelligence",
+      "source_department": "research",
       "trust_tier_ceiling": "auto_execute"
     },
     {
@@ -62,7 +62,7 @@
       ],
       "position_title": "Buyer Network Manager",
       "reports_to": "venture_operator",
-      "source_department": "Client Success & Operations",
+      "source_department": "operations",
       "trust_tier_ceiling": "propose"
     },
     {
@@ -89,7 +89,7 @@
       ],
       "position_title": "Deal Underwriter",
       "reports_to": "venture_operator",
-      "source_department": "Finance & Administration",
+      "source_department": "banking",
       "trust_tier_ceiling": "propose"
     }
   ],
