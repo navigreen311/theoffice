@@ -20,9 +20,9 @@ from datetime import UTC, datetime, timedelta
 import psycopg
 import pytest
 
-from broker import shifts
+from broker import shifts, village
 from broker.db import connection
-from broker.shifts import FlushFailed, ShiftBlocked
+from broker.shifts import FlushFailed, QuarterConflict, QuarterUnknown, ShiftBlocked
 from tests.conftest import requires_db
 
 pytestmark = [requires_db, pytest.mark.db]
@@ -30,6 +30,35 @@ pytestmark = [requires_db, pytest.mark.db]
 OPERATOR = uuid.uuid4()
 MEDLINK = "medlink-pro"
 COLLINGSWOOD = "collingswood"
+
+
+class Clock:
+    """The Village quarter, under the test's control.
+
+    Autouse, and not optional. Without it these tests would ask the real Village what
+    quarter it is: they would pass on this machine while it happens to be running and
+    fail in CI, which is the shape of false signal this suite exists to catch. The seal
+    says The Office runs without the Village present, and its tests have to as well.
+    """
+
+    def __init__(self) -> None:
+        self.quarter = "2026Q1"
+
+    def advance(self) -> str:
+        year, q = int(self.quarter[:4]), int(self.quarter[-1])
+        self.quarter = f"{year + 1}Q1" if q == 4 else f"{year}Q{q + 1}"
+        return self.quarter
+
+
+@pytest.fixture(autouse=True)
+def clock(monkeypatch):
+    c = Clock()
+
+    async def quarter() -> str:
+        return c.quarter
+
+    monkeypatch.setattr(village, "quarter", quarter)
+    return c
 
 
 def window(offset_hours: int, length_hours: int = 8) -> tuple[datetime, datetime]:
@@ -262,8 +291,12 @@ async def test_an_unflushed_previous_shift_blocks_the_next_assignment(
     assert exc.value.context["flush_verified"] is False
 
 
-async def test_a_verified_flush_permits_the_next_assignment(seed_agent):
-    """S4 — the wall lets a clean agent through, or it is just an outage."""
+async def test_a_verified_flush_permits_the_next_assignment(seed_agent, clock):
+    """S4 — the wall lets a clean agent through, or it is just an outage.
+
+    The venture change happens across a quarter boundary, because that is now the only
+    place it can happen. A clean flush is necessary and no longer sufficient.
+    """
     start, end = window(-10, 8)
     async with connection() as conn:
         first = await shifts.assign_shift(
@@ -276,12 +309,109 @@ async def test_a_verified_flush_permits_the_next_assignment(seed_agent):
         )
         await shifts.flush_phi(conn, office_agent_id=seed_agent, shift_id=first)
 
+        clock.advance()
         next_start, next_end = window(1)
         second = await shifts.assign_shift(
             conn, office_agent_id=seed_agent, venture_id=COLLINGSWOOD,
             shift_start=next_start, shift_end=next_end, assigned_by=OPERATOR,
         )
     assert second != first
+
+
+async def test_a_second_shift_on_the_same_venture_stays_in_the_quarter(seed_agent):
+    """The rule is one venture per agent-quarter, not one shift.
+
+    MORNING and EVENING are separate rows and an agent may hold both. A constraint that
+    forbade that would have been a unique index; this one is an exclusion on disagreeing
+    ventures, and this is the case that tells the two apart.
+    """
+    start, end = window(-10, 8)
+    async with connection() as conn:
+        first = await shifts.assign_shift(
+            conn, office_agent_id=seed_agent, venture_id=MEDLINK,
+            shift_start=start, shift_end=end, assigned_by=OPERATOR,
+        )
+        await shifts.flush_phi(conn, office_agent_id=seed_agent, shift_id=first)
+
+        next_start, next_end = window(1)
+        second = await shifts.assign_shift(
+            conn, office_agent_id=seed_agent, venture_id=MEDLINK,
+            shift_start=next_start, shift_end=next_end, assigned_by=OPERATOR,
+        )
+    assert second != first
+
+
+async def test_a_second_venture_in_one_quarter_is_refused(seed_agent):
+    """C3 — the wider form of the mid-shift switch Part 7.5 rules out.
+
+    `assert_on_shift_for` only ever forbade switching *inside* a shift. An agent could
+    work MedLink in the morning and Collingswood in the evening, flush cleanly between
+    them, and every individual shift was correct. The agent-quarter was not.
+    """
+    start, end = window(-10, 8)
+    async with connection() as conn:
+        first = await shifts.assign_shift(
+            conn, office_agent_id=seed_agent, venture_id=MEDLINK,
+            shift_start=start, shift_end=end, assigned_by=OPERATOR,
+        )
+        # Flushed and verified, so nothing else could refuse this.
+        await shifts.flush_phi(conn, office_agent_id=seed_agent, shift_id=first)
+
+        next_start, next_end = window(1)
+        with pytest.raises(QuarterConflict) as exc:
+            await shifts.assign_shift(
+                conn, office_agent_id=seed_agent, venture_id=COLLINGSWOOD,
+                shift_start=next_start, shift_end=next_end, assigned_by=OPERATOR,
+            )
+
+    assert exc.value.context["held_venture_id"] == MEDLINK
+    assert exc.value.context["quarter"] == "2026Q1"
+
+
+async def test_the_database_refuses_it_too(seed_agent, admin):
+    """The application check names the other venture; this constraint is what holds.
+
+    Written against SQL rather than through `assign_shift`, because a check in one
+    function is a check the second caller forgets and there is not yet a second caller.
+    """
+    start, end = window(-10, 8)
+    async with connection() as conn:
+        await shifts.assign_shift(
+            conn, office_agent_id=seed_agent, venture_id=MEDLINK,
+            shift_start=start, shift_end=end, assigned_by=OPERATOR,
+        )
+
+    later = datetime.now(UTC) + timedelta(hours=20)
+    with pytest.raises(psycopg.errors.ExclusionViolation), admin.cursor() as cur:
+        cur.execute(
+                "INSERT INTO shift_assignment (shift_id, office_agent_id, venture_id, "
+                "shift_start, shift_end, assigned_by, quarter) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            (uuid.uuid4(), seed_agent, COLLINGSWOOD, later,
+             later + timedelta(hours=8), OPERATOR, "2026Q1"),
+        )
+    admin.rollback()
+
+
+async def test_an_unknown_quarter_refuses_rather_than_defaulting(seed_agent, monkeypatch):
+    """A window we cannot name is not a window.
+
+    Defaulting to a wall-clock quarter would be wrong by construction - the Village runs
+    at 5/720 - and remembering the last one is worse: the constraint keeping an agent on
+    one venture would then be enforced against a quarter that may already have rolled.
+    """
+    async def unreachable() -> str:
+        raise village.VillageUnreachableError("connection refused")
+
+    monkeypatch.setattr(village, "quarter", unreachable)
+
+    start, end = window(1)
+    with pytest.raises(QuarterUnknown):
+        async with connection() as conn:
+            await shifts.assign_shift(
+                conn, office_agent_id=seed_agent, venture_id=MEDLINK,
+                shift_start=start, shift_end=end, assigned_by=OPERATOR,
+            )
 
 
 async def test_a_non_phi_venture_is_not_exempt(seed_agent):
@@ -308,9 +438,15 @@ async def test_a_non_phi_venture_is_not_exempt(seed_agent):
 
 # ------------------------------------------------------------------- the boundary
 
-async def test_rotate_performs_the_four_steps_in_order(agent_on_medlink, admin):
-    """S12 — Part 7.5: flush + verify -> re-resolve grants -> switch -> audit."""
+async def test_rotate_performs_the_four_steps_in_order(agent_on_medlink, admin, clock):
+    """S12 — Part 7.5: flush + verify -> re-resolve grants -> switch -> audit.
+
+    Across a quarter boundary, which is where a venture change now happens. The order
+    under test is unchanged: the quarter decides *whether* the rotation is allowed, and
+    the flush is still what makes it safe.
+    """
     agent_id, shift_id = agent_on_medlink
+    clock.advance()
 
     async with connection() as conn:
         # End the current shift so the next one does not overlap.
@@ -355,10 +491,11 @@ async def test_rotate_performs_the_four_steps_in_order(agent_on_medlink, admin):
 
 
 async def test_rotate_stops_at_a_failed_flush_and_creates_no_new_shift(
-    agent_on_medlink, admin, monkeypatch
+    agent_on_medlink, admin, monkeypatch, clock
 ):
     """A failed flush must have nothing to switch into. Verify before switch."""
     agent_id, shift_id = agent_on_medlink
+    clock.advance()
 
     async def still_dirty(conn, office_agent_id):
         return {"phi": 1}
@@ -404,3 +541,27 @@ def test_the_client_library_exposes_no_way_to_skip_a_boundary():
         f"OfficeClient surface changed: {surface}. Anything added here is reachable "
         "by an agent - confirm it cannot affect a shift boundary."
     )
+
+
+async def test_a_refused_rotation_destroys_nothing(agent_on_medlink):
+    """The quarter check runs before the flush, and this is why.
+
+    Flushing first and refusing afterwards would destroy the outgoing venture's working
+    memory on behalf of a rotation that never happened - an irreversible act performed
+    for a request that was about to be denied.
+    """
+    agent_id, shift_id = agent_on_medlink
+
+    async with connection() as conn:
+        before = await phi_rows(conn, agent_id)
+        assert before > 0
+
+        start, end = window(1)
+        with pytest.raises(QuarterConflict):
+            await shifts.rotate(
+                conn, office_agent_id=agent_id, from_shift_id=shift_id,
+                to_venture_id=COLLINGSWOOD, shift_start=start, shift_end=end,
+                assigned_by=OPERATOR,
+            )
+
+        assert await phi_rows(conn, agent_id) == before

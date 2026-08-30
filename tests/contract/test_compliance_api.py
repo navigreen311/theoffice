@@ -87,7 +87,7 @@ async def make(name: str, role: str) -> str:
 
 # ------------------------------------------------------------------ overview
 
-async def test_every_metric_carries_a_real_denominator(world, api):
+async def test_every_metric_carries_a_real_denominator(world, api, admin):
     """The page's own rule, applied to the page.
 
     Each metric is `{value, denominator}` and both come from a count this database can
@@ -105,8 +105,15 @@ async def test_every_metric_carries_a_real_denominator(world, api):
         assert "value" in metric and "denominator" in metric, key
         assert metric["value"] <= metric["denominator"], key
 
-    # The roster is seven fixtures, and the denominator says seven rather than 106.
-    assert body["scorecard"]["agents_with_grants"]["denominator"] == 7
+    # The denominator is the roster this database actually has, not a constant. Counted
+    # rather than written down as 7: the literal passed for the right reason on a clean
+    # database and failed on a dirty one, which is a test that reports the state of the
+    # fixtures rather than the property under test.
+    with admin.cursor() as cur:
+        cur.execute("SELECT count(*) FROM office_agent_identity")
+        known = cur.fetchone()[0]
+    assert known > 0, "nothing to compare a denominator against"
+    assert body["scorecard"]["agents_with_grants"]["denominator"] == known
     assert "roster has not been imported" in body["scorecard"]["agents_with_grants"]["note"]
 
     assert body["scorecard"]["controls_verified"]["denominator"] == len(CONTROL_COPY)

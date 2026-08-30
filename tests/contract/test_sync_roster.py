@@ -46,9 +46,17 @@ VILLAGE_AGENT = {
 
 
 def _wipe(conn: psycopg.Connection) -> None:
+    """Only the rows this file creates.
+
+    An earlier version cleared `office_agent_identity` outright and took out every other
+    suite's grants with it. A test fixture that empties a shared table is a test fixture
+    that fails somebody else's assertions from a different file.
+    """
     with conn.cursor() as cur:
-        cur.execute("DELETE FROM office_agent_identity")
-        cur.execute("DELETE FROM village_agent")
+        cur.execute(
+            "DELETE FROM village_agent WHERE village_agent_ref = %s",
+            (VILLAGE_AGENT["agent_id"],),
+        )
         cur.execute(
             "DELETE FROM office_human_role WHERE human_id IN "
             "(SELECT human_id FROM office_human WHERE email LIKE '%%.sync-test.invalid')"
@@ -181,7 +189,10 @@ async def test_a_failed_sync_leaves_no_half_written_roster(clean, monkeypatch):
             await sync_roster.apply(conn, actor=actor, confirmed=True)
 
     with clean.cursor() as cur:
-        cur.execute("SELECT count(*) FROM village_agent")
+        cur.execute(
+            "SELECT count(*) FROM village_agent WHERE village_agent_ref = %s",
+            (VILLAGE_AGENT["agent_id"],),
+        )
         written = cur.fetchone()[0]
 
     assert written == 0, (
@@ -223,7 +234,10 @@ async def test_a_successful_sync_returns_zero(clean, monkeypatch, capsys):
     assert await cli._sync_roster(confirm=True) == 0
 
     with clean.cursor() as cur:
-        cur.execute("SELECT count(*) FROM village_agent")
+        cur.execute(
+            "SELECT count(*) FROM village_agent WHERE village_agent_ref = %s",
+            (VILLAGE_AGENT["agent_id"],),
+        )
         assert cur.fetchone()[0] == 1
 
 
