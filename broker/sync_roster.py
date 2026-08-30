@@ -194,7 +194,12 @@ async def apply(
                 INSERT INTO village_agent
                   (village_agent_ref, agent_name, department, role_key, reports_to,
                    title, status, source)
-                VALUES (%s, %s, %s, %s, %s, %s, 'active', 'village_api')
+                -- 'import', not 'village_api': village_agent_source_check
+                -- permits only ('import','manual'), and broker/roster.py
+                -- already writes 'import' into this same column. The audit
+                -- event below still records source=village_api, which is
+                -- where that distinction belongs.
+                VALUES (%s, %s, %s, %s, %s, %s, 'active', 'import')
                 ON CONFLICT (village_agent_ref) DO UPDATE SET
                   agent_name = EXCLUDED.agent_name,
                   department = EXCLUDED.department,
@@ -239,8 +244,15 @@ async def apply(
             """
         )
 
-    await conn.commit()
-
+    # The audit entry is written in the same transaction as the rows it describes, and
+    # one commit covers both.
+    #
+    # It used to commit the roster first and then write the audit entry. A failure in
+    # between - and the first run of this hit one, a CHECK on `village_agent.source` -
+    # left the identity table changed with nothing recording who changed it. An
+    # unauditable write to the table that says who may act in this system is the one
+    # outcome this command must not be able to produce, so it is now impossible rather
+    # than unlikely: either both land or neither does.
     await audit.write_event(
         event_type="village_roster_imported",
         actor_type="human",

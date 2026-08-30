@@ -30,6 +30,7 @@ from typing import Any
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 
+from broker import account_origin
 from broker.errors import NotAuthorized
 from broker.revocation import ROLE_RANK
 
@@ -94,8 +95,18 @@ async def create_human(
     async with conn.cursor() as cur:
         await cur.execute(
             "INSERT INTO office_human (human_id, display_name, email, auth_method, "
-            "token_hash) VALUES (%s, %s, %s, %s, %s)",
-            (human_id, display_name, email, auth_method, hash_token(plaintext)),
+            "token_hash, origin) VALUES (%s, %s, %s, %s, %s, %s)",
+            (
+                human_id,
+                display_name,
+                email,
+                auth_method,
+                hash_token(plaintext),
+                # Marked at the moment it is created, by the one classifier. The column
+                # is what attribution reads, and a fixture that arrives unmarked is a
+                # fixture eligible to sign an audit entry.
+                account_origin.origin_of({"display_name": display_name, "email": email}),
+            ),
         )
     await conn.commit()
     return human_id, plaintext
@@ -480,6 +491,57 @@ async def note_seen(conn: AsyncConnection, *, human_id: uuid.UUID) -> None:
             "UPDATE office_human SET last_seen_at = now() WHERE human_id = %s",
             (human_id,),
         )
+
+
+class NoAttributableActorError(Exception):
+    """Nothing could sign this. There is no real account able to act."""
+
+
+async def attributable_actor(
+    conn: AsyncConnection, *, required_role: str = "ivan"
+) -> uuid.UUID:
+    """The person an audited action is recorded against.
+
+    `origin = 'human'` is the condition that matters, and it is why this function exists
+    rather than each caller writing the query. `sync-roster` resolved its actor as "the
+    oldest active account holding ivan", and 222 of the 223 accounts in the development
+    database are smoke fixtures that all hold `ivan`. The real account won that query by
+    being the oldest, which is luck rather than a rule: a re-seed, a restore, or one
+    fixture created a second earlier would have signed a change to the identity table as
+    `smoke-1a2b3c4d`.
+
+    An audit entry signed by a fixture is worthless. Non-repudiation is the whole reason
+    this log exists and it does not survive an actor nobody can call.
+
+    Raises rather than returning None. A caller that treats "nobody could sign this" as a
+    value will eventually write the row anyway with a null actor, and the point is that
+    the write must not happen.
+    """
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            """
+            SELECT h.human_id, h.display_name
+              FROM office_human h
+              JOIN office_human_role r ON r.human_id = h.human_id
+             WHERE r.role = %s
+               AND h.status = 'active'
+               AND h.origin = 'human'
+             ORDER BY h.created_at
+             LIMIT 1
+            """,
+            (required_role,),
+        )
+        row = await cur.fetchone()
+
+    if row is None:
+        raise NoAttributableActorError(
+            f"no active account with origin 'human' holds {required_role!r}. Test "
+            "fixtures are excluded deliberately: an audit entry signed by a fixture "
+            "names nobody who can answer for it. Create a real account first: "
+            "python -m broker human create."
+        )
+    actor_id: uuid.UUID = row["human_id"]
+    return actor_id
 
 
 async def list_humans(conn: AsyncConnection) -> list[dict[str, Any]]:

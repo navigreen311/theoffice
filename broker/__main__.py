@@ -199,27 +199,35 @@ async def _sync_roster(confirm: bool) -> int:
             )
             return 0
 
-        # The audit entry names a person. A sync changes who may act in this system,
-        # so it is attributed to whoever holds the strongest role rather than to the
-        # process - an entry saying "the system did it" is the one nobody can follow up.
-        from psycopg.rows import dict_row
+        # The audit entry names a person, and a real one. This used to be "the oldest
+        # active account holding ivan", which the one real account won by being oldest
+        # while 222 fixtures held the same role.
+        from broker import humans
 
-        async with conn.cursor(row_factory=dict_row) as cur:
-            await cur.execute(
-                "SELECT h.human_id FROM office_human h "
-                "JOIN office_human_role r ON r.human_id = h.human_id "
-                "WHERE r.role = 'ivan' AND h.status = 'active' "
-                "ORDER BY h.created_at LIMIT 1"
-            )
-            row = await cur.fetchone()
-        if row is None:
+        try:
+            actor = await humans.attributable_actor(conn)
+        except humans.NoAttributableActorError as exc:
+            print(f"sync-roster: {exc}")
+            return 1
+
+        # Every failure path returns non-zero. The first run of this command hit a
+        # CHECK constraint and the shell still saw 0, because the only thing standing
+        # between an exception and a zero exit was an unhandled traceback - which a pipe
+        # or a wrapper swallows. A command that writes to the identity table must not be
+        # able to report success it did not have.
+        try:
+            result = await sync_roster.apply(conn, actor=actor, confirmed=True)
+        except sync_roster.SyncError as exc:
+            print(f"sync-roster: {exc}")
+            return 1
+        except Exception as exc:
             print(
-                "sync-roster: no active account holds `ivan`, so there is nobody to "
-                "attribute this to. Create one first: python -m broker human create."
+                f"sync-roster failed: {type(exc).__name__}: {exc}\n"
+                "Nothing was written - the roster and its audit entry are one "
+                "transaction, so a failure rolls both back."
             )
             return 1
 
-        result = await sync_roster.apply(conn, actor=row["human_id"], confirmed=True)
         print(f"\nApplied. {result['new']} new, {result['departed']} departed.")
         return 0
 
