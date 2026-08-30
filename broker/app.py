@@ -85,7 +85,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0025"
+EXPECTED_SCHEMA_REVISION = "0026"
 
 
 @asynccontextmanager
@@ -1571,9 +1571,20 @@ async def pack_version(
 
 @app.get("/api/provisioning/runs")
 async def list_provisioning_runs(
-    conn: DB, _me: ME, venture_id: str | None = Query(default=None)
-) -> list[dict[str, Any]]:
-    return await provisioning.list_runs(conn, venture_id=venture_id)
+    conn: DB,
+    _me: ME,
+    venture_id: str | None = Query(default=None),
+    include_fixtures: bool = Query(default=False),
+) -> dict[str, Any]:
+    """Runs, with smoke-test loops filtered out by default and counted.
+
+    104 of 108 runs here were started by `scripts/console-smoke.sh`, which drives one to
+    gate 4 and aborts it on every invocation. Listed alongside real runs they read as a
+    system that cannot get past gate 4. Nothing is deleted - the filter changes the view.
+    """
+    return await provisioning.list_runs(
+        conn, venture_id=venture_id, include_fixtures=include_fixtures
+    )
 
 
 @app.get("/api/me")
@@ -2906,9 +2917,9 @@ async def compliance_overview(conn: DB, _me: ME) -> dict[str, Any]:
     scorecard assembled from separate calls can show "0 of 5 ventures" beside a list of
     six, and the reader has no way to tell which is wrong.
 
-    **No denominator is hardcoded.** The master prompt describes a Village of 106 agents
+    **No denominator is hardcoded.** The Village currently has 186 agents
     and a portfolio of several ventures; The Office knows about the agents and ventures
-    that have actually reached it. Reporting "0 of 106" against a roster of seven would
+    that have actually reached it. Reporting "0 of 186" against a roster of seven would
     invent a denominator, on the page whose own copy insists on real ones - so the
     counts are what this database can support, and the roster gap is reported as its own
     fact.

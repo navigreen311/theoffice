@@ -336,12 +336,12 @@ export default async function ProvisioningVenturePage({
 }) {
   const venture = decodeURIComponent(params.venture);
 
-  let runs: RunSummary[];
+  let runList: { runs: RunSummary[]; excluded_fixtures: number };
   let pack: PackDetail;
   let me: Me;
   try {
-    [runs, pack, me] = await Promise.all([
-      api.get<RunSummary[]>(
+    [runList, pack, me] = await Promise.all([
+      api.get<{ runs: RunSummary[]; excluded_fixtures: number }>(
         `/api/provisioning/runs?venture_id=${encodeURIComponent(venture)}`,
       ),
       api.get<PackDetail>(`/api/packs/${encodeURIComponent(venture)}`),
@@ -351,6 +351,9 @@ export default async function ProvisioningVenturePage({
     if (error instanceof NotAuthenticated) redirect("/login");
     throw error;
   }
+
+  // The listing filters smoke-test runs out by default and says how many.
+  const runs = runList.runs;
 
   // No Pack and no run is not a venture this screen can act on. Rendering an empty
   // ladder for a mistyped slug would offer a "Start a run" button for a venture that

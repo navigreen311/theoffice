@@ -184,8 +184,17 @@ async def test_publishing_does_not_start_a_run(world, api, pack_yaml):
     token = await make_operator("Pub")
     await _publish(api, token, pack_yaml)
 
-    runs = (await api.get("/api/provisioning/runs", headers=auth(token))).json()
-    assert runs == []
+    # `include_fixtures=true`: this test's operator is a fixture account, so a run it
+    # started would be filtered out of the default view - and this assertion is that no
+    # run was started at all, which the filtered view could not distinguish from one that
+    # was hidden.
+    runs = (
+        await api.get(
+            "/api/provisioning/runs?include_fixtures=true", headers=auth(token)
+        )
+    ).json()
+    assert runs["runs"] == []
+    assert runs["total"] == 0
 
 
 async def test_an_operator_of_another_venture_cannot_publish(world, api, pack_yaml):

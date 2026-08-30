@@ -25,7 +25,7 @@ export const dynamic = "force-dynamic";
  * has seven people. The agents The Office *cannot* appoint are the most consequential
  * rows here: they are the work that has not been done.
  *
- * Every number is computed from the two tables. There is deliberately no hardcoded 106:
+ * Every number is computed from the two tables. There is deliberately no hardcoded total:
  * the blueprint describes a Village of that size and The Office knows what the roster
  * has told it, so an unimported roster says exactly that rather than inventing a
  * denominator — the same rule the Compliance page set.
@@ -224,8 +224,8 @@ export default async function AgentsPage({
       </div>
 
       {/*
-        The roster gap, stated. Deliberately not "7 of 106": the blueprint describes a
-        Village of 106 and this database knows what the roster has told it. Reporting a
+        The roster gap, stated. Deliberately not "7 of 186": the Village has
+        186 agents and this database knows what the roster has told it. Reporting a
         denominator nothing here can support would be inventing one — so an unimported
         roster says so, and says what that means.
       */}

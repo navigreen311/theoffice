@@ -195,7 +195,8 @@ async def _gate_3(ctx: _Context) -> GateOutcome:
     return GateOutcome(
         "3", PASSED,
         f"{len(artifacts.workflow.steps)} workflow step(s), "
-        f"{len(artifacts.task_ledger.tasks)} task(s)",
+        f"{sum(artifacts.approval_projection.projected_daily_approvals.values())} "
+        f"projected daily approval(s)",
         {
             "artifacts_hash": artifacts_hash(artifacts),
             "positions": len(artifacts.roles.positions),
@@ -292,7 +293,7 @@ async def _gate_4(ctx: _Context) -> GateOutcome:
 async def _gate_4_5(ctx: _Context) -> GateOutcome:
     artifacts = ctx.require_artifacts()
     report = await validate_gate_4_5(
-        ctx.pack.pack, artifacts.task_ledger, artifacts.appointment
+        ctx.pack.pack, artifacts.approval_projection, artifacts.appointment
     )
     failures = report.failures
     evidence = {r.rule_id: r.message for r in report.results}
@@ -1124,24 +1125,60 @@ async def get_run(conn: AsyncConnection, run_id: uuid.UUID) -> RunState | None:
 
 
 async def list_runs(
-    conn: AsyncConnection, *, venture_id: str | None = None
-) -> list[dict[str, Any]]:
-    """Runs, newest first, with how far each got."""
+    conn: AsyncConnection,
+    *,
+    venture_id: str | None = None,
+    include_fixtures: bool = False,
+) -> dict[str, Any]:
+    """Runs, newest first, with how far each got and who started it.
+
+    104 of the 108 runs in the development database are smoke-test loops: every run of
+    `scripts/console-smoke.sh` starts one, drives it to gate 4 and aborts it. A history
+    that lists them alongside real runs makes "83 runs stopped at gate 4" read as a
+    system in trouble rather than as a test fixture doing its job.
+
+    Marked by the account that started the run, not by guessing at the shape - the smoke
+    loop does have a shape, but a shape can be coincidental and an actor cannot. Nothing
+    is deleted: a provisioning run is a record of an attempt, and filtering changes the
+    view rather than the record.
+    """
+    from broker import account_origin
+
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
             """
             SELECT r.run_id::text AS run_id, r.venture_id, r.pack_version, r.pack_hash,
                    r.status, r.current_gate, r.artifacts_hash, r.started_at,
-                   r.completed_at,
+                   r.completed_at, r.started_by::text AS started_by,
+                   h.display_name AS started_by_name, h.email AS started_by_email,
                    (SELECT count(*) FROM provisioning_gate_result g
                      WHERE g.run_id = r.run_id AND g.verdict = 'passed') AS gates_passed
             FROM provisioning_run r
+            LEFT JOIN office_human h ON h.human_id = r.started_by
             WHERE (%s::text IS NULL OR r.venture_id = %s)
             ORDER BY r.started_at DESC
             """,
             (venture_id, venture_id),
         )
-        return [dict(r) for r in await cur.fetchall()]
+        rows = [dict(r) for r in await cur.fetchall()]
+
+    for row in rows:
+        row["fixture"] = account_origin.origin_of({
+            "display_name": row.get("started_by_name"),
+            "email": row.get("started_by_email"),
+        }) == account_origin.TEST_FIXTURE
+
+    excluded = 0
+    if not include_fixtures:
+        before = len(rows)
+        rows = [row for row in rows if not row["fixture"]]
+        excluded = before - len(rows)
+
+    return {
+        "runs": rows,
+        "total": len(rows),
+        "excluded_fixtures": excluded,
+    }
 
 
 async def sign_off_run(

@@ -201,28 +201,21 @@ class Workflow(Artifact):
 # -------------------------------------------------------------------- 5.4 Task Ledger
 
 @dataclass(frozen=True, slots=True)
-class LedgerTask:
-    task_id: str
-    step_number: int
-    position: str
-    assigned_agent: str | None
-    forge_id: str
-    module_id: str
-    trust_tier: str
-    compliance_flags: list[str]
-    sla_minutes: int
-    expected_daily_volume: int
-    idempotency_class: str
+class ApprovalProjection(Artifact):
+    """What the humans will be asked to decide, per day, per role.
 
+    This replaced `TaskLedger`. The ledger carried task ids, owners, SLAs, per-task
+    volumes and assignment - all of it The Office deciding what an agent does and when,
+    which is the Village Decomposer's job. Two systems producing tasks with no
+    arbitration between them is one too many.
 
-@dataclass(frozen=True, slots=True)
-class TaskLedger(Artifact):
+    The projection is what survived, because it is not about agent work at all: it is
+    about human capacity, and it is the sole input to validator rule V13. Deleting it
+    with the rest of the ledger would have deleted Gate 4.5's capacity check.
+    """
+
     venture_id: str
-    tasks: list[LedgerTask]
     projected_daily_approvals: dict[str, int]
-    """Per human role. 5.4 names this a required additional output, and it is the
-    input to validator rule V13 - approval volume no human can absorb is what makes
-    a trust tier decorative."""
 
 
 # --------------------------------------------------------------------- 5.5 Curriculum
@@ -358,7 +351,7 @@ class GeneratedArtifacts(Artifact):
     roles: RoleDefinition
     appointment: Appointment
     workflow: Workflow
-    task_ledger: TaskLedger
+    approval_projection: ApprovalProjection
     curriculum: ScenarioPack
     forge_manifest: ForgeManifest
     runtime_config: RuntimeConfig

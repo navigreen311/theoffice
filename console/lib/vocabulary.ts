@@ -200,7 +200,7 @@ export function readable(value: string): string {
  * attaches on first use.
  */
 export const DOMAIN: Record<string, string> = {
-  Village: "The 106 AI workers, organised into 12 departments",
+  Village: "The 186 AI workers, organised into 12 departments",
   Forge: "A piece of business software agents operate — CapitalForge, VoiceForge, and six others",
   Pack: "The form describing one business; everything else is generated from it",
   Gate: "One of 17 checkpoints between a Pack and a live business",

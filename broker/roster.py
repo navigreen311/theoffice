@@ -10,7 +10,7 @@ Two counts, and the difference is the point:
   office_agent_identity    who The Office can appoint, grant and certify.
 
 An agent in the first and not the second is visible but unappointable. That is the state
-99 of the blueprint's 106 agents are in, and a page rendering seven rows says the
+179 of the Village's 186 agents are in, and a page rendering seven rows says the
 opposite.
 
 Nothing here creates an agent. `issue_identity` makes an existing Village agent
@@ -372,7 +372,7 @@ async def directory(
     Every count here comes from the two tables. When no roster has been imported the
     roster total is zero and the page says the roster is unknown - which is a different
     statement from "the Village has seven agents", and is the reason this is not a
-    hardcoded 106.
+    hardcoded agent count.
     """
 
     # The Village's list when it can be reached; otherwise whatever the roster itself

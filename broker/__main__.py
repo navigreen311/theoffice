@@ -153,6 +153,77 @@ async def _bootstrap_human(name: str, email: str, role: str) -> int:
     return 0
 
 
+async def _sync_roster(confirm: bool) -> int:
+    """Diff the Village roster against The Office, and apply only when told to.
+
+    Run without `--confirm` this reads both sides and prints what would change. That is
+    the normal way to run it: the destructive half of a sync is a departure, which
+    revokes whatever grants the departed agent held, and nobody should discover that
+    from a summary printed after the fact.
+    """
+    from broker import sync_roster
+    from broker.db import connection
+
+    async with connection() as conn:
+        try:
+            diff = await sync_roster.diff(conn)
+        except sync_roster.SyncError as exc:
+            print(f"sync-roster: {exc}")
+            return 1
+
+        print(f"Village {diff.village_total} agents · Office {diff.office_total} known")
+        if diff.empty:
+            print("No change.")
+            return 0
+
+        for kind, heading in (
+            ("new", "New in the Village"),
+            ("departed", "Gone from the Village"),
+            ("department", "Changed department"),
+            ("role", "Changed role"),
+            ("reporting", "Changed manager"),
+        ):
+            rows = diff.of(kind)
+            if not rows:
+                continue
+            print(f"\n{heading} ({len(rows)})")
+            for change in rows[:40]:
+                print(f"  {change.agent_name:28} {change.detail}")
+            if len(rows) > 40:
+                print(f"  ... and {len(rows) - 40} more")
+
+        if not confirm:
+            print(
+                "\nNothing was applied. Re-run with --confirm to write these changes.\n"
+                "A departure revokes the grants that agent held."
+            )
+            return 0
+
+        # The audit entry names a person. A sync changes who may act in this system,
+        # so it is attributed to whoever holds the strongest role rather than to the
+        # process - an entry saying "the system did it" is the one nobody can follow up.
+        from psycopg.rows import dict_row
+
+        async with conn.cursor(row_factory=dict_row) as cur:
+            await cur.execute(
+                "SELECT h.human_id FROM office_human h "
+                "JOIN office_human_role r ON r.human_id = h.human_id "
+                "WHERE r.role = 'ivan' AND h.status = 'active' "
+                "ORDER BY h.created_at LIMIT 1"
+            )
+            row = await cur.fetchone()
+        if row is None:
+            print(
+                "sync-roster: no active account holds `ivan`, so there is nobody to "
+                "attribute this to. Create one first: python -m broker human create."
+            )
+            return 1
+
+        result = await sync_roster.apply(conn, actor=row["human_id"], confirmed=True)
+        print(f"\nApplied. {result['new']} new, {result['departed']} departed.")
+        return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="broker")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -182,6 +253,16 @@ def main() -> int:
                                            "venture_operator"),
     )
 
+    sr = sub.add_parser(
+        "sync-roster",
+        help="Diff the Village roster against The Office; apply with --confirm",
+    )
+    sr.add_argument(
+        "--confirm",
+        action="store_true",
+        help="Apply the diff. Without this the command only reports what would change.",
+    )
+
     args = parser.parse_args()
     if args.command == "serve":
         return _serve(args.host, args.port, args.reload)
@@ -189,6 +270,8 @@ def main() -> int:
         return asyncio.run(_sweep(args.restore_drill))
     if args.command == "health":
         return asyncio.run(_health())
+    if args.command == "sync-roster":
+        return asyncio.run(_sync_roster(args.confirm))
     if args.command == "human":
         return asyncio.run(_bootstrap_human(args.name, args.email, args.role))
     return 2

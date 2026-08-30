@@ -121,7 +121,7 @@ async def test_no_uuid4_leaks_into_an_artifact(artifacts):
 
 @pytest.mark.parametrize(
     "name",
-    ["roles", "appointment", "workflow", "task_ledger", "curriculum",
+    ["roles", "appointment", "workflow", "approval_projection", "curriculum",
      "forge_manifest", "runtime_config"],
 )
 async def test_golden_snapshot(artifacts, name):
@@ -219,21 +219,45 @@ async def test_workflow_steps_follow_the_declared_stage_order(artifacts):
     assert ordered == sorted(ordered, key=lambda s: first_seen[s])
 
 
-async def test_task_ledger_projects_daily_approvals_per_human_role(artifacts):
-    """G8 — 5.4 names this a required output; it is V13's input."""
-    approvals = artifacts.task_ledger.projected_daily_approvals
-    assert approvals, "no approval projection - V13 has nothing to check"
-    assert all(isinstance(v, int) and v > 0 for v in approvals.values())
-    # Only sub-auto_execute tasks generate approvals.
-    assert any(t.trust_tier != "auto_execute" for t in artifacts.task_ledger.tasks)
+async def test_the_projection_counts_approvals_per_human_role(artifacts):
+    """V13's only input, and the reason the Task Ledger Generator was not deleted whole.
+
+    The ledger produced tasks with owners, priorities and SLAs, which is the Village
+    Decomposer's job. This number is not about agent work: it is how many decisions a
+    human will be handed per day, and no part of the Village has an opinion about how
+    many a compliance officer can absorb before they stop reading them.
+    """
+    approvals = artifacts.approval_projection.projected_daily_approvals
+
+    assert approvals, "no role is projected to receive any approval"
+    assert all(isinstance(count, int) and count > 0 for count in approvals.values())
+    # Every role named must be one the Pack actually staffs; a projection against a role
+    # with no coverage hours divides by zero in V13 and reads as infinite overload.
+    assert set(approvals) <= {"venture_operator", "compliance_officer"}
 
 
-async def test_at_most_once_module_carries_its_idempotency_class(artifacts):
-    """generate_loi is registered at_most_once. The ledger must say so, because the
-    call path refuses to auto-retry it."""
-    loi = [t for t in artifacts.task_ledger.tasks if t.module_id == "generate_loi"]
-    assert loi
-    assert all(t.idempotency_class == "at_most_once" for t in loi)
+async def test_the_projection_carries_no_task_shaped_fields(artifacts):
+    """The half that was deleted, asserted absent.
+
+    A field that quietly came back would put The Office back in the business of deciding
+    what an agent does and when, next to a Village that is already deciding it.
+    """
+    projection = artifacts.approval_projection
+    for gone in ("tasks", "sla_minutes", "assigned_agent", "priority", "task_id"):
+        assert not hasattr(projection, gone), (
+            f"{gone!r} is back on the approval projection; assignment is the Village's"
+        )
+
+
+# `test_at_most_once_module_carries_its_idempotency_class` was here. It asserted that the
+# Task Ledger copied a module's retry class onto each task, and there are no tasks any
+# more - the Village Decomposer owns work assignment.
+#
+# The property it existed to protect is untouched and is tested where it is enforced:
+# `tests/contract/test_call_path.py::test_at_most_once_replay_escalates_instead_of_retrying`
+# reads `forge_module_registry` and asserts the call path escalates to a human rather
+# than retrying. That is the behaviour that matters; the ledger only ever carried a copy
+# of the fact.
 
 
 async def test_curriculum_states_a_denominator_for_every_dimension(artifacts):
@@ -282,7 +306,7 @@ async def test_gate_4_5_catches_what_gate_2_could_not(artifacts, greenstone_worl
     gate_2 = await validate(pack)
     assert gate_2.get("V13").verdict.value == "PASS", "Gate 2 estimate is optimistic"
 
-    gate_45 = await validate_gate_4_5(pack, artifacts.task_ledger, artifacts.appointment)
+    gate_45 = await validate_gate_4_5(pack, artifacts.approval_projection, artifacts.appointment)
     v13 = gate_45.get("V13")
     assert v13.verdict.value == "FAIL", (
         "Greenstone as authored routes more approvals to its compliance officer than "
@@ -307,7 +331,7 @@ async def test_gate_4_5_resolves_v24(artifacts, greenstone_world):
     from generators.validator import validate_gate_4_5
 
     pack = load_pack(PACK_PATH)
-    gate_45 = await validate_gate_4_5(pack, artifacts.task_ledger, artifacts.appointment)
+    gate_45 = await validate_gate_4_5(pack, artifacts.approval_projection, artifacts.appointment)
     assert gate_45.get("V24").verdict.value == "PASS", "all positions were filled"
 
 

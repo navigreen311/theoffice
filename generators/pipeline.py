@@ -18,6 +18,9 @@ from generators import (
     appointment as appointment_gen,
 )
 from generators import (
+    approval_projection as approvals_gen,
+)
+from generators import (
     curriculum as curriculum_gen,
 )
 from generators import (
@@ -28,9 +31,6 @@ from generators import (
 )
 from generators import (
     runtime_config as runtime_gen,
-)
-from generators import (
-    task_ledger as ledger_gen,
 )
 from generators import (
     workflow as workflow_gen,
@@ -68,28 +68,26 @@ async def run_all(pack: BusinessPack, conn: AsyncConnection) -> GeneratedArtifac
     )
     workflow = workflow_gen.generate(pack, roles)
 
-    idempotency = await _idempotency_classes(conn)
-    task_ledger = ledger_gen.generate(
-        pack, roles, workflow, appointment,
-        module_forge=module_forge, idempotency_by_module=idempotency,
-    )
+    # The projection counts human decisions and needs neither the Forge each module
+    # sits on nor its retry class - both were per-task facts, and there are no tasks.
+    approval_projection = approvals_gen.generate(pack, roles, workflow, appointment)
 
     curriculum = await curriculum_gen.generate(pack, roles, workflow, appointment, conn)
-    forge_manifest = manifest_gen.generate(pack, workflow, task_ledger)
+    forge_manifest = manifest_gen.generate(pack, workflow)
     runtime = runtime_gen.generate(
         pack, roles, appointment, forge_manifest, module_forge=module_forge
     )
 
     # Gate 4.5 re-checks capacity against the real Task Ledger. V13 at Gate 2 could
     # only estimate from the Pack, and that estimate is the optimistic one.
-    gate_4_5 = await validate_gate_4_5(pack, task_ledger, appointment)
+    gate_4_5 = await validate_gate_4_5(pack, approval_projection, appointment)
 
     return GeneratedArtifacts(
         venture_id=pack.venture_id,
         roles=roles,
         appointment=appointment,
         workflow=workflow,
-        task_ledger=task_ledger,
+        approval_projection=approval_projection,
         curriculum=curriculum,
         forge_manifest=forge_manifest,
         runtime_config=runtime,

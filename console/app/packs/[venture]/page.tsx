@@ -34,11 +34,11 @@ export default async function PackEditorPage({
   const venture = decodeURIComponent(params.venture);
 
   let detail: PackDetail;
-  let runs: RunSummary[];
+  let runList: { runs: RunSummary[]; excluded_fixtures: number };
   try {
-    [detail, runs] = await Promise.all([
+    [detail, runList] = await Promise.all([
       api.get<PackDetail>(`/api/packs/${encodeURIComponent(venture)}`),
-      api.get<RunSummary[]>(
+      api.get<{ runs: RunSummary[]; excluded_fixtures: number }>(
         `/api/provisioning/runs?venture_id=${encodeURIComponent(venture)}`,
       ),
     ]);
@@ -46,6 +46,9 @@ export default async function PackEditorPage({
     if (error instanceof NotAuthenticated) redirect("/login");
     throw error;
   }
+
+  // The listing filters smoke-test runs out by default and says how many.
+  const runs = runList.runs;
 
   // A venture with neither a Pack nor a run is not a venture this screen knows about.
   // Rendering an empty editor for a mistyped slug would invite publishing a Pack under

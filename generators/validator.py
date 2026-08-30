@@ -832,7 +832,7 @@ def rule_severity(rule_id: str) -> Severity:
 # ------------------------------------------------------------------------ Gate 4.5
 
 async def validate_gate_4_5(
-    pack: BusinessPack, task_ledger: Any, appointment: Any
+    pack: BusinessPack, approval_projection: Any, appointment: Any
 ) -> ValidationReport:
     """Gate 4.5 — capacity and budget feasibility, against real generator output.
 
@@ -878,7 +878,7 @@ async def validate_gate_4_5(
     # do the arithmetic before they can tell whether it matters. The numbers all survive;
     # what changes is that they arrive inside a sentence that says what they mean.
     overloaded = []
-    for role, approvals in sorted(task_ledger.projected_daily_approvals.items()):
+    for role, approvals in sorted(approval_projection.projected_daily_approvals.items()):
         each = review_minutes_by_role.get(role, 5.0)
         needed = approvals * each
         available = coverage_by_role.get(role, 0.0)

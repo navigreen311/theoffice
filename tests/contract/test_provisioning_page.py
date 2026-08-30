@@ -359,5 +359,11 @@ async def test_history_lists_every_run_not_just_the_latest(api, world):
 
 
 async def _latest(conn) -> uuid.UUID:
-    runs = await provisioning.list_runs(conn, venture_id=VENTURE)
+    # These tests start their own runs from a fixture account, so they ask for
+    # fixtures explicitly - otherwise the helper filters out the very runs the
+    # test just created.
+    listing = await provisioning.list_runs(
+        conn, venture_id=VENTURE, include_fixtures=True
+    )
+    runs = listing["runs"]
     return uuid.UUID(runs[0]["run_id"])
