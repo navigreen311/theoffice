@@ -153,6 +153,71 @@ async def _bootstrap_human(name: str, email: str, role: str) -> int:
     return 0
 
 
+async def _bootstrap_phase0(venture_id: str, ref: str | None, confirm: bool) -> int:
+    """Put one agent on the path so the first real call can be made.
+
+    Reports what it would do unless `--confirm` is given. The thing being issued is
+    authority to call a Forge, and that should never happen as a side effect of running
+    a command to see what it does.
+    """
+    from broker import bootstrap_phase0, humans
+    from broker.db import connection
+
+    async with connection() as conn:
+        try:
+            actor = await humans.attributable_actor(conn)
+        except humans.NoAttributableActorError as exc:
+            print(f"bootstrap-phase0: {exc}")
+            return 1
+
+        human = await humans.get_human(conn, actor)
+        if human is None:
+            print("bootstrap-phase0: the attributed account could not be loaded")
+            return 1
+
+        try:
+            detail = await bootstrap_phase0.plan(conn, ref=ref)
+        except bootstrap_phase0.BootstrapError as exc:
+            print(f"bootstrap-phase0: {exc}")
+            return 1
+
+        agent = detail["agent"]
+        print(
+            f"Agent    {agent['agent_name']} ({agent['village_agent_ref']}) · "
+            f"{agent['department']} · {agent['role_key']}"
+        )
+        print(f"Forge    {detail['forge_id']} {detail['forge']['api_version']} "
+              f"· {detail['forge']['health_status']} · {detail['forge']['base_url']}")
+        print(f"Module   {detail['module_id']} at tier {detail['tier']}")
+        print(f"Actor    {human.display_name}")
+        print(f"Venture  {venture_id}")
+
+        if not confirm:
+            print(
+                "\nNothing was written. Re-run with --confirm to issue the identity, "
+                "two certifications, one grant and one shift.\n"
+                "Every row is marked as a Phase 0 bootstrap: it is what makes the first "
+                "call possible, not evidence that the provisioning ladder was run."
+            )
+            return 0
+
+        try:
+            result = await bootstrap_phase0.apply(
+                conn, human=human, venture_id=venture_id, ref=ref, confirmed=True
+            )
+        except bootstrap_phase0.BootstrapError as exc:
+            print(f"bootstrap-phase0: {exc}")
+            return 1
+        except Exception as exc:
+            print(f"bootstrap-phase0 failed: {type(exc).__name__}: {exc}")
+            return 1
+
+    print("\nIssued.")
+    for key in ("office_agent_id", "grant_id", "unit_a_cert", "unit_b_cert", "shift_id"):
+        print(f"  {key:18} {result[key]}")
+    return 0
+
+
 async def _sync_roster(confirm: bool) -> int:
     """Diff the Village roster against The Office, and apply only when told to.
 
@@ -271,6 +336,22 @@ def main() -> int:
         help="Apply the diff. Without this the command only reports what would change.",
     )
 
+    bp = sub.add_parser(
+        "bootstrap-phase0",
+        help="Issue one identity, certification pair, grant and shift for the first call",
+    )
+    bp.add_argument(
+        "--venture", default="greenstone", help="Venture the grant and shift are for"
+    )
+    bp.add_argument(
+        "--agent", default=None,
+        help="Village agent ref. Defaults to the lowest-ranked active engineer.",
+    )
+    bp.add_argument(
+        "--confirm", action="store_true",
+        help="Actually issue. Without this the command only reports what it would do.",
+    )
+
     args = parser.parse_args()
     if args.command == "serve":
         return _serve(args.host, args.port, args.reload)
@@ -280,6 +361,10 @@ def main() -> int:
         return asyncio.run(_health())
     if args.command == "sync-roster":
         return asyncio.run(_sync_roster(args.confirm))
+    if args.command == "bootstrap-phase0":
+        return asyncio.run(
+            _bootstrap_phase0(args.venture, args.agent, args.confirm)
+        )
     if args.command == "human":
         return asyncio.run(_bootstrap_human(args.name, args.email, args.role))
     return 2

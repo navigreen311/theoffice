@@ -145,6 +145,11 @@ EVENTS: tuple[Event, ...] = (
     Event("bootstrap_human_created", "First operator created",
           "The account that removed the need for a shell to create the second one.",
           "broker.humans", SYSTEM),
+    Event("grant_issued", "Grant issued",
+          "An agent was given authority to call one Forge module for one venture. "
+          "Normally written at the end of the provisioning ladder; a Phase 0 bootstrap "
+          "grant carries bootstrap: true in its subject and is not evidence the ladder "
+          "was run.", "broker.bootstrap_phase0", SYSTEM),
     Event("office_identity_issued", "Office identity issued",
           "A Village agent was given an identity in The Office. The Office appoints; it "
           "does not create agents.", "broker.roster", SYSTEM),
