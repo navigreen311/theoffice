@@ -32,6 +32,7 @@ from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 
 CERTIFIED = "certified"
+PROVISIONAL = "provisional"
 STALE_INSTRUCTIONS = "stale_instructions"
 STALE_FORGE = "stale_forge"
 IN_TRAINING = "in_training"
@@ -39,10 +40,36 @@ NEVER_CERTIFIED = "never_certified"
 FAILED = "failed"
 REVOKED = "revoked"
 
+#: Every state the `certification.state` CHECK constraint admits, in the order a
+#: reader needs them: earned, withheld, gone stale, in flight, absent, failed, voided.
+#: Migration 0029 is the constraint; this is the same list in Python, and
+#: `tests/contract/test_simforge_vocabulary.py` fails if the two disagree.
+ALL_STATES = (
+    CERTIFIED,
+    PROVISIONAL,
+    STALE_INSTRUCTIONS,
+    STALE_FORGE,
+    IN_TRAINING,
+    NEVER_CERTIFIED,
+    FAILED,
+    REVOKED,
+)
+
+#: The only state that permits assignment. `resolve_grant` compares against
+#: `certified` directly; this exists so the fact is assertable rather than implied
+#: by an equality check buried in a query.
+ASSIGNABLE_STATES = frozenset({CERTIFIED})
+
 # SimForge verdict -> Office certification state. Explicit rather than derived, so
 # adding a verdict is a decision someone makes rather than a default that happens.
+#
+# PROVISIONAL is SimForge's Rev-2 governance hold: the agent passed the threshold but
+# the rubric did not discriminate, or a required never-do dimension went untested. It
+# maps to its own state rather than onto one of the others because every candidate is
+# wrong in a way that matters - see migration 0029. It is not assignable.
 VERDICT_TO_STATE = {
     "PASS": CERTIFIED,
+    "PROVISIONAL": PROVISIONAL,
     "FAIL": FAILED,
     "TIMEOUT": IN_TRAINING,
     "NOT_RUN": NEVER_CERTIFIED,
@@ -159,6 +186,20 @@ async def record_result(
             "a certified result must record the instruction hash, Forge api_version "
             "and certified tier it was earned against; otherwise staleness is "
             "uncomputable and the certification is permanent by accident"
+        )
+
+    # A provisional hold ran against a specific text and a specific Forge version, so
+    # its staleness is computable and must stay so - a hold that outlives the
+    # instructions it was measured against is a hold nobody can resolve or clear.
+    #
+    # No `certified_tier` is required: certification was WITHHELD, so there is no
+    # certified tier, and demanding one here would invite a placeholder that a later
+    # reader takes for a real cap.
+    if state == PROVISIONAL and not (instruction_content_hash and forge_api_version):
+        raise CertificationError(
+            "a provisional result must record the instruction hash and Forge "
+            "api_version its battery ran against; a hold whose basis is unknown "
+            "cannot be recomputed and cannot be cleared"
         )
 
     conflict = (

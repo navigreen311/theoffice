@@ -1,0 +1,2584 @@
+# COMPLIANCE LIBRARY — Burkham Wickmont
+#
+# ONE ENTRY IS WRITTEN. NINE ARE TEMPLATES FOR YOU TO FILL IN.
+#
+# ---------------------------------------------------------------------------
+# WHY THIS FILE EXISTS
+#
+#   Burkham's Pack declares ten compliance frameworks, each with a runtime_flag.
+#   The Compliance Library has no entry for any of them, so all ten flags reach an
+#   agent as a bare string — `per_pull_authorization_required` — with no condition,
+#   no instruction, no escalation point and no citation behind it.
+#
+#   That is the "Documented." stub, one layer over. An entry that exists and says
+#   nothing resolves the Pack's library_entry_ref, satisfies validator rule V28, and
+#   clears Gate 6 — while the agent reading it learns nothing it can act on. The
+#   claim of coverage becomes machine-verified and false.
+#
+#   `broker/compliance_quality.py` now refuses that shape. Run it before loading:
+#
+#       python -m scripts.check_compliance_library packs/compliance-library/*.yaml
+#
+# ---------------------------------------------------------------------------
+# THE SIX FIELDS, AND THE THREE THAT ARE EASY TO GET WRONG
+#
+#   entry_ref     The stable id a Pack resolves against. Never reuse or renumber:
+#                 a Pack pinned to `compliance/glba-plaid-v1` must keep meaning what
+#                 it meant. A changed rule is a NEW entry at -v2.
+#
+#   framework     One value from the Pack schema's ComplianceFramework enum.
+#
+#   jurisdiction  A list. `["FEDERAL"]`, `["ALL"]`, or two-letter state codes.
+#                 This decides whether the entry binds a given client at all.
+#
+#   The three below answer three DIFFERENT questions, and the common failure is
+#   answering the first one three times.
+#
+#   applicability_rule
+#       WHEN does this bind? A condition an agent can evaluate against the case in
+#       front of it. Not "this applies to bank data" — that is a topic. Write the
+#       circumstance: "when the client connects a bank account through Plaid".
+#
+#   agent_behavior_implication
+#       WHAT DOES THE AGENT DO DIFFERENTLY? This is the whole point of the entry and
+#       the field most often filled with a restatement of the law. If you could delete
+#       this field and the agent would behave identically, it is not written yet.
+#       It must contain an instruction: must / must not / obtain / record / refuse.
+#
+#   escalation_trigger
+#       WHEN DOES THE AGENT STOP and hand to a human? Also a condition. "Escalate as
+#       needed" is not one.
+#
+#   citation      A statute, section, rule or URL. A framework name is not a citation:
+#                 an agent asked "on what authority" cannot answer from "GLBA".
+#
+#   runtime_flag  Must match the Pack's `compliance_surface[].runtime_flag` EXACTLY.
+#                 The flag is the join between the Pack and this entry; a typo means
+#                 the Pack declares a framework that resolves to nothing.
+#
+#   depends_on    OPTIONAL, authoring-file only, never POSTed. What must exist
+#                 elsewhere before this entry can actually fire. An entry that defers
+#                 to a per-jurisdiction variant, an approved phrase, or a capability
+#                 declares it here:
+#
+#                   depends_on:
+#                     - kind: state_activation
+#                       description: >-
+#                         One sentence on what "satisfied" means for this dependency.
+#                       required_for: [CA, NY, UT]
+#                       satisfied_for: []
+#                       blocking: true
+#
+#                 `check_compliance_library.py` refuses `status: approved` while any
+#                 blocking dependency is unmet, and reports BLOCKED. This is the
+#                 `status: draft` guard one layer out: a draft entry is honest about
+#                 not being ready, and an approved entry that cannot fire is not.
+#
+#                 `satisfied_for` is maintained by hand, because this checker runs
+#                 without a database on purpose. Update it as states go live.
+#
+# ---------------------------------------------------------------------------
+# AMENDMENT HISTORY — THERE IS NONE. Read this before promising one.
+#
+#   An entry loosened later cannot currently be reconstructed as it was.
+#
+#   `compliance_library_entry` has `entry_ref` as its PRIMARY KEY, no version column,
+#   and `author_compliance_entry` writes ON CONFLICT DO UPDATE. An amendment
+#   OVERWRITES the prior text in place. The audit entry that accompanies it carries
+#   only `entry_ref` and `runtime_flag` — that the entry changed, never what it
+#   changed from or to.
+#
+#   Two consequences worth having in front of you while writing:
+#
+#   1. The Compliance Library lives in THE OFFICE, not the Console. An amendment
+#      never reaches the Console's Event Ledger. It lands in the Office audit_log,
+#      which is correct — the library is portfolio-wide — but a note promising an
+#      Event Ledger record is naming the wrong store.
+#
+#   2. Certifications bind to an instruction set's `content_hash`, so rewriting
+#      instructions makes every certification against them stale. NOTHING equivalent
+#      exists for a library entry. Loosen one and it silently changes what "compliant"
+#      meant for every deliverable already assessed against it, retroactively, with no
+#      staleness signal anywhere.
+#
+#   Until that is fixed, THIS FILE is the amendment history: it is version-controlled,
+#   the diff is the record, and an entry's `notes` are where the reasoning lives. Keep
+#   the file as the source of truth and load FROM it — never edit an entry directly
+#   through the API, or the only history there is disappears.
+#
+#   The Console's own Marketing Claim Library does have `version` and a `deprecate`
+#   lifecycle. The gap is on the Office side only.
+#
+# ---------------------------------------------------------------------------
+# CONTROLS THAT ARE REFERENCED BUT HAVE NO CONTENT
+#
+#   Two have been found while writing these entries. Both were cited AS COVERAGE —
+#   in this library and in the specifications — and neither exists. They are listed
+#   here because the failure is a pattern rather than two accidents, and because an
+#   entry that leans on one is claiming a protection nobody has written.
+#
+#   THE FUNDING ETHICS FIREWALL'S FIVE ETHICAL RULES.
+#
+#     blueprint-v2 §6.2: "Automated enforcement of five ethical rules on placement
+#     eligibility." That sentence is the ONLY mention of them across both reference
+#     documents, 1,807 lines. They are never enumerated.
+#
+#     Nor implemented. `packages/firewall/src/index.ts` exposes status, trigger,
+#     clear and evaluate: a per-client triggered/clear flag whose `trigger` takes an
+#     arbitrary `reason` string, plus the Decision E coupling to compliance state.
+#     A flag a human or an agent sets — not five conditions evaluated. The package
+#     has exactly one commit, the original walking-skeleton spine, and has not been
+#     revisited. Git history shows the phrase entering with the specification and
+#     never being elaborated. There is no ethics or firewall service in CapitalForge
+#     either.
+#
+#     The reliance is wide. The Firewall is named 21 times across the two reference
+#     documents, is a declared dependency of the Recommendation Engine (5.3), Risk &
+#     Defense (6.1) and Do Not Fund Governance (6.4), is given precedence over ALL
+#     placement modules by design principle 7, and sits at step 4 of the middleware
+#     chain that every client-facing action passes through.
+#
+#     The count is what made it citable. "Five rules" reads as a known set, so an
+#     author reaches for "rule 4" — which is what happened in
+#     compliance/client-interest-standard-v1 before review. An unenumerated control
+#     with a number attached is worse than one with no number: the number implies
+#     somebody wrote them down.
+#
+#   THE FUNDING READINESS SCORE'S COMPONENTS.
+#
+#     Three mentions across both documents, none of them a specification: an Event
+#     Ledger event type, one line in a flow diagram, and a KPI. No module section,
+#     no component list. The phrase "eight components" appears in no document, and
+#     no scorer with eight components exists in any repository — CapitalForge has a
+#     five-component scorer and a separate four-dimension one.
+#
+#   WHAT TO DO WITH THEM. Neither is a library entry's job to fix. Both are recorded
+#   as `depends_on` on the entries that need them, so an entry cannot reach
+#   `approved` while leaning on something unwritten. Enumerating the five rules and
+#   specifying the score's components are specification work, and until that lands
+#   an entry must say "held by this entry and human judgement" rather than "covered
+#   by the Firewall".
+#
+# ---------------------------------------------------------------------------
+# A TEST FOR WHETHER AN ENTRY IS FINISHED
+#
+#   Read only `agent_behavior_implication` and ask: could a competent agent that had
+#   never heard of this framework do the right thing from this sentence alone?
+#
+#   If it needs the citation to know what to do, the implication is not written yet.
+
+entries:
+
+  # =========================================================================
+  # WORKED EXAMPLE — complete. Use this as the shape.
+  #
+  # GLBA is the one the schema could not express at all until this week, and it is
+  # engaged on Burkham's FIRST client: Decision A makes Plaid the V1 statement source,
+  # so every diagnostic touches it.
+  # =========================================================================
+  - entry_ref: compliance/glba-plaid-connection-v1
+    framework: GLBA
+    jurisdiction: [FEDERAL]
+    runtime_flag: per_connection_authorization_required
+
+    applicability_rule: >-
+      When the client is asked to connect a financial account through Plaid, and on
+      every subsequent call that reads data from that connection. It binds per
+      connection and per institution, not per client: a client who connects a second
+      bank has not authorized the second one by having authorized the first.
+
+    agent_behavior_implication: >-
+      The agent must obtain a written authorization that names the specific
+      institution being connected, and must record it before calling
+      statement_pull for that connection. The authorization is per connection — the
+      agent must not reuse an authorization captured for a different institution, and
+      must not treat the engagement agreement as covering it. If a stored
+      authorization is revoked or expired, the agent must stop reading from that
+      connection immediately rather than finishing the current diagnostic. The agent
+      must never present the connection step as optional-to-authorize; connecting and
+      authorizing are one act and are refused separately.
+
+    escalation_trigger: >-
+      When the client declines authorization for an institution the diagnostic needs,
+      when a stored authorization is revoked mid-engagement, or when Plaid returns
+      account data for an institution the recorded authorization does not name. In all
+      three the agent stops and hands to the venture operator — the third is a data
+      handling incident, not a retry.
+
+    citation: >-
+      Gramm-Leach-Bliley Act, 15 U.S.C. §§ 6801–6809; Privacy Rule, 16 C.F.R. Part 313;
+      Safeguards Rule, 16 C.F.R. Part 314.
+
+  # =========================================================================
+  # NINE TO WRITE.
+  #
+  # Each carries the runtime_flag from the draft Pack, so the join is already correct.
+  # Delete the TODO markers as you fill each one in — the quality check refuses any
+  # entry that still carries one.
+  # =========================================================================
+
+  # =========================================================================
+  # WRITTEN BY IVAN. FCRA is split in two: authorization is upstream and belongs to
+  # the Consent & Authorization Center; this entry governs what happens to a report
+  # once it has come back. The Pack now carries two FCRA rows to match — one flag
+  # each — because a single row can only declare one runtime_flag.
+  #
+  # `jurisdiction` corrected to a list. As a scalar it reads as absent, and the
+  # jurisdiction list is what decides whether an entry binds a given client at all.
+  # =========================================================================
+  - entry_ref: compliance/bureau-report-handling-v1
+    framework: FCRA
+    jurisdiction: [FEDERAL]
+    runtime_flag: bureau_report_handling_required
+
+    applicability_rule: >-
+      Any handling of a returned bureau report — business or personal. Covers both
+      business_bureau_pull and personal_credit_pull; the agent's obligations are
+      identical and only the consent kind differs.
+
+      Fires when a report has been returned by the Integration Layer, not when a pull
+      is requested. Authorization is upstream and belongs to the Consent &
+      Authorization Center: if the client declines or an authorization has expired,
+      the pull does not happen and this rule is never reached.
+
+    agent_behavior_implication: >-
+      THE AGENT MAY: use the report as input to the Funding Readiness Score with
+      provenance preserved; reason over specific findings internally; include derived
+      characterizations in client deliverables; enter specific figures from the report
+      onto a lender application form where that form requires them; store the report in
+      the Secure Document Vault under Regulatory Engine retention.
+
+      THE AGENT MUST NOT:
+
+      1. Share the raw report outside the client's authorized viewers. Not with
+      lenders, not with partners, not with other Green Companies ventures, and not in a
+      cross-portfolio handoff artifact, unless the client authorized that specific
+      document flow.
+
+      2. Attach the raw report to a lender packet. The distinction is exact: the report
+      says PAYDEX 72, so the agent enters 72 on the application — that is correct.
+      Attaching the D&B report to the SBA package is not. Lenders pull their own.
+
+      3. Hold the report past the Regulatory Engine's state-specific retention.
+
+      4. Render the raw report as a Burkham deliverable. The agent may characterize it
+      in Burkham's own analytical language; it may not reproduce the vendor's output as
+      Burkham's assertion of the client's creditworthiness. "Here is what Nav returned"
+      is redistribution; a Funding Readiness Score incorporating bureau data as one
+      component among several is a deliverable.
+
+      Where the boundary between a figure and a reproduction is unclear — a reformatted
+      tradeline table, a PAYDEX with its reason codes — the agent characterises in
+      Burkham's own analytical language rather than reproducing vendor formatting. This
+      tie-break governs DELIVERABLES. It does not narrow the permission above to enter
+      specific figures onto a lender application form: a form has fields and cannot be
+      characterised into, so where the form requires a figure the agent enters it.
+
+      5. Use the report for any purpose beyond the one the client authorized. The
+      per-pull authorization scopes the use. Repurposing the same pulled data — an
+      anonymised marketing case study, for instance — requires fresh authorization.
+
+      VISIBILITY: agents assigned to this client's engagement, Human Compliance &
+      Evidence on approval workflows, and founders on escalation. Not agents outside the
+      engagement, not cross-venture agents, not partners under any co-brand or
+      white-label arrangement.
+
+    escalation_trigger: >-
+      A returned report carrying a fraud alert, a credit freeze indicator, an identity
+      mismatch, or an open dispute flag MUST NOT be fed into Funding Readiness Score
+      computation. The agent routes to Human Approval Console for reviewer disposition,
+      and the Compliance Evidence Vault records the flag, the routing and the
+      resolution.
+
+      These are not scoring inputs. Each is a signal about whether the file is the
+      client's and whether it can be relied on.
+
+      FRAUD ALERT — the bureau is signalling the file may be compromised. Scoring
+      against it either produces a wrong result or acts on data fraudulently attributed
+      to the client.
+
+      CREDIT FREEZE — the report reflects what the bureau could return without lifting
+      the freeze. Portions may be absent. Do not compute against partial data as though
+      it were complete.
+
+      IDENTITY MISMATCH — name, address, date of birth or EIN not matching onboarding
+      data. Stop unconditionally. Either the client's identity is compromised or
+      somebody is misrepresenting themselves, and both carry 18 USC §1014 exposure.
+
+      DISPUTE FLAG — the disputed item must not be scored as settled. Scope varies and
+      the reviewer decides: score without the item, exclude and re-score, or wait for
+      resolution.
+
+    citation: "15 U.S.C. § 1681 et seq. (FCRA); 18 U.S.C. § 1014"
+
+    status: draft_pending_claim_library_approval
+
+    notes: >-
+      DECIDED — the raw-report prohibition is a deliberate restrictive default, not an
+      unverified assumption. It holds regardless of vendor TOS. Rationale: a permissive
+      default tied to vendor terms means a TOS tightening puts Burkham out of compliance
+      by inaction, and TOS silence is not TOS permission.
+
+      DELEGATED — Village Compliance & Evidence to document, per bureau vendor, what the
+      TOS says about redistribution to third parties, retention obligations, purpose
+      limitation, consent requirements beyond the initial pull authorization, and vendor
+      audit rights. Filed in Compliance Evidence Vault. If it returns clean permission to
+      forward, loosening is proposed through the 2.3 approved-list workflow with both
+      founders — an explicit amendment, recorded, not operational drift.
+
+      RESOLVED — the line between characterising a report and rendering it. The
+      ambiguous case now has a stated tie-break rather than waiting on Claim Library
+      approval: where the boundary is unclear, characterise. It is the restrictive
+      default, consistent with the DECIDED reasoning above, and it means an agent
+      meeting a reformatted tradeline table has a rule instead of a judgement call.
+
+      NOT AUTOMATED, and this one cannot be. Nothing detects "vendor formatting" — the
+      scanner matches phrases and lender-product numbers, and a reproduced tradeline
+      table is neither. This rule is enforced by the agent reading it and by the
+      Deliverable Approval Workflow at 3.4, not by a check. Stated so nobody later reads
+      the entry's presence as coverage.
+
+      NOTED — dispute-flag handling is deliberately stated as a concept rather than a
+      rule. A dispute on a twenty-year-old resolved tradeline is not the same as one on
+      the client's primary banking relationship, and the specifics should evolve through
+      Compliance & Evidence rather than be guessed now.
+
+      SEPARATE FINDING — no soft/hard pull distinction exists anywhere in the code. If
+      Burkham does soft pre-qualification pulls and hard pulls at application, the system
+      cannot tell them apart. That is a data-model gap, not a library gap, and it should
+      be raised independently of this entry.
+
+      SEPARATE FINDING — three of the four escalation flags already exist as
+      ObservationKind in @bwc/risk: fraud_alert, freeze and dispute. Identity mismatch
+      has no kind. What is missing is not the vocabulary but the path: the bureau adapter
+      returns not_built with no return shape, so nothing carries a flag from a report
+      into an observation. Belongs with the soft/hard pull gap.
+
+      RAISED BY REVIEW — an amendment to this entry is not currently recoverable. The
+      Compliance Library lives in The Office, not the Console, so an amendment never
+      reaches the Console Event Ledger. In The Office it is an upsert on entry_ref with
+      no version column, so the prior text is overwritten, and the audit entry carries
+      only entry_ref and runtime_flag rather than what changed. See AMENDMENT HISTORY at
+      the head of this file.
+
+  # STILL TO WRITE — the authorization half that this entry explicitly excludes.
+  - entry_ref: compliance/fcra-pull-authorization-v1
+    framework: FCRA
+    jurisdiction: [FEDERAL]
+    runtime_flag: per_pull_authorization_required
+    # Hint: business bureau and personal credit are SEPARATE authorizations per
+    # Decision B. `bureau-report-handling-v1` says the obligations AFTER a pull are
+    # identical for both — is that true of the authorization itself, or does a personal
+    # pull oblige something a business pull does not?
+    applicability_rule: TODO
+    agent_behavior_implication: TODO
+    escalation_trigger: TODO
+    citation: TODO
+
+  # =========================================================================
+  # WRITTEN BY IVAN. Same split shape as FCRA: authorization is one flag, conduct is
+  # another, and a compliance_surface row carries one flag each — so the Pack has two
+  # rows for this framework too.
+  #
+  # `framework` adopted as written: the enum value was renamed
+  # FALSE_STATEMENTS_CREDIT_APPLICATION -> FALSE_STATEMENT_TO_LENDER. Nothing is
+  # provisioned yet, so a rename is free now and a schema change later. The name is
+  # also the better one: the exposure is a false statement TO A LENDER, whether it
+  # rides on an application form or a lender packet.
+  #
+  # `jurisdiction` corrected to a list — third time. As a scalar it reads as absent.
+  # =========================================================================
+  - entry_ref: compliance/application-truthfulness-v1
+    framework: FALSE_STATEMENT_TO_LENDER
+    jurisdiction: [FEDERAL]
+    runtime_flag: application_truthfulness_required
+
+    applicability_rule: >-
+      Any preparation, population or staging of a lender application. Fires from the
+      first field populated, not at submission — the exposure is in what goes onto the
+      form, and by the time a submission is staged the false statement already exists.
+
+      Applies to every field regardless of source: client-stated, Plaid-derived,
+      bureau-derived, or extracted from a client-uploaded document.
+
+    agent_behavior_implication: >-
+      NO AGENT SUBMITS. Preparation is Authority Level 1; submission is Level 3 and a
+      human presses the button.
+
+      Half of that is enforced today and half is not, and the entry says which. The
+      middleware DOES refuse a Level 1 agent attempting to submit: `submit_application`
+      is Level 3 in the action catalogue and step 3 of the chain compares the actor's
+      level against it. The human at the button is NOT enforced — Level 3 is a level an
+      agent can hold, and the chain has no human-actor step, so a Level 3 agent passes
+      it. The rule stands as written; see the note below for the one-line gap.
+
+      NEVER ENTERED, whatever the source:
+
+      - a figure the client has not authorised for this specific application
+
+      - a characterisation the client has not confirmed. If the client said "working
+      capital", the agent enters working capital — not "inventory purchase", however
+      clearly the Plaid data suggests it
+
+      - any signature or attestation on the client's behalf. This one IS hard-blocked:
+      `sign_for_client` is a Level 4 prohibited action and the middleware refuses it
+      for every actor at every level
+
+      - any answer misrepresenting the business's nature, industry or structure
+
+      WHEN SOURCES DISAGREE — the agent surfaces the conflict; it does not pick a
+      winner. Client says $500K trailing revenue, Plaid shows $340K, the bureau shows a
+      third figure:
+
+      - leave the field unpopulated
+
+      - display all values with their provenance
+
+      - route to the client with the specific question and ask for the figure and the
+      context for the differences
+
+      - the client's answer is what goes on the form
+
+      - log the conflict, the resolution and the client's context to the Compliance
+      Evidence Vault
+
+      Silently taking the client's number while holding data that contradicts it is the
+      exposure. The client's authorisation does not insulate Burkham from having
+      knowingly used data it had reason to question.
+
+      NO ESTIMATES ON APPLICATIONS. Where no verified source supplies a value, the agent
+      requests it from the client, leaves the field blank where the form permits, or
+      routes to human review. Never a reasonable estimate, never based on similar
+      businesses, never a conservative figure to be safe. An estimated field is a false
+      statement waiting to be produced.
+
+      This is the one place the estimate rule inverts. Cost of Capital Calculator output
+      is estimated by design and governed by compliance/estimate-not-offer-v1 —
+      client-facing education. It never appears on a lender application.
+
+    escalation_trigger: >-
+      Seven. The first six are mechanical; the seventh is judgement and is caught by the
+      Level 3 human, not by the agent.
+
+      1. When the draft would contain never-entered data. Refuse to stage; route to
+      Compliance & Evidence, not merely to submission approval.
+
+      2. When a source conflict is unresolved — the client has not responded, has given
+      a materially incompatible answer, or has given one no source can verify.
+
+      3. When synthetic-document detection is positive. Nothing built on a flagged
+      document proceeds. Using a tampered client document to prepare an application
+      creates the exact reason-to-know exposure §1014 punishes. NOT BUILT — see notes.
+
+      4. When the compliance categorical state moves to Needs Review or Fail during
+      preparation. Placement freezes.
+
+      5. When authorisation is withdrawn after capture and before submission.
+
+      6. When the provider's Capital Product Governance Board standing is anything other
+      than `approved` — `under_review`, `suspended` or `blacklisted` — or when its
+      approval has gone stale past its review cadence, which stops being usable rather
+      than continuing to count. Applies even where the application content is clean.
+
+      7. When the aggregate would mislead although every field is individually
+      defensible. Technically complete answers that selectively omit what a lender would
+      consider material. Stated as a discipline principle: the agent's duty is to
+      surface everything transparently; the human's duty at Level 3 is to judge whether
+      the whole is defensible.
+
+    citation: "18 U.S.C. § 1014; 18 U.S.C. § 1344"
+
+    status: draft_pending_claim_library_approval
+
+    notes: >-
+      OPEN — approval authority is unspecified. "Human approval required at Level 3" is
+      locked; which human is not. Any Compliance & Evidence member for standard
+      applications, founders for edge cases under Gardner's escalation thresholds, is a
+      reasonable read but has not been decided. Needs an approval-authority matrix from
+      Village Compliance & Evidence and a founder decision.
+
+      OPEN — in-flight work when compliance state changes. Trigger 4 freezes placement;
+      it does not say what becomes of preparation already done. Discard, preserve for
+      resumption, or time-box before requiring rebuild. Not blocking for this entry, but
+      it will matter operationally.
+
+      NOTED — trigger 7 resists mechanical enforcement by design. It is named here so
+      the discipline is on the record and so the Level 3 reviewer knows it is theirs to
+      apply. An entry that only listed the six testable triggers would imply the seventh
+      does not exist.
+
+      RAISED BY REVIEW — "a human presses the button" is not enforced. Level 3 is a
+      level an agent can hold, and the middleware chain has seven steps of which none
+      checks actor kind. A Level 3 agent calling submit_application passes it. The
+      seeded playbook does place a `compliance_officer_approval` human_checkpoint before
+      the `submit_application` node, but that is workflow SEQUENCING rather than a gate:
+      it binds only work flowing through that playbook, and the engine dispatches the
+      node by raising a notification rather than executing anything.
+
+      The fix is one line in an idiom this codebase already uses in six places —
+      `if (actor.kind !== 'human') return refused(...)`, as `deliverables/approval.ts`,
+      `firewall/index.ts`, `retention/deletion.ts`, `billing/refunds.ts`,
+      `admin/settings.ts` and `contracts/templates.ts` all do. It is not applied to
+      submission. Given §1014 this is the highest-value single guard outstanding, and it
+      is a code change rather than a library decision.
+
+      RAISED BY REVIEW — synthetic-document detection does not exist. Trigger 3 names a
+      capability nothing implements: `@bwc/intelligence` does `classifyByFilename` and
+      coverage assessment — whether the documents required for a phase are present — and
+      never inspects content. Note that classifying a document by its filename is the
+      same shape of defect as moderating a video by its filename, found in AnimaForge
+      this week. The trigger is kept and marked NOT BUILT rather than removed, so the
+      requirement is on the record ahead of the capability.
+
+  # STILL TO WRITE — the authorization half. Distinct from truthfulness: one is
+  # whether the client permitted this submission, the other is whether what it says
+  # is true. A truthful application nobody authorised and an authorised application
+  # that misstates revenue are different offences.
+  - entry_ref: compliance/application-authorization-v1
+    framework: FALSE_STATEMENT_TO_LENDER
+    jurisdiction: [FEDERAL]
+    runtime_flag: per_application_authorization_required
+    applicability_rule: TODO
+    agent_behavior_implication: TODO
+    escalation_trigger: TODO
+    citation: TODO
+
+  # =========================================================================
+  # WRITTEN BY IVAN. This entry resolves an open question from the FTC_ACT review:
+  # whether UDAAP and FTC_ACT both apply, or one was a shortcut for the other. The
+  # answer is that they apply to different disciplines — FTC_ACT to deceptive claims
+  # about Burkham, UDAAP to the abusive standard — so the templated
+  # `compliance/udaap-claims-v1` is retired rather than written. Claims are covered
+  # by compliance/own-claims-and-pricing-v1, and a second entry for the same
+  # discipline under a second statute is the duplication this library avoids.
+  #
+  # The UDAAP Pack row is retargeted to this entry's flag accordingly.
+  # `jurisdiction` corrected to a list.
+  # =========================================================================
+  - entry_ref: compliance/client-interest-standard-v1
+    framework: UDAAP
+    jurisdiction: [FEDERAL]
+    runtime_flag: client_interest_standard_required
+
+    applicability_rule: >-
+      Every engagement decision, every recommendation, every point where Burkham's
+      interest and the client's could diverge. Applies from intake through
+      disengagement.
+
+      THIS ENTRY HAS NO ELEMENTS. Unfair, deceptive and abusive are standards a
+      regulator applies to a pattern, not tests to satisfy. It catches conduct that
+      satisfies every specific rule and harms the client anyway.
+
+      IT IS NOT A RESTATEMENT. Deception is covered by
+      compliance/own-claims-and-pricing-v1, compliance/estimate-not-offer-v1 and
+      compliance/card-product-characterisation-v1. Unfairness overlaps
+      compliance/fair-treatment-in-routing-v1. What no other entry reaches is ABUSIVE:
+      taking unreasonable advantage of a client's lack of understanding, or of their
+      reliance on Burkham to act in their interest.
+
+      That risk is specific and structural here. Burkham's clients are distressed
+      businesses, usually declined elsewhere, who do not understand capital markets and
+      are relying on Burkham to know better. That is precisely the vulnerability the
+      standard was written for.
+
+    agent_behavior_implication: >-
+      THE STANDARD: Burkham's obligation is the client's outcome, not the placement.
+      Where those diverge, the outcome wins, and the fee is lost.
+
+      SAYING NO IS PART OF THE SERVICE. An agent is authorised and expected to recommend
+      against — declining to engage, recommending a smaller scope, recommending a
+      different service, recommending the client not raise capital at all. A firm that
+      always helps and never advises against is optimising for the transaction, which is
+      the pattern the standard exists to catch.
+
+      THE BLUEPRINT REACHES A CONCLUSION ABOUT WHETHER, NOT ONLY HOW READY. It must be
+      able to conclude "we recommend not raising capital at this time" with reasoning. A
+      client who is solvent, creditworthy and eligible may still be better served doing
+      nothing, and readiness for capital is not the same question as appropriateness of
+      capital.
+
+      RECOMMENDED SCOPE IS DISTINCT FROM ELIGIBLE SCOPE. The Recommendation Engine
+      produces both, and they are not the same number. Eligible for $400K across a full
+      stack; recommended $150K in a structure leaving room for future need. The
+      recommendation is what serves the business. The client may choose more, and does so
+      having been advised otherwise.
+
+      THE FEE STRUCTURE PULLS AGAINST THE CLIENT IN FOUR PLACES. This is stated plainly
+      because a misalignment nobody names is a misalignment nobody manages:
+
+      1. a client best served by not raising at all — no placement, no success fee
+
+      2. a client best served by a smaller stack — fees are per placement
+
+      3. a client best served by waiting to strengthen their profile — waiting defers
+      revenue
+
+      4. a client best served by a lower-fee product — success fees are not neutral
+      across product categories
+
+      ALL FOUR are held by this entry and by human judgement, and by nothing else today.
+      An earlier draft said the fourth was covered by a Funding Ethics Firewall rule. It
+      is not — see notes.
+
+      A SIGNED AGREEMENT IS NOT UNDERSTANDING. Where Burkham has reason to believe a
+      client does not grasp what they agreed to, the signature does not insulate it. The
+      discipline is not "get them to sign so we are protected" — it is "help them
+      understand before they sign, and stop if it becomes clear they did not."
+
+      Watch for: a statement revealing a factually wrong understanding of what was agreed
+      · a question showing material information in a signed document was not absorbed ·
+      an expected outcome Burkham never committed to · a belief that Burkham is doing
+      something it is not · a belief the client is protected against something they are
+      not.
+
+      On any of those: stop at the point of divergence, route to a human, document the
+      specific misunderstanding, re-educate on that point, and confirm understanding
+      demonstrated — not merely re-signed. If understanding cannot be established, whether
+      the engagement should continue is itself the question.
+
+    escalation_trigger: >-
+      1. When Blueprint analysis indicates raising capital is not appropriate for this
+      client. Human review on whether to continue, redirect to Advisory, or advise
+      against placement.
+
+      2. When recommended scope is materially smaller than eligible scope. Never silently
+      expand to eligible. Present the recommendation with reasoning; document a client's
+      request for more; review the pattern if client-driven expansion becomes frequent.
+
+      3. When the client's stated use of capital does not make business sense — $200K to
+      expand into a market the economics do not support. Document the mismatch and route
+      before placement.
+
+      4. When aggregate patterns show recommendations skewing toward higher-fee products
+      or larger placements, by agent, client type, or systematically. Compliance Review
+      Board.
+
+      5. When a client statement reveals a fundamental misunderstanding of agreed terms.
+      Stop, route, re-educate, confirm understanding.
+
+      6. When a client demonstrates an absorbed expectation that does not match reality —
+      "I understand I'll be funded in 30 days", "I know the success rate is high for my
+      profile". Correct it and document the correction. It indicates something reached
+      them from marketing or a partner that should not have.
+
+      7. When the client proceeds against Burkham's recommendation. Their right to do so
+      is respected and the decision is documented — not to protect Burkham, but so the
+      decision stays visible and reversible if their circumstances change.
+
+      8. When the Compliance Review Board concludes in hindsight that Burkham should have
+      declined or advised against. Not retrospective blame — the finding adjusts the
+      discipline and enters agent training.
+
+    depends_on:
+      - Blueprint scope extending to whether capital is appropriate, not only readiness
+      - Recommendation Engine producing recommended scope distinct from eligible scope
+      - fee-alignment pattern tracking across agents, client types and product categories
+      - workflow that surfaces a recommendation against placement rather than filtering it
+      - scanner patterns for client statements indicating misunderstanding
+      - declined engagements in training material, showing what the right call looks like when it is no
+      - the Funding Ethics Firewall's five ethical rules, enumerated and implemented
+
+    citation: "12 U.S.C. § 5531 (CFPA, abusive); 15 U.S.C. § 45 (FTC Act, unfair and deceptive)"
+
+    status: draft_pending_claim_library_approval
+
+    notes: >-
+      THE PHILOSOPHICAL ENTRY. Every other entry states a discipline that can be checked.
+      This one asks whether Burkham is optimising for the client's outcome or for
+      placement volume, and whether it will earn less by placing less when placing less is
+      right.
+
+      The operating principles say stewardship over transactions and the Funding Ethics
+      Firewall exists to stop harmful placement. But the Firewall constrains HOW capital
+      is placed, not WHETHER placement should happen.
+
+      GAP — no discipline currently asks, before engaging, whether raising capital serves
+      this client. A client can be solvent, creditworthy, eligible, pass every Firewall
+      check, get funded, and be worse off. Nothing fires.
+
+      GAP — the Readiness Score measures readiness for funding, not appropriateness of
+      funding. Those are different questions and the specs do not distinguish them.
+
+      RECOMMENDED — disclose the incentive. State in the fee exhibit that success fees are
+      earned on placement, that this creates a structural incentive, and name the
+      disciplines that manage it. Defensive transparency: a client who knows the
+      misalignment exists can weigh advice accordingly.
+
+      RECOMMENDED — this entry evolves, and that is its nature rather than a defect. The
+      others are largely static. This one requires institutional judgement about when
+      clean rules are not enough, and that judgement is built from real cases, not
+      specified upfront. Compliance Review Board should own its evolution as a standing
+      responsibility.
+
+      OPEN — the recommended-versus-eligible scope split is a design change to the
+      Recommendation Engine, not a discipline addition. Confirmed absent: the Engine takes
+      one amount, `requestedCreditLimit` — what the client asked for — and matches it
+      against each offering's minimum and maximum. There is no second number for it to
+      recommend, so producing one is new work rather than surfacing something computed.
+
+      OPEN — scanner patterns for misunderstanding signals need real client interactions
+      to learn from. Compliance & Evidence to draft once V1 has traffic.
+
+      RAISED BY REVIEW — the fourth misalignment is NOT covered, and the correction runs
+      in the unsafe direction. An earlier draft said "Rule 4 covers fee-driven product
+      selection". There is no Rule 4 to cite. blueprint-v2 §6.2 says the Firewall performs
+      "automated enforcement of five ethical rules on placement eligibility" and that
+      sentence is the ONLY mention of them in either reference document. The five are
+      never enumerated anywhere.
+
+      Nor are they implemented as rules. `packages/firewall/src/index.ts` exposes
+      `status`, `trigger`, `clear` and `evaluate`: a per-client triggered/clear flag whose
+      `trigger` takes an arbitrary `reason` string, plus the Decision E coupling to
+      compliance state. It is a flag a human or an agent sets, not five conditions
+      evaluated. And nothing anywhere checks fee-driven product selection — the search
+      returns nothing.
+
+      So all four misalignments rest on this entry and on human judgement. The entry now
+      says four rather than three, and the missing enumeration is a dependency rather than
+      an assumption.
+
+      RAISED BY REVIEW — the Section 6.2 collision, resolved by naming the document. In
+      `docs/reference/blueprint-v2.md` §6.2 is the Funding Ethics Firewall. Any reference
+      to Blueprint drafting or the Readiness Score under that number is pointing at a
+      different document and must say which — "marketing plan §6.2", not "Section 6.2".
+      Two documents in this venture carry a §6.2 and they are unrelated.
+
+      The Readiness Score components are specified in neither reference document; see the
+      same note on compliance/own-claims-and-pricing-v1 and the standing note at the head
+      of this file.
+
+  - entry_ref: compliance/own-claims-and-pricing-v1
+    framework: FTC_ACT
+    jurisdiction: [FEDERAL]
+    runtime_flag: own_claims_discipline_required
+
+    applicability_rule: >-
+      Everything Burkham says about itself — its service, its results, its pricing.
+      Every client-facing communication, deliverable, portal message, call script,
+      marketing asset, case study and web page. Broader than the transactional entries:
+      this is not a rule about an action, it is a rule about content.
+
+      Distinct from compliance/estimate-not-offer-v1, which governs numbers about LENDER
+      products. Burkham's own service pricing — Blueprint tiers, retainers, success fees
+      — carries no lending disclosure obligation. It carries this one.
+
+      NO SAFE HARBOUR. Unlike TILA or FCRA there is no disclosure that makes a deceptive
+      claim acceptable. The standard is whether a reasonable consumer would be misled,
+      so this entry is mostly about what is never said.
+
+    agent_behavior_implication: >-
+      THIS ENTRY DEFINES NO PHRASES. The Marketing Claim Library holds the approved and
+      banned lists; this is the rule for deciding what belongs on which.
+
+      THE CLASSIFICATION RULE: a firm-scale factual claim about aggregate activity is
+      permitted. A claim that shifts a prospective client's expectation about their own
+      outcome is not — including when it is true.
+
+      "Burkham Wickmont has facilitated over $X in capital placements since founding" —
+      firm-scale, factual, implies nothing about this client. Permitted.
+
+      "Our clients have received $X in funding" — the same figure, pointed at the
+      reader. Banned.
+
+      BANNED REGARDLESS OF ACCURACY. Every one of these can be literally true and each
+      creates an inference that does not match the individual case:
+
+      - success rates — "most clients get funded". True at 78% across the book, and this
+      client may sit at 20% or 95%
+
+      - timeframe averages — "typical placement in 30 days"
+
+      - approval likelihoods presented as probabilities
+
+      - historical achievement offered as future expectation
+
+      - speculation about lender behaviour — "Chase usually approves within 2 weeks"
+
+      - comparative claims against named competitors
+
+      The test: does the statement shift what a reasonable consumer expects about their
+      own result? If yes, it is banned whether or not it is accurate. Technical truth is
+      not a defence, and it is the specific pattern the FTC enforces.
+
+      OUTCOME PROMISES. `guarantee_approval` is a Level 4 prohibited action, hard-blocked
+      by the middleware for every actor. The PHRASES that express it — "guaranteed
+      approval", "guaranteed funding", "get you approved", "get you funded" — are banned
+      Marketing Claim Library entries caught at chain step 7. Two mechanisms, and it is
+      worth knowing which is which: the action gate cannot see a sentence, and the
+      scanner cannot see an intent.
+
+      DELIVERABLE PROMISES ARE PERMITTED. The Blueprint may promise its own contents: a
+      readiness assessment with named components, in a stated format, by a stated date.
+      It may not promise a funding outcome, a score movement, or a time to funding. The
+      client receives an artifact, not a prediction.
+
+      PRICING — two tiers, and the distinction is the rule:
+
+      BASELINE pricing is public and quotable in any context, with no exhibit required.
+      "The Readiness Blueprint is $497 Standard or $997 Comprehensive."
+
+      ENGAGEMENT-SPECIFIC pricing requires the all-in fee exhibit presented and signed
+      first. Which tier applies, which success-fee schedule, which credits, which
+      protective terms — none of it is quotable before the exhibit.
+
+      "WHAT WILL THIS COST ME" is answered in three parts and never with a specific
+      engagement total: state the baseline; explain that total cost depends on services
+      engaged and placements succeeded, and that the exhibit shows every possible fee;
+      offer the exhibit.
+
+      SUCCESS FEES carry three attributes every time they are mentioned:
+
+      1. CONTINGENT — charged only on successful placement; nothing for a decline
+
+      2. CAPPED — the ceiling, stated, regardless of placement size
+
+      3. TIMED — the triggering event, and that it appears in the per-application
+      authorisation signed before submission
+
+      The contingent framing is the critical one. A success fee described without it
+      implies a guaranteed fee against no guaranteed service, which is the pattern that
+      drew enforcement against comparable firms.
+
+      PRICING VARIATIONS — an agent applies published logic and never its own judgement.
+      Permitted: Blueprint credits, the auto-graduation retainer waiver, annual and
+      quarterly prepay pricing. All of it is published pricing logic, not an exception.
+
+      Not permitted at agent discretion: ad hoc discounts, goodwill waivers, reduced
+      pricing to close a sale, any variation not in published logic. Two clients in
+      materially similar situations quoted different prices creates a dispute-of-record
+      whatever the intent.
+
+    escalation_trigger: >-
+      1. When output would state or imply a specific client outcome — most clients,
+      typical result, you'll likely, should get funded.
+
+      2. When a success fee is described without its contingent framing.
+
+      3. When engagement-specific pricing is about to be quoted with no exhibit
+      presented. Route to Consent & Authorization Center to present it first.
+
+      4. When the client requests a discount, waiver or variation outside published
+      logic. Compliance Review Board, both founders. An agent neither approves nor
+      negotiates pricing.
+
+      5. When any testimonial, case study or past-results claim is about to be released —
+      regardless of source. FTC substantiation requires affirmative approval and
+      documentation for every published performance claim.
+
+      6. When a comparative claim names a competitor. Substantiation burden and
+      litigation exposure both apply, and accuracy does not remove either.
+
+      7. When the client references a specific promise Burkham allegedly made. Human
+      Approval Console AND Compliance Review Board. Either output escaped scanning, a
+      partner made an unsanctioned claim, or the client misremembers — all three need
+      running down.
+
+      8. When output contains a statistical or aggregate claim about firm performance,
+      accurate or not. The agent does not judge whether a statistic is defensible; the
+      human does.
+
+    citation: "15 U.S.C. § 45 (FTC Act § 5); FTC Endorsement Guides, 16 C.F.R. Part 255 (2023)"
+
+    depends_on:
+      - Funding Readiness Score components specified, so a Blueprint deliverable promise names something that exists
+
+    status: draft_pending_claim_library_approval
+
+    notes: >-
+      DECIDED — no testimonials in V1. Client quotes about their experience are
+      persistent FTC enforcement bait: the Endorsement Guides require material
+      disclosures, typical-results framing and substantiation for each claim, and the
+      typical-results requirement is where comparable firms fail. Case studies with
+      affirmative client consent, structured facts, dated outcomes and a
+      results-not-typical disclosure are permitted. Testimonials at V1.5, with counsel
+      review and per-claim substantiation.
+
+      ACTION — anchor customer consent must be structured before the engagements begin.
+      Greenstone EMD and MedLink payroll float will be the first case studies, and a case
+      study needs consent captured at the outset, not requested afterwards. Compliance &
+      Evidence owns this and it is time-sensitive.
+
+      OPEN — trigger 8 has no implementation. Detecting a statistical claim is a pattern
+      problem, not a banned-phrase problem, and the Scanner does phrases. Three routes: a
+      Scanner rule, an agent self-catch trained into output discipline, or
+      human-review-by-default for any claim containing a number about firm activity. The
+      third is crude and works today. NOTE — `detectLenderNumbers` in @bwc/scanner is a
+      worked precedent for the first route: number shapes detected in code, gated on
+      nearby context terms, feeding the same requiredDisclosures path. A firm-performance
+      variant would gate on "clients", "funded", "placements", "approval" rather than on
+      lender terms.
+
+      OPEN — prospective range disclosure. Where a client asks what the full ladder might
+      total, the agent needs approved language for illustrative ranges that does not
+      become an engagement-specific quote. Compliance & Evidence to draft.
+
+      OPEN — Blueprint deliverable promises depend on the Readiness Score components,
+      which are specified nowhere. See the correction below.
+
+      NOTED — this entry deliberately owns no lists. It is the framework the Marketing
+      Claim Library applies. Adding phrases here would create a second list, and two
+      lists drift.
+
+      RAISED BY REVIEW — applying this entry's classification rule to the SEEDED library
+      reclassifies two existing claims. Both are currently `requires_disclaimer`, and this
+      entry bans their category outright:
+
+      `success rate` -> DISCLOSURE_SUBSTANTIATION. The entry bans success rates
+      "regardless of accuracy".
+
+      `typical` -> DISCLOSURE_NOT_TYPICAL. The entry bans timeframe averages, and
+      "typical placement in 30 days" is its own example.
+
+      A `requires_disclaimer` claim SHIPS with its disclosure attached; a `banned` one
+      does not ship. So the library currently permits, with a disclaimer, two things this
+      entry says are never said. One of the two is wrong and it is a decision, not a bug.
+
+      Three further requires_disclaimer claims are arguable and left alone: `up to`, `as
+      low as` and `projected` all describe LENDER product terms rather than firm
+      performance, which puts them under estimate-not-offer rather than here.
+
+      RAISED BY REVIEW — the Section 6.2 reference does not resolve, and the document it
+      referred to must be named. In `docs/reference/blueprint-v2.md` — the canonical
+      module specification — §6.2 is the Funding Ethics Firewall. If the intended source
+      is the marketing plan or another document, cite it as "marketing plan §6.2" rather
+      than a bare section number: this venture now has at least two documents with a §6.2
+      and they are different things.
+
+      THE READINESS SCORE IS SPECIFIED NOWHERE. Searched across both reference documents,
+      1,807 lines. It appears three times and none is a specification: "readiness score
+      changed" as an Event Ledger event type (blueprint §11.3); "Funding Readiness Score
+      generated (provenance on each component)" as one line in a flow diagram; and
+      "Funding Readiness Score improvement (Phase 0 clients)" as a KPI in specifications
+      §12. There is no module section, no component list, and the phrase "eight
+      components" appears in no document.
+
+      The flow diagram's "provenance on each component" is the only evidence that
+      components exist at all. So the dependency is real, the section number is not, and
+      the eight components are an intention rather than a specification — see the
+      standing note on unspecified controls at the head of this file.
+
+      RAISED BY REVIEW — trigger 3's mechanism exists. `@bwc/billing/exhibit.ts` assembles
+      the fee exhibit from the engagement record and already carries the rule that a
+      repricing must not change what an existing client's exhibit says they agreed to pay.
+      Baseline pricing is data rather than code, which is correct — $497/$997 live in
+      offers, not in a constant.
+
+  - entry_ref: compliance/reg-z-trigger-terms-v1
+    framework: REG_Z_ADVERTISING
+    jurisdiction: [FEDERAL]
+    runtime_flag: trigger_term_disclosure_required
+    # Hint: a stated rate or payment is a trigger term that obliges the full disclosure
+    # set alongside it. The implication should distinguish stating a rate (allowed,
+    # with disclosures) from promising one (never).
+    applicability_rule: TODO
+    agent_behavior_implication: TODO
+    escalation_trigger: TODO
+    citation: TODO
+
+  # =========================================================================
+  # WRITTEN BY IVAN. The Pack gained a CROA row: it declared no CROA framework at
+  # all, so this flag resolved to nothing. `jurisdiction` corrected to a list —
+  # fourth time.
+  #
+  # The "Level 4, hard-blocked" claim is corrected in place: one of the six IS a
+  # prohibited action, the other five are caught by the scanner rather than by the
+  # authority layer. The rules are unchanged; only the claim about which mechanism
+  # enforces them.
+  # =========================================================================
+  - entry_ref: compliance/not-a-credit-repair-organization-v1
+    framework: CROA
+    jurisdiction: [FEDERAL]
+    runtime_flag: croa_perimeter_required
+
+    applicability_rule: >-
+      Any discussion of a client's credit — profile, score, tradelines, utilisation,
+      negative items, or what a lender wants to see. Applies to deliverables, portal
+      messages, calls and internal reasoning that reaches a client.
+
+      THIS IS NOT A COMPLIANCE RULE. Burkham Wickmont is not a Credit Repair
+      Organization and does not provide credit repair services, so CROA does not govern
+      it. This entry documents the discipline that keeps that true. The risk it
+      addresses is recharacterisation — behaving in a way that makes Burkham a CROA
+      entity by conduct.
+
+    agent_behavior_implication: >-
+      THE LINE: the agent may advise on the client's BUSINESS. It may not advise on the
+      client's CREDIT FILE.
+
+      "You have three negative items on your business credit report" — observation.
+      Permitted.
+
+      "Those items may not be accurate and you should dispute them" — action on the
+      file. Refused.
+
+      "Your score is 620 and this lender wants 680" — observation plus lender fact.
+      Permitted.
+
+      "Here is how to get from 620 to 680" — refused at the word 'how'.
+
+      "Apply for Net 30 accounts with Uline, Grainger and Quill" — business operations.
+      The client applies, in normal commerce, and a stronger profile follows. Permitted.
+
+      NEVER, whatever the client asks:
+
+      - dispute a tradeline or contact a bureau on the client's behalf
+
+      - send, draft or supply dispute letters, templates or scripts
+
+      - represent that Burkham can remove, delete, fix or repair any item. THIS ONE is
+      a Level 4 prohibited action — `promise_credit_repair` — hard-blocked by the
+      middleware for every actor at every level
+
+      - promise or imply a specific score outcome
+
+      - charge an upfront fee for anything credit-repair-adjacent
+
+      - contract in terms that would recharacterise Burkham as a CROA entity
+
+      HOW THE OTHER FIVE ARE ENFORCED, because it is not the authority layer. Level 4
+      blocks nine named ACTIONS, and "draft a dispute letter" is not one of them — an
+      agent doing it would be performing `draft_communication`, which is Level 1 and
+      passes. What catches these is the Communication Compliance Scanner at chain step
+      7, against the Marketing Claim Library's credit-repair phrases. The rules stand;
+      the mechanism is the scanner, and a phrase absent from the library is a rule
+      nothing enforces. See trigger 3.
+
+      LANGUAGE: characterise analytically, never remedially. A profile has
+      characteristics that limit access to particular products at particular lenders. It
+      is not defective, and it does not need repair, fixing or cleaning up.
+
+      THE SOFT EDGES — permitted with framing, and the framing is the rule:
+
+      UTILISATION. The agent may observe that revolving utilisation is 82% across three
+      cards, that this affects both cash-flow analysis in underwriting and the credit
+      profile, and that paying down before applying would strengthen the application. It
+      may not predict a score movement from that action. The specificity of the score
+      prediction is what crosses the line, not the suggestion to pay down.
+
+      TIMING. The agent may say that applying now would likely decline and that waiting
+      sixty days after paying down would put the client in a stronger position for the
+      same product. It may not forecast a score range for that window or frame it as
+      timing applications for score benefit.
+
+      EDUCATION. General credit education is permitted — utilisation is one factor in
+      scoring models is on every bureau's own website. Tactical advice on arranging
+      balances across accounts to move a score is not; that is the informational content
+      of a credit repair service.
+
+      REFERRING OUT is permitted and is the correct response to a genuine need —
+      inaccurate items, fraudulent inquiries, identity theft. Refer to a consumer
+      protection attorney or a CROA-compliant organization.
+
+      TAKE NO FEE FOR THE REFERRAL. Refer freely, take nothing. A fee makes Burkham an
+      indirect participant in a service it does not offer.
+
+    escalation_trigger: >-
+      1. When the client asks directly for credit repair — remove these items, dispute
+      these tradelines, raise my score by X. The agent declines with the approved
+      refer-out and logs the request. A logged request is a compliance data point, not
+      an incident.
+
+      2. When the client is already engaged with credit repair — currently working with
+      an organization, has bulk-disputed inquiries, has taken credit-file action.
+      Service continues; human review decides how it affects Readiness Score computation
+      and application preparation, because file actions taken by others change how
+      current bureau data should be read.
+
+      3. When the Communication Compliance Scanner catches credit-repair-adjacent
+      language in the agent's own draft. This is the operational catch for slippage, and
+      it is the primary enforcement for five of the six NEVERs above. Thirteen phrases
+      are seeded and matching today: "repair your credit", "credit repair services",
+      "credit repair program", "erase your bad credit", "improve your credit score",
+      "boost your credit score", "raise your credit score", "remove negative items",
+      "we can remove negative items", "delete negative items", "dispute negative items",
+      "remove late payments", "remove collections". Two phrases named in earlier drafts
+      of this entry are NOT seeded and would pass — see notes.
+
+      4. When application preparation would reference a disputed or under-review credit
+      item. Handled under compliance/bureau-report-handling-v1.
+
+      5. When the client claims a specific credit promise was made — a score outcome, an
+      item removal, a credit-file action. Route immediately to Human Approval Console AND
+      the Compliance Review Board. This may be agent output that escaped scanning, a
+      partner making unsanctioned claims, or a client misremembering. Every one of those
+      needs running down.
+
+      6. When the refer-out is declined and the client keeps asking. Either the need is
+      not what was described, or Burkham is being tested, or there is genuine confusion
+      about what it does. Compliance & Evidence engages the client directly.
+
+    citation: "15 U.S.C. § 1679 et seq. (CROA); 15 U.S.C. § 1679b (upfront fee prohibition)"
+
+    status: draft_pending_claim_library_approval
+
+    notes: >-
+      OPEN — the utilisation boundary. "Pay down before applying" and "optimise
+      utilisation for score" are the same suggestion in different words, and the
+      difference lives entirely in framing. Village Compliance & Evidence must draft
+      approved phrases for discussing utilisation that stay on the business-operations
+      side. This is the softest edge in the entry and the most likely to be crossed by
+      accident.
+
+      OPEN — the characterisation language in the applicability rule is proposed, not
+      sanctioned. Approved phrasing for describing a weak profile without remedial
+      framing requires Compliance & Evidence drafting and both-founder approval under the
+      2.3 workflow.
+
+      OPEN — trigger 2 is a conservative read rather than a known industry practice.
+      Whether existing credit-repair engagement should change Burkham's workflow is worth
+      outside-counsel input eventually. Included because the conservative direction costs
+      little.
+
+      RAISED BY REVIEW — two gaps in the claim library, each one word wide. "fix your
+      profile" is not seeded; "fix your credit" is. "boost your score" is not seeded;
+      "boost your credit score" is. `phrasePattern` bounds the whole phrase, so the
+      near-miss does not match and the draft ships. Both are one-line additions to the
+      Marketing Claim Library and should go in with the utilisation phrases.
+
+      RAISED BY REVIEW — "Level 4, hard-blocked" held for one of the six NEVERs, not all
+      six. `promise_credit_repair` is a prohibited action; the others name conduct rather
+      than an action in the catalogue, so the authority layer cannot see them. Corrected
+      in the implication above. The rules did not change — only the claim about what
+      enforces them, which mattered because it decides whether a missing claim-library
+      phrase is a gap or a redundancy. It is a gap.
+
+      RAISED BY REVIEW — the Section 4.9 reference does not resolve. blueprint-v2's 4.x
+      flow sections run 4.1 to 4.4 and neither reference document contains a cannabis,
+      MCA or debt-settlement cut list, nor a documented refer-out pattern. The PRINCIPLE
+      is real and better cited: specifications-v2 §6.1 design principle 1, the Seek
+      Capital test — "no module design survives if it recharacterizes Burkham Wickmont as
+      a lender, investment advisor, credit repair organization, or debt settlement firm."
+      That sentence names credit repair explicitly and is the anchor this entry rests on.
+      If a Section 4.9 exists in the marketing plan rather than the blueprint, the note
+      should say which document.
+
+  - entry_ref: compliance/estimate-not-offer-v1
+    framework: STATE_COMMERCIAL_FINANCING_DISCLOSURE
+    jurisdiction: [CA, NY, UT, VA, GA, CT, FL]
+    runtime_flag: estimate_not_offer_required
+
+    applicability_rule: >-
+      Any client-facing output containing a number about a lender product — APR,
+      factor rate, origination fee, monthly payment, repayment burden, total cost of
+      capital, or blended stack cost. Chiefly Cost of Capital Calculator output,
+      Funding Recommendation Engine output, Suitability Memos, Capital Command Briefs
+      and Quarterly Capital Reviews.
+
+      Does NOT apply to Burkham's own service fees — the $497/$997 Blueprint tiers,
+      retainers, or success fees. Those are service pricing, not lender product terms.
+      FTC Act and the Marketing Claim Library govern them; no lending disclosure regime
+      attaches. An agent must not withhold a fee quote under this rule.
+
+    agent_behavior_implication: >-
+      Three elements must appear together with any lender-product number. If any one is
+      absent, the number does not go out.
+
+      1. HEDGE, in the same sentence as the number — not a footnote. Must contain all
+      three of: "estimated at approximately", "not an offer of credit", "actual terms
+      will be set by the lender's underwriting".
+
+      2. PROVENANCE, adjacent to the number. Where provenance is issuer_rule, name the
+      source and the verification date. Where provenance is unresearched_default, the
+      hedge is replaced by the heavier variant, which is the registered disclosure
+      "Unresearched default - not verified against the issuer." followed by the
+      recorded rationale for the assumption. That exact string is what the scanner
+      requires and step 7 matches; a paraphrase satisfies neither.
+
+      3. NOT-THE-LENDER statement, at least once per deliverable containing any number:
+      Burkham is not a lender, identifies options and prepares applications, and all
+      lending decisions are made by the lender.
+
+      An unresearched_default alone does not suppress the number and does not hold the
+      output. Suppression is refused deliberately: an absent number in a comparison
+      document is itself a signal, and it pushes clients toward the products Burkham
+      knows least about.
+
+      STATE ACTIVATION — this entry cannot enforce in a state until BOTH hold, and
+      neither alone is sufficient:
+
+      1. COUNSEL CERTIFICATION. The state's Regulatory Engine module has been
+      activated: a named human at Authority Level 3 has recorded a counsel review
+      against a document reference, and the reviewed version is the version now in
+      force. A module that has been materially republished since its review reads as
+      `needs_counsel_review`, not `active`, and that is a refusal.
+
+      2. POPULATED DISCLOSURE VARIANTS. That module carries at least one disclosure
+      requirement with real text and a citation. An activated module with an empty
+      disclosure set supplies nothing, and the agent would compose the hedge itself —
+      which is the state-specific requirement being answered by a generic one.
+
+      Where either is absent the agent does not fall back to the standard hedge and
+      does not proceed. It holds the output and routes to Human Approval Console, per
+      escalation condition 2. A state Burkham is not activated in is a state Burkham
+      does not present financing offers in.
+
+      THE SECOND CONDITION IS NOT ENFORCED TODAY. `activateState` requires the counsel
+      document reference and the Level 3 human, and does NOT check that the module has
+      any disclosure requirements. TX, AZ and NV have modules with zero disclosures and
+      could be activated as they stand. Until that check exists this element is a rule
+      an agent follows, not a gate the engine applies — see notes.
+
+    escalation_trigger: >-
+      Five conditions. Each halts the output and routes to Human Approval Console.
+
+      1. When the draft would read as an offer rather than an estimate. Detected on the
+      Marketing Claim Library's banned phrases — "pre-approved", "you will be
+      approved", "get you approved", "guaranteed approval", "guaranteed funding",
+      "instant approval" — which block at middleware step 7 rather than escalating.
+
+      2. When the client's state carries a disclosure requirement the standard hedge
+      does not satisfy. Output holds pending the state-specific variant.
+
+      3. When provenance is unresearched_default AND the client's Risk Rating is High
+      or above AND the product is in a higher-cost category. Any one alone ships; the
+      combination does not.
+
+      4. When Calculator output materially disagrees with Lender Intelligence Database
+      history for that lender. A data-quality signal, surfaced with the underlying data.
+
+      5. When a lender-product number is detected and the required disclosure is present
+      in the deliverable but not in the same sentence as the number. Step 7's check is
+      an exact substring match over the whole document and a footnote satisfies it; this
+      condition is what catches the case the machinery cannot. See notes.
+
+    citation: >-
+      CA Fin. Code § 22800 et seq. (SB 1235); NY Fin. Serv. Law art. 8; UT Code 7-27;
+      VA Code 6.2-2200; GA SB 90; CT PA 23-201; FL Stat. 559.9611
+
+    # Read against the Regulatory Engine on 2026-08-31. `satisfied_for` is empty
+    # because ALL SEVEN seeded state modules ship as drafts and none has been
+    # activated — the seeding function deliberately has no way to activate one.
+    #
+    # Three of the seven states this entry binds have no module at all, not even a
+    # draft, so they cannot be satisfied by review alone: someone has to write them.
+    depends_on:
+      - kind: state_activation
+        description: >-
+          Counsel certification AND at least one populated disclosure requirement, per
+          state. Both required; neither alone activates.
+        required_for: [CA, NY, UT, VA, GA, CT, FL]
+        satisfied_for: []
+        blocking: true
+      - kind: state_module_exists
+        description: >-
+          A Regulatory Engine module must exist for the state before it can be
+          reviewed at all. VA, GA and CT have none — they are outside the V1 priority
+          seven, which are NV, CA, NY, TX, FL, AZ, UT.
+        required_for: [VA, GA, CT]
+        satisfied_for: []
+        blocking: true
+
+    # `status`, `notes` and `depends_on` are AUTHORING-FILE fields. They are never
+    # POSTed — see the note at the top of this file — and the checker refuses any entry
+    # whose status is not `approved` or whose dependencies are unmet, so an open
+    # question keeps the entry out of the database rather than travelling into it as a
+    # silent draft.
+    status: draft_pending_claim_library_approval
+    notes: >-
+      The three hedge phrases are proposed, not sanctioned. They require Village
+      Compliance & Evidence drafting and both-founder approval under the 2.3 hybrid
+      workflow before becoming approved Marketing Claim Library phrases. Until then the
+      disclosure the scanner actually requires is DISCLOSURE_ESTIMATE, whose text is
+      fixed and whose match at step 7 is exact — a paraphrase will not satisfy it.
+
+      RESOLVED — what unresearched_default derives from. It derives from nothing
+      computed. `typicalAnnualRate` and `typicalFactorRate` are columns on an offering
+      row, supplied by whoever called `addOffering`, alongside a provenance tag the same
+      caller chose. There is no market data, no category average, and no derivation of
+      any kind. An `unresearched_default` is one number a person entered plus one
+      sentence saying why, and `lenders/profile.ts` throws if that sentence is missing:
+      "An assumption nobody can explain cannot be argued with or revisited."
+
+      So "based on general market data" would have been a false statement in a client
+      disclosure — the disclosure written to prevent a misrepresentation would have been
+      making one. Element 2 says what is true instead.
+
+      RESOLVED — which string the heavier variant is. It is
+      `DISCLOSURE_UNRESEARCHED_DEFAULT` in `@bwc/core`, "Unresearched default - not
+      verified against the issuer.", and it is not a new sentence: `describeProvenance`
+      is now built FROM that constant rather than repeating it, so the registered
+      disclosure and the rendered text share one source and cannot drift. The scanner
+      requires it whenever a lender-product number is detected AND the caller reports
+      that the figure rests on an unresearched default.
+
+      It is the invariant PREFIX rather than the whole rendered sentence, because the
+      rendered sentence interpolates the per-offering rationale and step 7's check is an
+      exact substring match against a fixed string. A varying sentence registered as the
+      disclosure would match nothing, every time, silently.
+
+      READ 2026-08-31 — what the Regulatory Engine actually holds. It holds real
+      per-state disclosure TEXT, not merely the concept of variants:
+      `DisclosureRequirement` carries a key, the text itself, the citation that obliges
+      it, and an optional productKind. State modules are versioned, every publish
+      declares `material` or `editorial`, and a material republish returns an activated
+      state to `needs_counsel_review` rather than leaving it active.
+
+      Populated, of the seven V1 priority states (NV, CA, NY, TX, FL, AZ, UT):
+
+      CA 2 — commercial financing disclosure, broker compensation.
+      NY 2 — commercial financing disclosure, MCA conduct.
+      FL 2 — commercial financing disclosure, broker conduct.
+      UT 1 — commercial financing disclosure.
+      TX 0. AZ 0. NV 0 — modules exist and oblige nothing.
+
+      ALL SEVEN ARE DRAFTS. None is activated, and the seed says so plainly: "a
+      scaffold for counsel, not legal advice", shipping unusable until a named Level 3
+      human records a review. So this entry can enforce in no state today.
+
+      THE SET MISMATCH, which matters more than the counts. This entry binds CA, NY,
+      UT, VA, GA, CT, FL. The Regulatory Engine's V1 priority is NV, CA, NY, TX, FL,
+      AZ, UT. The overlap is four. VA, GA and CT have no module at all; NV, TX and AZ
+      have modules with no disclosure text. Whether that is a gap in the engine or an
+      over-broad jurisdiction list on this entry is a decision — the disclosure regimes
+      in VA, GA and CT are real, so the likelier answer is that the engine's priority
+      list was drawn from where Burkham operates rather than from where the disclosure
+      obligation attaches.
+
+      RAISED BY REVIEW — the second activation condition is not enforced. `activateState`
+      requires a non-empty document reference, a non-empty reviewer, and a human actor
+      at Level 3 or above. It does NOT inspect the module's disclosure requirements. TX,
+      AZ and NV could be activated today with zero disclosures: counsel reviews a module
+      that obliges nothing, the review is recorded, `permitsClientFacingAction` becomes
+      true, and the engine supplies an empty disclosure set to an agent that believes it
+      received the state-specific variant. That is a control passing on absence, and the
+      fix belongs in `activation.ts` rather than here.
+
+      Nothing else remains open. Ready for Village Compliance & Evidence drafting of the
+      three hedge phrases and both-founder approval under the 2.3 hybrid workflow.
+
+  # =========================================================================
+  # WRITTEN BY IVAN. Pack row retargeted from `network_rule_language_required` to
+  # `card_product_discipline_required`. `jurisdiction` corrected to a list — sixth
+  # time.
+  #
+  # The Level 4 claim is qualified in place, and a `depends_on` records the two
+  # disclosures in the pre-authorisation list that have no data behind them.
+  # =========================================================================
+  - entry_ref: compliance/card-product-characterisation-v1
+    framework: CARD_NETWORK_RULES
+    jurisdiction: [FEDERAL]
+    runtime_flag: card_product_discipline_required
+
+    applicability_rule: >-
+      Any discussion, deliverable, or placement work involving business credit card
+      products — a single card or a coordinated stack. Covers how the product is named,
+      what is disclosed before a stack is authorised, and what is said about the effect
+      on the client's credit.
+
+      NOT A STATUTE. Visa and Mastercard operating rules govern the issuers, who pass
+      requirements down to Burkham as a referral partner. Enforcement is relational: an
+      issuer that finds its product mischaracterised terminates the relationship, which
+      removes Burkham's ability to place that card at all. The deceptive-practices
+      exposure underneath is real and statutory — see
+      compliance/own-claims-and-pricing-v1 and compliance/application-truthfulness-v1 —
+      but this entry's own teeth are contractual.
+
+    agent_behavior_implication: >-
+      NEVER CALLED:
+
+      - a loan, business loan, or small business loan. Cards are revolving credit, not
+      term debt. This is the specific consumer harm named in the Seek Capital
+      enforcement — clients believed they were getting business loans and received
+      credit cards with debt structures they did not expect. `mislabel_card_as_loan` is
+      a Level 4 prohibited ACTION, which the middleware refuses for every actor; the
+      WORDS are caught by the Marketing Claim Library, and only three compounds are
+      seeded today. See notes.
+
+      - a line of credit or LOC. A business LOC is a distinct product Burkham places
+      separately, with different terms, underwriting and disclosures. Conflating them
+      misrepresents both. NOT bannable as a bare phrase — Burkham discusses real LOCs —
+      so this one is a discipline the scanner cannot carry.
+
+      - funding, working capital, cash, capital in your bank account, or money in your
+      business, WHERE THE FRAMING IMPLIES RECEIVED CAPITAL. An unused credit limit is
+      available capital, not capital in hand. The qualifier is the rule: these words
+      are not wrong in themselves, and "working capital" is a purpose a client states
+      on an application.
+
+      - a package or facility. Both imply one integrated product with unified terms. A
+      stack is several distinct products with several issuers.
+
+      - "no interest" or "0% APR" without the intro period bounded.
+
+      CORRECT: business credit cards · business credit card products · card stack ·
+      credit card portfolio · available business credit.
+
+      THE STACK IS NOT A PRODUCT. It is Burkham's characterisation of coordinated
+      placement work. The client holds a set of cards; each has its own issuer, terms,
+      limit and repayment obligation.
+
+      BEFORE A STACK IS AUTHORISED, all of the following are disclosed:
+
+      - these are business credit cards, not loans
+
+      - personal guarantees are required; the client is personally liable
+
+      - the planned number of applications, their timing, and the specific issuers and
+      card products
+
+      - the expected number of hard inquiries on PERSONAL credit
+
+      - the expected temporary personal score impact and recovery window
+
+      - which cards report to personal bureaus and which to business bureaus only. Most
+      business cards report to business bureaus; some issuers do not
+
+      - approval is not guaranteed for any individual card. The strategy applies to more
+      cards than the client needs, expecting declines
+
+      - interest accrues on unpaid balances at the published APR
+
+      - Burkham's own success fees per card placed
+
+      RATE-SHOPPING LOGIC DOES NOT APPLY TO CARDS. FICO and VantageScore merge multiple
+      hard inquiries inside a 14-45 day window into one for autos, mortgages and student
+      loans. Credit cards are excluded. Five card applications are five inquiries. An
+      agent must never suggest that clustering reduces the impact.
+
+      "WILL NOT AFFECT YOUR CREDIT" is banned because it is false. A stack affects credit
+      through the inquiries and through the guarantees created.
+
+      TWO AUTHORISATIONS, NOT ONE. The coordinated strategy is authorised once at the
+      outset, with the disclosures above. Each individual card application then carries
+      its own written authorisation at submission under
+      compliance/application-truthfulness-v1.
+
+    escalation_trigger: >-
+      1. When banned terminology appears in draft output. The Scanner refuses the send;
+      the agent redrafts or a human reviews.
+
+      2. When the client asks to skip the strategy authorisation — "just start applying,
+      I trust you". The agent refuses and explains why. This protects the client and
+      protects Burkham from a later claim of not understanding.
+
+      3. When the client's personal credit profile will not sustain the planned inquiries
+      without material harm, or bureau data indicates declines are highly likely. Route
+      to Funding Strategy to recalibrate the stack.
+
+      4. When field evidence suggests an issuer velocity rule has changed and the Issuer
+      Rules Engine still shows the old one. Escalate to the Capital Product Governance
+      Board before submitting further applications against a stale rule.
+
+      5. When the client requests a card or issuer Burkham has cut from scope. Decline
+      with explanation; refer out where the need is legitimate.
+
+      6. When the client's own words indicate they misunderstand the personal guarantee.
+      "So if the business defaults, the business is on the hook, right?" — stop the
+      workflow and route to a human for direct education. Do not place while the client's
+      understanding of their personal liability is materially wrong.
+
+      7. When execution would produce more inquiries than the strategy authorisation
+      disclosed — declines requiring more attempts, timing extending. Stop and
+      re-authorise the revised strategy. Never silently expand beyond authorised scope.
+
+      8. When any issuer communication touches characterisation — a terminated
+      relationship, a requested change to how their product is described, any compliance
+      contact. Route immediately to both the Compliance Review Board and the Capital
+      Product Governance Board. Issuer relationships are the enforcement mechanism here
+      and they require active tending.
+
+    citation: "Visa Core Rules; Mastercard Rules; issuer referral agreements; 15 U.S.C. § 45"
+
+    depends_on:
+      - kind: claim_library_phrases
+        description: >-
+          The card-as-loan compounds must be seeded before the Scanner can enforce the
+          NEVER CALLED list. Three are: "our loan to you", "credit card loan", "card
+          loan". The two that name the Seek Capital harm are not.
+        required_for: ["business loan", "small business loan"]
+        satisfied_for: []
+        blocking: true
+      - kind: card_bureau_reporting_data
+        description: >-
+          The pre-authorisation disclosure "which cards report to personal bureaus and
+          which to business bureaus only" requires per-card-product bureau reporting.
+          No such field exists in either the Console or CapitalForge, so an agent has
+          no source for a disclosure this entry requires it to make.
+        required_for: [per_card_bureau_reporting_field]
+        satisfied_for: []
+        blocking: true
+      - kind: inquiry_count_tracking
+        description: >-
+          Trigger 7 compares executed hard inquiries against the number the strategy
+          authorisation disclosed. Nothing counts inquiries anywhere.
+        required_for: [executed_inquiry_count]
+        satisfied_for: []
+        blocking: true
+
+    status: draft_pending_claim_library_approval
+
+    notes: >-
+      OPEN — trigger 3's threshold. "Material harm to personal credit" needs a definition
+      Compliance & Evidence can apply: a score-impact range, an inquiry count, a profile
+      pattern, or some combination. The principle is clear and the operational threshold
+      is not.
+
+      OPEN — the strategy authorisation document structure. A signed acknowledgment
+      carrying the disclosures above, presented before Placement Program engagement,
+      copied to the Compliance Evidence Vault. Compliance & Evidence to draft.
+
+      OPEN — where "funding" is acceptable. The word is not per se wrong and the industry
+      uses it loosely, but it is wrong wherever it implies received capital. Approved
+      phrases needed rather than a blanket ban.
+
+      NOTED — the banned terms here overlap with compliance/own-claims-and-pricing-v1.
+      That is correct: one Marketing Claim Library serves several frameworks, and a
+      phrase banned twice is banned once in the list.
+
+      NOTED — triggers 4 and 7 depend on operational monitoring that does not yet exist.
+      Trigger 4 needs field decline patterns feeding back against the Rules Engine;
+      trigger 7 needs the executed inquiry count tracked against the authorised one. Both
+      are named so the gap is visible rather than assumed closed.
+
+      RAISED BY REVIEW — the NEVER CALLED list is almost entirely unenforced. Seeded and
+      matching: "our loan to you", "credit card loan", "card loan". NOT seeded: "business
+      loan", "small business loan", "line of credit", "working capital", "package",
+      "facility", "money in your business", "cash in your bank". Eight of the terms this
+      entry forbids pass the Scanner today.
+
+      And they do not all become bannable by adding them. Three groups:
+
+      SAFE TO BAN — "business loan" and "small business loan" as bounded phrases. These
+      are the Seek Capital harm named in this entry's own rationale, they have no
+      legitimate use describing a card, and they should go in with the CROA phrases.
+
+      NOT BANNABLE — "line of credit", "working capital", "package", "facility". Each has
+      a legitimate use: Burkham places real business LOCs, and "working capital" is a
+      stated purpose an agent must enter verbatim on an application under
+      compliance/application-truthfulness-v1, which says so explicitly. A blanket ban
+      would put two entries in direct conflict.
+
+      NEEDS A DETECTOR, NOT A PHRASE — "cash in your bank account", "money in your
+      business". The rule is about the FRAMING implying received capital, and a phrase
+      list cannot express a framing. `detectLenderNumbers` is the precedent for the
+      shape: a detector in code, gated on nearby context terms.
+
+      RAISED BY REVIEW — `mislabel_card_as_loan` is genuinely Level 4 and hard-blocked,
+      which is more than CROA had. But it blocks an ACTION NAME, and no agent performs an
+      action called `mislabel_card_as_loan` — it performs `draft_communication` and
+      writes the word. The Level 4 entry states the prohibition; the Scanner is what
+      catches it, and for eight of these terms the Scanner has nothing to match.
+
+      RAISED BY REVIEW — the Issuer Rules Engine trigger 4 names is CapitalForge's, not
+      the Console's. `issuer-rules-engine.ts` there holds the real thing, including
+      `CROSS_ISSUER_VELOCITY_RULE = 'velocity_max_apps_per_period'` and Chase 5/24. The
+      Console has only two comments mentioning velocity policy and no engine. So this
+      trigger fires across the Office-to-CapitalForge bridge, which does not exist yet —
+      capitalforge is not in `forge_registry` and V2 fails on it.
+
+      RAISED BY REVIEW — personal guarantees ARE modelled. `packages/capital/positions.ts`
+      carries `personalGuarantee` per position and `health.ts` reasons over it, so the
+      disclosure and trigger 6 have a data model behind them. That is the one item in the
+      pre-authorisation list that does.
+
+  # =========================================================================
+  # WRITTEN BY IVAN. `TAX_ADVICE_SCOPE` added to the schema enum — it is not a
+  # statute, and the enum already carries obligation surfaces that are not statutes
+  # (TWO_PARTY_CONSENT_RECORDING, VOICE_CLONING_CONSENT), so it fits the pattern.
+  #
+  # THE FIRST ENTRY THAT REMOVES SOMETHING. It replaces a would-be IRC §163(j) entry
+  # on the grounds that §163(j) tells an agent nothing it would not otherwise do.
+  # That is the deletion test applied one level up — to what belongs in the library
+  # at all, rather than to a field inside an entry — and it is the right instinct.
+  # A library organised by statute grows an entry per citation and teaches nothing;
+  # one organised by discipline grows an entry per behaviour.
+  #
+  # `jurisdiction` corrected to a list — seventh time.
+  # =========================================================================
+  - entry_ref: compliance/tax-advice-boundary-v1
+    framework: TAX_ADVICE_SCOPE
+    jurisdiction: [FEDERAL]
+    runtime_flag: tax_advice_boundary_required
+
+    applicability_rule: >-
+      Any client interaction touching tax treatment — deductibility, entity elections,
+      depreciation, taxable events, state nexus, or anything else in the tax code.
+      Applies to conversation, deliverables, and CFO Advisory output.
+
+      THIS ENTRY IS NOT ABOUT A STATUTE. IRC §163(j) does not appear here because
+      §163(j) tells an agent nothing it would not otherwise do — the deletion test
+      removes it. It appears as one example among many of where the boundary applies,
+      alongside §162, §168, §199A and every state provision.
+
+      The entry's subject is the boundary itself: Burkham Wickmont does not provide tax
+      advice. Tax advice as principal is cut from V1 scope, and unauthorised practice is
+      enforced by some states directly.
+
+    agent_behavior_implication: >-
+      THE LINE: an agent prepares information a CPA uses. It does not reach a tax
+      conclusion, and it does not present one as Burkham's.
+
+      CFO Advisory produces coordination packets for the client's CPA, not tax analysis.
+      No tax documents are generated. CapitalForge's tax DOCUMENT endpoints refuse
+      explicitly — listing, downloading, summarising and generating a tax document all
+      return one shared refusal — and that refusal is the design, not a gap. Its §163(j)
+      report endpoint is a different case and is live; see notes.
+
+      NEVER SAID:
+
+      - "this interest will be deductible"
+
+      - "you can write this off"
+
+      - "this triggers §X treatment"
+
+      - "this is a taxable event"
+
+      - any statement placing a tax position as settled
+
+      Giving tax advice is Level 4. The prohibited action is
+      `give_legal_or_tax_advice_without_professional_review`, and its name carries a
+      qualifier this entry does not: it forbids advice given WITHOUT professional
+      review, which implies a review path. In V1 there is none — tax advice as principal
+      is out of scope — so the boundary here is the stricter one and the action name is
+      the looser. See notes.
+
+      SAID INSTEAD: "your CPA will assess deductibility of this interest expense under
+      applicable rules." The reframing is consistent — the agent describes what a CPA
+      will evaluate, never what the answer is.
+
+      REFER OUT to the client's CPA. This is the correct answer to a tax question, not
+      an evasion of one. Same shape as the credit repair refer-out in
+      compliance/not-a-credit-repair-organization-v1: a service Burkham does not
+      provide, a client pointed at the right provider.
+
+      NOTHING GOES TO A TAXING AUTHORITY. Deliverables reach the client's CPA, who
+      prepares and submits filings. Burkham submits nothing to the IRS or any state
+      authority. Bright line.
+
+    escalation_trigger: >-
+      1. When the client asks for a tax opinion — can I deduct this, how should I
+      structure this, will this be taxable. The agent declines with the approved
+      refer-out, and the request is logged.
+
+      2. When draft output states a tax position as fact. The Scanner catches it; the
+      agent rewrites to coordination language or removes the passage.
+
+      3. When a deliverable would present tax analysis as a Burkham conclusion. CFO
+      Advisory output routes through Deliverable Approval Workflow with tax content as a
+      named checkpoint — coordination content passes, advice content does not.
+
+      4. When the client references specific tax advice Burkham allegedly gave. Human
+      Approval Console AND Compliance Review Board. Either output escaped scanning, a
+      partner made an unsanctioned claim, or the client misremembers.
+
+      5. When the client intends to take a tax position on Burkham's analysis rather than
+      their CPA's — "I don't need to run this by my CPA, you already told me it's
+      deductible." Stop. Route to a human for direct clarification and log it. Either
+      advice was given that should not have been, or the client misunderstands Burkham's
+      role, and both need correcting before anything proceeds.
+
+      6. When a deliverable is being packaged for direct submission to a taxing
+      authority. Human review. Burkham does not submit tax documents.
+
+    citation: "IRC § 163(j) and § 162 as examples only; Circular 230; state unauthorised-practice statutes"
+
+    depends_on:
+      - kind: deliverable_tax_checkpoint
+        description: >-
+          Trigger 3 requires tax content to be a NAMED checkpoint in the Deliverable
+          Approval Workflow. The workflow exists and has a human approval gate; a
+          tax-specific checkpoint within it does not.
+        required_for: [named_tax_checkpoint_in_3_4]
+        satisfied_for: []
+        blocking: true
+
+    status: draft_pending_claim_library_approval
+
+    notes: >-
+      STRUCTURAL — this entry replaces what would have been an IRC §163(j) entry. That
+      draft failed the deletion test: "agents should be aware of §163(j) limitations"
+      changes no agent behaviour, since tax advice is already Level 4 blocked and CFO
+      Advisory output already routes through Deliverable Approval Workflow. It was
+      reference material with the right fields filled in — the same shape as the
+      "Documented." instruction stub.
+
+      The compliance library is organised by agent behaviour discipline, not by statute.
+      A statute earns an entry when an agent must do something specific because of it.
+      Otherwise it is an example of a broader discipline, and this is that discipline.
+
+      OPEN — approved phrasing for coordination content versus advice content. The
+      general reframe is clear; the specific language across many interaction types needs
+      Compliance & Evidence drafting and Marketing Claim Library approval.
+
+      OPEN — unauthorised practice of tax advice varies by state and some enforce
+      actively. Whether any priority state carries a requirement beyond the general
+      boundary should be part of state activation counsel review, alongside the
+      disclosure variants in compliance/estimate-not-offer-v1.
+
+      NOTED — §163(j) itself belongs in the CFO Advisory playbook as reference material,
+      not here. Moving it out of the library is the point of this entry.
+
+      RAISED BY REVIEW — the refusal claim is right about documents and incomplete about
+      reports. `src/backend/api/routes/tax.routes.ts` refuses all four document
+      operations through a single shared `refuse()` helper, written so "the four cannot
+      drift apart" — exactly as this entry says.
+
+      But `tax-reports.routes.ts` is live, and one of its routes is
+      `GET /api/businesses/:id/tax/163j-report`, which "generates an IRC §163(j) business
+      interest deductibility report … returns the full computation with planning notes,
+      disclaimer, and alert flags." `services/irc163j.ts` implements the limitation:
+      business interest income, floor plan financing, 30% of ATI, indefinite carryforward.
+
+      So §163(j) is not reference material anywhere — it is a working computation that
+      returns a number. A report that computes deductible interest and attaches PLANNING
+      NOTES sits on the far side of the line this entry draws at "never say this interest
+      will be deductible", and a disclaimer does not move it back. The other two live
+      routes are cleaner: year-end-summary and the accountant-ready export are
+      coordination packets, which is exactly the model this entry describes.
+
+      The question for Compliance & Evidence is narrow: does the §163(j) report reach a
+      client, or only their CPA? If it reaches a client it needs the same treatment as a
+      deliverable and the planning notes need re-framing. If it is CPA-only it is a
+      coordination packet and belongs with the export.
+
+      RAISED BY REVIEW — the Level 4 action is
+      `give_legal_or_tax_advice_without_professional_review`. Its qualifier describes an
+      escape hatch V1 does not have. Either the action should lose the suffix, or this
+      entry should say what professional review would consist of. Leaving both as they
+      are means the perimeter and the entry disagree about whether a review path exists.
+
+      RAISED BY REVIEW — CFO Advisory is a Village DEPARTMENT (blueprint line 1124: Phase
+      4 workflows, Cost of Capital Calculator, Debt Service Capacity Score, Capital
+      Policy Manual generation), not a Console module. It is also not one of the Village's
+      twelve real departments, so it carries the same mapping problem as Burkham's other
+      department names — see the Pack's positions_required.
+
+  # =========================================================================
+  # WRITTEN BY IVAN. The Pack gained a TWO_PARTY_CONSENT_RECORDING row; it declared
+  # none. `depends_on` kept in the plain-string form as written — the checker now
+  # accepts it, because forcing the structured mapping on "this capability does not
+  # exist" is ceremony and a field that is awkward to write is a field left out.
+  #
+  # `jurisdiction` corrected: the "+" placeholder replaced with the two states it
+  # stood for. `@bwc/calls` already holds the list in code and it has eleven.
+  # =========================================================================
+  - entry_ref: compliance/call-recording-consent-v1
+    framework: TWO_PARTY_CONSENT_RECORDING
+    jurisdiction: [CA, FL, IL, MD, MA, MT, NH, OR, PA, WA, CT]
+    runtime_flag: recording_consent_required
+
+    applicability_rule: >-
+      Any recorded call, whoever dialled. Applies to founder-led Blueprint Review
+      calls, Concierge Desk calls, AI-mediated VoiceForge calls, and inbound calls
+      reaching a routing system.
+
+      NOT CUT BY THE OUTBOUND DECISION. V1 cuts outbound telemarketing; this entry is
+      untouched by that, because two-party consent attaches to RECORDING, not to who
+      initiated. Module 4.3 records every founder-led and Concierge call, so an inbound
+      call from a client in California is squarely in scope.
+
+    agent_behavior_implication: >-
+      EXPLICIT CONSENT, EVERY CALL, EVERY JURISDICTION. California's Invasion of Privacy
+      Act has been read to require affirmative consent rather than disclosure plus
+      continued participation. "This call is being recorded, by continuing you consent"
+      does not work there. Rather than run per-state consent models, one rule: every
+      party affirmatively says yes before recording proceeds. Over-restrictive in
+      permissive states, and the operational simplicity beats the risk of implementing
+      jurisdiction detection wrongly.
+
+      SILENCE IS NOT CONSENT. A party who neither agrees nor refuses has not consented.
+      Re-prompt; if still unresponsive, proceed unrecorded or end the call.
+
+      THE DISCLOSURE IS SCRIPTED. Not ad hoc. Marketing Claim Library approved list,
+      Compliance & Evidence drafted, both founders approved. Delivery varies by call
+      type: a human reads it on founder-led and human-Concierge calls; VoiceForge
+      announces it on AI-mediated calls; a routing system announces it before anyone
+      joins.
+
+      WHEN SOMEONE REFUSES AT THE START — recording does not begin. Whether the call
+      proceeds depends on whether recording is operationally required. A routine service
+      question does not need one. A Blueprint Review where disclosures are made and
+      engagement is authorised does: without a recording there is no audit trail of what
+      was disclosed and what was authorised, so the call is rescheduled or moved to a
+      medium with a different consent structure.
+
+      WHEN SOMEONE WITHDRAWS MID-CALL — recording stops immediately. The portion already
+      captured is retained under Regulatory Engine retention with the withdrawal
+      timestamped, because that portion was consensual and may be needed as a record of
+      what was said before. It is marked so nobody later uses it as though consent had
+      been continuous.
+
+      WHEN SOMEONE JOINS MID-CALL — pause, restate, capture, resume. The new party was
+      not present for the original consent and has not consented to anything.
+
+      1. recording pauses on detection of the new participant
+
+      2. the scripted disclosure is restated to them
+
+      3. they consent — recording resumes as a NEW SEGMENT
+
+      4. they refuse — recording does not resume; the call continues unrecorded if its
+      purpose permits
+
+      The earlier portion is retained. The original parties consented to it and a later
+      arrival does not retroactively invalidate that. But the recording is SEGMENTED,
+      with timestamps and per-segment consent records showing which parties consented to
+      which portion.
+
+      THIS IS WHERE THE DISCIPLINE FAILS IN PRACTICE. Two-party consent violations do
+      not happen through anyone deciding to ignore consent. They happen because somebody
+      joins at minute twenty, nobody wants to break the flow of the conversation, and the
+      recording keeps running. The pause is an interruption and it is meant to be one.
+
+      Every join, leave and rejoin is a separate consent event.
+
+    escalation_trigger: >-
+      1. When a recording reaches the Compliance Evidence Vault with consent capture
+      missing or incomplete for any participant. Quarantined pending human review — not
+      deleted, since it may be needed for audit, and not usable for any purpose until the
+      gap is resolved.
+
+      2. When participants span jurisdictions with materially different requirements and
+      the handler is unsure which apply. Route before the call proceeds; default to the
+      strictest.
+
+      3. When a participant is unidentified — an unknown caller, an unverified mid-call
+      joiner. Consent from an unverified party may not be sufficient. Human review;
+      possibly end and re-establish with verified participants.
+
+      4. When consent is withdrawn while a compliance disclosure is being made or an
+      authorisation captured. The record of that disclosure is now incomplete. Stop,
+      route, and restart the sequence under a workable consent arrangement.
+
+      5. When recording infrastructure fails after consent was captured. Not a consent
+      violation — the parties agreed to something that did not happen. But the audit
+      trail is lost, so a human decides whether the call must be redone.
+
+      6. When a participant asks about their recording rights — a copy, a deletion, a
+      question about use. Compliance & Evidence handles it per the jurisdiction's
+      requirements.
+
+      7. When recorded content is proposed for any use beyond internal audit and
+      compliance — a testimonial, marketing material, a training example. Recording
+      consent is not use consent. Additional consent is required and the Compliance
+      Review Board reviews the use.
+
+      8. When a call is to be recorded in NEVADA, until the contradiction in the notes is
+      resolved. Two live artifacts in this portfolio disagree about whether NV is a
+      one-party or all-party state, and NV is Burkham's first-listed target geography.
+
+    depends_on:
+      - VoiceForge pause, resume, participant detection, and system-announced disclosure
+      - Marketing Claim Library scripted disclosures per call type, founder-approved
+      - Regulatory Engine jurisdiction-specific disclosure variants, per state activation
+      - Compliance Evidence Vault storage with segmentation metadata and per-segment consent
+      - Concierge Desk procedures for human-handled joins and refusals
+      - the required-recording versus optional-recording decision matrix
+      - resolution of the Nevada one-party / all-party contradiction
+
+    citation: "Cal. Penal Code § 632 (IPA); Fla. Stat. § 934.03; 720 ILCS 5/14-2; Md. Cts & Jud. Proc. § 10-402; Mass. Gen. Laws ch. 272 § 99; Mont. Code § 45-8-213; N.H. RSA 570-A:2; Or. Rev. Stat. § 165.540; 18 Pa. C.S. § 5703; Wash. Rev. Code § 9.73.030; Conn. Gen. Stat. § 52-570d"
+
+    status: draft_pending_claim_library_approval
+
+    notes: >-
+      RECOMMENDED SEQUENCING — founder-led calls launch first, with human-delivered
+      disclosure and manual consent handling. Those have stable participant lists and
+      need no VoiceForge capability. AI-mediated calls follow once the infrastructure
+      supports pause, participant detection and consent capture. This lets the entry
+      apply operationally at V1 rather than waiting on engineering.
+
+      OPEN — complex multi-party calls. Participants joining and leaving repeatedly make
+      every transition a consent event, and V1 may not handle that reliably. Recommend
+      such conversations move to scheduled multi-party video or in-person with a
+      different consent structure, rather than being handled badly on a call.
+
+      OPEN — whether pre-withdrawal recording may be retained. Retention with notation is
+      the default here; some jurisdictions may require destruction. Counsel review at
+      state activation.
+
+      OPEN — the required-recording decision matrix. The heuristic is that any call
+      making a compliance disclosure or capturing an authorisation requires recording,
+      and routine service questions do not. Compliance & Evidence to make that a rule.
+
+      OPEN — how VoiceForge captures affirmative consent: voice recognition, keypress,
+      verbal confirmation. The entry states the requirement; the mechanism is an
+      engineering decision.
+
+      OPEN — multi-jurisdiction detection. Trigger 2 assumes participant location is
+      known and it may not be. Needs a default.
+
+      CONTRADICTION — NEVADA. Two live artifacts in this portfolio disagree, and one of
+      them is wrong.
+
+      The Office's Compliance Library holds `compliance/nv-two-party-consent-v1`,
+      framework TWO_PARTY_CONSENT_RECORDING, jurisdiction {NV} — an authored, live entry
+      asserting Nevada is all-party. Greenstone's Pack declares it and resolves against
+      it.
+
+      Burkham's Console lists NV in `CONFIRMED_ONE_PARTY_STATES` in
+      `packages/calls/src/consent.ts`, alongside NY, TX, AZ and UT, with the comment
+      that these are "confirmed rather than assumed so the distinction between 'checked'
+      and 'not on the other list' survives". CONFIRMED is the strongest word that module
+      uses.
+
+      So: one portfolio, one state, two live artifacts, opposite conclusions. Nevada is
+      FIRST on Burkham's target_geographies, Greenstone already records calls there, and
+      the Console's own module header states the stake plainly — recording a client
+      without the consent their state requires is a crime in the state where the CLIENT
+      is sitting. The Console defaults an unlisted state to one-party, so if the Office
+      entry is right, Burkham records NV calls without the consent Nevada requires.
+
+      This is a counsel question and not one this entry can settle. What it can do is
+      refuse to proceed on it: trigger 8 holds NV recordings until it is resolved, and
+      the resolution belongs in `openQuestion` on the NV rule rather than in a comment.
+
+      RAISED BY REVIEW — the jurisdiction list. `ALL_PARTY_CONSENT_STATES` in
+      `@bwc/calls` holds eleven with citations: CA, FL, IL, MD, MA, MT, NH, OR, PA, WA,
+      CT. This entry listed nine and a "+". OR and CT were the two the "+" stood for and
+      are now named, with citations added. A placeholder in a jurisdiction list is worth
+      avoiding for its own sake: the list is what decides whether the entry binds, and
+      "+" binds nothing.
+
+      RAISED BY REVIEW — more of this is built than the entry assumes. `@bwc/calls` has
+      `capture.ts` with a real `beginCall` consent decision, a `CallStatus` of
+      consent_refused / recording / captured / analysed, and `consentBasis` STORED rather
+      than derived later, on the reasoning that the rule may change. `@bwc/consent`
+      already carries `call_recording` as one of its nine kinds, with a comment stating
+      the same jurisdictional principle this entry does. The all-party list is data with
+      citations and is marked as requiring counsel confirmation.
+
+      What is NOT built is the part this entry adds: SEGMENTATION. Nothing supports
+      pausing, restating, and resuming as a new segment with per-segment consent records.
+      That is the entry's real contribution and it is the dependency to fund.
+
+  # =========================================================================
+  # WRITTEN BY IVAN. The Pack gained an ECOA row; it declared none.
+  # `jurisdiction` corrected to a list.
+  #
+  # The NAMED GAP is corrected in place: one of the six dependencies is built, one
+  # is partly built, and four are genuinely absent. The correction matters in the
+  # expensive direction — "none of the six exists" would have funded building a
+  # thing that exists and is well made.
+  # =========================================================================
+  - entry_ref: compliance/fair-treatment-in-routing-v1
+    framework: ECOA
+    jurisdiction: [FEDERAL]
+    runtime_flag: fair_treatment_required
+
+    applicability_rule: >-
+      Any decision affecting which lenders a client is shown, whether a client is
+      served, and what client information enters a structured record or an automated
+      decision. Covers Recommendation Engine output, Lender Intelligence Database
+      pattern formation, intake and disengagement decisions, and the handling of
+      protected class information a client volunteers.
+
+      Burkham does not lend, so it issues no adverse action notices. It does decide
+      which lenders a client sees and whether to serve them at all, and those are
+      decisions about access to credit facilitation.
+
+    agent_behavior_implication: >-
+      VOLUNTEERED PROTECTED CLASS INFORMATION — acknowledge, never record, never use.
+
+      A client mentions on a call that they are a veteran, that they are 68 and thinking
+      about succession, that English is not their first language. Nobody asked. The
+      rules:
+
+      - the call recording captures it — that is a factual record of a conversation
+
+      - the STRUCTURED RECORD does not. No tag, no field, no searchable attribute
+
+      - the Recommendation Engine never sees it, because it is not in the input stream
+
+      - call summarisation redacts protected class references from structured output
+
+      - it does not reach a lender packet unless the client authorises it per application
+
+      A human handler may respond conversationally. Congratulating someone on their
+      service is not a decision input.
+
+      PROGRAMS FOR PROTECTED CLASSES — the client self-identifies; Burkham never infers.
+
+      Veteran-preference SBA products, minority and women-owned programs, rural programs
+      — these exist because legislatures created them to widen access. Surfacing one to
+      an eligible client is not discrimination. But inferring eligibility from something
+      said on a call is Burkham deciding which protected class benefits apply to which
+      clients on the basis of informal disclosure, and that is using the information
+      however benign the intent.
+
+      The clean pattern: agents surface the EXISTENCE of these program categories to
+      every client — "some programs have specific eligibility categories including
+      veteran-owned, minority-owned, women-owned, or geographic; if any apply we can
+      identify what you may be eligible for." The client then self-identifies through the
+      per-application authorisation, deliberately and on the record.
+
+      THE RECOMMENDATION ENGINE'S INPUTS ARE ENUMERATED AND FIXED. What the eligibility
+      check reads today, exactly: requested amount against the offering's minimum and
+      maximum, time in business in months, annual revenue, personal credit score,
+      industry label matched against the offering's excluded industries, and the states
+      the offering serves. Suitability and governance standing are separate stages with
+      their own inputs.
+
+      Any addition requires Compliance Review Board approval with disparate impact
+      analysis first. No silent expansion.
+
+      PROXY DISCRIMINATION IS THE REAL RISK, AND IT NEEDS NO PROTECTED FIELD.
+
+      The Lender Intelligence Database exists to learn which lenders approve which
+      profiles. If a lender's own approval history embeds discrimination — which is the
+      premise of every fair lending statute — the Database learns that pattern and the
+      Engine routes accordingly:
+
+      - zip code correlates with race in most American cities
+
+      - industry classification correlates with owner demographics
+
+      - time in business correlates with owner age
+
+      - banking patterns visible in cash flow correlate with demographics
+
+      Each routing decision looks defensible alone. The disparity is only visible in
+      aggregate, measured against characteristics Burkham deliberately does not collect.
+
+      ROUTING IS DOCUMENTED PER CLIENT. Every recommendation records which lenders were
+      considered, which were excluded, and why — with reasons mapping to lender
+      underwriting criteria, never to client attributes that could proxy for a protected
+      class. Three lenders shown and four omitted is a decision about that client,
+      whether or not they are told.
+
+      DECLINING TO SERVE requires documented client-specific reasons in the Compliance
+      Evidence Vault. ECOA requires no notice for this, and it is treated as though it
+      did — a service decision that cannot state its reason is a service decision nobody
+      can defend.
+
+    escalation_trigger: >-
+      1. When output would place volunteered protected class information into a
+      structured field or an automated routing decision. Refuse the structural record;
+      route for guidance on acknowledging it conversationally without using it as data.
+
+      2. When an expansion of Recommendation Engine inputs is proposed. Compliance Review
+      Board, with disparate impact analysis before approval.
+
+      3. When statistical disparity appears in aggregate routing, approval or service
+      patterns correlating with a proxy variable. Compliance Review Board with the
+      evidence.
+
+      4. When a client is declined without documented client-specific reasons — or with
+      reasons that could correlate with a protected class. Human review before the
+      decline executes.
+
+      5. When the client asks why particular lenders were or were not included. Route to
+      a human for a specific factual answer. No canned response and no refusal to
+      explain. Transparency about routing is discipline, not exposure.
+
+      6. When any client communication indicates perceived discrimination — "you're only
+      showing me these because of X", "why aren't you helping me like you helped my
+      friend". Compliance Review Board immediately. Perception problem, communication
+      problem or real pattern; all three need investigating.
+
+      7. When a recommendation references information about the client that cannot be
+      traced to a structured source with provenance. Route to Agent QA. Untraceable input
+      is how volunteered protected class information leaks into a decision.
+
+    depends_on:
+      - disparate impact monitoring over Recommendation Engine output and Lender Intelligence Database patterns
+      - Compliance Review Board governance over the Recommendation Engine input list
+      - documented reasons on every service decline
+      - client-facing explanation of routing rationale
+      - fair lending review by outside expertise
+      - a decision on whether CapitalForge's Section 1071 demographic capture applies to Burkham
+
+    citation: "15 U.S.C. § 1691 et seq. (ECOA); Regulation B, 12 C.F.R. Part 1002"
+
+    status: draft_pending_claim_library_approval
+
+    notes: >-
+      NAMED GAP — corrected. The original note said none of the six dependencies exists.
+      Four do not. One is built. One is partly built. The correction is in the expensive
+      direction: building a thing that already exists costs more than the note saved.
+
+      BUILT — per-client routing rationale. `packages/placement/src/recommend.ts` returns
+      `RejectedAlternative` per excluded offering, carrying the provider, the offering,
+      the STAGE the rejection happened at (governance, eligibility or suitability) and a
+      `reason` written, in its own words, "in the words a memo should use" because "a
+      compliance officer cannot tell a sound rejection from a bug and neither can the
+      client". The stage field is exactly this entry's requirement that reasons map to
+      underwriting criteria rather than to client attributes. It also returns
+      `missingProfileFields` — the actionable inverse, "record the entity's revenue and
+      four more providers resolve" — which is most of what trigger 5 needs.
+
+      PARTLY BUILT — the enumerated input list. `EligibilityCriteria` is a typed,
+      fixed structure, so an addition is a type change rather than a config edit and
+      cannot happen silently. What does not exist is the GOVERNANCE around it: nothing
+      routes a change through the Compliance Review Board, and nothing requires a
+      disparate impact analysis first. The dependency has been narrowed to that.
+
+      The original enumerated list in this entry also over-stated what the Engine reads.
+      It named cash flow signals, bureau data, entity structure, revenue, existing debt,
+      NAICS and state. The eligibility check actually reads amount, time in business,
+      annual revenue, personal credit score, industry label and states served. An entry
+      that governs inputs has to name the real ones, so the implication now does.
+
+      Industry IS in the decision path — `excludedIndustries` is matched against a
+      "free-text or NAICS-derived label" — so the proxy concern about industry
+      classification is live rather than hypothetical.
+
+      NOT BUILT, and the core claim stands. Nothing computes disparate impact anywhere.
+      CapitalForge has a 415-line `FairLendingService` whose header lists "fair-lending
+      monitoring dashboards" among its responsibilities, and the word "disparate" does
+      not appear in it once. What it implements is Section 1071 record capture, adverse
+      action reporting in 1071 format, and CFPB reason codes. Record-keeping, not
+      disparity analysis.
+
+      So the honest answer to "would proxy discrimination be noticed if it were
+      occurring" remains: probably not. Individual recommendations look defensible one
+      at a time, the rejection reasons are sound one at a time, and the pattern is only
+      visible in aggregate against characteristics not collected.
+
+      RAISED BY REVIEW — a direct tension with CapitalForge, and it needs deciding rather
+      than noting. This entry says protected class information is NEVER recorded.
+      CapitalForge's `FairLendingRecord` model records `demographicData` deliberately,
+      with `isFirewalled` defaulting to true, and activates at a 100-application coverage
+      threshold. Burkham's own Pack declares CFPB_1071.
+
+      Both positions are coherent and they are not compatible. Do-not-collect rests on
+      Burkham not being a covered financial institution — 1071 attaches at the issuer,
+      which is what the Pack's own CFPB_1071 row says. Collect-and-firewall rests on
+      Burkham being covered, or becoming covered at volume.
+
+      If Burkham is not covered, CapitalForge's demographic capture must never be reached
+      by a Burkham tenant, and that needs enforcing rather than assuming. If Burkham
+      becomes covered at 100 applications, this entry's "never record" expires on a
+      threshold nobody is watching. Either way the decision belongs to counsel and the
+      answer changes what an agent does.
+
+      ACTION — fair lending expertise. Disparate impact monitoring is a discipline that
+      CFPB examiners and fair lending consultants practise full-time. It should be
+      engaged rather than invented internally. Natural pairing with the third Compliance
+      Review Board seat and outside counsel engagement.
+
+      ACTION — public benchmark comparison. Where small business lending data is
+      published, compare Burkham's routing and approval patterns to the market baseline.
+      A material divergence for clients from particular geographies or industries is the
+      first signal available without collecting protected class data.
+
+      OPEN — conversational scripting for volunteered disclosures. The line between a
+      handler acknowledging what was said and using it to shape service is genuinely
+      soft. If a client mentions veteran status and the handler notes that
+      veteran-preference programs exist, information has arguably been used. Compliance &
+      Evidence to draft the specific guidance.
+
+      OPEN — how much routing rationale a client sees. `RejectedAlternative.reason` is
+      already written to be readable by a client as well as a compliance officer, so the
+      question is narrower than it was: not whether an explanation can be produced, but
+      whether the full set is shown. Full internal reasoning includes proprietary
+      Database patterns. A product and compliance decision together.
+
+  # =========================================================================
+  # WRITTEN BY IVAN. The Pack gained an FTC_TSR row; it declared none.
+  # `jurisdiction` corrected to a list.
+  #
+  # NOT a contradiction with Greenstone, though it looks like the Nevada case.
+  # `compliance/ftc-tsr-v2` is live in the Office library under flag
+  # `tsr_disclosure_required` — "state identity, the company, and the purpose of the
+  # call before anything else" — because Greenstone DOES cold-call property owners
+  # and complies with TSR. This entry stays OUTSIDE TSR instead. Two ventures, one
+  # statute, opposite postures, separate refs and separate flags. The portfolio
+  # library handles that correctly and both Packs point at the right one.
+  # =========================================================================
+  - entry_ref: compliance/outbound-contact-boundary-v1
+    framework: FTC_TSR
+    jurisdiction: [FEDERAL]
+    runtime_flag: outbound_contact_boundary_required
+
+    applicability_rule: >-
+      Any Burkham-initiated contact with an individual — phone, email, SMS, any channel.
+      Applies to Concierge Desk calls, follow-up on form fills and gated downloads, and
+      first contact with a Ring 1 referral.
+
+      A BOUNDARY ENTRY. V1 does not conduct outbound telemarketing. This documents the
+      line and the discipline that keeps Burkham outside TSR's reach, not how to comply
+      with it.
+
+      Broader than TSR by design. TSR reaches telephone contact; CAN-SPAM reaches email;
+      UDAAP reaches any commercial contact. Rather than run three tests, one test governs
+      all outbound channels.
+
+    agent_behavior_implication: >-
+      NO OUTBOUND CONTACT WITHOUT ALL THREE. An agent checks these before dialling,
+      sending or messaging. Any one missing, no contact.
+
+      A — THE RELATIONSHIP EXISTS. One of: an active engagement, or a former client
+      inside an 18-month lookback; an affirmative initiating action, documented with
+      source attribution — a form submitted, a call requested, a gated asset downloaded
+      with contact fields, a webinar registered, a subscription taken; or a Ring 1
+      introduction WITH DOCUMENTED CONSENT from the person introduced.
+
+      B — THE CHANNEL IS AUTHORISED. A form supplying a phone number authorises phone. A
+      form supplying only email does not. The channel the person gave is the channel
+      available.
+
+      C — THE PURPOSE MATCHES THE REASON. A whitepaper downloaded about non-dilutive
+      funding authorises follow-up about non-dilutive funding. It does not authorise
+      outreach about Stack Management. A Blueprint client may be contacted about their
+      Blueprint, not cross-sold a partner's product.
+
+      A REFERRAL IS NOT CONSENT. A Ring 1 partner sending a name does not satisfy Part A.
+      The person referred must have known they were being introduced and agreed to it,
+      and that agreement must be documented in the referral packet. Without it, Burkham
+      does not make contact — the partner is asked to obtain it.
+
+      COLD OUTREACH IS BANNED IN EVERY CHANNEL. A prospect list with no documented
+      initiating action fails Part A however warm the list is thought to be. This is
+      consistent with the Ring 1 model: Burkham does not grow through cold contact.
+
+      AI-MEDIATED OUTBOUND IS RESTRICTED IN V1. Concierge outbound defaults to
+      human-initiated. Not because the law distinguishes — TSR does not care whether a
+      human or a system dials — but because AI-mediated contact scales, exercises less
+      real-time judgement about whether a particular call is appropriate, and can drift
+      in scope without anyone noticing. Deployment requires an authorised scope, a volume
+      ceiling, and Compliance Review Board approval.
+
+      DO NOT CALL is TWO checks, not one, and they fail differently. The client's own
+      standing instruction is held in the Communications Hub as a preference with legal
+      force that nothing overrides — that one is enforced today. The national registry is
+      a separate lookup that does not exist here; where a number is registered and the
+      existing business relationship does not clearly apply, do not call — email, or wait
+      for inbound.
+
+      TIME OF DAY — 8am to 9pm local to the recipient, no exceptions for urgency. This is
+      enforced: the Communications Hub computes the window against the recipient's own
+      timezone rather than the sender's.
+
+      THE BOUNDARY MOVES ONLY BY DECISION. An agent never approves outbound outside this
+      test. Neither does a venture operator. Expanding outbound — a new channel, a new
+      prospect category, a higher volume, AI-mediated deployment — is a Compliance Review
+      Board decision recorded in the Event Ledger. "Just a few warm calls to the referral
+      list" is how this boundary erodes, and it erodes without anyone deciding to cross
+      it.
+
+    escalation_trigger: >-
+      1. When outbound is about to be initiated without documented evidence for A, B and
+      C. Refuse; route for evidence review or collection.
+
+      2. When a Ring 1 referral arrives without consent documentation. No contact. Route
+      to Channel Partnerships to obtain it from the partner. A repeated pattern raises a
+      `documentation_gap` finding against that partner, which is what adjusts their
+      standing.
+
+      3. When the proposed purpose does not match the initiating action's scope. Refuse;
+      human review on whether additional consent is needed or the outreach should be
+      redirected.
+
+      4. When the recipient indicates they did not expect the contact — "how did you get
+      my information", "I never signed up", "take me off your list". End the call, update
+      the record, and Compliance & Evidence determines which of three happened: the
+      evidence was insufficient, a partner referred without consent, or a system error.
+
+      5. When complaint responses from Concierge outbound exceed a defined rate.
+      Compliance Review Board reviews whether the three-part test is being applied
+      correctly.
+
+      6. When any expansion of AI-mediated outbound is proposed — channel, category, or
+      volume. Compliance Review Board before deployment, never automatic.
+
+      7. When DNC status is unverified before a dial, on either check.
+
+      8. When a dial would fall outside 8am–9pm recipient local time.
+
+    depends_on:
+      - Ring 1 consent documentation captured in the Partner & Referrer Portal
+      - a consent kind for referral introduction in the Consent & Authorization Center
+      - partner training content covering the consent obligation
+      - national Do Not Call registry lookup before outbound dial
+      - automatic documentation_gap findings when a referral arrives without consent
+
+    citation: "16 C.F.R. Part 310 (TSR); 15 U.S.C. § 7701 et seq. (CAN-SPAM); 15 U.S.C. § 45"
+
+    status: draft_pending_claim_library_approval
+
+    notes: >-
+      KNOWN FRICTION — this entry adds a requirement to Burkham's core acquisition
+      channel. Ring 1 partners must obtain and document the referred person's consent
+      before introducing them, and partners will resist. "I'm just introducing a client,
+      this doesn't need paperwork" is the natural reaction and it is exactly why the
+      discipline matters.
+
+      RECOMMENDED — hold the discipline and let it filter partners rather than relaxing
+      it and absorbing the TSR exposure. A partner who cannot be brought to consistent
+      consent documentation is a partner whose referrals carry risk Burkham cannot see.
+
+      OPEN — the consent language itself is novel. Business referrals ordinarily happen
+      through informal introduction with no documented consent, so there is no
+      industry-standard implementation to copy. Compliance & Evidence with outside
+      counsel to develop language that works legally and does not make the introduction
+      unnatural.
+
+      OPEN — whether the three-part test is legally sufficient to stay outside TSR
+      jurisdiction. It is a defensible operational test, not a verified legal one.
+      Counsel review before locking.
+
+      OPEN — the complaint rate threshold in trigger 5. Needs operational data. Start
+      conservative and relax as evidence accumulates.
+
+      OPEN — the 18-month lookback for former clients follows common TSR safe-harbour
+      practice rather than a verified requirement. Confirm at counsel review.
+
+      RAISED BY REVIEW — the dependency list was longer than it needed to be. Three of
+      the original six are built or nearly built, and the list has been narrowed to what
+      is actually missing.
+
+      BUILT — time of day. `packages/comms/src/windows.ts` restricts calls and texts to
+      8am-9pm LOCAL TO THE RECIPIENT and computes it against the recipient's timezone
+      rather than the sender's, with the daylight-saving case reasoned through in the
+      source: a fixed offset would be "quietly wrong for half the year, and the wrong
+      half is the one where an 8am send" lands too early. Trigger 8 has an enforcer. The
+      entry now says so rather than asking for it.
+
+      BUILT — the client's own do-not-call instruction. `comms/preferences.ts` carries
+      `doNotCall` as "a standing instruction with legal force. Nothing overrides it",
+      distinguished in the source from a mere channel preference an urgent alert may
+      override. What is NOT built is the national registry lookup, which is a different
+      check with a different failure mode, so DNC is now stated as two checks.
+
+      MOSTLY BUILT — Partner Risk Score. `packages/partners/src/risk.ts` has standings,
+      severities, thresholds, a ten-referral minimum before a rate is computed, and a
+      `FindingKind` list that already includes `documentation_gap` — the exact kind a
+      missing referral consent should raise. The score does not need building; the
+      automatic finding does, and that is the dependency now recorded.
+
+      PARTLY BUILT — partner training. `partners/curriculum.ts`, `tracks.ts` and
+      `certification.ts` exist, so the machinery is there and only the content is
+      missing. Narrowed to content.
+
+      NOT BUILT, and the core gap. `packages/partners/src/referrals.ts` records
+      attribution and counts — total, converted, lost, open — and captures NO CONSENT
+      from the person referred. There is also no consent KIND for it: the Consent &
+      Authorization Center has eight, and a referral introduction is not among them.
+
+      That second one matters more than it looks. `@bwc/consent` refuses a consent with
+      an empty scope, on the reasoning that an unscoped consent is a blanket consent by
+      accident — which is precisely the discipline this entry wants for referrals. The
+      right home for Ring 1 consent is a ninth kind in that store, not a field on a
+      referral row, because the store already enforces scope, expiry and revocation
+      propagation and a bare boolean on a referral would enforce none of them.
+
+  # =========================================================================
+  # WRITTEN BY IVAN. The Pack gained a STATE_LENDER_LICENSURE row; it declared none.
+  #
+  # `jurisdiction` is [ALL] rather than the seven-plus-"+". The rule binds in every
+  # state — that is what "every engagement, in every state" means — and the seven
+  # are where a finding is being sought, which belongs in depends_on rather than in
+  # the jurisdiction list. A "+" in a jurisdiction list binds nothing.
+  # =========================================================================
+  - entry_ref: compliance/facilitator-not-broker-v1
+    framework: STATE_LENDER_LICENSURE
+    jurisdiction: [ALL]
+    runtime_flag: facilitator_status_required
+
+    applicability_rule: >-
+      Every engagement, in every state, from intake through placement. Governs how
+      Burkham characterises itself, how it is compensated, what its agents do with a
+      lender, and whether it may operate in a given state at all.
+
+      NOT A BOUNDARY ENTRY. The credit repair, tax and outbound entries describe services
+      Burkham does not provide. This describes the service Burkham does provide, and
+      whether that activity requires a licence is a per-state question with no single
+      answer.
+
+      "WE ARE NOT A LENDER" IS THE WRONG CLAIM. Nobody alleges Burkham lends. The
+      exposure is broker licensure: several states license anyone taking compensation for
+      arranging credit, regardless of whose money funds it. Burkham charges a success fee
+      contingent on placement — which is the definition, not a distance from it. The
+      contingent structure makes the question sharper, not softer.
+
+    agent_behavior_implication: >-
+      FOUR STRUCTURAL DISCIPLINES. Each supports the position that Burkham facilitates
+      rather than brokers. Each must hold continuously; any one breaking requires
+      re-analysis of the whole perimeter.
+
+      1. NEVER TOUCH THE MONEY. Burkham does not receive, hold, escrow, disburse or
+      otherwise handle client capital at any point. Clients pay Burkham for its service;
+      lender approvals disburse directly from lender to client. This is load-bearing for
+      more than broker status — handling funds reaches money transmission, custody and
+      potentially banking regulation.
+
+      2. NEVER TAKE LENDER-SIDE COMPENSATION. Fees come from the client only. No lender
+      referral fee, no origination participation, no volume arrangement, no economic
+      relationship with the lender in either direction.
+
+      3. NEVER NEGOTIATE TERMS. Burkham's role is preparation, packaging, coordination
+      and submission. Agent contact with a lender's underwriters is scoped to
+      documentation clarification, timing, and advocacy for approval on the client's
+      circumstances. Pushing for a lower rate, different covenants or an altered
+      structure is term negotiation, and in several states that is exactly the licensed
+      activity.
+
+      4. FEES ARE FOR FACILITATION, NOT FOR AN OUTCOME. The engagement documents, the fee
+      exhibit and every description of the success fee must be clear that compensation is
+      for the facilitation service performed, not consideration for arranging a specific
+      credit outcome. This is a documentation discipline, not merely a phrasing
+      preference.
+
+      TWO OF THESE HOLD BY ABSENCE TODAY, WHICH IS NOT THE SAME AS BEING ENFORCED.
+      Nothing in the system models client capital — no escrow, no disbursement, no
+      custody — so discipline 1 cannot currently be broken. Nothing models compensation
+      flowing FROM a lender either; the fee model on an offering describes what the
+      lender charges the client, and partner payouts run outward. A discipline that holds
+      because the capability is missing is one a future feature breaks silently, which is
+      what trigger 2 exists for.
+
+      NEVER CALLED A BROKER. Not by Burkham, not in a deliverable, not in partner
+      material. The approved characterisation is that Burkham helps identify suitable
+      funding options and prepares and submits applications on the client's
+      authorisation.
+
+      That said — declining the label does not decide the question. A state characterises
+      activity by what is done, not by what it is called.
+
+      NO SERVICE IN A STATE WHOSE BROKER TREATMENT IS UNREVIEWED. Counsel review must
+      return one of four findings per state:
+
+      - permitted without registration
+
+      - permitted with structural tightening — and the tightening named
+
+      - registration required
+
+      - not activatable
+
+      Until a state has one of those four on record, Burkham does not serve clients there.
+
+      THIS IS A SECOND GATE, NOT THE EXISTING ONE. The Regulatory Engine's activation
+      gate answers "has counsel reviewed this state's disclosure module". That is a
+      different question from "may Burkham operate here at all", and a state can pass the
+      first while the second is untouched. An agent must not read `active` as answering
+      this entry. See notes.
+
+    escalation_trigger: >-
+      1. When output characterises Burkham as a broker, loan broker or credit broker.
+      Refuse; rewrite to the approved characterisation.
+
+      2. When any feature, workflow or arrangement is proposed that would put Burkham in
+      position to receive, hold, escrow or disburse client capital. Compliance Review
+      Board immediately. This is a structural change requiring re-analysis of the entire
+      perimeter, not a product decision — and it is the trigger that matters most,
+      because discipline 1 currently holds only because nothing implements the capability.
+
+      3. When an agent's contact with a lender moves from clarification and advocacy into
+      term negotiation. Route for a determination on whether it crosses the line in that
+      client's state.
+
+      4. When a client is in a state whose broker treatment has not been counsel-reviewed.
+      No service.
+
+      5. When the client requests something that would be brokerage in their state — term
+      negotiation, lender-side representation. Compliance Review Board decides whether it
+      can be accommodated within the structural disciplines or must be refused.
+
+      6. When any compensation change is proposed that introduces lender-side economics.
+      Compliance Review Board immediately; it changes the analysis fundamentally.
+
+      7. When any regulatory inquiry touches broker status — a state regulator question, a
+      complaint alleging unlicensed brokerage. Compliance Review Board and outside
+      counsel. Do not respond without counsel.
+
+      8. When an external source characterises Burkham as a broker — trade press, an
+      industry directory, a partner's own marketing. Third-party characterisation creates
+      exposure regardless of Burkham's own language. Review whether correction is
+      required.
+
+    depends_on:
+      - per-state broker treatment analysis by outside counsel, one of four findings per state
+      - a broker-treatment field on the Regulatory Engine state module, distinct from activation status
+      - a second gate refusing service in a state whose broker treatment is unrecorded
+      - engagement and fee documentation stating compensation is for facilitation
+      - scanner detection of term-negotiation language in lender-facing agent contact
+
+    citation: "Cal. Fin. Code Div. 9 (CFL); N.Y. Banking Law art. 12-D; Fla. Stat. ch. 494; state commercial loan broker statutes generally"
+
+    status: draft_pending_claim_library_approval
+
+    notes: >-
+      MATERIAL RISK TO LAUNCH SCOPE. If several priority states require broker
+      registration and Burkham does not register, it cannot operate there. California
+      alone is the largest small business market in the country. The national footprint
+      positioning may need revising, and that is a founder decision informed by counsel
+      findings rather than a compliance detail.
+
+      THREE OPTIONS PER STATE, and they need not be the same everywhere. Register. Avoid.
+      Or structure the activity to fall outside the definition — which is achievable in
+      many states through the four disciplines above, and may not be achievable in all.
+
+      GAP — current specs do not address broker licensure. The locked language is "we are
+      not a lender", which sidesteps rather than answers. Three of the four structural
+      disciplines already hold in practice; the third — no term negotiation — needs
+      tightening, because the line between advocating for approval and negotiating terms
+      is fuzzy in operation and some state definitions reach both.
+
+      OPEN — per-state findings. NV, CA, NY, TX, FL, AZ and UT all need the four-way
+      determination. CA, NY and FL are likely to reach this activity; NV, TX, AZ and UT
+      are unknown. This is state law expertise and cannot be answered internally.
+
+      OPEN — scanner rules for term-negotiation language. Trigger 3 needs detection that
+      does not exist. Compliance & Evidence to draft. Note that nothing in the Console
+      models lender contact at all, so there is no channel to scan yet either.
+
+      NOTED — the success fee is the sharpest exposure and it is central to the pricing
+      model. If a state's definition reaches contingent compensation for arranging credit,
+      restructuring the fee is not a small change. Worth knowing before counsel findings
+      arrive rather than after. It is modelled as `successFeeBasisPoints` on the
+      engagement record, so the exposure is concrete rather than notional.
+
+      RAISED BY REVIEW — the Regulatory Engine already knows broker conduct is live in two
+      priority states, and has flagged it for counsel in its own words. California's
+      module summary says "Broker conduct and compensation disclosure require counsel
+      attention", and carries a `ca_broker_compensation` disclosure keyed to SB 1235's
+      broker provisions and Fin. Code §22800. Florida's says the state "regulates broker
+      conduct in connection with" covered transactions, and carries `fl_broker_conduct`.
+
+      So this is not a question nobody has raised — it is one the seeded modules raised
+      and nothing has answered. Both are still drafts and neither state is activated.
+
+      RAISED BY REVIEW — and this is the structural point. The existing activation gate
+      CANNOT enforce trigger 4. `ActivationStatus` is `no_module | draft |
+      needs_counsel_review | active | withdrawn`, and `activateState` requires a counsel
+      document reference plus a Level 3 human. What it certifies is that counsel reviewed
+      the DISCLOSURE MODULE. Nothing in it records a licensure determination, and
+      `SeedState` has no field for one — a module carries a state, a summary, citations,
+      disclosures and marketing notes.
+
+      A state could therefore reach `active`, `permitsClientFacingAction` could return
+      true, and the broker question would remain entirely unexamined. Reusing that flag
+      for this entry would be the same defect as an activated module with no disclosures:
+      a control reporting a pass on a question it never asked.
+
+      So this entry needs a SECOND determination stored alongside the first, and the
+      depends_on names it. The four findings map onto a field, not onto the existing
+      status enum — "registration required" and "not activatable" are both compatible
+      with a reviewed disclosure module, and neither is expressible today.
+
+      RAISED BY REVIEW — disciplines 1 and 2 hold structurally, which is stronger than
+      policy and weaker than enforcement. There is no escrow, disbursement, custody or
+      client-funds model anywhere in the Console, and no model for compensation flowing
+      from a lender to Burkham. `feeModel` on an offering is what the LENDER charges the
+      CLIENT; partner payouts run outward under versioned agreements. Both disciplines
+      are currently unbreakable because the capability is absent — and both would be
+      broken by a feature nobody flagged as a compliance change. That is precisely
+      trigger 2's job, and it is worth the entry saying which disciplines depend on it.
+
+  - entry_ref: compliance/cfpb-1071-data-collection-v1
+    framework: CFPB_1071
+    jurisdiction: [FEDERAL]
+    runtime_flag: sb_lending_data_collection
+    # Hint: phase-in is 2026–2027 at the ISSUER level. The applicability rule should
+    # carry the date condition, because an entry that binds before it does is a
+    # control that fires early and gets switched off.
+    applicability_rule: TODO
+    agent_behavior_implication: TODO
+    escalation_trigger: TODO
+    citation: TODO
+
+  # Two further frameworks are declared in the draft Pack and are NOT templated here,
+  # because each needs a decision before it can be written:
+  #
+  #   REFERRAL_FEE_REGULATION       varies by state AND by product. Whether this is one
+  #                                 entry with a jurisdiction list or one per state
+  #                                 depends on whether the behaviour differs or only
+  #                                 the permission does.
+  #
+  #   STATE_PRIVACY_COMPREHENSIVE   CCPA already has its own value. Whether VA/CO/CT/UT
+  #                                 share one entry turns on whether the agent's
+  #                                 response to a rights request differs between them.
+  #
+  # Both are worth answering before writing, rather than splitting later.

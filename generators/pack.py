@@ -40,11 +40,107 @@ SCHEMA_VERSION = 3
 # falling back to a copy, because a check against a stale list is worse than no check:
 # it produces a pass.
 
+# The enum is CLOSED and `Strict` forbids unknown keys, so a framework absent from
+# this list cannot be declared at all — the Pack fails to load rather than warning.
+# That is the right default (a typo'd framework is silently unenforced otherwise) and
+# it means adding a venture's real compliance surface is a schema change, deliberately.
+#
+# The six below were added for Burkham Wickmont, whose ten declared frameworks could
+# not be expressed: six had no value, and V3 requires a resolving `runtime_flag` per
+# declared framework — so a framework that cannot be declared is one that cannot be
+# enforced at runtime either. The gap was not cosmetic.
+#
+# Each is the STATUTE or rule an agent's behaviour couples to, not a topic. `FTC_TSR`
+# is the Telemarketing Sales Rule and is NOT a general FTC Act value; the two are
+# different obligations and conflating them would attach telemarketing duties to a
+# video script, or Section 5 duties to an outbound call, at random.
 ComplianceFramework = Literal[
     "HIPAA", "HCQC", "TILA", "FCRA", "ECOA", "UDAAP", "CROA", "FTC_TSR",
     "NRS_648_NV", "STATE_LENDER_LICENSURE", "MCA_DISCLOSURE_CA_SB1235",
     "TWO_PARTY_CONSENT_RECORDING", "VOICE_CLONING_CONSENT", "GDPR", "CCPA", "PCI_DSS",
+
+    # --- Added for Burkham Wickmont -------------------------------------------
+    #
+    # GLBA. The notable one. Every Plaid connection carries Gramm-Leach-Bliley
+    # obligations, and a lending venture handling client bank data had no way to
+    # declare them. Decision A makes Plaid the V1 statement source, so this is a
+    # framework Burkham engages on its first client, not an edge case.
+    "GLBA",
+
+    # 18 U.S.C. §1014 and §1344 — false statements on a credit application. This is
+    # the criminal exposure behind the per-application written authorisation rule, and
+    # it is why `submit_application` sits at the highest authority level. Named as one
+    # value because the two sections attach to the same act.
+    "FALSE_STATEMENT_TO_LENDER",
+
+    # CFPB Regulation Z. TILA is already present as the statute; Reg Z is the rule that
+    # implements it, and the trigger-term disclosure obligations an advertisement
+    # engages are Reg Z's, not TILA's directly. Kept separate for that reason: a Pack
+    # declaring TILA is saying something about cost-of-credit disclosure, and one
+    # declaring Reg Z is saying something about how it advertises.
+    "REG_Z_ADVERTISING",
+
+    # CFPB Section 1071 — small-business lending data collection, phasing in 2026–2027
+    # at the issuer level. Declarable now because the phase-in is inside the horizon
+    # this venture launches in.
+    "CFPB_1071",
+
+    # State commercial financing disclosure regimes beyond California.
+    # `MCA_DISCLOSURE_CA_SB1235` already covers CA. NY, UT, VA, GA, CT and FL each have
+    # their own, and the Regulatory Engine holds per-state modules — so this value
+    # carries the `jurisdiction` list rather than being split six ways.
+    "STATE_COMMERCIAL_FINANCING_DISCLOSURE",
+
+    # Card network rules — lawful-use language, cash-advance fee disclosure, AML and
+    # sanctions obligations flowed down by Visa and Mastercard. Contractual rather than
+    # statutory, and binding in the same way for an agent's behaviour. NOT PCI_DSS,
+    # which is about cardholder data handling and is a different obligation entirely.
+    "CARD_NETWORK_RULES",
+
+    # Referral fee regulation, which varies by state and by product. Burkham pays
+    # partners and referrers, so an agent proposing a payout engages this; `CCPA`'s
+    # neighbour `STATE_LENDER_LICENSURE` covers who may lend, not who may be paid for
+    # an introduction.
+    "REFERRAL_FEE_REGULATION",
+
+    # State comprehensive privacy regimes other than California's. `CCPA` is already a
+    # value and stays one — it is the regime with the most distinct obligations — while
+    # VCDPA, CPA, CTDPA and the rest share a shape and travel on the `jurisdiction`
+    # list. Declaring only CCPA, as Burkham's documents effectively did, understates
+    # the surface by every state but one.
+    "STATE_PRIVACY_COMPREHENSIVE",
+
+    # FTC Act § 5, 15 U.S.C. § 45. Its own value rather than an alias for UDAAP,
+    # which was the first version of this list and was wrong. UDAAP is Dodd-Frank
+    # § 1031, CFPB-enforced, and includes "abusive"; FTC Act § 5 is FTC-enforced UDAP.
+    # Different statutes, different enforcers, different standards — and a venture
+    # whose deceptive-claims discipline cites 15 U.S.C. § 45 is declaring this one.
+    "FTC_ACT",
+
+    # Not a statute, and it does not need to be. The enum already carries obligation
+    # SURFACES rather than only statute names — TWO_PARTY_CONSENT_RECORDING and
+    # VOICE_CLONING_CONSENT are both scope boundaries. This one is the boundary around
+    # tax advice: Burkham prepares information a CPA uses and reaches no tax conclusion.
+    # A statute earns a value when an agent must do something specific because of it;
+    # IRC §163(j) does not, and the discipline around it does.
+    "TAX_ADVICE_SCOPE",
 ]
+
+#: Frameworks a reader may expect and will not find, with what to use instead.
+#:
+#: Written down because the failure mode is silent: a Pack author who cannot find
+#: "FTC Act" may reach for `FTC_TSR`, which is the Telemarketing Sales Rule and a
+#: different obligation, and the Pack would validate while attaching the wrong duties.
+FRAMEWORK_ALIASES: dict[str, str] = {
+    "FTC_ACT_SECTION_5": "FTC_ACT",
+    "FTC_SECTION_5": "FTC_ACT",
+    "REGULATION_Z": "REG_Z_ADVERTISING",
+    "GRAMM_LEACH_BLILEY": "GLBA",
+    "18_USC_1014": "FALSE_STATEMENT_TO_LENDER",
+    "18_USC_1344": "FALSE_STATEMENT_TO_LENDER",
+    "VCDPA": "STATE_PRIVACY_COMPREHENSIVE",
+    "VISA_MASTERCARD_RULES": "CARD_NETWORK_RULES",
+}
 TrustTier = Literal["auto_execute", "propose", "suggest"]
 Criticality = Literal["hard", "soft"]
 

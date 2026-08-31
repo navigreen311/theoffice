@@ -86,7 +86,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0028"
+EXPECTED_SCHEMA_REVISION = "0029"
 
 
 @asynccontextmanager
