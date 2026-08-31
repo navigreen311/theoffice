@@ -189,11 +189,10 @@
 #
 #   THE "2.3 HYBRID WORKFLOW" FOR BOTH-FOUNDER APPROVAL.
 #
-#     Four entries defer approval of a phrase or a disclosure to it —
-#     estimate-not-offer-v1, not-a-credit-repair-organization-v1,
-#     own-claims-and-pricing-v1 and card-product-characterisation-v1 — variously as
-#     "the 2.3 hybrid workflow", "the 2.3 approved-list workflow" and "the 2.3
-#     workflow".
+#     Four deferrals across three entries pointed at it — bureau-report-handling-v1,
+#     not-a-credit-repair-organization-v1 and estimate-not-offer-v1 (twice) —
+#     variously as "the 2.3 hybrid workflow", "the 2.3 approved-list workflow" and
+#     "the 2.3 workflow".
 #
 #     specifications-v2 §2.3 is "What the Console owns vs. what it calls": eight
 #     owned capabilities and thirteen called ones. An ownership boundary. It contains
@@ -201,10 +200,20 @@
 #     and "both-founder" appear nowhere in the document.
 #
 #     The real mechanism is line 386: "Marketing claims — versioned in Marketing
-#     Claim Library, Compliance Review Board approval required." One board, not two
-#     founders, and no section number. Every entry deferring to "2.3" should defer to
-#     Compliance Review Board approval instead — the entries are NOT edited here,
-#     because the deferral is the author's decision to restate, not the reviewer's.
+#     Claim Library, Compliance Review Board approval required." One board, and no
+#     section number. §6 adds that the Board reviews new marketing claims, state-law
+#     concerns and edge-case funding recommendations on a WEEKLY cadence, which is
+#     operationally useful: a deferral to the Board has a known turnaround, and a
+#     deferral to "the 2.3 workflow" had none.
+#
+#     All four deferrals now point at Compliance Review Board approval. RESOLVED.
+#
+#     WHAT REMAINS OPEN: who sits on the Board. The specification never says. It is
+#     listed under §7.1 as a place human involvement concentrates, alongside
+#     founder-led calls, but its membership is nowhere defined — so "both founders"
+#     is not contradicted by the correction, merely unstated. Where entries name both
+#     founders OUTSIDE a 2.3 citation, that wording is left as written; one entry
+#     already writes "Compliance Review Board, both founders" and may be right.
 #
 #     This one differs from the other two in a way worth naming. The Firewall's rules
 #     and the Readiness Score's components are things that were described and never
@@ -218,8 +227,9 @@
 #   entry cannot reach `approved` while leaning on something unwritten. Enumerating
 #   the five rules and specifying the score's components are specification work, and
 #   until that lands an entry must say "held by this entry and human judgement"
-#   rather than "covered by the Firewall". The third needs no dependency — the
-#   approval mechanism exists, and only the citation pointing at it is wrong.
+#   rather than "covered by the Firewall". The third needed no dependency — the
+#   approval mechanism exists, only the citation pointing at it was wrong, and the
+#   four deferrals have been repointed.
 #
 # ---------------------------------------------------------------------------
 # A TEST FOR WHETHER AN ENTRY IS FINISHED
@@ -434,8 +444,9 @@ entries:
       TOS says about redistribution to third parties, retention obligations, purpose
       limitation, consent requirements beyond the initial pull authorization, and vendor
       audit rights. Filed in Compliance Evidence Vault. If it returns clean permission to
-      forward, loosening is proposed through the 2.3 approved-list workflow with both
-      founders — an explicit amendment, recorded, not operational drift.
+      forward, loosening goes to the Compliance Review Board, which approves marketing
+      claims and reviews state-law concerns on a weekly cadence — an explicit
+      amendment, recorded, not operational drift.
 
       RESOLVED — the line between characterising a report and rendering it. The
       ambiguous case now has a stated tie-break rather than waiting on Claim Library
@@ -1345,8 +1356,8 @@ entries:
 
       OPEN — the characterisation language in the applicability rule is proposed, not
       sanctioned. Approved phrasing for describing a weak profile without remedial
-      framing requires Compliance & Evidence drafting and both-founder approval under the
-      2.3 workflow.
+      framing requires Compliance & Evidence drafting and Compliance Review Board
+      approval.
 
       OPEN — trigger 2 is a conservative read rather than a known industry practice.
       Whether existing credit-repair engagement should change Burkham's workflow is worth
@@ -1523,8 +1534,8 @@ entries:
     status: draft_pending_claim_library_approval
     notes: >-
       The three hedge phrases are proposed, not sanctioned. They require Village
-      Compliance & Evidence drafting and both-founder approval under the 2.3 hybrid
-      workflow before becoming approved Marketing Claim Library phrases. Until then the
+      Compliance & Evidence drafting and Compliance Review Board approval before
+      becoming approved Marketing Claim Library phrases. Until then the
       disclosure the scanner actually requires is DISCLOSURE_ESTIMATE, whose text is
       fixed and whose match at step 7 is exact — a paraphrase will not satisfy it.
 
@@ -1591,7 +1602,7 @@ entries:
       fix belongs in `activation.ts` rather than here.
 
       Nothing else remains open. Ready for Village Compliance & Evidence drafting of the
-      three hedge phrases and both-founder approval under the 2.3 hybrid workflow.
+      three hedge phrases and Compliance Review Board approval.
 
   # =========================================================================
   # WRITTEN BY IVAN. Pack row retargeted from `network_rule_language_required` to
