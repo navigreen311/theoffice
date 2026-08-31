@@ -15,7 +15,13 @@ from pathlib import Path
 import pytest
 import yaml
 
-from broker.compliance_quality import assess, assess_field
+from broker.compliance_quality import (
+    REQUIRED_BY_TAG,
+    assess,
+    assess_claim,
+    assess_field,
+    assess_provenance,
+)
 
 LIBRARY_DIR = Path(__file__).resolve().parents[2] / "packs" / "compliance-library"
 
@@ -317,3 +323,91 @@ def test_mixed_string_and_mapping_dependencies_both_report() -> None:
 def test_an_empty_string_dependency_is_ignored_rather_than_reported() -> None:
     """A blank list item is a YAML accident, not a declared dependency."""
     assert _unmet(entry(status="approved", depends_on=["", "   "])) == []
+
+
+# ---------------------------------------------------------------------------
+# Per-claim provenance
+#
+# The field mirrors the Recommendation Engine's `issuer_rule` versus
+# `unresearched_default`, and mirrors the part that matters: there, an
+# unresearched default without a `rationale` throws in `profile.ts` rather than
+# rendering. A tag whose supporting field is optional is a tag that gets applied
+# to everything, and a library where every claim says `sourced` tells a reader
+# nothing.
+# ---------------------------------------------------------------------------
+
+
+def test_sourced_claim_without_a_source_is_refused():
+    result = assess_claim({"claim": "FCRA permissible purpose", "tag": "sourced"})
+    assert result["ok"] is False
+    assert "`source`" in result["reason"]
+
+
+def test_reconstructed_claim_without_a_basis_is_refused():
+    result = assess_claim({"claim": "route to a human", "tag": "reconstructed"})
+    assert result["ok"] is False
+    assert "`basis`" in result["reason"]
+
+
+def test_proposed_claim_without_a_reviewer_is_refused():
+    result = assess_claim({"claim": "disclose the incentive", "tag": "proposed"})
+    assert result["ok"] is False
+    assert "`review_by`" in result["reason"]
+
+
+def test_placeholder_support_is_the_same_as_no_support():
+    """`source: TBD` is the 'Documented.' stub at claim scale."""
+    result = assess_claim(
+        {"claim": "FCRA permissible purpose", "tag": "sourced", "source": "TBD"}
+    )
+    assert result["ok"] is False
+
+
+def test_an_unknown_tag_is_refused_rather_than_counted():
+    result = assess_claim(
+        {"claim": "x", "tag": "inferred", "source": "somewhere"}
+    )
+    assert result["ok"] is False
+    assert "inferred" in result["reason"]
+
+
+def test_a_well_formed_claim_of_each_tag_passes():
+    for tag, field in REQUIRED_BY_TAG.items():
+        result = assess_claim({"claim": "a claim", "tag": tag, field: "real support"})
+        assert result["ok"] is True, tag
+        assert result["tag"] == tag
+
+
+def test_unmarked_is_distinct_from_fully_sourced():
+    """Both have zero problems. Only one has been looked at."""
+    unmarked = assess_provenance({"entry_ref": "x"})
+    assert unmarked["unmarked"] is True
+    assert unmarked["problems"] == []
+
+    marked = assess_provenance(
+        {
+            "entry_ref": "x",
+            "claim_provenance": [
+                {"claim": "a", "tag": "sourced", "source": "15 U.S.C. 1681b"}
+            ],
+        }
+    )
+    assert marked["unmarked"] is False
+    assert marked["problems"] == []
+    assert marked["counts"]["sourced"] == 1
+
+
+def test_counts_exclude_malformed_claims():
+    """A claim that fails is not silently counted under its own tag."""
+    prov = assess_provenance(
+        {
+            "claim_provenance": [
+                {"claim": "a", "tag": "sourced", "source": "15 U.S.C. 1681b"},
+                {"claim": "b", "tag": "sourced"},
+                "not a mapping",
+            ]
+        }
+    )
+    assert prov["total"] == 3
+    assert prov["counts"]["sourced"] == 1
+    assert len(prov["problems"]) == 2

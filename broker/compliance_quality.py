@@ -335,3 +335,114 @@ def assess(entry: dict[str, Any]) -> dict[str, Any]:
             else "; ".join(f"{f['title']}: {f['reason']}" for f in problems)
         ),
     }
+
+
+# ------------------------------------------------------------- claim provenance
+
+"""Where each claim in an entry came from.
+
+MIRRORS DECISION D, DELIBERATELY
+================================
+
+    specifications-v2's own glossary names the pair this copies: "`issuer_rule` vs
+    `unresearched_default` — provenance tags in Lender Intelligence Database per
+    Decision D". The Recommendation Engine will not present a figure without saying
+    how it was derived, and `lenders/profile.ts` THROWS on an `unresearched_default`
+    row with no rationale: "An assumption nobody can explain cannot be argued with or
+    revisited."
+
+    A compliance entry is a derived figure of the same kind. It states what an agent
+    must do, and a reader cannot weigh that without knowing whether it traces to a
+    locked decision, was shaped from surrounding context, or is somebody's proposal
+    awaiting review. An entry approved without that distinction is approved on the
+    reader's assumption that it was sourced.
+
+PER CLAIM, NOT PER ENTRY
+========================
+
+    An entry-level tag would be the average of its parts and therefore true of none
+    of them. Every entry written so far mixes all three: a statute citation beside a
+    behavioural rule shaped from context beside a phrase awaiting Claim Library
+    approval. The useful question is which sentences are which.
+
+THE REQUIRED FIELD PER TAG IS THE WHOLE MECHANISM
+=================================================
+
+    `sourced` must name its source, or it is an assertion of sourcing rather than
+    sourcing. `reconstructed` must say what it was shaped FROM, for exactly the
+    reason profile.ts throws. `proposed` must name who decides, or it is a
+    recommendation addressed to nobody.
+"""
+
+PROVENANCE_TAGS = ("sourced", "reconstructed", "proposed")
+
+#: The field each tag cannot omit, and why omitting it empties the tag.
+REQUIRED_BY_TAG = {
+    "sourced": "source",
+    "reconstructed": "basis",
+    "proposed": "review_by",
+}
+
+
+def assess_claim(claim: dict[str, Any]) -> dict[str, Any]:
+    """One claim's provenance: usable, or a tag with nothing behind it."""
+    label = str(claim.get("claim", "")).strip()
+    tag = str(claim.get("tag", "")).strip().lower()
+
+    if not label:
+        return {"ok": False, "tag": tag or None, "reason": "claim has no label"}
+    if tag not in PROVENANCE_TAGS:
+        return {
+            "ok": False,
+            "tag": None,
+            "claim": label,
+            "reason": f"tag {tag!r} is not one of {', '.join(PROVENANCE_TAGS)}",
+        }
+
+    required = REQUIRED_BY_TAG[tag]
+    value = str(claim.get(required, "")).strip()
+    if not value or _is_placeholder(value):
+        return {
+            "ok": False,
+            "tag": tag,
+            "claim": label,
+            "reason": (
+                f"`{tag}` requires `{required}`, and this one is absent. A sourced "
+                "claim that names no source asserts sourcing rather than having it; "
+                "a reconstruction nobody can explain cannot be argued with."
+            ),
+        }
+
+    return {"ok": True, "tag": tag, "claim": label, required: value}
+
+
+def assess_provenance(entry: dict[str, Any]) -> dict[str, Any]:
+    """An entry's claims, counted by tag, with the malformed ones named.
+
+    `unmarked` is True when an entry declares no provenance at all. That is not an
+    error today — the field is new — but it is the state the sweep exists to clear,
+    and reporting it as a count of zero would hide it among entries that are fully
+    sourced.
+    """
+    claims = entry.get("claim_provenance") or []
+    if not claims:
+        return {
+            "unmarked": True,
+            "total": 0,
+            "counts": {tag: 0 for tag in PROVENANCE_TAGS},
+            "problems": [],
+        }
+
+    results = [assess_claim(c) if isinstance(c, dict) else
+               {"ok": False, "tag": None, "reason": f"malformed claim: {c!r}"}
+               for c in claims]
+
+    counts = {tag: sum(1 for r in results if r["ok"] and r["tag"] == tag)
+              for tag in PROVENANCE_TAGS}
+
+    return {
+        "unmarked": False,
+        "total": len(results),
+        "counts": counts,
+        "problems": [r for r in results if not r["ok"]],
+    }

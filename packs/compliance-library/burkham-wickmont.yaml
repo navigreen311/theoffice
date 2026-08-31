@@ -77,6 +77,41 @@
 #                 `satisfied_for` is maintained by hand, because this checker runs
 #                 without a database on purpose. Update it as states go live.
 #
+#   claim_provenance
+#                 OPTIONAL, authoring-file only, never POSTed. Per CLAIM, not per
+#                 entry — an entry is a mixture, and an entry-level tag would round
+#                 the mixture to whichever tag the author felt best about.
+#
+#                   claim_provenance:
+#                     - claim: "Short label for the specific assertion."
+#                       tag: sourced          # source:    what it is traceable to
+#                     - claim: "Another."
+#                       tag: reconstructed    # basis:     what it was shaped from
+#                     - claim: "A third."
+#                       tag: proposed         # review_by: who decides
+#
+#                 sourced        traceable to a locked decision, an approved phrase,
+#                                a statute, or a line in a specification. `source`
+#                                names the thing, specifically enough to check.
+#                 reconstructed  shaped from context with no source behind it. It may
+#                                be right. Nobody has agreed to it. `basis` says what
+#                                it was shaped from, so it can be argued with.
+#                 proposed       a recommendation awaiting a decision. `review_by`
+#                                names who decides, not "someone".
+#
+#                 The supporting field is MANDATORY for its tag, and the checker
+#                 refuses a claim without it. This mirrors the Recommendation
+#                 Engine's `issuer_rule` versus `unresearched_default`, and mirrors
+#                 the part that matters: there, `profile.ts` THROWS on an
+#                 unresearched default with no `rationale`. A tag whose support is
+#                 optional is a tag applied to everything.
+#
+#                 A statutory obligation restated is `sourced` to the statute. The
+#                 BEHAVIOUR an agent takes because of it is almost never in the
+#                 statute, and is `reconstructed` unless a Decision or a
+#                 specification line states it. That distinction is where most of
+#                 this library actually sits.
+#
 # ---------------------------------------------------------------------------
 # AMENDMENT HISTORY — THERE IS NONE. Read this before promising one.
 #
@@ -112,9 +147,9 @@
 # ---------------------------------------------------------------------------
 # CONTROLS THAT ARE REFERENCED BUT HAVE NO CONTENT
 #
-#   Two have been found while writing these entries. Both were cited AS COVERAGE —
-#   in this library and in the specifications — and neither exists. They are listed
-#   here because the failure is a pattern rather than two accidents, and because an
+#   Three have been found while writing these entries. Each was cited AS COVERAGE —
+#   in this library and in the specifications — and none exists. They are listed
+#   here because the failure is a pattern rather than three accidents, and because an
 #   entry that leans on one is claiming a protection nobody has written.
 #
 #   THE FUNDING ETHICS FIREWALL'S FIVE ETHICAL RULES.
@@ -152,12 +187,39 @@
 #     no scorer with eight components exists in any repository — CapitalForge has a
 #     five-component scorer and a separate four-dimension one.
 #
-#   WHAT TO DO WITH THEM. Neither is a library entry's job to fix. Both are recorded
-#   as `depends_on` on the entries that need them, so an entry cannot reach
-#   `approved` while leaning on something unwritten. Enumerating the five rules and
-#   specifying the score's components are specification work, and until that lands
-#   an entry must say "held by this entry and human judgement" rather than "covered
-#   by the Firewall".
+#   THE "2.3 HYBRID WORKFLOW" FOR BOTH-FOUNDER APPROVAL.
+#
+#     Four entries defer approval of a phrase or a disclosure to it —
+#     estimate-not-offer-v1, not-a-credit-repair-organization-v1,
+#     own-claims-and-pricing-v1 and card-product-characterisation-v1 — variously as
+#     "the 2.3 hybrid workflow", "the 2.3 approved-list workflow" and "the 2.3
+#     workflow".
+#
+#     specifications-v2 §2.3 is "What the Console owns vs. what it calls": eight
+#     owned capabilities and thirteen called ones. An ownership boundary. It contains
+#     no workflow, no approval step and no mention of founders. The words "hybrid"
+#     and "both-founder" appear nowhere in the document.
+#
+#     The real mechanism is line 386: "Marketing claims — versioned in Marketing
+#     Claim Library, Compliance Review Board approval required." One board, not two
+#     founders, and no section number. Every entry deferring to "2.3" should defer to
+#     Compliance Review Board approval instead — the entries are NOT edited here,
+#     because the deferral is the author's decision to restate, not the reviewer's.
+#
+#     This one differs from the other two in a way worth naming. The Firewall's rules
+#     and the Readiness Score's components are things that were described and never
+#     written. This is a real section cited for something it does not contain — the
+#     citation is wrong rather than the target empty. It found its way in the same
+#     way "rule 4" did: a section number reads as a checkable reference, so nobody
+#     checks it.
+#
+#   WHAT TO DO WITH THEM. None is a library entry's job to fix. Both are recorded
+#   The first two are recorded as `depends_on` on the entries that need them, so an
+#   entry cannot reach `approved` while leaning on something unwritten. Enumerating
+#   the five rules and specifying the score's components are specification work, and
+#   until that lands an entry must say "held by this entry and human judgement"
+#   rather than "covered by the Firewall". The third needs no dependency — the
+#   approval mechanism exists, and only the citation pointing at it is wrong.
 #
 # ---------------------------------------------------------------------------
 # A TEST FOR WHETHER AN ENTRY IS FINISHED
@@ -204,6 +266,29 @@ entries:
       account data for an institution the recorded authorization does not name. In all
       three the agent stops and hands to the venture operator — the third is a data
       handling incident, not a retry.
+
+    claim_provenance:
+      - claim: "GLBA obligations attach to Plaid connections"
+        tag: sourced
+        source: "specifications-v2 §6.3: 'GLBA (indirect) — Plaid connections carry Gramm-Leach-Bliley obligations; per-connection authorization required per Decision A'"
+      - claim: "Authorization is per connection and per institution, not per client"
+        tag: sourced
+        source: "Decision A, specifications-v2 §6.3 'per-connection authorization'"
+      - claim: "The authorization must be WRITTEN and name the specific institution"
+        tag: reconstructed
+        basis: "Decision A says per-connection; 'written' and 'names the institution' are shaped from the per-application written-authorization pattern in §6.3, not stated for Plaid"
+      - claim: "Recorded BEFORE calling statement_pull, and not reusable across institutions"
+        tag: reconstructed
+        basis: "ordering and the reuse prohibition follow from per-connection scope; no source states either"
+      - claim: "A revoked authorization stops reading mid-diagnostic rather than finishing"
+        tag: reconstructed
+        basis: "shaped from @bwc/consent's revocation-propagates behaviour, which freezes dependent workflows; the mid-diagnostic specificity is not in code or spec"
+      - claim: "Connecting and authorizing are one act, refused separately"
+        tag: reconstructed
+        basis: "shaped from the consent store's refusal of an unscoped consent; no source frames connection this way"
+      - claim: "The heavier disclosure is DISCLOSURE_UNRESEARCHED_DEFAULT verbatim"
+        tag: sourced
+        source: "packages/core/src/provenance.ts — describeProvenance is built from the constant; step 7 matches it exactly"
 
     citation: >-
       Gramm-Leach-Bliley Act, 15 U.S.C. §§ 6801–6809; Privacy Rule, 16 C.F.R. Part 313;
@@ -310,6 +395,32 @@ entries:
       resolution.
 
     citation: "15 U.S.C. § 1681 et seq. (FCRA); 18 U.S.C. § 1014"
+
+    claim_provenance:
+      - claim: "FCRA-adjacent obligations attach to bureau pulls"
+        tag: sourced
+        source: "specifications-v2 §6.3: 'FCRA (indirect) — bureau data pulls carry FCRA-adjacent obligations; per-pull authorization required per Decision B'"
+      - claim: "Business bureau and personal credit are separate authorizations"
+        tag: sourced
+        source: "Decision B; @bwc/consent kinds business_bureau_pull and personal_credit_pull"
+      - claim: "Obligations after a returned report are identical for business and personal"
+        tag: reconstructed
+        basis: "no source distinguishes handling by report type; asserted from the two consent kinds differing only in subject"
+      - claim: "The agent may enter figures from a report onto a lender form but not attach the report"
+        tag: reconstructed
+        basis: "the PAYDEX-72 distinction is shaped from the redistribution concern; no vendor TOS or spec line states it"
+      - claim: "Raw report never leaves the authorized viewer set"
+        tag: reconstructed
+        basis: "shaped from design principle 5, strict multi-tenant isolation, extended to vendor data"
+      - claim: "Retention is state-specific and engine-resolved"
+        tag: sourced
+        source: "packages/retention/src/schedules.ts — stateCode on retention schedules, validated two-letter"
+      - claim: "A report carrying fraud alert, freeze, mismatch or dispute is not a scoring input"
+        tag: proposed
+        review_by: "Compliance & Evidence — three of the four map to existing ObservationKinds; identity_mismatch has none and the routing rule is new"
+      - claim: "The raw-report prohibition holds regardless of vendor TOS"
+        tag: proposed
+        review_by: "both founders — recorded as DECIDED in the entry, pending the per-vendor TOS review delegated to Compliance & Evidence"
 
     status: draft_pending_claim_library_approval
 
@@ -487,6 +598,35 @@ entries:
       the whole is defensible.
 
     citation: "18 U.S.C. § 1014; 18 U.S.C. § 1344"
+
+    claim_provenance:
+      - claim: "18 U.S.C. §1014 and §1344 attach to statements on credit applications"
+        tag: sourced
+        source: "specifications-v2 §6.3: '18 USC §1014 and §1344 — false statements on credit applications'"
+      - claim: "Per-application written client authorization is required before submission"
+        tag: sourced
+        source: "specifications-v2 §6.3, same line; Decision B"
+      - claim: "Preparation is Level 1 and submission is Level 3"
+        tag: sourced
+        source: "packages/core/src/authority.ts — draft_application: 1, submit_application: 3"
+      - claim: "The middleware refuses a Level 1 agent attempting to submit"
+        tag: sourced
+        source: "packages/middleware/src/index.ts step 3, decideAuthority compares actor level against ACTION_MINIMUM_LEVEL"
+      - claim: "A human presses the button"
+        tag: reconstructed
+        basis: "shaped from the Level 3 label 'Submit with human approval'; NOT enforced — the chain has no actor-kind step and a Level 3 agent passes it"
+      - claim: "Signing on the client's behalf is hard-blocked"
+        tag: sourced
+        source: "packages/core/src/authority.ts PROHIBITED_ACTIONS includes sign_for_client"
+      - claim: "When sources disagree the field is left unpopulated and routed to the client"
+        tag: reconstructed
+        basis: "shaped from the §1014 reason-to-know exposure; no source states the procedure"
+      - claim: "No estimates on applications, ever"
+        tag: reconstructed
+        basis: "shaped by inversion from estimate-not-offer-v1, which mandates estimates on client-facing output; the inversion is the entry's own reasoning"
+      - claim: "Seven escalation triggers, and the seventh is judgement"
+        tag: proposed
+        review_by: "Compliance & Evidence — the aggregate-misleading trigger resists mechanical enforcement by design"
 
     status: draft_pending_claim_library_approval
 
@@ -679,6 +819,35 @@ entries:
       - the Funding Ethics Firewall's five ethical rules, enumerated and implemented
 
     citation: "12 U.S.C. § 5531 (CFPA, abusive); 15 U.S.C. § 45 (FTC Act, unfair and deceptive)"
+
+    claim_provenance:
+      - claim: "The abusive prong reaches taking advantage of a client's reliance"
+        tag: sourced
+        source: "12 U.S.C. §5531(d) (CFPA); specifications-v2 §6.3 names UDAAP standards for small-business financing conduct"
+      - claim: "Stewardship over transactions is an operating principle"
+        tag: sourced
+        source: "specifications-v2 §3.2 design principle 2: 'Structure rewards stewardship, not transactions'"
+      - claim: "Burkham's clients are distressed businesses usually declined elsewhere"
+        tag: reconstructed
+        basis: "shaped from the target personas in the draft Pack and the decline-recovery emphasis in CapitalForge; no spec line characterises the client base this way"
+      - claim: "Saying no is part of the service, and the fee is lost"
+        tag: reconstructed
+        basis: "shaped from design principle 2; no source authorises an agent to recommend against engagement"
+      - claim: "The Blueprint must be able to conclude 'do not raise capital'"
+        tag: proposed
+        review_by: "both founders — this is a scope change to the Blueprint deliverable, not a restatement"
+      - claim: "Recommended scope is distinct from eligible scope"
+        tag: proposed
+        review_by: "Compliance Review Board and product — confirmed absent: the Engine takes one amount, requestedCreditLimit, matched against offering min/max"
+      - claim: "The fee structure pulls against the client in four places"
+        tag: reconstructed
+        basis: "derived from successFeeBasisPoints being per-placement; the enumeration is the entry's own analysis"
+      - claim: "All four misalignments are held by this entry and human judgement alone"
+        tag: sourced
+        source: "packages/firewall/src/index.ts — a triggered/clear flag with an arbitrary reason string; no rule evaluation, and no fee-driven product selection check exists anywhere"
+      - claim: "A signed agreement is not understanding"
+        tag: reconstructed
+        basis: "shaped from the abusive prong's 'lack of understanding' language; the five watch-fors and the demonstrate-don't-re-sign rule are the entry's own"
 
     status: draft_pending_claim_library_approval
 
@@ -881,6 +1050,35 @@ entries:
 
     depends_on:
       - Funding Readiness Score components specified, so a Blueprint deliverable promise names something that exists
+
+    claim_provenance:
+      - claim: "FTC Act §5 governs claims about the firm's own service"
+        tag: sourced
+        source: "15 U.S.C. §45; specifications-v2 §6.3 'FTC Act — small-business financing facilitation'"
+      - claim: "Marketing claims require Compliance Review Board approval"
+        tag: sourced
+        source: "specifications-v2 §11: 'Marketing claims — versioned in Marketing Claim Library, Compliance Review Board approval required'"
+      - claim: "Firm-scale factual claims are permitted; claims shifting a client's expectation are not"
+        tag: reconstructed
+        basis: "shaped from FTC substantiation doctrine; the firm-scale/reader-pointed distinction is the entry's own formulation"
+      - claim: "Banned regardless of accuracy — success rates, timeframe averages, approval likelihoods"
+        tag: proposed
+        review_by: "Compliance Review Board — applying this rule reclassifies two SEEDED claims from requires_disclaimer to banned: 'success rate' and 'typical'"
+      - claim: "guarantee_approval is a Level 4 prohibited action"
+        tag: sourced
+        source: "packages/core/src/authority.ts PROHIBITED_ACTIONS"
+      - claim: "Baseline pricing is quotable; engagement-specific pricing requires the exhibit first"
+        tag: reconstructed
+        basis: "shaped from packages/billing/src/exhibit.ts, which assembles the exhibit from the engagement record; the two-tier quoting rule is not stated anywhere"
+      - claim: "Success fees carry contingent, capped and timed framing every time"
+        tag: proposed
+        review_by: "Compliance & Evidence — approved phrasing not drafted"
+      - claim: "No testimonials in V1; case studies with consent are permitted"
+        tag: proposed
+        review_by: "both founders — recorded as DECIDED in the entry, resting on the Endorsement Guides' typical-results requirement"
+      - claim: "An agent applies published pricing logic and never its own judgement"
+        tag: reconstructed
+        basis: "shaped from the dispute-of-record risk; no source prohibits agent-level discounting"
 
     status: draft_pending_claim_library_approval
 
@@ -1109,6 +1307,32 @@ entries:
 
     citation: "15 U.S.C. § 1679 et seq. (CROA); 15 U.S.C. § 1679b (upfront fee prohibition)"
 
+    claim_provenance:
+      - claim: "No feature may recharacterize Burkham as a credit repair organization"
+        tag: sourced
+        source: "specifications-v2 §3.1 design principle 1 / §6.1, the Seek Capital test"
+      - claim: "CROA attaches to anyone representing they will improve a credit record"
+        tag: sourced
+        source: "15 U.S.C. §1679a(3), §1679b(a)"
+      - claim: "promise_credit_repair is a Level 4 prohibited action"
+        tag: sourced
+        source: "packages/core/src/authority.ts PROHIBITED_ACTIONS"
+      - claim: "The other five NEVERs are scanner-enforced, not authority-enforced"
+        tag: sourced
+        source: "PROHIBITED_ACTIONS blocks named actions; drafting a dispute letter is draft_communication at Level 1 and passes"
+      - claim: "Advise on the business, never on the credit file"
+        tag: reconstructed
+        basis: "shaped from CROA's definition of a credit repair organization; the business/file line and the 'refused at the word how' test are the entry's own"
+      - claim: "Utilisation and timing may be discussed; score prediction may not"
+        tag: proposed
+        review_by: "Compliance & Evidence — flagged in the entry as the softest edge and most likely to be crossed by accident"
+      - claim: "Refer out freely and take no fee for the referral"
+        tag: reconstructed
+        basis: "shaped from CROA's indirect-participation concern; no source addresses referral fees for credit repair"
+      - claim: "Thirteen CROA phrases are seeded and matching"
+        tag: sourced
+        source: "packages/claims/src/seed.ts — verified list; 'fix your profile' and 'boost your score' are NOT seeded"
+
     status: draft_pending_claim_library_approval
 
     notes: >-
@@ -1273,6 +1497,29 @@ entries:
     # whose status is not `approved` or whose dependencies are unmet, so an open
     # question keeps the entry out of the database rather than travelling into it as a
     # silent draft.
+    claim_provenance:
+      - claim: "State commercial financing disclosure regimes apply in seven states"
+        tag: sourced
+        source: "specifications-v2 §6.3: 'CA SB 1235 + Oct 2023 UDAAP, NY commercial financing disclosure + AG MCA enforcement, UT / VA / GA / CT / FL disclosure regimes'"
+      - claim: "Burkham's own service fees are out of scope"
+        tag: sourced
+        source: "specifications-v2 §6.3 lists lending regimes only; service pricing sits under FTC Act per own-claims-and-pricing-v1"
+      - claim: "Three elements must appear together with any lender-product number"
+        tag: proposed
+        review_by: "Compliance & Evidence and both founders — the three hedge phrases are proposed, not sanctioned"
+      - claim: "The hedge must be in the same sentence as the number, not a footnote"
+        tag: reconstructed
+        basis: "shaped from Reg Z trigger-term proximity practice; NOT enforceable — step 7's check is content.includes over the whole document"
+      - claim: "unresearched_default requires the heavier variant naming it as an assumption"
+        tag: sourced
+        source: "packages/core/src/provenance.ts describeProvenance; lenders/profile.ts throws without a rationale"
+      - claim: "Suppression of a number is refused deliberately"
+        tag: reconstructed
+        basis: "shaped from Decision D's provenance discipline; the reasoning about comparison documents is the entry's own"
+      - claim: "A state needs counsel certification AND populated disclosures before this can enforce"
+        tag: proposed
+        review_by: "counsel at state activation — the second condition is NOT enforced: activateState does not inspect disclosures, and TX, AZ, NV have modules with zero"
+
     status: draft_pending_claim_library_approval
     notes: >-
       The three hedge phrases are proposed, not sanctioned. They require Village
@@ -1505,6 +1752,32 @@ entries:
         satisfied_for: []
         blocking: true
 
+    claim_provenance:
+      - claim: "Card products must not be called loans"
+        tag: sourced
+        source: "packages/core/src/authority.ts PROHIBITED_ACTIONS includes mislabel_card_as_loan; specifications-v2 §6.3 Visa/Mastercard lawful-use language"
+      - claim: "Visa and Mastercard rules reach Burkham through issuer referral agreements"
+        tag: sourced
+        source: "specifications-v2 §6.3: 'Visa / Mastercard rules — lawful-use language, cash-advance fee disclosure, AML / sanctions'"
+      - claim: "Enforcement is relational rather than statutory"
+        tag: reconstructed
+        basis: "shaped from the referral-partner structure; no source describes the enforcement mechanism"
+      - claim: "Eight of the NEVER CALLED terms are unenforced by the Scanner"
+        tag: sourced
+        source: "packages/claims/src/seed.ts — only 'our loan to you', 'credit card loan', 'card loan' are seeded"
+      - claim: "Rate-shopping inquiry consolidation excludes credit cards"
+        tag: sourced
+        source: "FICO and VantageScore published methodology; the 14-45 day window applies to auto, mortgage and student loans"
+      - claim: "Ten disclosures are required before a stack is authorised"
+        tag: proposed
+        review_by: "Compliance & Evidence — the strategy authorisation document is not drafted, and two of the ten have no data behind them"
+      - claim: "Two authorisations, not one — strategy then per application"
+        tag: reconstructed
+        basis: "shaped from the per-application authorization requirement in §6.3 extended to the coordinated strategy; the two-level structure is the entry's own"
+      - claim: "Personal guarantees are modelled per position"
+        tag: sourced
+        source: "packages/capital/src/positions.ts personalGuarantee; health.ts reasons over it"
+
     status: draft_pending_claim_library_approval
 
     notes: >-
@@ -1682,6 +1955,32 @@ entries:
         required_for: [named_tax_checkpoint_in_3_4]
         satisfied_for: []
         blocking: true
+
+    claim_provenance:
+      - claim: "Burkham does not provide tax advice; it is cut from V1 scope"
+        tag: sourced
+        source: "specifications-v2 §3.1 design principle 1 — no feature may recharacterize as investment advisor; V1 scope excludes tax advice as principal"
+      - claim: "Giving tax advice without professional review is Level 4"
+        tag: sourced
+        source: "packages/core/src/authority.ts — give_legal_or_tax_advice_without_professional_review"
+      - claim: "The qualifier implies a review path V1 does not have"
+        tag: sourced
+        source: "the action name's suffix versus the entry's own scope statement; both read directly"
+      - claim: "CapitalForge's tax DOCUMENT endpoints refuse"
+        tag: sourced
+        source: "capitalforge src/backend/api/routes/tax.routes.ts — four routes share one refuse() helper"
+      - claim: "The §163(j) report endpoint is live and returns planning notes"
+        tag: sourced
+        source: "capitalforge tax-reports.routes.ts GET /api/businesses/:id/tax/163j-report; services/irc163j.ts computes the limitation"
+      - claim: "An agent prepares information a CPA uses and reaches no tax conclusion"
+        tag: reconstructed
+        basis: "shaped from the scope exclusion; the prepare-versus-conclude line and the SAID INSTEAD reframe are the entry's own"
+      - claim: "Nothing goes to a taxing authority"
+        tag: reconstructed
+        basis: "shaped from the same exclusion; no source states it as a bright line"
+      - claim: "The library is organised by discipline, not by statute"
+        tag: proposed
+        review_by: "both founders — this is a structural decision about the library itself, recorded as STRUCTURAL in the entry"
 
     status: draft_pending_claim_library_approval
 
@@ -1868,6 +2167,29 @@ entries:
       - resolution of the Nevada one-party / all-party contradiction
 
     citation: "Cal. Penal Code § 632 (IPA); Fla. Stat. § 934.03; 720 ILCS 5/14-2; Md. Cts & Jud. Proc. § 10-402; Mass. Gen. Laws ch. 272 § 99; Mont. Code § 45-8-213; N.H. RSA 570-A:2; Or. Rev. Stat. § 165.540; 18 Pa. C.S. § 5703; Wash. Rev. Code § 9.73.030; Conn. Gen. Stat. § 52-570d"
+
+    claim_provenance:
+      - claim: "All-party consent states require every participant's consent"
+        tag: sourced
+        source: "packages/calls/src/consent.ts ALL_PARTY_CONSENT_STATES — eleven states with per-state citations"
+      - claim: "Recording without required consent is a crime in the client's state"
+        tag: sourced
+        source: "packages/calls/src/consent.ts module header, and @bwc/consent's call_recording comment"
+      - claim: "One rule for every jurisdiction rather than per-state consent models"
+        tag: reconstructed
+        basis: "shaped from the operational-simplicity argument; the code computes per-state and this entry deliberately over-restricts"
+      - claim: "Silence is not consent"
+        tag: reconstructed
+        basis: "shaped from California IPA affirmative-consent reading; not stated in code or spec"
+      - claim: "Every join, leave and rejoin is a separate consent event, and recording is segmented"
+        tag: proposed
+        review_by: "Compliance & Evidence and engineering — nothing supports segmentation or per-segment consent records; this is the entry's principal contribution"
+      - claim: "The disclosure is scripted and Claim Library approved"
+        tag: proposed
+        review_by: "Compliance & Evidence and both founders — not drafted"
+      - claim: "Nevada's regime is contradicted between two live artifacts"
+        tag: sourced
+        source: "Office compliance_library_entry compliance/nv-two-party-consent-v1 says all-party; Console CONFIRMED_ONE_PARTY_STATES includes NV"
 
     status: draft_pending_claim_library_approval
 
@@ -2080,6 +2402,35 @@ entries:
 
     citation: "15 U.S.C. § 1691 et seq. (ECOA); Regulation B, 12 C.F.R. Part 1002"
 
+    claim_provenance:
+      - claim: "ECOA and Regulation B reach decisions about access to credit facilitation"
+        tag: sourced
+        source: "15 U.S.C. §1691 et seq.; 12 C.F.R. Part 1002"
+      - claim: "Burkham issues no adverse action notices because it does not lend"
+        tag: reconstructed
+        basis: "shaped from the facilitator position; no source states the adverse-action conclusion"
+      - claim: "Volunteered protected class information is acknowledged, never recorded, never used"
+        tag: reconstructed
+        basis: "shaped from ECOA's prohibited-basis structure; the recording-versus-structured-record split is the entry's own"
+      - claim: "Clients self-identify for protected class programs; Burkham never infers"
+        tag: reconstructed
+        basis: "shaped from the same; the surface-the-category-to-everyone pattern is the entry's own solution to the inference problem"
+      - claim: "The eligibility check reads amount, time in business, revenue, credit score, industry, states"
+        tag: sourced
+        source: "packages/lenders/src/eligibility.ts EligibilityCriteria — a typed fixed structure"
+      - claim: "Industry is NAICS-derived and is in the decision path"
+        tag: sourced
+        source: "packages/lenders/src/profile.ts — 'Free-text or NAICS-derived label, matched case-insensitively against exclusions'"
+      - claim: "Routing rationale is recorded per client with reasons keyed to underwriting stages"
+        tag: sourced
+        source: "packages/placement/src/recommend.ts RejectedAlternative — provider, offering, stage, reason"
+      - claim: "Nothing computes disparate impact anywhere"
+        tag: sourced
+        source: "capitalforge fair-lending.service.ts — 415 lines, zero occurrences of 'disparate'; nothing in the Console"
+      - claim: "Proxy discrimination needs no protected field"
+        tag: reconstructed
+        basis: "shaped from fair lending doctrine; the four named correlations are the entry's own analysis"
+
     status: draft_pending_claim_library_approval
 
     notes: >-
@@ -2285,6 +2636,32 @@ entries:
 
     citation: "16 C.F.R. Part 310 (TSR); 15 U.S.C. § 7701 et seq. (CAN-SPAM); 15 U.S.C. § 45"
 
+    claim_provenance:
+      - claim: "V1 does not conduct outbound telemarketing"
+        tag: sourced
+        source: "the outbound cut recorded in V1 scope; specifications-v2 §12 phasing"
+      - claim: "TSR reaches telephone, CAN-SPAM reaches email, UDAAP reaches any commercial contact"
+        tag: sourced
+        source: "16 C.F.R. Part 310; 15 U.S.C. §7701 et seq.; 15 U.S.C. §45"
+      - claim: "The three-part test — relationship, channel, purpose"
+        tag: proposed
+        review_by: "outside counsel — the entry states plainly that it is a defensible operational test, not a verified legal one"
+      - claim: "A referral is not consent; the referred person must have agreed and it must be documented"
+        tag: reconstructed
+        basis: "shaped from TSR's established-business-relationship exemption; no industry-standard implementation exists, as the entry notes"
+      - claim: "The 18-month lookback for former clients"
+        tag: proposed
+        review_by: "counsel — follows common TSR safe-harbour practice rather than a verified requirement"
+      - claim: "Calls and texts are restricted to 8am-9pm local to the recipient"
+        tag: sourced
+        source: "packages/comms/src/windows.ts — computed against the recipient's timezone, DST case reasoned in source"
+      - claim: "The client's own do-not-call instruction has legal force and nothing overrides it"
+        tag: sourced
+        source: "packages/comms/src/preferences.ts doNotCall"
+      - claim: "Referrals capture no consent and no consent kind exists for one"
+        tag: sourced
+        source: "packages/partners/src/referrals.ts records attribution and counts only; @bwc/consent has eight kinds, none for referral introduction"
+
     status: draft_pending_claim_library_approval
 
     notes: >-
@@ -2486,6 +2863,32 @@ entries:
       - scanner detection of term-negotiation language in lender-facing agent contact
 
     citation: "Cal. Fin. Code Div. 9 (CFL); N.Y. Banking Law art. 12-D; Fla. Stat. ch. 494; state commercial loan broker statutes generally"
+
+    claim_provenance:
+      - claim: "State broker licensure reaches compensation for arranging credit"
+        tag: sourced
+        source: "Cal. Fin. Code Div. 9; N.Y. Banking Law art. 12-D; Fla. Stat. ch. 494"
+      - claim: "California and Florida modules already flag broker conduct for counsel"
+        tag: sourced
+        source: "packages/regulatory/src/seed.ts — CA summary 'Broker conduct and compensation disclosure require counsel attention', ca_broker_compensation and fl_broker_conduct disclosures"
+      - claim: "Burkham charges a success fee contingent on placement"
+        tag: sourced
+        source: "packages/billing/src/engagements.ts successFeeBasisPoints"
+      - claim: "'We are not a lender' answers the wrong question"
+        tag: reconstructed
+        basis: "shaped from the licensure definitions above; the specs' locked language is the lender claim and no source makes this distinction"
+      - claim: "Four structural disciplines support the facilitator position"
+        tag: proposed
+        review_by: "outside counsel — the entry states the specs do not address broker licensure at all"
+      - claim: "Nothing models client capital or lender-side compensation"
+        tag: sourced
+        source: "no escrow, disbursement or custody anywhere in the Console; feeModel on an offering is the lender's charge to the client; partner payouts run outward"
+      - claim: "Four findings per state, and no service until one is on record"
+        tag: proposed
+        review_by: "outside counsel and both founders — a second gate that does not exist; ActivationStatus certifies the disclosure module only"
+      - claim: "Term negotiation is the licensed activity in several states"
+        tag: reconstructed
+        basis: "shaped from the broker statutes cited; the clarification-versus-negotiation line is the entry's own and the entry flags it as needing tightening"
 
     status: draft_pending_claim_library_approval
 

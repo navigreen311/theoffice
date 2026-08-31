@@ -35,7 +35,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from broker.compliance_quality import assess  # noqa: E402
+from broker.compliance_quality import assess, assess_provenance  # noqa: E402
 
 TODO_MARKERS = ("todo", "tbd", "fixme", "xxx")
 
@@ -53,7 +53,7 @@ TODO_MARKERS = ("todo", "tbd", "fixme", "xxx")
 APPROVED_STATUS = "approved"
 
 #: Fields that live in the file and never travel to the database.
-AUTHORING_ONLY_FIELDS = ("status", "notes", "depends_on")
+AUTHORING_ONLY_FIELDS = ("status", "notes", "depends_on", "claim_provenance")
 
 
 def _unmet_dependencies(entry: dict[str, Any]) -> list[str]:
@@ -130,6 +130,27 @@ def _unmet_dependencies(entry: dict[str, Any]) -> list[str]:
     return unmet
 
 
+def _print_provenance(prov: dict[str, Any]) -> None:
+    """One line on where an entry's claims came from, and the malformed ones named.
+
+    `unmarked` prints rather than staying silent. An entry with no provenance and one
+    that is entirely sourced both have zero problems, and only one of them has been
+    looked at.
+    """
+    if prov["unmarked"]:
+        print("            provenance: UNMARKED - no claim has been attributed")
+        return
+
+    c = prov["counts"]
+    print(
+        f"            provenance: {c['sourced']} sourced / "
+        f"{c['reconstructed']} reconstructed / {c['proposed']} proposed"
+        f"  (of {prov['total']})"
+    )
+    for problem in prov["problems"]:
+        print(f"              ! {problem.get('claim', '<unlabelled>')}: {problem['reason']}")
+
+
 def _has_todo(entry: dict[str, Any]) -> list[str]:
     """Fields still carrying a template marker.
 
@@ -166,6 +187,7 @@ def check_file(path: Path) -> tuple[int, int]:
             continue
 
         result = assess(entry)
+        prov = assess_provenance(entry)
         status = str(entry.get("status", APPROVED_STATUS)).strip().lower()
         notes = " ".join(str(entry.get("notes", "")).split())
         unmet = _unmet_dependencies(entry)
@@ -187,6 +209,7 @@ def check_file(path: Path) -> tuple[int, int]:
             # different things of the author.
             print(f"\n  HELD      {ref}")
             print(f"            status: {status}")
+            _print_provenance(prov)
             for item in unmet:
                 print(f"            also unmet: {item}")
             if notes:
@@ -196,6 +219,7 @@ def check_file(path: Path) -> tuple[int, int]:
 
         if result["state"] == "complete":
             print(f"\n  COMPLETE  {ref}")
+            _print_provenance(prov)
             complete += 1
             continue
 
