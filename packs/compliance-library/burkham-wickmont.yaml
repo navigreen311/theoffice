@@ -148,24 +148,51 @@
 # CONTROLS THAT ARE REFERENCED BUT HAVE NO CONTENT
 #
 #   Three have been found while writing these entries. Each was cited AS COVERAGE —
-#   in this library and in the specifications — and none exists. They are listed
+#   in this library and in the specifications — and none existed. They are listed
 #   here because the failure is a pattern rather than three accidents, and because an
 #   entry that leans on one is claiming a protection nobody has written.
 #
-#   THE FUNDING ETHICS FIREWALL'S FIVE ETHICAL RULES.
+#   TWO OF THE THREE ARE NOW CLOSED. The Firewall's five rules were written on
+#   31 August 2026 and the "2.3 workflow" deferrals were repointed at the mechanism
+#   that actually exists. The Readiness Score's components remain unspecified. The
+#   entries stay here rather than being deleted: the pattern is the finding, and a
+#   list that only holds open items loses the evidence that the pattern is real.
+#
+#   THE FUNDING ETHICS FIREWALL'S FIVE ETHICAL RULES. — CLOSED 31 August 2026.
+#
+#     WRITTEN. Founder decision of 31 August 2026 chose the five and their effects,
+#     and they are implemented in `packages/firewall/src/rules.ts` as
+#     `FIREWALL_RULES`, enumerated and each carrying its own effect, whether it binds
+#     submission, and what it cannot yet see:
+#
+#       1 FIT       a product that works against the stated need     candidate removed
+#       2 COST      a cheaper equal option the firm withheld          candidate removed
+#       3 CAPACITY  obligations beyond capacity to service them       client freeze
+#       4 STACKING  the same security twice, or too soon after        client freeze
+#       5 EVIDENCE  terms nobody verified against the issuer          candidate removed
+#
+#     THREE OF THE FIVE CARRY DECLARED GAPS. Rule 2 cannot price a factor-rate
+#     product; rule 3 cannot see debt Burkham did not broker; rule 5 treats
+#     verification as asserted rather than proven. Each says so on itself in
+#     `unenforceableBecause`, and rule 3's refusal states the blind spot in the
+#     sentence a human reads before clearing the freeze. ADR-0086 sizes what would
+#     make rules 2, 3 and 5 bind at submission as well as at recommendation.
+#
+#     WHAT IT WAS BEFORE, kept because the diagnosis is the reusable part.
 #
 #     blueprint-v2 §6.2: "Automated enforcement of five ethical rules on placement
-#     eligibility." That sentence is the ONLY mention of them across both reference
-#     documents, 1,807 lines. They are never enumerated.
+#     eligibility." That sentence was the ONLY mention of them across both reference
+#     documents, 1,807 lines. They were never enumerated.
 #
-#     Nor implemented. `packages/firewall/src/index.ts` exposes status, trigger,
+#     Nor implemented. `packages/firewall/src/index.ts` exposed status, trigger,
 #     clear and evaluate: a per-client triggered/clear flag whose `trigger` takes an
 #     arbitrary `reason` string, plus the Decision E coupling to compliance state.
 #     A flag a human or an agent sets — not five conditions evaluated. The package
-#     has exactly one commit, the original walking-skeleton spine, and has not been
-#     revisited. Git history shows the phrase entering with the specification and
+#     had exactly one commit, the original walking-skeleton spine, and had not been
+#     revisited. Git history showed the phrase entering with the specification and
 #     never being elaborated. There is no ethics or firewall service in CapitalForge
-#     either.
+#     either. That flag still exists and is still the client-level freeze; rules 3
+#     and 4 are what now set it, rather than a human with a free-text reason.
 #
 #     The reliance is wide. The Firewall is named 21 times across the two reference
 #     documents, is a declared dependency of the Recommendation Engine (5.3), Risk &
@@ -175,9 +202,17 @@
 #
 #     The count is what made it citable. "Five rules" reads as a known set, so an
 #     author reaches for "rule 4" — which is what happened in
-#     compliance/client-interest-standard-v1 before review. An unenumerated control
-#     with a number attached is worse than one with no number: the number implies
-#     somebody wrote them down.
+#     compliance/client-interest-standard-v1 before review, and independently in
+#     `lenders/suitability.ts`, which called a refinance into an advance "the
+#     stacking pattern the Funding Ethics Firewall exists to stop". Two authors, two
+#     artifacts, neither citation with a referent. An unenumerated control with a
+#     number attached is worse than one with no number: the number implies somebody
+#     wrote them down.
+#
+#     Both citations are now correct rather than removed — there IS a rule 4, and it
+#     is stacking. That is a coincidence and not a vindication: the phantom rule 4
+#     was about fee-driven product selection, which is rule 2's territory and only
+#     partly covered even there.
 #
 #   THE FUNDING READINESS SCORE'S COMPONENTS.
 #
@@ -222,14 +257,20 @@
 #     way "rule 4" did: a section number reads as a checkable reference, so nobody
 #     checks it.
 #
-#   WHAT TO DO WITH THEM. None is a library entry's job to fix. Both are recorded
-#   The first two are recorded as `depends_on` on the entries that need them, so an
-#   entry cannot reach `approved` while leaning on something unwritten. Enumerating
-#   the five rules and specifying the score's components are specification work, and
-#   until that lands an entry must say "held by this entry and human judgement"
-#   rather than "covered by the Firewall". The third needed no dependency — the
-#   approval mechanism exists, only the citation pointing at it was wrong, and the
-#   four deferrals have been repointed.
+#   WHAT TO DO WITH THEM. None was a library entry's job to fix. Both are recorded
+#   The Readiness Score is still recorded as `depends_on` on the entries that need
+#   it, so an entry cannot reach `approved` while leaning on something unwritten;
+#   specifying its components is specification work nobody has done.
+#
+#   The Firewall's five are done, and the dependency they blocked has been narrowed
+#   rather than deleted: client-interest-standard-v1 now depends on a check for
+#   fee-driven product selection among EQUALLY AVAILABLE options, which rule 2 does
+#   not reach. An entry must still say "held by this entry and human judgement" for
+#   that part, and may now say "covered by the Firewall" for the rest — which is the
+#   first time that sentence has been true.
+#
+#   The 2.3 deferrals needed no dependency: the approval mechanism existed, only the
+#   citation pointing at it was wrong, and all four have been repointed.
 #
 # ---------------------------------------------------------------------------
 # A TEST FOR WHETHER AN ENTRY IS FINISHED
@@ -774,9 +815,17 @@ entries:
       4. a client best served by a lower-fee product — success fees are not neutral
       across product categories
 
-      ALL FOUR are held by this entry and by human judgement, and by nothing else today.
-      An earlier draft said the fourth was covered by a Funding Ethics Firewall rule. It
-      is not — see notes.
+      THREE OF THE FOUR are held by this entry and by human judgement. The fourth — a
+      client best served by a lower-fee product — is now reached by Funding Ethics Firewall
+      rule 2, which refuses a placement when a materially cheaper option of equal or better
+      suitability was withheld for a reason of Burkham's own making. That is not the whole
+      of the fourth misalignment: rule 2 catches the firm's supply constraints being passed
+      to the client, and does not catch an agent steering toward a higher-fee product among
+      options all equally available. The remainder stays with this entry.
+
+      An earlier draft said the fourth was covered by "Rule 4". There was no rule 4 to
+      cite, and now there is a different one — rule 4 is stacking. The correction and the
+      later enumeration are recorded in notes.
 
       A SIGNED AGREEMENT IS NOT UNDERSTANDING. Where Burkham has reason to believe a
       client does not grasp what they agreed to, the signature does not insulate it. The
@@ -834,7 +883,7 @@ entries:
       - workflow that surfaces a recommendation against placement rather than filtering it
       - scanner patterns for client statements indicating misunderstanding
       - declined engagements in training material, showing what the right call looks like when it is no
-      - the Funding Ethics Firewall's five ethical rules, enumerated and implemented
+      - a Recommendation Engine check for fee-driven product selection among equally available options, which Firewall rule 2 does not reach
 
     citation: "12 U.S.C. § 5531 (CFPA, abusive); 15 U.S.C. § 45 (FTC Act, unfair and deceptive)"
 
@@ -860,9 +909,18 @@ entries:
       - claim: "The fee structure pulls against the client in four places"
         tag: reconstructed
         basis: "derived from successFeeBasisPoints being per-placement; the enumeration is the entry's own analysis"
-      - claim: "All four misalignments are held by this entry and human judgement alone"
+      - claim: "Three of the four misalignments are held by this entry and human judgement; the fourth is partly reached by Firewall rule 2"
         tag: sourced
-        source: "packages/firewall/src/index.ts — a triggered/clear flag with an arbitrary reason string; no rule evaluation, and no fee-driven product selection check exists anywhere"
+        source: "packages/firewall/src/rules.ts RULE_COST, enforced in placement/recommend.ts. Fee-driven selection among equally available options is still checked nowhere."
+      - claim: "The Funding Ethics Firewall enforces five named rules: fit, cost, capacity, stacking, evidence"
+        tag: sourced
+        source: "Founder decision, 31 August 2026. The five and their effects were chosen; blueprint-v2 §6.2 asserted a count and never enumerated them. Implemented in packages/firewall/src/rules.ts as FIREWALL_RULES."
+      - claim: "Each rule declares its own effect: three remove a candidate, two freeze the client"
+        tag: sourced
+        source: "Founder decision, 31 August 2026 — a product finding and a client finding are different and a single effect would be wrong about one of them. FirewallRule.effect."
+      - claim: "A rule binds submission, not only recommendation, so a client's own instruction does not carry it"
+        tag: sourced
+        source: "Founder decision, 31 August 2026. Enforced for rules 1 and 4 at submitAttempt; declared and not yet evaluable for rules 2, 3 and 5 — see ADR-0086."
       - claim: "A signed agreement is not understanding"
         tag: reconstructed
         basis: "shaped from the abusive prong's 'lack of understanding' language; the five watch-fors and the demonstrate-don't-re-sign rule are the entry's own"
@@ -906,23 +964,60 @@ entries:
       OPEN — scanner patterns for misunderstanding signals need real client interactions
       to learn from. Compliance & Evidence to draft once V1 has traffic.
 
-      RAISED BY REVIEW — the fourth misalignment is NOT covered, and the correction runs
-      in the unsafe direction. An earlier draft said "Rule 4 covers fee-driven product
-      selection". There is no Rule 4 to cite. blueprint-v2 §6.2 says the Firewall performs
-      "automated enforcement of five ethical rules on placement eligibility" and that
-      sentence is the ONLY mention of them in either reference document. The five are
-      never enumerated anywhere.
+      RESOLVED — the five ethical rules now exist. They are written, enumerated and
+      enforced, by founder decision of 31 August 2026.
 
-      Nor are they implemented as rules. `packages/firewall/src/index.ts` exposes
-      `status`, `trigger`, `clear` and `evaluate`: a per-client triggered/clear flag whose
-      `trigger` takes an arbitrary `reason` string, plus the Decision E coupling to
-      compliance state. It is a flag a human or an agent sets, not five conditions
-      evaluated. And nothing anywhere checks fee-driven product selection — the search
-      returns nothing.
+      The history matters because it is the pattern this library keeps finding. An earlier
+      draft of this entry said "Rule 4 covers fee-driven product selection". There was no
+      rule 4 to cite: blueprint-v2 §6.2 said the Firewall performs "automated enforcement
+      of five ethical rules on placement eligibility", that sentence was the only mention
+      across both reference documents, and the five were never enumerated. Nor were they
+      implemented — `packages/firewall/src/index.ts` held a per-client triggered/clear flag
+      whose `trigger` took an arbitrary reason string, and nothing in the codebase called
+      it. The COUNT was what made the phantom citable: "five rules" reads as a known set,
+      so an author reaches for one of them. `lenders/suitability.ts` did the same thing
+      independently, calling a refinance into an advance "the stacking pattern the Funding
+      Ethics Firewall exists to stop".
 
-      So all four misalignments rest on this entry and on human judgement. The entry now
-      says four rather than three, and the missing enumeration is a dependency rather than
-      an assumption.
+      THE FIVE, as decided and implemented in `packages/firewall/src/rules.ts`:
+
+      1. FIT — a product that works against the client's stated need is not placed.
+      Candidate removed. Fully enforceable: the Suitability Matrix scores all 42 pairs and
+      13 are negative, and those were previously presented with a caution.
+
+      2. COST — not placed when a materially cheaper option of equal or better suitability
+      was withheld for a reason of Burkham's own making rather than the client's. Candidate
+      removed. This is the one that reaches part of the fourth misalignment.
+
+      3. CAPACITY — not placed where total obligations after placement would exceed the
+      client's capacity to service them. Client freeze.
+
+      4. STACKING — not placed where it would layer on an outstanding obligation: the same
+      security pledged twice, or a placement before the last has settled. Client freeze.
+      `suitability.ts` now cites this rule by number, correctly.
+
+      5. EVIDENCE — not placed on terms nobody has verified against the issuer. Candidate
+      removed. Decision D had built the provenance machinery and stopped at labelling; this
+      supplies the consequence.
+
+      THREE OF THE FIVE CARRY DECLARED GAPS, recorded on each rule in
+      `unenforceableBecause` rather than smoothed over:
+
+      · rule 2 cannot price a factor-rate product, which is the category most likely to be
+      materially dearer, and its 300-basis-point spread is proposed rather than decided
+
+      · rule 3 cannot see debt the client holds outside what Burkham brokered, cannot
+      compute debt service from a free-text repayment structure, and measures against
+      revenue rather than cash flow. Its refusal says so in as many words and calls the
+      figure a floor rather than a total
+
+      · rule 5 treats verification as asserted rather than proven: `issuer_rule` means
+      somebody recorded a source and a date, not that the figure was re-checked
+
+      Rules 2, 3 and 5 also declare that they bind submission as policy and cannot be
+      evaluated at that seam. ADR-0086 sizes what would change that — one field on a
+      funding attempt recording which recommendation it came from — so the gap is a
+      decision rather than a default.
 
       RAISED BY REVIEW — the Section 6.2 collision, resolved by naming the document. In
       `docs/reference/blueprint-v2.md` §6.2 is the Funding Ethics Firewall. Any reference
