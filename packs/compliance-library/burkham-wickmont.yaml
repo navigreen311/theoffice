@@ -429,16 +429,23 @@ entries:
         tag: proposed
         review_by: "Compliance & Evidence — three of the four map to existing ObservationKinds; identity_mismatch has none and the routing rule is new"
       - claim: "The raw-report prohibition holds regardless of vendor TOS"
-        tag: proposed
-        review_by: "both founders — recorded as DECIDED in the entry, pending the per-vendor TOS review delegated to Compliance & Evidence"
+        tag: sourced
+        source: "Founder decision, 31 August 2026, ratifying the DECIDED note in this entry. Taken deliberately UPSTREAM of the per-vendor TOS review, so that review can only ever loosen the rule by recorded amendment."
 
     status: draft_pending_claim_library_approval
 
     notes: >-
-      DECIDED — the raw-report prohibition is a deliberate restrictive default, not an
+      DECIDED AND RATIFIED, founder decision 31 August 2026 — the raw-report prohibition
+      is a deliberate restrictive default, not an
       unverified assumption. It holds regardless of vendor TOS. Rationale: a permissive
       default tied to vendor terms means a TOS tightening puts Burkham out of compliance
       by inaction, and TOS silence is not TOS permission.
+
+      RATIFICATION NOTE — the decision was taken BEFORE the vendor review, and that
+      ordering is the substance of it. A prohibition ratified as "pending TOS" would be a
+      rule any vendor document could quietly overturn. Ratified upstream, the review can
+      only ever loosen it, and loosening is an explicit recorded amendment rather than
+      operational drift.
 
       DELEGATED — Village Compliance & Evidence to document, per bureau vendor, what the
       TOS says about redistribution to third parties, retention obligations, purpose
@@ -960,25 +967,51 @@ entries:
       "Our clients have received $X in funding" — the same figure, pointed at the
       reader. Banned.
 
-      BANNED REGARDLESS OF ACCURACY. Every one of these can be literally true and each
-      creates an inference that does not match the individual case:
+      ACCURACY IS NOT THE QUESTION. POINTING IS. A performance figure can be literally
+      true and still create an inference that does not match the individual case, and that
+      inference is what the FTC enforces against. The cure is not to suppress the figure.
+      It is to keep it firm-scale.
 
-      - success rates — "most clients get funded". True at 78% across the book, and this
-      client may sit at 20% or 95%
+      PERMITTED AS A FIRM-SCALE STATISTIC, with substantiation and not-typical framing in
+      the same statement:
 
-      - timeframe averages — "typical placement in 30 days"
+      - "78% of engagements since founding resulted in at least one placement" —
+      aggregate, historical, attributable, and saying nothing about the reader
 
-      - approval likelihoods presented as probabilities
+      - "median time from engagement to first placement, across all clients, is 34 days"
 
-      - historical achievement offered as future expectation
+      BANNED WHEN POINTED AT A PROSPECTIVE CLIENT'S OWN LIKELIHOOD, whatever the figure
+      behind it:
 
-      - speculation about lender behaviour — "Chase usually approves within 2 weeks"
+      - "most clients get funded", said to someone deciding whether to engage — the same
+      78% aimed at one person who may sit at 20% or 95%
 
-      - comparative claims against named competitors
+      - "typical placement in 30 days" offered as what THIS client should expect
 
-      The test: does the statement shift what a reasonable consumer expects about their
-      own result? If yes, it is banned whether or not it is accurate. Technical truth is
-      not a defence, and it is the specific pattern the FTC enforces.
+      - approval likelihoods presented as probabilities. No firm-scale reading survives: a
+      probability is a statement about an individual outcome by construction
+
+      - historical achievement offered as future expectation — the pointing is in the
+      word "expectation", not in the history
+
+      - speculation about lender behaviour — "Chase usually approves within 2 weeks".
+      Banned outright: it is not Burkham's performance to characterise, and Burkham holds
+      no substantiation for another firm's book
+
+      - comparative claims against named competitors. Banned outright, for that reason plus
+      the substantiation burden a comparison carries
+
+      THE TEST is the classification rule above, applied. This list is not a second rule.
+      "Burkham Wickmont has facilitated over $X in capital placements" is permitted and
+      "our clients have received $X" is not, and a performance figure divides on exactly
+      that line. Does the statement shift what THIS reader expects about THEIR own result?
+      If yes, no disclaimer rescues it. If it is genuinely aggregate, substantiation and
+      not-typical framing discharge it.
+
+      SUBSTANTIATION IS A PRECONDITION, NOT A DISCLAIMER. A firm-scale figure may only be
+      published if it is computable from the firm's own records, and the statement carries
+      the period it is drawn from. A number nobody can reproduce is banned in both
+      directions.
 
       OUTCOME PROMISES. `guarantee_approval` is a Level 4 prohibited action, hard-blocked
       by the middleware for every actor. The PHRASES that express it — "guaranteed
@@ -1072,9 +1105,12 @@ entries:
       - claim: "Firm-scale factual claims are permitted; claims shifting a client's expectation are not"
         tag: reconstructed
         basis: "shaped from FTC substantiation doctrine; the firm-scale/reader-pointed distinction is the entry's own formulation"
-      - claim: "Banned regardless of accuracy — success rates, timeframe averages, approval likelihoods"
-        tag: proposed
-        review_by: "Compliance Review Board — applying this rule reclassifies two SEEDED claims from requires_disclaimer to banned: 'success rate' and 'typical'"
+      - claim: "A performance figure is permitted firm-scale with substantiation and not-typical framing, and banned when pointed at a prospective client's own likelihood"
+        tag: sourced
+        source: "Founder decision, 31 August 2026. Resolves the conflict with the seeded Marketing Claim Library: `success rate` and `typical` stay requires_disclaimer and this entry changed instead. Recorded in notes."
+      - claim: "Lender-behaviour speculation and named-competitor comparisons are banned outright, with no firm-scale reading"
+        tag: reconstructed
+        basis: "Neither is Burkham's own performance, so the firm-scale exception cannot reach them - it rests on substantiation from the firm's own records. Applied for internal consistency; not separately decided."
       - claim: "guarantee_approval is a Level 4 prohibited action"
         tag: sourced
         source: "packages/core/src/authority.ts PROHIBITED_ACTIONS"
@@ -1085,8 +1121,8 @@ entries:
         tag: proposed
         review_by: "Compliance & Evidence — approved phrasing not drafted"
       - claim: "No testimonials in V1; case studies with consent are permitted"
-        tag: proposed
-        review_by: "both founders — recorded as DECIDED in the entry, resting on the Endorsement Guides' typical-results requirement"
+        tag: sourced
+        source: "Founder decision, 31 August 2026, ratifying the DECIDED note in this entry. Rests on the FTC Endorsement Guides' typical-results and substantiation requirements."
       - claim: "An agent applies published pricing logic and never its own judgement"
         tag: reconstructed
         basis: "shaped from the dispute-of-record risk; no source prohibits agent-level discounting"
@@ -1094,7 +1130,7 @@ entries:
     status: draft_pending_claim_library_approval
 
     notes: >-
-      DECIDED — no testimonials in V1. Client quotes about their experience are
+      DECIDED AND RATIFIED, founder decision 31 August 2026 — no testimonials in V1. Client quotes about their experience are
       persistent FTC enforcement bait: the Endorsement Guides require material
       disclosures, typical-results framing and substantiation for each claim, and the
       typical-results requirement is where comparable firms fail. Case studies with
@@ -1128,19 +1164,36 @@ entries:
       Claim Library applies. Adding phrases here would create a second list, and two
       lists drift.
 
-      RAISED BY REVIEW — applying this entry's classification rule to the SEEDED library
-      reclassifies two existing claims. Both are currently `requires_disclaimer`, and this
-      entry bans their category outright:
+      RESOLVED — the conflict with the SEEDED library, and this entry was the half that
+      changed. As drafted it banned success rates and timeframe averages "regardless of
+      accuracy", while `packages/claims/src/seed.ts` seeds `success rate` (line 838) and
+      `typical` (line 824) as `requires_disclaimer`, each with a named disclosure. A
+      `requires_disclaimer` claim SHIPS with its disclosure attached and a `banned` one
+      does not ship, so the two artifacts obliged different behaviour — and the code was
+      the one that ran.
 
-      `success rate` -> DISCLOSURE_SUBSTANTIATION. The entry bans success rates
-      "regardless of accuracy".
+      What settled it is that the entry contradicted ITSELF. The classification rule
+      directly above permits a firm-scale factual claim about aggregate activity and bans
+      the same figure pointed at the reader — "Burkham Wickmont has facilitated over $X"
+      against "our clients have received $X". A performance figure divides on exactly that
+      line, and the banned-regardless bullet ignored the distinction its own entry had
+      just drawn.
 
-      `typical` -> DISCLOSURE_NOT_TYPICAL. The entry bans timeframe averages, and
-      "typical placement in 30 days" is its own example.
+      So `success rate` and `typical` stay `requires_disclaimer`, the seed is unchanged,
+      and the bullet now bans the POINTED claim rather than the category. The seed's own
+      rationale — "5.5 makes one computable for the first time; the disclosure states the
+      period it is drawn from and that it does not predict" — is consistent with the entry
+      as it now reads, and the entry goes one step further by making computability a
+      precondition rather than treating the disclosure as the whole cure.
 
-      A `requires_disclaimer` claim SHIPS with its disclosure attached; a `banned` one
-      does not ship. So the library currently permits, with a disclaimer, two things this
-      entry says are never said. One of the two is wrong and it is a decision, not a bug.
+      FOUNDER DECISION, 31 August 2026.
+
+      NOT COVERED BY THAT DECISION — lender-behaviour speculation and named-competitor
+      comparisons are now stated as banned outright, with no firm-scale exception. Neither
+      is Burkham's own performance, so the exception's basis — substantiation from the
+      firm's own records — cannot reach them. That is reasoning applied to keep the list
+      internally consistent rather than a decision that was taken, and it is tagged
+      `reconstructed` accordingly.
 
       Three further requires_disclaimer claims are arguable and left alone: `up to`, `as
       low as` and `projected` all describe LENDER product terms rather than firm
@@ -1990,13 +2043,20 @@ entries:
         tag: reconstructed
         basis: "shaped from the same exclusion; no source states it as a bright line"
       - claim: "The library is organised by discipline, not by statute"
-        tag: proposed
-        review_by: "both founders — this is a structural decision about the library itself, recorded as STRUCTURAL in the entry"
+        tag: sourced
+        source: "Founder decision, 31 August 2026, ratifying the STRUCTURAL note in this entry. Governs how every subsequent entry is written: a new statute is folded into the discipline it constrains unless it constrains a discipline no entry covers."
 
     status: draft_pending_claim_library_approval
 
     notes: >-
-      STRUCTURAL — this entry replaces what would have been an IRC §163(j) entry. That
+      STRUCTURAL AND RATIFIED, founder decision 31 August 2026. The organising principle
+      is settled and now governs authoring: a new statute does NOT get an entry because it
+      is a new statute. It gets one only if it constrains an agent behaviour no existing
+      entry reaches. Otherwise it is folded into the discipline it belongs to, and the
+      citation is added there.
+
+      This entry is the worked example. It replaces what would have been an IRC §163(j)
+      entry. That
       draft failed the deletion test: "agents should be aware of §163(j) limitations"
       changes no agent behaviour, since tax advice is already Level 4 blocked and CFO
       Advisory output already routes through Deliverable Approval Workflow. It was
