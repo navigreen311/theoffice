@@ -366,9 +366,24 @@
 #     question turns on. A counsel opinion on a capped 1.5% would not be an opinion
 #     about a firm charging an uncapped 3.5%.
 #
-#     The brief has NOT been sent. The figures stay in it as written, unmarked in the
-#     document itself, because correcting them is a pricing decision and not a
-#     drafting one.
+#     RESOLVED 31 August 2026, and resolved in the direction the pattern predicts.
+#     The recollected figures were not confirmed by a document - they were replaced.
+#     A search for the earlier factoring pricing, recalled at $1,500-$3,500 setup by
+#     facility size, across both reference documents, the Marketing Plan Intake, this
+#     library and the Console repository including git history, returned NOTHING. It
+#     was a recollection: the same shape as the five Firewall rules.
+#
+#     Seven positions are now recorded in `packages/billing/src/successFeeSeed.ts`,
+#     flat per placement, each carrying the effort that justifies it, all PROPOSED
+#     pending Compliance Review Board. And `proposed` is a state the system enforces
+#     rather than a word in a rationale: `successFeeFor` refuses an unapproved fee, so
+#     nothing can be quoted in an exhibit or billed on a placement until the Board
+#     approves it. That distinction is the whole lesson of this entry - the previous
+#     figures lived in prose, which is how they reached a law firm unsourced.
+#
+#     THE BRIEF HAS NOT BEEN SENT, and its §1.3 still carries the reconstructed caps.
+#     It is now wrong in a NEW way: it describes percentage caps against a schedule
+#     that is flat. It must be rewritten before it goes anywhere.
 #
 #   WHAT TO DO WITH THEM. None was a library entry's job to fix. Both are recorded
 #   The Readiness Score is still recorded as `depends_on` on the entries that need
@@ -1336,9 +1351,15 @@ entries:
       - claim: "Success fees are flat on approved and funded capital, not a percentage of limit"
         tag: sourced
         source: "Marketing Plan Intake §4.2 Claims we make, item 8: 'Flat success fees on approved and funded capital, not percentage-of-limit.' Restated in §2 Group C and in §9.5 as the Seek Capital class-action pattern the firm is 'architected specifically to prevent'."
-      - claim: "The per-product success fee schedule — $7,500 LOC cap, $20,000 SBA cap, flat per-card"
-        tag: reconstructed
-        basis: "Written into a draft counsel brief on 31 August 2026 and traceable to no specification, decision, seed, test or note. Marketing Plan Intake §4.3 row 8 — 'Documented per-product schedule (Placement Program)' — scheduled it as a Day 8 deliverable that was never produced; these figures filled the gap. Recorded in the standing note at the head of this file."
+      - claim: "The per-product success fee schedule: $500 card, $5,000 equipment, $7,500 line, $10,000 term, $20,000 SBA, $7,500 factoring, flat per placement"
+        tag: proposed
+        review_by: "Compliance Review Board. Recorded by the founder on 31 August 2026 in packages/billing/src/successFeeSeed.ts, each figure with the effort that justifies it. Enforced as proposed rather than described as it: successFeeFor refuses a fee the Board has not approved, so nothing can be quoted or billed until it does."
+      - claim: "Fees are set by the work a placement takes, not by the capital it places"
+        tag: sourced
+        source: "Founder decision, 31 August 2026. The reason two tiering proposals were rejected: cards at $300/$750/$1,500 by approved limit, and factoring setup at $1,500-$3,500 by facility size. Sizing a fee by the capital placed is percentage-of-limit pricing in steps. REJECTED_TIERING in successFeeSeed.ts."
+      - claim: "Merchant cash advance is not offered, is referred out, and carries no fee"
+        tag: proposed
+        review_by: "Compliance Review Board. Recorded as the ABSENCE of a schedule row rather than a fee of zero, because a zero says the product is free and no row says it is not priced. A placement of it refuses loudly. See compliance/no-advance-placement-v1."
       - claim: "No testimonials in V1; case studies with consent are permitted"
         tag: sourced
         source: "Founder decision, 31 August 2026, ratifying the DECIDED note in this entry. Rests on the FTC Endorsement Guides' typical-results and substantiation requirements."
@@ -3065,6 +3086,117 @@ entries:
   # are where a finding is being sought, which belongs in depends_on rather than in
   # the jurisdiction list. A "+" in a jurisdiction list binds nothing.
   # =========================================================================
+  # =========================================================================
+  # WRITTEN 31 August 2026, alongside the flat success fee schedule. The schedule
+  # records six products and deliberately omits a seventh; this is what the omission
+  # means. Without it, "no row for merchant_cash_advance" reads as an oversight
+  # rather than as a decision, and the next person to complete the schedule fills
+  # the gap.
+  # =========================================================================
+  - entry_ref: compliance/no-advance-placement-v1
+    framework: UDAAP
+    jurisdiction: [ALL]
+    runtime_flag: advance_placement_prohibited
+
+    applicability_rule: >-
+      Any point at which a merchant cash advance could be recommended, applied for,
+      submitted, or discussed as something Burkham would arrange. Intake, Blueprint,
+      recommendation, submission, and any conversation where a client asks for one.
+
+      NOT A PRICING RULE. It sits beside the success fee schedule because that is where the
+      decision became visible - the schedule prices six products and omits this one - but the
+      omission is a consequence rather than the rule. The rule is that Burkham does not place
+      advances at all.
+
+    agent_behavior_implication: >-
+      BURKHAM DOES NOT PLACE MERCHANT CASH ADVANCES. Not at a higher fee, not with extra
+      disclosure, not on a client's insistence. There is no fee at which this becomes a
+      product the firm arranges.
+
+      REFER OUT, AND TAKE NOTHING FOR IT. A client whose situation genuinely points to an
+      advance is told so and pointed elsewhere. Burkham accepts no referral fee, no
+      commission and no consideration of any kind for that referral. A payment for sending
+      someone toward a product the firm will not itself place is a reason to send them, and
+      the reason this entry exists is that the firm decided it should have no such reason.
+
+      SAY WHY, NOT JUST NO. A client who is refused without explanation goes and finds an
+      advance on their own, from whoever answers the phone, on worse terms and with nobody
+      explaining the daily remittance. The refusal carries the reasoning: what an advance
+      costs relative to the alternatives, how the repayment works against daily receipts,
+      and what would have to change about their situation for a placeable product to fit.
+
+      NO FEE IS RECORDED FOR IT, AND THE ABSENCE IS THE RECORD. The success fee schedule
+      carries no row for merchant_cash_advance. That is deliberate and is not the same as a
+      row of zero: a zero says the product is free, and no row says the product is not
+      priced. `recordFundingOutcome` refuses a placement of it, naming the product.
+
+      IF AN ADVANCE REACHES THE PLACEMENT PATH, SOMETHING UPSTREAM FAILED. The refusal is a
+      backstop and not the control. Funding Ethics Firewall rule 1 already refuses an
+      advance for five of the six capital needs on fit alone, and this entry covers the
+      sixth and any case where fit would have permitted it.
+
+    escalation_trigger: >-
+      1. When a client asks Burkham to arrange a merchant cash advance. Explain, refer out,
+      document the referral and that no consideration was taken.
+
+      2. When any output recommends, quotes, or describes an advance as something Burkham
+      would arrange. Refuse and rewrite.
+
+      3. When a placement of merchant_cash_advance is attempted. It refuses; the attempt is
+      the finding. Route to Compliance & Evidence to establish how it got that far.
+
+      4. When any arrangement is proposed under which Burkham would receive consideration
+      for referring a client to an advance provider. Compliance Review Board. This is a
+      change to what the firm is, not a partnership decision.
+
+      5. When a client returns having taken an advance elsewhere. Not a failure of this rule
+      and not a reason to disengage - it becomes an input to Firewall rules 3 and 4, and the
+      client should be asked about it precisely because the system cannot see it.
+
+    depends_on:
+      - a documented refer-out procedure naming who the client is sent to and on what basis
+      - scanner detection of advance-arranging language in client-facing output
+      - a place to record that a referral was made and that no consideration was taken
+
+    citation: "12 U.S.C. § 5531 (CFPA, abusive); FTC Act 15 U.S.C. § 45"
+
+    claim_provenance:
+      - claim: "Burkham does not place merchant cash advances"
+        tag: proposed
+        review_by: "Compliance Review Board. Founder decision of 31 August 2026, recorded as NOT_OFFERED in packages/billing/src/successFeeSeed.ts and enforced by the absence of a schedule row."
+      - claim: "No referral fee is taken for referring a client to an advance provider"
+        tag: proposed
+        review_by: "Compliance Review Board. A payment for sending someone toward a product the firm will not place is a reason to send them."
+      - claim: "The refusal explains, so the client does not go and find a worse one alone"
+        tag: reconstructed
+        basis: "Shaped from compliance/client-interest-standard-v1, which says saying no is part of the service and that the client's outcome is the obligation. No source states the explaining requirement."
+      - claim: "An advance reaching the placement path means something upstream failed"
+        tag: reconstructed
+        basis: "Follows from Firewall rule 1 refusing merchant_cash_advance for five of six capital needs on fit alone; the refusal here is a backstop rather than the primary control."
+
+    status: draft_pending_claim_library_approval
+
+    notes: >-
+      WHY THIS IS AN ENTRY AND NOT A LINE IN THE SCHEDULE. The schedule can record that a
+      product has no price. It cannot record why, cannot tell an agent what to do when a
+      client asks, and cannot distinguish "not priced yet" from "never". An omission with
+      no entry behind it is the shape this library exists to catch - somebody completing the
+      schedule later would fill the gap in good faith.
+
+      OPEN - the refer-out procedure. There is no documented list of who an advance client is
+      sent to, and no basis on which such a list would be built. Sending a client to a
+      provider the firm has not assessed is its own problem, and it is the reason this
+      dependency is first.
+
+      OPEN - nothing records that a referral was made or that no consideration was taken.
+      The commitment is currently unfalsifiable, which is the weakest kind.
+
+      NOTED - this entry costs revenue by construction, and that is the point. A client
+      refused an advance is a client who may place nothing at all. compliance/client-interest-standard-v1
+      names four ways the fee structure pulls against the client; this is the firm choosing
+      against itself in the one case where the pull is strongest, because the alternative is
+      a fee earned on the product most likely to end the client's business.
+
   - entry_ref: compliance/facilitator-not-broker-v1
     framework: STATE_LENDER_LICENSURE
     jurisdiction: [ALL]
