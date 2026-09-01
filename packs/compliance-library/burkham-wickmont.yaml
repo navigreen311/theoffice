@@ -1,7 +1,27 @@
 # COMPLIANCE LIBRARY — Burkham Wickmont
 #
-# THIRTEEN ENTRIES ARE WRITTEN. FOUR ARE TEMPLATES, HELD PENDING A DECISION ON
-# WHETHER THE TWO AUTHORIZATION ONES ARE REAL ENTRIES.
+# SIXTEEN ENTRIES. NONE IS A TEMPLATE.
+#
+# The four that were templates were resolved on 1 September 2026, and not all in the
+# same direction:
+#
+#   fcra-pull-authorization-v1        WRITTEN. bureau-report-handling-v1 scopes itself
+#                                     out of authorization explicitly and relies on
+#                                     this existing.
+#   application-authorization-v1      WRITTEN. The Pack states the split: a truthful
+#                                     application nobody authorised and an authorised
+#                                     application that misstates revenue are separate
+#                                     violations.
+#   reg-z-trigger-terms-v1            RETIRED. specifications-v2 §6 records a
+#                                     business-purpose exemption from most of TILA;
+#                                     trigger terms sit in the exempt part.
+#   cfpb-1071-data-collection-v1      FOLDED into fair-treatment-in-routing-v1. The
+#                                     collection duty is the issuer's; what Burkham
+#                                     does with the data passing through it is not.
+#
+# Two of the four were entries for frameworks that do not bind this firm. Writing them
+# would have been the coverage-claim defect pointing the other way: a control asserting
+# an obligation nobody has.
 #
 # ---------------------------------------------------------------------------
 # THE THREE DOCUMENTS THIS FILE CITES, AND WHERE THEY LIVE
@@ -658,20 +678,160 @@ entries:
       no version column, so the prior text is overwritten, and the audit entry carries
       only entry_ref and runtime_flag rather than what changed. See AMENDMENT HISTORY at
       the head of this file.
-
-  # STILL TO WRITE — the authorization half that this entry explicitly excludes.
+  # =========================================================================
+  # WRITTEN 1 September 2026, replacing the template. This is the entry
+  # compliance/bureau-report-handling-v1 explicitly defers to: "Authorization is
+  # upstream and belongs to the Consent & Authorization Centre." That entry
+  # scoped itself out of authorization deliberately, so deleting this one leaves
+  # rules that presume an authorization and no rule for obtaining one.
+  # =========================================================================
   - entry_ref: compliance/fcra-pull-authorization-v1
     framework: FCRA
     jurisdiction: [FEDERAL]
     runtime_flag: per_pull_authorization_required
-    # Hint: business bureau and personal credit are SEPARATE authorizations per
-    # Decision B. `bureau-report-handling-v1` says the obligations AFTER a pull are
-    # identical for both — is that true of the authorization itself, or does a personal
-    # pull oblige something a business pull does not?
-    applicability_rule: TODO
-    agent_behavior_implication: TODO
-    escalation_trigger: TODO
-    citation: TODO
+
+    applicability_rule: >-
+      Before any credit bureau pull, consumer or business, every time. Fires at the moment a
+      pull is requested, not when the report comes back — that is
+      compliance/bureau-report-handling-v1, which governs the report and states plainly that
+      authorization is this entry's job.
+
+      TWO KINDS, NOT ONE. `business_bureau_pull` and `personal_credit_pull` are separate
+      consent kinds because they are separate intrusions. A business owner who authorised a
+      Dun & Bradstreet pull on their company has not authorised a hard inquiry against their
+      personal file, and the second is the one that costs them points.
+
+      FCRA reaches Burkham indirectly. Burkham is not a consumer reporting agency and does not
+      furnish data. What it does is obtain reports, and a report obtained without a
+      permissible purpose is the violation whoever obtained it committed.
+
+    agent_behavior_implication: >-
+      THE PERMISSIBLE PURPOSE IS THE CLIENT'S WRITTEN INSTRUCTION, and nothing else. Burkham
+      has no independent purpose for pulling — no underwriting interest, no account review, no
+      collection. The whole of its authority is that the client asked it to.
+
+      PER PULL, NOT PER ENGAGEMENT. One authorization covers one pull, of one bureau kind, for
+      one stated purpose. A client who authorised a business bureau pull for a line of credit
+      application has not authorised a second pull three months later for a different
+      application. The engagement agreement is not the authorization and never substitutes
+      for it.
+
+      RECORDED BEFORE THE CALL, NOT AFTER. The authorization exists in the Consent &
+      Authorization Centre before the Integration Layer is asked for anything. An
+      authorization captured afterwards documents a pull that had no permissible purpose at
+      the moment it happened, which is the violation, not a cure for it.
+
+      THE CLIENT IS TOLD WHICH KIND OF INQUIRY. Soft or hard, and against which file. A client
+      who believes they authorised a soft business pull and receives a hard personal inquiry
+      was not told what they were agreeing to, and the signature does not fix that — see
+      compliance/client-interest-standard-v1 on a signed agreement not being understanding.
+
+      SCOPE BINDS THE USE, NOT ONLY THE PULL. The purpose stated in the authorization is the
+      purpose the report may serve. Pulling for a specific application and then reusing the
+      same report for a portfolio analysis, a marketing segmentation or another lender's
+      submission is use beyond the authorization even though no second pull occurred.
+
+      REVOCATION STOPS THE NEXT PULL IMMEDIATELY. A client may revoke at any time, and the
+      revocation binds from the moment it is recorded. A pull already in flight is completed
+      and the report handled under bureau-report-handling-v1; no further pull is made.
+
+      A GUARANTOR IS A SEPARATE PERSON. Where a personal credit pull concerns someone other
+      than the client contact — a co-owner, a spouse guarantor — the authorization must come
+      from that person. The client cannot authorise an inquiry against a third party's file,
+      whatever their relationship to the business.
+
+      NO AGENT MAY BROADEN AN AUTHORIZATION. An agent that finds an authorization too narrow
+      for what it wants to do asks the client for a new one. It does not proceed on the view
+      that the client would obviously have agreed.
+
+    escalation_trigger: >-
+      1. When a pull is requested and no live authorization covers that bureau kind and that
+      purpose. Refuse. Route to obtain one; do not proceed and document afterwards.
+
+      2. When the purpose of a pull has drifted from the purpose authorised — a different
+      application, a different product, a different lender. New authorization, or no pull.
+
+      3. When a personal credit pull would touch anyone other than the client contact. Obtain
+      that person's own authorization directly. Escalate if it is unclear whose file would be
+      inquired against.
+
+      4. When a client asks how many inquiries have been made on their behalf. Answer with the
+      record. A client who cannot get that number from Burkham has no way to hold the
+      inquiry-count discipline in compliance/card-product-characterisation-v1 to account.
+
+      5. When a client revokes. Confirm, stop, and record. Any pull after a revocation is a
+      pull with no permissible purpose.
+
+      6. When an agent proposes reusing a previously pulled report for a new purpose. Compliance
+      & Evidence decides whether the original scope reaches it; the default is that it does not.
+
+      7. When a bureau or a client alleges a pull was unauthorised. Compliance Review Board and
+      outside counsel. Do not respond to the client's dispute without the authorization record
+      in hand.
+
+    depends_on:
+      - a consent check before the bureau pull path, which does not exist - `business_bureau_pull` and `personal_credit_pull` are declared consent kinds that no code path consults
+      - a client-facing statement of inquiry kind, soft or hard, at the point of authorisation
+      - authorization capture for a guarantor who is not the client contact
+      - an inquiry count per client, readable by the client
+
+    citation: "15 U.S.C. § 1681b(a)(2) and (f) (permissible purpose; written instructions of the consumer); 15 U.S.C. § 1681q (obtaining information under false pretences)"
+
+    claim_provenance:
+      - claim: "The permissible purpose is the client's written instruction and nothing else"
+        tag: sourced
+        source: "15 U.S.C. §1681b(a)(2) - a consumer report may be furnished to a person the consumer has instructed in writing. Burkham has no other statutory basis: it does not underwrite, service or collect."
+      - claim: "Per-pull authorization, not per-engagement"
+        tag: sourced
+        source: "specifications-v2 §6 lists FCRA as indirect with 'per-pull authorization required per Decision B'. The Console models it as such: CONSENT_KINDS carries business_bureau_pull and personal_credit_pull, and check() enforces scope, expiry and revocation."
+      - claim: "Two consent kinds because a business pull and a personal hard inquiry are different intrusions"
+        tag: sourced
+        source: "packages/consent/src/index.ts CONSENT_KINDS - business_bureau_pull and personal_credit_pull are separate values."
+      - claim: "The authorization is recorded before the Integration Layer is called"
+        tag: reconstructed
+        basis: "Shaped from compliance/glba-plaid-connection-v1, which states the same ordering for Plaid connections. No source states it for bureau pulls, and nothing enforces it."
+      - claim: "The client is told whether the inquiry is soft or hard, and against which file"
+        tag: reconstructed
+        basis: "Shaped from the seeded Marketing Claim Library, where `soft pull` requires DISCLOSURE_SOFT_INQUIRY on the reasoning that the soft inquiry is followed by a hard one at application. Extending that from marketing copy to the authorisation itself is this entry's own step."
+      - claim: "Scope binds the use of the report, not only the act of pulling"
+        tag: reconstructed
+        basis: "Restates compliance/bureau-report-handling-v1's trigger 5, 'use the report for any purpose beyond the one the client authorized', from the authorisation side. The two entries meet here by design."
+      - claim: "A guarantor must authorise their own inquiry"
+        tag: proposed
+        review_by: "Compliance Review Board. Nothing captures a non-client authorisation today, and the Entity Graph models guarantors without modelling their consent."
+      - claim: "An agent may not broaden an authorization on the view that the client would have agreed"
+        tag: reconstructed
+        basis: "Shaped from compliance/client-interest-standard-v1's rule that a signature is not understanding; the inverse case, where no signature exists at all, follows a fortiori. Not separately sourced."
+
+    status: draft_pending_claim_library_approval
+
+    notes: >-
+      THE GAP THAT MATTERS. `business_bureau_pull` and `personal_credit_pull` are declared
+      consent kinds and NOTHING CHECKS THEM. Searched the integration, placement and API
+      packages: `check()` is called once in the whole codebase, for `application` consent in
+      `requestRecommendation`. The vendors exist in `VENDOR_IDS` as `business_bureau` and
+      `personal_credit`; the consent kinds exist; no path joins them.
+
+      So this entry is presently held by human process. That is stated rather than implied,
+      and it is the first dependency because it is the one that makes the rest enforceable.
+
+      WHY THIS IS NOT PART OF bureau-report-handling-v1. That entry says so itself:
+      "Authorization is upstream and belongs to the Consent & Authorization Centre." It
+      governs a report that has come back — who may see it, what may be copied from it, what
+      may never be attached. This governs whether the report should have been obtained. A
+      report handled impeccably that nobody authorised is still a violation, and the two
+      entries fail in different directions.
+
+      OPEN — the guarantor case. The Entity Graph models co-owners and guarantees, including
+      capped and uncapped ones, and models nobody's consent. A personal credit pull against a
+      guarantor is the most likely place this entry is breached first, because the client
+      contact will supply the guarantor's details in good faith and nothing will ask whether
+      the guarantor agreed.
+
+      NOTED — inquiry counts. compliance/card-product-characterisation-v1 depends on an
+      executed inquiry count that does not exist. The same record would answer trigger 4 here.
+      One field, two entries.
+
 
   # =========================================================================
   # WRITTEN BY IVAN. Same split shape as FCRA: authorization is one flag, conduct is
@@ -856,19 +1016,148 @@ entries:
       same shape of defect as moderating a video by its filename, found in AnimaForge
       this week. The trigger is kept and marked NOT BUILT rather than removed, so the
       requirement is on the record ahead of the capability.
-
-  # STILL TO WRITE — the authorization half. Distinct from truthfulness: one is
-  # whether the client permitted this submission, the other is whether what it says
-  # is true. A truthful application nobody authorised and an authorised application
-  # that misstates revenue are different offences.
+  # =========================================================================
+  # WRITTEN 1 September 2026, replacing the template. The Pack's own comment says
+  # why it is separate: "Authorization and truthfulness are different offences: a
+  # truthful application nobody authorised and an authorised application that
+  # misstates revenue are each a violation on their own."
+  # =========================================================================
   - entry_ref: compliance/application-authorization-v1
     framework: FALSE_STATEMENT_TO_LENDER
     jurisdiction: [FEDERAL]
     runtime_flag: per_application_authorization_required
-    applicability_rule: TODO
-    agent_behavior_implication: TODO
-    escalation_trigger: TODO
-    citation: TODO
+
+    applicability_rule: >-
+      Before any application is submitted to any lender on a client's behalf. Fires at
+      submission, once per application, and covers what is being applied for, to whom, and
+      for how much.
+
+      THE PAIR TO compliance/application-truthfulness-v1, and the Pack states the split
+      deliberately: a truthful application nobody authorised and an authorised application
+      that misstates revenue are each a violation on their own. Truthfulness governs what the
+      application says. This governs whether Burkham was asked to send it.
+
+      WHY IT SITS UNDER FALSE_STATEMENT_TO_LENDER. Submitting an application in someone's name
+      without their authorisation is itself a false statement to the lender — the lender is
+      told this person is applying, and they are not. The exposure is not only to the client.
+
+    agent_behavior_implication: >-
+      ONE AUTHORIZATION, ONE APPLICATION. Naming the lender, the product and the amount. A
+      client who authorised a $150,000 line of credit application to Meridian has not
+      authorised a $400,000 one, has not authorised the same application to a second lender,
+      and has not authorised a card application instead.
+
+      THE AUTHORIZATION IS OBTAINED BEFORE SUBMISSION AND IS ON FILE AT THE MOMENT OF
+      SUBMISSION. Not reconstructed afterwards from an email thread. The Consent &
+      Authorization Centre holds it, scoped to the application reference, and
+      `requestRecommendation` already refuses when it is absent — this is the one
+      authorization discipline in the library that has an enforcer today.
+
+      A SHOTGUN SUBMISSION IS SEVERAL VIOLATIONS, NOT ONE. Sending the same package to six
+      lenders on one authorisation is five unauthorised applications and five hard inquiries
+      the client did not agree to. Each lender is a separate authorization, and the client is
+      told what a multi-lender strategy costs their credit profile before being asked to
+      authorise it.
+
+      AMOUNT CHANGES REQUIRE A NEW AUTHORIZATION, in either direction. Submitting for less
+      than authorised is not obviously harmless: it can produce an approval the client would
+      have declined and a success fee they did not expect against a facility that does not
+      meet their need.
+
+      RE-SUBMISSION IS SUBMISSION. An application declined and re-submitted after a change —
+      a corrected figure, an added guarantor, a different structure — is a new application and
+      needs a new authorisation. The client is told it was declined, and why, before being
+      asked.
+
+      A HUMAN SUBMITS, AND THE AUTHORIZATION DOES NOT CHANGE THAT.
+      compliance/application-truthfulness-v1 puts submission at Authority Level 3 with a human
+      pressing the button. An authorisation on file is a precondition for that human to act,
+      never a substitute for them.
+
+      WITHDRAWAL BINDS WHILE THE APPLICATION IS LIVE. A client may withdraw an application they
+      authorised. Burkham notifies the lender and records the withdrawal; it does not let the
+      application run because the work is already done.
+
+    escalation_trigger: >-
+      1. When a submission is attempted with no live authorization scoped to that application.
+      Refuse. This is enforced today at `requestRecommendation`.
+
+      2. When the lender, product or amount differs from what was authorised. Refuse and route;
+      an agent does not decide the difference is immaterial.
+
+      3. When a client asks for the same package to go to multiple lenders. Explain the inquiry
+      cost, obtain a separate authorization per lender, and record that the cost was explained.
+
+      4. When an application is to be re-submitted after a decline. New authorization, and the
+      client is told about the decline first.
+
+      5. When a client withdraws. Notify the lender, record the withdrawal, and stop.
+
+      6. When a lender contacts Burkham about an application the client says they did not
+      authorise. Compliance Review Board and outside counsel immediately. Do not respond to the
+      lender before the authorization record has been checked.
+
+      7. When an authorization is found to have been obtained after the submission it covers.
+      Compliance & Evidence. This is a finding about the process, not a paperwork correction,
+      and the pattern matters more than the instance.
+
+    depends_on:
+      - a check that the authorized lender, product and amount match what is actually submitted, which today is scoped by application reference alone
+      - a client-facing statement of the credit-profile cost of a multi-lender strategy, before the authorisation is sought
+      - a withdrawal path that notifies the lender
+
+    citation: "18 U.S.C. § 1014 (false statement to a financial institution); 15 U.S.C. § 1681b(f) (obtaining a report without permissible purpose, where a submission triggers a pull)"
+
+    claim_provenance:
+      - claim: "Authorization and truthfulness are separate obligations"
+        tag: sourced
+        source: "packs/burkham-wickmont.draft.yaml, the comment above the two FALSE_STATEMENT_TO_LENDER rows: 'a truthful application nobody authorised and an authorised application that misstates revenue are each a violation on their own'."
+      - claim: "Per-application written client authorization"
+        tag: sourced
+        source: "Marketing Plan Intake §4.2 Claims we make, item 6: 'Per-application written client authorization for all capital applications (Placement).' Enforced at placement/src/index.ts, which calls checkConsent for the 'application' kind scoped to the application reference."
+      - claim: "Submitting in someone's name without authorisation is itself a false statement to the lender"
+        tag: reconstructed
+        basis: "18 U.S.C. §1014 reaches false statements to influence a financial institution's action; that an unauthorised applicant identity is such a statement is this entry's reading, not a cited holding."
+      - claim: "One authorization per lender, and a shotgun submission is several violations"
+        tag: reconstructed
+        basis: "Follows from per-application authorisation plus the inquiry cost named in compliance/card-product-characterisation-v1. No source addresses multi-lender submission directly."
+      - claim: "Amount changes need a new authorization in either direction"
+        tag: proposed
+        review_by: "Compliance Review Board. The downward case is the arguable one - it is included because a smaller approval can still produce a success fee against a facility that does not meet the need."
+      - claim: "Re-submission after a decline is a new application"
+        tag: proposed
+        review_by: "Compliance Review Board. Operationally significant: it makes a decline a point at which the client must be re-engaged rather than a step the firm works through."
+      - claim: "Withdrawal binds while the application is live"
+        tag: reconstructed
+        basis: "Shaped from the revocation discipline in compliance/glba-plaid-connection-v1 and the consent store's revocation support. No withdrawal path to a lender exists."
+
+    status: draft_pending_claim_library_approval
+
+    notes: >-
+      THE ONE AUTHORIZATION DISCIPLINE WITH AN ENFORCER. `requestRecommendation` calls
+      `check(tenantId, clientId, 'application', applicationRef)` and refuses without a live,
+      unrevoked, unexpired consent scoped to that reference. Every other authorisation rule in
+      this library is held by process; this one is held by code, and it is worth knowing which
+      is which.
+
+      WHAT THAT ENFORCER DOES NOT CHECK. The consent is scoped to an application REFERENCE, a
+      string. It does not carry the lender, the product or the amount, so the check confirms
+      that an authorisation exists for this application and not that the application matches
+      what was authorised. Triggers 2 and the first dependency are about that gap: an agent
+      could submit a $400,000 application under an authorisation the client gave for $150,000
+      and the consent check would pass.
+
+      OPEN — the multi-lender explanation. Trigger 3 requires the client to be told what a
+      six-lender strategy costs their credit profile before authorising it. Nothing computes
+      that, and compliance/card-product-characterisation-v1 depends on the same missing
+      inquiry-count data. Three entries now need it.
+
+      NOTED — the decline case is the one most likely to be breached under commercial
+      pressure. A declined application is work already done with no success fee, and
+      re-submitting after a correction is the natural next move. Requiring a fresh
+      authorisation makes the client a participant in that decision rather than someone who
+      finds out later. That is the cost, and it is the point.
+
 
   # =========================================================================
   # WRITTEN BY IVAN. This entry resolves an open question from the FTC_ACT review:
@@ -1500,18 +1789,6 @@ entries:
       repricing must not change what an existing client's exhibit says they agreed to pay.
       Baseline pricing is data rather than code, which is correct — $497/$997 live in
       offers, not in a constant.
-
-  - entry_ref: compliance/reg-z-trigger-terms-v1
-    framework: REG_Z_ADVERTISING
-    jurisdiction: [FEDERAL]
-    runtime_flag: trigger_term_disclosure_required
-    # Hint: a stated rate or payment is a trigger term that obliges the full disclosure
-    # set alongside it. The implication should distinguish stating a rate (allowed,
-    # with disclosures) from promising one (never).
-    applicability_rule: TODO
-    agent_behavior_implication: TODO
-    escalation_trigger: TODO
-    citation: TODO
 
   # =========================================================================
   # WRITTEN BY IVAN. The Pack gained a CROA row: it declared no CROA framework at
@@ -2700,6 +2977,22 @@ entries:
       Each routing decision looks defensible alone. The disparity is only visible in
       aggregate, measured against characteristics Burkham deliberately does not collect.
 
+      SECTION 1071 DATA PASSES THROUGH AND DOES NOT STOP HERE. An issuer may collect
+      demographic data under CFPB Section 1071 through an application Burkham prepares and
+      submits. The collection obligation is the ISSUER'S — specifications-v2 §6 puts 1071
+      "at the issuer level" — and Burkham does not originate credit, so it is not a covered
+      financial institution.
+
+      What Burkham does with that data is the discipline. It transmits what the issuer's form
+      requires, retains none of it, uses none of it in routing or recommendation, and never
+      asks for it on its own account. A client who supplies it is told it goes to the issuer
+      and is used by the issuer.
+
+      The rule is the same as for volunteered information, and it is stated separately because
+      the route in is different: volunteered data arrives in conversation and this arrives on a
+      form Burkham is filling in, which makes retaining it the natural mistake rather than the
+      obvious one.
+
       ROUTING IS DOCUMENTED PER CLIENT. Every recommendation records which lenders were
       considered, which were excluded, and why — with reasons mapping to lender
       underwriting criteria, never to client attributes that could proxy for a protected
@@ -2746,7 +3039,7 @@ entries:
       - documented reasons on every service decline
       - client-facing explanation of routing rationale
       - fair lending review by outside expertise
-      - a decision on whether CapitalForge's Section 1071 demographic capture applies to Burkham
+      - a submission path that transmits issuer 1071 fields without persisting them, which nothing implements because no bureau or issuer submission path exists
 
     citation: "15 U.S.C. § 1691 et seq. (ECOA); Regulation B, 12 C.F.R. Part 1002"
 
@@ -2757,6 +3050,12 @@ entries:
       - claim: "Burkham issues no adverse action notices because it does not lend"
         tag: reconstructed
         basis: "shaped from the facilitator position; no source states the adverse-action conclusion"
+      - claim: "Section 1071 collection is the issuer's obligation, not Burkham's"
+        tag: sourced
+        source: "specifications-v2 §6: 'CFPB Section 1071 - small business lending data collection tiers apply from 2026-2027 at the issuer level.' Burkham does not originate credit and is not a covered financial institution."
+      - claim: "Issuer 1071 data is transmitted, never retained, never used in routing"
+        tag: reconstructed
+        basis: "Extends this entry's volunteered-information rule to data arriving on an issuer's form. Replaces compliance/cfpb-1071-data-collection-v1, retired 1 September 2026 because it would have written an entry for a framework that binds the issuer rather than Burkham."
       - claim: "Volunteered protected class information is acknowledged, never recorded, never used"
         tag: reconstructed
         basis: "shaped from ECOA's prohibited-basis structure; the recording-versus-structured-record split is the entry's own"
@@ -3418,29 +3717,3 @@ entries:
       are currently unbreakable because the capability is absent — and both would be
       broken by a feature nobody flagged as a compliance change. That is precisely
       trigger 2's job, and it is worth the entry saying which disciplines depend on it.
-
-  - entry_ref: compliance/cfpb-1071-data-collection-v1
-    framework: CFPB_1071
-    jurisdiction: [FEDERAL]
-    runtime_flag: sb_lending_data_collection
-    # Hint: phase-in is 2026–2027 at the ISSUER level. The applicability rule should
-    # carry the date condition, because an entry that binds before it does is a
-    # control that fires early and gets switched off.
-    applicability_rule: TODO
-    agent_behavior_implication: TODO
-    escalation_trigger: TODO
-    citation: TODO
-
-  # Two further frameworks are declared in the draft Pack and are NOT templated here,
-  # because each needs a decision before it can be written:
-  #
-  #   REFERRAL_FEE_REGULATION       varies by state AND by product. Whether this is one
-  #                                 entry with a jurisdiction list or one per state
-  #                                 depends on whether the behaviour differs or only
-  #                                 the permission does.
-  #
-  #   STATE_PRIVACY_COMPREHENSIVE   CCPA already has its own value. Whether VA/CO/CT/UT
-  #                                 share one entry turns on whether the agent's
-  #                                 response to a rights request differs between them.
-  #
-  # Both are worth answering before writing, rather than splitting later.

@@ -99,16 +99,17 @@ market:
       applies_when: Any point at which a merchant cash advance could be recommended, applied for or submitted
       runtime_flag: advance_placement_prohibited
       library_entry_ref: compliance/no-advance-placement-v1
-    - framework: REG_Z_ADVERTISING
-      jurisdiction: FEDERAL
-      applies_when: Any advertisement stating a rate, term or payment
-      runtime_flag: trigger_term_disclosure_required
-      library_gap: true
-    - framework: CFPB_1071
-      jurisdiction: FEDERAL
-      applies_when: Small-business credit application data collection, 2026-2027 phase-in
-      runtime_flag: sb_lending_data_collection
-      library_gap: true
+    # REG_Z_ADVERTISING RETIRED 1 September 2026. specifications-v2 §6: "CFPB Regulation Z -
+    # business-purpose credit exemption from most TILA, but card issuance and unauthorized-use
+    # rules apply". Trigger terms are an advertising rule under the exempt part; the parts that
+    # do apply are the ISSUER's obligations. Burkham's advertising is governed by
+    # compliance/own-claims-and-pricing-v1 and the Marketing Claim Library, which already
+    # carry "0% interest", "introductory rate" and "as low as" with required disclosures.
+    # CFPB_1071 RETIRED 1 September 2026. specifications-v2 §6 puts the collection duty "at
+    # the issuer level" and Burkham does not originate credit, so it is not a covered
+    # financial institution. The real agent behaviour - what Burkham does with demographic
+    # data an issuer collects through an application Burkham submits - is folded into
+    # compliance/fair-treatment-in-routing-v1, which already governs protected-class data.
     - framework: STATE_COMMERCIAL_FINANCING_DISCLOSURE
       jurisdiction: [NY, UT, VA, GA, CT, FL]
       applies_when: Commercial financing offer presented in a disclosure state
@@ -126,7 +127,7 @@ market:
       jurisdiction: FEDERAL
       applies_when: Authorizing an application submitted to an issuer on a client's behalf
       runtime_flag: per_application_authorization_required
-      library_gap: true
+      library_entry_ref: compliance/application-authorization-v1
     - framework: FALSE_STATEMENT_TO_LENDER
       jurisdiction: FEDERAL
       applies_when: Preparing, populating or staging any field of a lender application
@@ -170,7 +171,7 @@ market:
       jurisdiction: FEDERAL
       applies_when: Authorizing a consumer or business bureau pull
       runtime_flag: per_pull_authorization_required
-      library_gap: true
+      library_entry_ref: compliance/fcra-pull-authorization-v1
     - framework: FCRA
       jurisdiction: FEDERAL
       applies_when: Handling a bureau report once the Integration Layer has returned it
