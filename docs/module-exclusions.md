@@ -15,7 +15,8 @@ Three shapes, all found while onboarding CapitalForge:
 |---|---|---|
 | `inert` | persists or records something no runner ever consumes | `POST /api/platform/workflows` — the platform's own GET answers `execution: {runs: false}` |
 | `stubbed` | calls a stub client that fabricates a third-party response | `voiceforge.service.ts` uses a `TwilioStubClient` declared inside itself and returns invented Twilio SIDs |
-| `refuses` | answers 501 by design | ten endpoints, each stating why in its body |
+| `refuses` | answers 501 by design | eleven endpoints, each stating why in its body |
+| `fabricated` | answers 200 with invented figures presented as a record | `POST /api/rewards/:clientId/export` reported per-programme points balances, identical for every client, in a domain whose own balance endpoint is a 501 |
 
 ## How it is enforced
 
@@ -79,8 +80,8 @@ mid-call.
 
 ## What is recorded today
 
-Seventeen modules on `capitalforge`: three `platform_workflow_*`, four VoiceForge call
-and outreach modules, and the ten 501s. Reasons and evidence per module are in
+Eighteen modules on `capitalforge`: three `platform_workflow_*`, four VoiceForge call
+and outreach modules, the eleven 501s, and `rewards_export`. Reasons and evidence per module are in
 `broker/module_exclusions.py`.
 
 **Not excluded**, and worth stating because the two look alike:

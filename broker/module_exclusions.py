@@ -153,6 +153,20 @@ CAPITALFORGE: tuple[ModuleExclusion, ...] = (
     ),
     ModuleExclusion(
         "capitalforge",
+        "rewards_export",
+        "fabricated: exported a client-facing 'REWARDS PORTFOLIO REPORT' asserting "
+        "124,500 Amex points, 89,200 Chase points, $312.47 cash back and a $3,206.72 "
+        "total - written into the handler, identical for every client, with no tenant "
+        "check on the client id. Its own sibling GET /points-balances was already a 501 "
+        "because nothing records a balance. Refused 2026-09-01; excluded because a "
+        "document asserting a balance is the worst shape this can take, and the module "
+        "must not become grantable if somebody rebuilds the endpoint without the data "
+        "behind it.",
+        "capitalforge: api/routes/rewards.routes.ts (POST /:clientId/export). Fixed in "
+        "ffd6b25; compare api/routes/card-benefits.routes.ts:238 for a real one.",
+    ),
+    ModuleExclusion(
+        "capitalforge",
         "rewards_points_balances",
         "refuses 501: nothing records points or cash back.",
         "capitalforge: api/routes/rewards.routes.ts (GET /rewards/:clientId/points-balances).",
