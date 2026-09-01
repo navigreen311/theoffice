@@ -38,6 +38,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from broker.compliance_quality import (  # noqa: E402
     assess,
     assess_citation_form,
+    assess_pack_references,
     assess_provenance,
 )
 
@@ -179,9 +180,52 @@ def _citation_problems(path: Path) -> list[dict[str, str]]:
     return assess_citation_form(path.read_text(encoding="utf-8"))
 
 
+#: Pack files checked against the library, by matching stem.
+#:
+#: `packs/burkham-wickmont.draft.yaml` is checked against
+#: `packs/compliance-library/burkham-wickmont.yaml`. A Pack with no library, or a
+#: library with no Pack, is not an error - the pairing is what is checked when both
+#: exist.
+PACKS_DIR = Path(__file__).resolve().parent.parent / "packs"
+
+
+def _pack_for(library_path: Path) -> Path | None:
+    """The Pack this library serves, if one is on disk."""
+    stem = library_path.stem
+    for candidate in (PACKS_DIR / f"{stem}.yaml", PACKS_DIR / f"{stem}.draft.yaml"):
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _pack_problems(library_path: Path, doc: dict[str, Any]) -> list[dict[str, str]]:
+    """Coverage the Pack claims and the library does not provide.
+
+    Checked here rather than left to V28, which does the same job against the DATABASE
+    and reports NOT_RUN without one - so the check an author most needs, before anything
+    is loaded, is the one that does not run. This also catches the half V28 cannot: a ref
+    that resolves to an entry which is still a template.
+    """
+    pack_path = _pack_for(library_path)
+    if pack_path is None:
+        return []
+
+    with pack_path.open(encoding="utf-8") as fh:
+        pack = yaml.safe_load(fh) or {}
+
+    return assess_pack_references(pack, doc)
+
+
 def check_file(path: Path) -> tuple[int, int]:
     with path.open(encoding="utf-8") as fh:
         doc = yaml.safe_load(fh) or {}
+
+    pack_problems = _pack_problems(path, doc)
+    if pack_problems:
+        print("")
+        print(f"  PACK      {path.name} - coverage claimed that the library does not provide")
+        for problem in pack_problems:
+            print(f"            {problem['reason']}")
 
     citation_problems = _citation_problems(path)
     if citation_problems:
@@ -250,7 +294,7 @@ def check_file(path: Path) -> tuple[int, int]:
         for problem in result["problems"]:
             print(f"            {problem['title']}: {problem['reason']}")
 
-    return (complete, failed + len(citation_problems))
+    return (complete, failed + len(citation_problems) + len(pack_problems))
 
 
 def main(argv: list[str]) -> int:

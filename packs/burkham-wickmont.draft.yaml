@@ -73,17 +73,17 @@ market:
       jurisdiction: FEDERAL
       applies_when: Any discussion of a client's credit profile, score, tradelines or negative items
       runtime_flag: croa_perimeter_required
-      library_gap: true
+      library_entry_ref: compliance/not-a-credit-repair-organization-v1
     - framework: FTC_ACT
       jurisdiction: FEDERAL
       applies_when: Anything Burkham says about its own service, results or pricing
       runtime_flag: own_claims_discipline_required
-      library_gap: true
+      library_entry_ref: compliance/own-claims-and-pricing-v1
     - framework: UDAAP
       jurisdiction: FEDERAL
       applies_when: Any client-facing claim about approval, cost or outcome
       runtime_flag: client_interest_standard_required
-      library_gap: true
+      library_entry_ref: compliance/client-interest-standard-v1
     # TWO UDAAP rows, for the reason FCRA and FALSE_STATEMENT_TO_LENDER have two: a
     # standard and one absolute application of it are different obligations. The row
     # above is the standard - whether Burkham is optimising for the client's outcome,
@@ -113,12 +113,12 @@ market:
       jurisdiction: [NY, UT, VA, GA, CT, FL]
       applies_when: Commercial financing offer presented in a disclosure state
       runtime_flag: estimate_not_offer_required
-      library_gap: true
+      library_entry_ref: compliance/estimate-not-offer-v1
     - framework: MCA_DISCLOSURE_CA_SB1235
       jurisdiction: [CA]
       applies_when: Commercial financing offer presented to a California business
       runtime_flag: estimate_not_offer_required
-      library_gap: true
+      library_entry_ref: compliance/estimate-not-offer-v1
     # TWO rows, as with FCRA. Authorization and truthfulness are different offences:
     # a truthful application nobody authorised and an authorised application that
     # misstates revenue are each a violation on their own.
@@ -131,12 +131,12 @@ market:
       jurisdiction: FEDERAL
       applies_when: Preparing, populating or staging any field of a lender application
       runtime_flag: application_truthfulness_required
-      library_gap: true
+      library_entry_ref: compliance/application-truthfulness-v1
     - framework: CARD_NETWORK_RULES
       jurisdiction: FEDERAL
       applies_when: Any representation about card use, cash advance or fees
       runtime_flag: card_product_discipline_required
-      library_gap: true
+      library_entry_ref: compliance/card-product-characterisation-v1
     # TWO rows, one flag each. FCRA splits into authorization (before the pull) and
     # handling (after the report comes back), and a compliance_surface row can only
     # declare one runtime_flag. See compliance/bureau-report-handling-v1, which states
@@ -145,27 +145,27 @@ market:
       jurisdiction: ALL
       applies_when: Every engagement, in every state, from intake through placement
       runtime_flag: facilitator_status_required
-      library_gap: true
+      library_entry_ref: compliance/facilitator-not-broker-v1
     - framework: FTC_TSR
       jurisdiction: FEDERAL
       applies_when: Any Burkham-initiated contact with an individual, any channel
       runtime_flag: outbound_contact_boundary_required
-      library_gap: true
+      library_entry_ref: compliance/outbound-contact-boundary-v1
     - framework: ECOA
       jurisdiction: FEDERAL
       applies_when: Any decision on which lenders a client is shown, or whether to serve them
       runtime_flag: fair_treatment_required
-      library_gap: true
+      library_entry_ref: compliance/fair-treatment-in-routing-v1
     - framework: TWO_PARTY_CONSENT_RECORDING
       jurisdiction: [CA, FL, IL, MD, MA, MT, NH, OR, PA, WA, CT]
       applies_when: Any recorded call, whoever dialled
       runtime_flag: recording_consent_required
-      library_gap: true
+      library_entry_ref: compliance/call-recording-consent-v1
     - framework: TAX_ADVICE_SCOPE
       jurisdiction: FEDERAL
       applies_when: Any client interaction touching tax treatment
       runtime_flag: tax_advice_boundary_required
-      library_gap: true
+      library_entry_ref: compliance/tax-advice-boundary-v1
     - framework: FCRA
       jurisdiction: FEDERAL
       applies_when: Authorizing a consumer or business bureau pull
@@ -175,12 +175,12 @@ market:
       jurisdiction: FEDERAL
       applies_when: Handling a bureau report once the Integration Layer has returned it
       runtime_flag: bureau_report_handling_required
-      library_gap: true
+      library_entry_ref: compliance/bureau-report-handling-v1
     - framework: GLBA
       jurisdiction: FEDERAL
       applies_when: Any Plaid connection or handling of client financial account data
       runtime_flag: per_connection_authorization_required
-      library_gap: true
+      library_entry_ref: compliance/glba-plaid-connection-v1
     - framework: CCPA
       jurisdiction: [CA]
       applies_when: Any California client exercising a privacy right

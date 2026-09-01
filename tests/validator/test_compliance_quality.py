@@ -19,6 +19,7 @@ from broker.compliance_quality import (
     REQUIRED_BY_TAG,
     assess,
     assess_citation_form,
+    assess_pack_references,
     assess_claim,
     assess_field,
     assess_provenance,
@@ -466,3 +467,102 @@ def test_the_replacement_form_passes():
 def test_both_forms_are_reported_separately():
     problems = assess_citation_form("line 12 and docs/reference/specifications-v2.md")
     assert len(problems) == 2
+
+
+# ---------------------------------------------------------------------------
+# Pack references
+# ---------------------------------------------------------------------------
+
+_TEMPLATE_ENTRY = {
+    "entry_ref": "compliance/unwritten-v1",
+    "runtime_flag": "unwritten_required",
+    "applicability_rule": "TODO",
+    "agent_behavior_implication": "TODO",
+}
+
+_WRITTEN_ENTRY = {
+    "entry_ref": "compliance/written-v1",
+    "runtime_flag": "written_required",
+    "applicability_rule": "Every engagement in every state, from intake through placement.",
+    "agent_behavior_implication": "The agent refuses and routes to a human.",
+}
+
+_LIBRARY = {"entries": [_TEMPLATE_ENTRY, _WRITTEN_ENTRY]}
+
+
+def _pack(*rows: dict) -> dict:
+    return {"market": {"compliance_surface": list(rows)}}
+
+
+def test_a_ref_that_resolves_to_a_written_entry_passes():
+    pack = _pack(
+        {"runtime_flag": "written_required", "library_entry_ref": "compliance/written-v1"}
+    )
+    assert assess_pack_references(pack, _LIBRARY) == []
+
+
+def test_a_ref_to_an_entry_that_does_not_exist_is_refused():
+    pack = _pack({"runtime_flag": "x_required", "library_entry_ref": "compliance/absent-v1"})
+    problems = assess_pack_references(pack, _LIBRARY)
+    assert len(problems) == 1
+    assert "does not exist" in problems[0]["reason"]
+    assert "set `library_gap: true`" in problems[0]["reason"]
+
+
+def test_a_ref_to_a_TEMPLATE_is_refused():
+    """The half V28 cannot catch.
+
+    V28 queries the database for the entry_ref and is satisfied when a row comes back. A
+    template entry produces a row. It resolves, it constrains nothing, and the Pack's
+    `library_gap: false` then asserts a gap is closed by a file with a placeholder in it.
+    """
+    pack = _pack(
+        {"runtime_flag": "unwritten_required", "library_entry_ref": "compliance/unwritten-v1"}
+    )
+    problems = assess_pack_references(pack, _LIBRARY)
+    assert len(problems) == 1
+    assert "still a\n" not in problems[0]["reason"]
+    assert "TEMPLATE" in problems[0]["reason"]
+    assert "machine-verified and false" in problems[0]["reason"]
+
+
+def test_a_row_declaring_a_gap_is_not_checked():
+    """An honest gap is the state this rule exists to tell a false claim apart from."""
+    pack = _pack(
+        {
+            "runtime_flag": "unwritten_required",
+            "library_entry_ref": "compliance/unwritten-v1",
+            "library_gap": True,
+        }
+    )
+    assert assess_pack_references(pack, _LIBRARY) == []
+
+
+def test_a_row_with_no_ref_is_not_checked():
+    pack = _pack({"runtime_flag": "x_required", "library_gap": True})
+    assert assess_pack_references(pack, _LIBRARY) == []
+
+
+def test_the_problem_names_the_flag_so_a_reader_can_find_the_row():
+    pack = _pack({"runtime_flag": "x_required", "library_entry_ref": "compliance/absent-v1"})
+    problems = assess_pack_references(pack, _LIBRARY)
+    assert problems[0]["runtime_flag"] == "x_required"
+    assert problems[0]["entry_ref"] == "compliance/absent-v1"
+
+
+def test_the_real_pack_and_library_agree():
+    """The reconciliation, asserted rather than assumed.
+
+    Fourteen rows were converted from `library_gap: true` to a `library_entry_ref` on
+    31 August 2026. If one of them named an entry that does not exist, or one that is
+    still a template, this is where it shows.
+    """
+    pack_path = LIBRARY_DIR.parent / "burkham-wickmont.draft.yaml"
+    library_path = LIBRARY_DIR / "burkham-wickmont.yaml"
+
+    with pack_path.open(encoding="utf-8") as fh:
+        pack = yaml.safe_load(fh)
+    with library_path.open(encoding="utf-8") as fh:
+        library = yaml.safe_load(fh)
+
+    assert assess_pack_references(pack, library) == []

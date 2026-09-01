@@ -514,3 +514,84 @@ def assess_citation_form(text: str) -> list[dict[str, str]]:
         )
 
     return problems
+
+
+# ---------------------------------------------------------------------------
+# Pack references
+#
+# V28 already checks that a Pack's `library_entry_ref` resolves, but it is a world
+# rule: it queries `compliance_library_entry` and reports NOT_RUN without a database.
+# So the check that matters most - the one an author wants BEFORE anything is loaded
+# anywhere - does not run at the moment the mistake is made.
+#
+# It also checks existence only. An entry that exists and is a TODO stub resolves
+# perfectly well and constrains nothing, which is the "Documented." defect wearing the
+# Pack's coverage claim: `library_gap: false` then asserts the gap is closed by a file
+# with a placeholder in it.
+#
+# Both halves are checked here, from the two files, with no database.
+# ---------------------------------------------------------------------------
+
+
+def assess_pack_references(
+    pack: dict[str, Any], library: dict[str, Any]
+) -> list[dict[str, str]]:
+    """Pack rows whose `library_entry_ref` does not resolve to a written entry.
+
+    Returns one problem per offending row. A row declaring `library_gap` is not checked:
+    it has said the entry does not exist, which is honest and is the state this rule
+    exists to distinguish a false claim from.
+    """
+    entries = {e.get("entry_ref"): e for e in (library.get("entries") or []) if isinstance(e, dict)}
+
+    templates = {
+        ref
+        for ref, entry in entries.items()
+        if any(
+            isinstance(value, str) and value.strip().lower() in PLACEHOLDER_STRINGS
+            for value in entry.values()
+        )
+    }
+
+    problems: list[dict[str, str]] = []
+    surface = ((pack.get("market") or {}).get("compliance_surface")) or []
+
+    for row in surface:
+        if not isinstance(row, dict):
+            continue
+        ref = row.get("library_entry_ref")
+        if not ref or row.get("library_gap"):
+            continue
+
+        flag = row.get("runtime_flag", "<no runtime_flag>")
+
+        if ref not in entries:
+            problems.append(
+                {
+                    "runtime_flag": str(flag),
+                    "entry_ref": str(ref),
+                    "reason": (
+                        f"{flag} claims library entry {ref}, which does not exist. The Pack is "
+                        "asserting coverage it does not have. Write the entry, or set "
+                        "`library_gap: true` so the claim matches the world."
+                    ),
+                }
+            )
+            continue
+
+        if ref in templates:
+            problems.append(
+                {
+                    "runtime_flag": str(flag),
+                    "entry_ref": str(ref),
+                    "reason": (
+                        f"{flag} claims library entry {ref}, which exists and is still a "
+                        "TEMPLATE. It constrains nothing, so the flag reaches an agent as a bare "
+                        "label with the Pack asserting otherwise - which is worse than declaring "
+                        "the gap, because it is now machine-verified and false. Keep "
+                        "`library_gap: true` until the entry is written."
+                    ),
+                }
+            )
+
+    return problems
