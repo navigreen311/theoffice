@@ -395,7 +395,7 @@ Enumerated (versioned in Marketing Claim Library):
 1. **Operator-led firm.** Founded by Ivan Green, 20-year healthcare operator.
 2. **Anchor customers are portfolio companies.** Greenstone (CRE) and MedLink Pro (healthcare staffing) are Ivan's own companies.
 3. **Five-offer ladder.** Blueprint / Buildout / Placement / Stack Management / Advisory & Exit. Fees disclosed per engagement letter.
-4. **Funding Ethics Firewall.** Five rules governing capital recommendations. Enforced through Funding Recommendation Engine (Pack module 6.4).
+4. **Funding Ethics Firewall.** Five rules governing capital placement — fit, cost, capacity, stacking, evidence. Pack module **6.2**. Enforced in the placement path and, for two of the five, at submission.
 5. **Written credit-profile-preservation commitment** in the engagement letter.
 6. **Per-application written client authorization** for all capital applications (Placement).
 7. **Application velocity governance** via Issuer Rules Engine respecting documented issuer rules (5/24, 2/30/90, once-per-lifetime, etc.).
@@ -415,7 +415,7 @@ Enumerated (versioned in Marketing Claim Library):
 | 1 | Ivan's operator history — verifiable through MedLink Pro Nevada Board of Nursing licensure records, Greenstone entity filings, Green Companies LLC public records. |
 | 2 | Anchor engagement contracts (internal, executed). Case study documentation `[ANCHOR DOCS PENDING]`. |
 | 3 | Engagement letter template with fee schedule exhibit. `[COMPLIANCE REVIEW PENDING]`. |
-| 4 | Pack module 6.4 (Funding Recommendation Engine) implements the five rules; Pack module 4.2 (Communication Compliance Scanner) enforces them at the language layer. Documented in specs. |
+| 4 | The five rules are enumerated and implemented in `packages/firewall/src/rules.ts` as `FIREWALL_RULES` (Pack module **6.2**, Funding Ethics Firewall — not 6.4, which is Do Not Fund Governance). Three remove a candidate from a recommendation, two freeze the client's placement pending human review; rules 1 and 4 also refuse the submission, so a client's own instruction does not carry them. **Three of the five carry declared limits**, recorded on each rule: rule 2 cannot price a factor-rate product, rule 3 cannot see debt Burkham did not broker, rule 5 treats verification as asserted rather than re-proven. Pack module 4.2 (Communication Compliance Scanner) enforces claim language separately. |
 | 5 | Engagement letter language `[COMPLIANCE REVIEW PENDING]`. |
 | 6 | Engagement letter language + per-application authorization workflow in Console. |
 | 7 | Issuer Rules Engine (CapitalForge partial build, ~52% per spec audit). Documented rule set per issuer. |
