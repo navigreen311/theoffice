@@ -45,6 +45,7 @@ from broker.certification import cap_tier
 from broker.errors import (
     GrantNotActivated,
     IdentityInactive,
+    ModuleExcluded,
     NotCertified,
     NotGranted,
     UnknownForge,
@@ -102,12 +103,17 @@ SELECT
     g.activated_at,
     ca.state          AS unit_a_state,
     ca.certified_tier AS unit_a_tier,
-    cb.state          AS unit_b_state
+    cb.state          AS unit_b_state,
+    x.reason          AS exclusion_reason
 FROM agent_forge_grant g
 JOIN office_agent_identity i ON i.office_agent_id = g.office_agent_id
 JOIN forge_registry       r ON r.forge_id        = g.forge_id
 JOIN forge_module_registry m ON m.forge_id = g.forge_id AND m.module_id = g.module_id
 LEFT JOIN forge_tenant_credential c ON c.forge_id = g.forge_id
+-- An excluded module answers without doing the work. Joined here rather than
+-- queried separately so the refusal costs no extra round trip on the hot path.
+LEFT JOIN forge_module_exclusion x ON x.forge_id  = g.forge_id
+                                  AND x.module_id = g.module_id
 -- Certification state, live. LEFT JOIN so a missing cert is distinguishable from a
 -- cert in a non-certified state: "never certified" and "failed" are different
 -- findings and must not collapse into one message.
@@ -157,12 +163,30 @@ async def resolve_grant(
     if row is None:
         # Distinguish "this Forge/module is not registered" from "this agent has
         # no grant for it" - they are different failures with different fixes.
+        #
+        # Exclusion is checked here too, and first. An excluded module is usually
+        # NOT registered - it is excluded precisely so it never gets a registry row
+        # - so without this an excluded module reports as merely unknown, and the
+        # reader learns nothing about why it will stay unknown.
         async with conn.cursor(row_factory=dict_row) as cur:
+            await cur.execute(
+                "SELECT reason FROM forge_module_exclusion "
+                "WHERE forge_id = %s AND module_id = %s",
+                (forge_id, module_id),
+            )
+            excluded = await cur.fetchone()
             await cur.execute(
                 "SELECT 1 FROM forge_module_registry WHERE forge_id = %s AND module_id = %s",
                 (forge_id, module_id),
             )
             known = await cur.fetchone()
+        if excluded is not None:
+            raise ModuleExcluded(
+                "module is excluded and may never be granted",
+                forge_id=forge_id,
+                module_id=module_id,
+                exclusion_reason=excluded["reason"],
+            )
         if known is None:
             raise UnknownForge(
                 "forge or module is not registered",
@@ -174,6 +198,18 @@ async def resolve_grant(
             forge_id=forge_id,
             module_id=module_id,
             venture_id=venture_id,
+        )
+
+    # Before anything about this agent. A grant that exists for an excluded module
+    # predates the exclusion or bypassed the trigger; either way no agent may use it,
+    # and reporting a suspended identity first would bury the reason that matters.
+    if row["exclusion_reason"] is not None:
+        raise ModuleExcluded(
+            "module is excluded and may never be granted",
+            forge_id=forge_id,
+            module_id=module_id,
+            grant_id=str(row["grant_id"]),
+            exclusion_reason=row["exclusion_reason"],
         )
 
     if row["identity_status"] != "active":

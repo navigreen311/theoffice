@@ -85,6 +85,37 @@ end; assert on it in whatever check you write, because both sides return 200 wit
 
 ---
 
+## A fourth: a module that answers without doing the work
+
+The three above are defects in the adapter. This one is a property of the Forge, and it
+is worse, because nothing about the call looks wrong at either end.
+
+CapitalForge has three shapes of endpoint that return a plausible success for work that
+never happens:
+
+    inert     `POST /api/platform/workflows` persists a rule. No scheduler, runner or
+              cron consumes it. The platform's own GET says so in its response body:
+              `execution: {runs: false}`.
+    stubbed   The VoiceForge call endpoints record a call and dial nobody -
+              `voiceforge.service.ts` uses a `TwilioStubClient` declared inside itself
+              which returns fabricated SIDs. The production Twilio client exists, and
+              is imported only by the SMS path, which is live. The endpoint named
+              "initiate outbound call" is the inert one.
+    refuses   Ten endpoints answer 501 by design.
+
+Grant one of these and the agent gets a 200, and The Office writes a ledger row saying
+a call was made. That is true, and it reads afterwards as evidence that the work was
+done. **Check what is on the other end of a module before you certify an agent for it.**
+An endpoint's name is not evidence that it does the thing.
+
+These are recorded in `forge_module_exclusion` and enforced by a BEFORE INSERT trigger
+on `agent_forge_grant`, so no writer can grant one - see `docs/module-exclusions.md`.
+Record the exclusion **before** onboarding: the table deliberately has no foreign key to
+`forge_registry`, because an exclusion written after the registry rows exist is a
+reaction, and one written before is a prevention.
+
+---
+
 ## What an adapter is, and is not
 
 The Office posts to `{forge_registry.base_url}/{module_id}` with a JSON body. The
@@ -125,6 +156,8 @@ logger you use before trusting that the correlation is being written down.
 - [ ] `venture_forge_manifest` row per venture × module — **or every call is UNDECLARED**
 - [ ] Grant at `auto_execute`, with Unit A and Unit B certifications at the same tier —
       **or no call is made at all**
+- [ ] Every module checked for a stub, a missing runner, or a 501 - and any found
+      recorded in `forge_module_exclusion` **before** the registry rows are written
 - [ ] Adapter reads the header names above verbatim from `broker/executor.py`
 - [ ] Adapter returns `X-Forge-Request-Id`
 - [ ] Verified: 401 with no credential, 401 with a wrong one, 404 for an unimplemented
