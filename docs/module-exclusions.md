@@ -16,6 +16,7 @@ Three shapes, all found while onboarding CapitalForge:
 | `inert` | persists or records something no runner ever consumes | `POST /api/platform/workflows` — the platform's own GET answers `execution: {runs: false}` |
 | `stubbed` | calls a stub client that fabricates a third-party response | `voiceforge.service.ts` uses a `TwilioStubClient` declared inside itself and returns invented Twilio SIDs |
 | `refuses` | answers 501 by design | eleven endpoints, each stating why in its body |
+| `attributed` | answers about a subject it never read, from values the caller supplied | `GET /api/readiness/:businessId` scores from query parameters and stamps the businessId on the result |
 | `fabricated` | answers 200 with invented figures presented as a record | `POST /api/rewards/:clientId/export` reported per-programme points balances, identical for every client, in a domain whose own balance endpoint is a 501 |
 
 ## How it is enforced
@@ -80,8 +81,15 @@ mid-call.
 
 ## What is recorded today
 
-Eighteen modules on `capitalforge`: three `platform_workflow_*`, four VoiceForge call
-and outreach modules, the eleven 501s, and `rewards_export`. Reasons and evidence per module are in
+Nineteen modules on `capitalforge`: three `platform_workflow_*`, four VoiceForge call
+and outreach modules, the eleven 501s, `rewards_export`, and `readiness_score`.
+
+`readiness_score` is the one to read if you only read one. It is the quietest module
+on the Burkham Pack's list - a score, arithmetic, nothing that touches a person - and
+it never opens the record it reports on. Everything it scores is asserted by the
+caller in the query string, and the response carries the businessId as though the
+business had been consulted. Ordering an audit by blast radius would have reached it
+last. Reasons and evidence per module are in
 `broker/module_exclusions.py`.
 
 **Not excluded**, and worth stating because the two look alike:

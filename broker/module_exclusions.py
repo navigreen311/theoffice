@@ -107,6 +107,24 @@ CAPITALFORGE: tuple[ModuleExclusion, ...] = (
         "stubbed: as outreach_apr_expiry.",
         "capitalforge: api/routes/voiceforge.routes.ts (POST /voiceforge/outreach/restack).",
     ),
+    # ------------------------------------------------- attributed, not read
+    ModuleExclusion(
+        "capitalforge",
+        "readiness_score",
+        "attributed to a subject it never consulted: GET /api/readiness/:businessId "
+        "reads the path parameter only to log it and to stamp the response. The score "
+        "is computed from QUERY PARAMETERS the caller supplies - allConsentsGranted, "
+        "allAcknowledgmentsSigned, kybVerified, compliancePassed, ficoScore - none of "
+        "which are checked against the consent, acknowledgment, KYB or compliance "
+        "records that exist. An agent granted this receives a readiness assessment for "
+        "a named client that is a restatement of what the agent itself asserted, and "
+        "the response carries the businessId as though the business had been read. "
+        "Declared in the Burkham Wickmont Pack at hard criticality.",
+        "capitalforge: api/routes/readiness.routes.ts:41 (param read) vs :51-68 "
+        "(client built from req.query) vs :74,:82 (businessId stamped onto the "
+        "response). The handler's own comment: 'ASSUMPTION: In a full implementation "
+        "this would fetch business data from Prisma.'",
+    ),
     # --------------------------------------------------------------- refuses
     ModuleExclusion(
         "capitalforge",

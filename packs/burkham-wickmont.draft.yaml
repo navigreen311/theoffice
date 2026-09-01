@@ -249,7 +249,13 @@ positions_required:
       - Pull bank and bureau data under a recorded authorization
       - Compute the funding readiness assessment
       - Produce the diagnostic deliverable for compliance review
-    forge_modules_operated: [statement_pull, bureau_pull, readiness_score]
+    # DECISION NEEDED. Two of this position's three modules are gone (see the
+    # forge binding below), so its duties now exceed what it can operate: it can
+    # pull bank data, not bureau data, and it cannot compute the readiness
+    # assessment through a Forge at all. The duties above are left as written
+    # rather than quietly narrowed - what this role is for is Ivan's call, not a
+    # side effect of a module going away.
+    forge_modules_operated: [statement_pull]
     source_department: banking          # Burkham calls this "CapitalForge Ops"
     compliance_flags_in_scope:
       [per_pull_authorization_required, bureau_report_handling_required,
@@ -319,8 +325,17 @@ forge_dependencies:
     - forge: capitalforge
       api_version: 2.0.0
       criticality: hard
+      # bureau_pull and readiness_score removed 2026-09-01. Neither can be granted:
+      #   bureau_pull      CapitalForge does not pull a bureau score and has no path to
+      #                    one. Its own specification section 2 says so; SBSS is an input
+      #                    an advisor types, not a value the system obtains.
+      #   readiness_score  excluded in forge_module_exclusion. GET /api/readiness/:id
+      #                    never reads the business - it scores from query parameters the
+      #                    caller supplies and stamps the businessId on the answer.
+      # They were declared at criticality:hard, so the Pack asserted the workflow could
+      # not run without two modules that will never exist.
       modules_expected:
-        [client_lookup, record_consent, statement_pull, bureau_pull, readiness_score,
+        [client_lookup, record_consent, statement_pull,
          lender_match, build_packet, submit_application, scan_communication,
          assemble_evidence, portfolio_health, restack_recommend]
       compliance_flags_propagated:
@@ -422,8 +437,13 @@ data_retention:
 kpi_targets:
   # INVENTED sources. blueprint-v2 §9.1-9.4 name dashboards and never name a source.
   day_30:
+    # DECISION NEEDED. This measured agent_call_ledger.module_id=readiness_score.
+    # That module is excluded, so no ledger row can ever carry it and the KPI would
+    # read zero forever - indistinguishable from nobody doing the work. Left named
+    # here with the source marked unmeasurable rather than deleted, because the
+    # target is a real business intention and only its measurement is broken.
     - {kpi_name: Clients through diagnostic, target_value: 20, unit: count,
-       measurement_source: agent_call_ledger.module_id=readiness_score,
+       measurement_source: UNMEASURABLE - was agent_call_ledger.module_id=readiness_score,
        measurement_frequency: weekly, owner: Ivan}
   day_90:
     - {kpi_name: Funded rounds, target_value: 8, unit: count,
