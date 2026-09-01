@@ -54,23 +54,27 @@ CAPITALFORGE: tuple[ModuleExclusion, ...] = (
         "runner or cron consumes. Worse, it writes conditions as {expression: string} "
         "while the engine reads them as RuleCondition[] and calls .every() - one such "
         "row makes workflow_evaluate throw for every rule in that tenant.",
-        "capitalforge: api/routes/platform.routes.ts:670 (write shape) vs "
-        "services/workflow-engine.service.ts:212,268 (read shape). The platform's own "
-        "GET /workflows returns execution: {runs: false}.",
+        "capitalforge: api/routes/platform.routes.ts:684 (write shape) vs "
+        "services/workflow-engine.service.ts:212,279 (read shape). The platform's own "
+        "GET /workflows returns execution: {runs: false}. "
+        "Filed as navigreen311/Capitalforge#81.",
     ),
     ModuleExclusion(
         "capitalforge",
         "platform_workflow_update",
-        "inert: PATCH /api/platform/workflows/:id edits a rule nothing runs, in the "
-        "same shape that breaks evaluation.",
-        "capitalforge: api/routes/platform.routes.ts (PATCH /workflows/:id).",
+        "inert: PATCH /api/platform/workflows/:id sets isActive on a rule nothing "
+        "runs. It does not rewrite conditions or actions, so it cannot introduce the "
+        "shape that breaks evaluation - but it can re-activate a row carrying it.",
+        "capitalforge: api/routes/platform.routes.ts:740 -> setWorkflowActive. "
+        "Filed as navigreen311/Capitalforge#81.",
     ),
     ModuleExclusion(
         "capitalforge",
         "platform_workflow_toggle",
         "inert: PATCH /api/platform/workflows/:id/toggle flips isActive on a rule "
         "nothing runs, and can re-activate a row that breaks evaluation.",
-        "capitalforge: api/routes/platform.routes.ts (PATCH /workflows/:id/toggle).",
+        "capitalforge: api/routes/platform.routes.ts:752. "
+        "Filed as navigreen311/Capitalforge#81.",
     ),
     # --------------------------------------------------------------- stubbed
     ModuleExclusion(

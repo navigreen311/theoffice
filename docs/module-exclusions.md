@@ -93,3 +93,8 @@ The two surfaces do write the same `workflowRule` table in incompatible shapes, 
 `RuleCondition[]` and calls `.every()`. One platform-created rule makes `evaluateRules`
 throw for every rule in that tenant. Excluding `platform_workflow_*` protects
 `workflow_evaluate` as much as it protects the caller.
+
+The exclusion only stops an **agent**. A human calling that endpoint still poisons the
+table, so it is filed against the Forge as
+[navigreen311/Capitalforge#81](https://github.com/navigreen311/Capitalforge/issues/81)
+and has to be fixed there regardless of what The Office does.
