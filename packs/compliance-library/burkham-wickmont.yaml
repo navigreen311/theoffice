@@ -3096,20 +3096,7 @@ entries:
   - entry_ref: compliance/no-advance-placement-v1
     framework: UDAAP
     jurisdiction: [ALL]
-    # SHARES A FLAG, which nothing else in this library does.
-    #
-    # `advance_placement_prohibited` was the obvious name and no framework in the Pack
-    # declares it, so an entry carrying it would resolve to nothing - which
-    # `test_every_templated_entry_carries_the_pack_runtime_flag` refused, correctly.
-    #
-    # Adding a Pack row is out of scope: the draft Pack is not being edited. So this
-    # entry resolves through UDAAP's existing flag, which is defensible on the merits -
-    # not placing advances IS the client-interest standard applied to one product - and
-    # is recorded here rather than passed off as ordinary. Until today every one of the
-    # eighteen entries had its own flag, 18 for 18.
-    #
-    # A `depends_on` records what would fix it properly.
-    runtime_flag: client_interest_standard_required
+    runtime_flag: advance_placement_prohibited
 
     applicability_rule: >-
       Any point at which a merchant cash advance could be recommended, applied for,
@@ -3167,7 +3154,6 @@ entries:
       client should be asked about it precisely because the system cannot see it.
 
     depends_on:
-      - a Pack compliance_surface row of its own, so this entry stops sharing UDAAP's runtime_flag with compliance/client-interest-standard-v1
       - a documented refer-out procedure naming who the client is sent to and on what basis
       - scanner detection of advance-arranging language in client-facing output
       - a place to record that a referral was made and that no consideration was taken

@@ -84,6 +84,21 @@ market:
       applies_when: Any client-facing claim about approval, cost or outcome
       runtime_flag: client_interest_standard_required
       library_gap: true
+    # TWO UDAAP rows, for the reason FCRA and FALSE_STATEMENT_TO_LENDER have two: a
+    # standard and one absolute application of it are different obligations. The row
+    # above is the standard - whether Burkham is optimising for the client's outcome,
+    # judged case by case. This one is the single product where the answer was decided
+    # in advance and does not vary: advances are not placed, at any fee.
+    #
+    # This is also the FIRST row in this Pack to carry a `library_entry_ref` rather than
+    # `library_gap: true`. Twenty-two rows admit no entry exists; fourteen entries have
+    # since been written and the Pack has not been updated to point at any of them. That
+    # is a separate and larger correction, not made here.
+    - framework: UDAAP
+      jurisdiction: FEDERAL
+      applies_when: Any point at which a merchant cash advance could be recommended, applied for or submitted
+      runtime_flag: advance_placement_prohibited
+      library_entry_ref: compliance/no-advance-placement-v1
     - framework: REG_Z_ADVERTISING
       jurisdiction: FEDERAL
       applies_when: Any advertisement stating a rate, term or payment
