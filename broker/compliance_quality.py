@@ -446,3 +446,71 @@ def assess_provenance(entry: dict[str, Any]) -> dict[str, Any]:
         "counts": counts,
         "problems": [r for r in results if not r["ok"]],
     }
+
+
+# ---------------------------------------------------------------------------
+# Citation form
+#
+# A citation exists so a reader can go and check. Two forms in this library could
+# not do that, and each failed differently:
+#
+#   REPOSITORY-RELATIVE PATHS. `docs/reference/blueprint-v2.md` resolves in the
+#   Operations Console and not in the repository that held the citation. It had
+#   been wrong since it was written, and nothing said so, because nothing
+#   resolves these paths - they are read by people.
+#
+#   LINE NUMBERS. Fifteen of them, all still resolving by luck: the edit made to
+#   the Marketing Plan on 31 August 2026 replaced two lines in place and added
+#   none. One line inserted above the first citation would have invalidated six
+#   silently.
+#
+# The replacement is document, section, quoted phrase. A phrase survives an edit
+# that does not change the sentence, and when the sentence changes that is a
+# finding rather than a broken link.
+# ---------------------------------------------------------------------------
+
+#: A bare line-number citation. `\b` before `line` matters: without it this
+#: matches "discipline 1" and "discipline 4", which is how the first version of
+#: this pattern reported two false positives in prose it had no business
+#: touching. The same word-boundary bug this module already fixed once, in
+#: `_has_word`, reintroduced by a regex written in a hurry.
+LINE_NUMBER_CITATION = re.compile(r"\bline \d+", re.IGNORECASE)
+
+#: A repository-relative path into a reference document.
+REPO_RELATIVE_CITATION = re.compile(r"docs/reference/[A-Za-z0-9._-]+")
+
+
+def assess_citation_form(text: str) -> list[dict[str, str]]:
+    """Citation forms that cannot survive an edit or a repository.
+
+    Returns one problem per offending form, with the offending text, so an author
+    is told what to replace rather than that something is wrong.
+    """
+    problems: list[dict[str, str]] = []
+
+    for match in LINE_NUMBER_CITATION.findall(text or ""):
+        problems.append(
+            {
+                "found": match,
+                "reason": (
+                    f"'{match}' cites a line number. A line number is invalidated by any edit "
+                    "that adds a line above it, silently and with nothing to report it. Cite the "
+                    "document, the section, and the phrase in quotes."
+                ),
+            }
+        )
+
+    for match in REPO_RELATIVE_CITATION.findall(text or ""):
+        problems.append(
+            {
+                "found": match,
+                "reason": (
+                    f"'{match}' is a repository-relative path. The three documents this library "
+                    "cites live in two repositories, so a path resolves only for a reader who "
+                    "happens to be in the right one. Name the document instead - see the manifest "
+                    "at the head of the library file."
+                ),
+            }
+        )
+
+    return problems

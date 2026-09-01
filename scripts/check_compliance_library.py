@@ -35,7 +35,11 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from broker.compliance_quality import assess, assess_provenance  # noqa: E402
+from broker.compliance_quality import (  # noqa: E402
+    assess,
+    assess_citation_form,
+    assess_provenance,
+)
 
 TODO_MARKERS = ("todo", "tbd", "fixme", "xxx")
 
@@ -164,9 +168,27 @@ def _has_todo(entry: dict[str, Any]) -> list[str]:
     )
 
 
+def _citation_problems(path: Path) -> list[dict[str, str]]:
+    """Citation forms anywhere in the file, comments included.
+
+    Read from the RAW text rather than from the parsed entries, because the worst
+    offenders were in the header commentary - the standing note that records what
+    was found and where. YAML drops comments, so an entry-by-entry check would
+    have passed a file whose documentation was full of dead references.
+    """
+    return assess_citation_form(path.read_text(encoding="utf-8"))
+
+
 def check_file(path: Path) -> tuple[int, int]:
     with path.open(encoding="utf-8") as fh:
         doc = yaml.safe_load(fh) or {}
+
+    citation_problems = _citation_problems(path)
+    if citation_problems:
+        print("")
+        print(f"  CITATIONS {path.name}")
+        for problem in citation_problems:
+            print(f"            {problem['reason']}")
 
     entries = doc.get("entries") or []
     if not entries:
@@ -228,7 +250,7 @@ def check_file(path: Path) -> tuple[int, int]:
         for problem in result["problems"]:
             print(f"            {problem['title']}: {problem['reason']}")
 
-    return (complete, failed)
+    return (complete, failed + len(citation_problems))
 
 
 def main(argv: list[str]) -> int:

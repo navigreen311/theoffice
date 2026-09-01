@@ -18,6 +18,7 @@ import yaml
 from broker.compliance_quality import (
     REQUIRED_BY_TAG,
     assess,
+    assess_citation_form,
     assess_claim,
     assess_field,
     assess_provenance,
@@ -411,3 +412,57 @@ def test_counts_exclude_malformed_claims():
     assert prov["total"] == 3
     assert prov["counts"]["sourced"] == 1
     assert len(prov["problems"]) == 2
+
+
+# ---------------------------------------------------------------------------
+# Citation form
+# ---------------------------------------------------------------------------
+
+
+def test_a_bare_line_number_is_refused():
+    problems = assess_citation_form('see blueprint line 386 for the rule')
+    assert len(problems) == 1
+    assert problems[0]["found"] == "line 386"
+    assert "adds a line above it" in problems[0]["reason"]
+
+
+def test_a_capitalised_line_number_is_refused_too():
+    """Caught a real one on its first run.
+
+    A manual sweep converted fifteen citations and missed a sixteenth because it was
+    capitalised mid-sentence and the grep was lowercase. This assertion exists so the
+    case that escaped a human does not escape again.
+    """
+    assert assess_citation_form("...not percentage-of-limit.\" Line 1128 gives the reason")
+
+
+def test_a_repo_relative_path_is_refused():
+    problems = assess_citation_form("in `docs/reference/blueprint-v2.md` the section reads")
+    assert len(problems) == 1
+    assert problems[0]["found"] == "docs/reference/blueprint-v2.md"
+    assert "two repositories" in problems[0]["reason"]
+
+
+def test_prose_about_disciplines_is_not_a_citation():
+    """The word-boundary case, which the first version of this pattern got wrong.
+
+    A `line` pattern with no word boundary matches "discipline 1" and "discipline 4". The
+    same defect this module already fixed once in `_has_word`, reintroduced in a new regex
+    - which is the argument for the boundary being tested rather than merely commented.
+    """
+    assert assess_citation_form("discipline 1 and discipline 4 hold structurally") == []
+
+
+def test_the_replacement_form_passes():
+    assert (
+        assess_citation_form(
+            'Marketing Plan Intake §4.2 Claims we make, item 8: "Flat success fees on '
+            'approved and funded capital, not percentage-of-limit."'
+        )
+        == []
+    )
+
+
+def test_both_forms_are_reported_separately():
+    problems = assess_citation_form("line 12 and docs/reference/specifications-v2.md")
+    assert len(problems) == 2

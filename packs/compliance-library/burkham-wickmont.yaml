@@ -1,6 +1,57 @@
 # COMPLIANCE LIBRARY — Burkham Wickmont
 #
-# ONE ENTRY IS WRITTEN. NINE ARE TEMPLATES FOR YOU TO FILL IN.
+# THIRTEEN ENTRIES ARE WRITTEN. FOUR ARE TEMPLATES, HELD PENDING A DECISION ON
+# WHETHER THE TWO AUTHORIZATION ONES ARE REAL ENTRIES.
+#
+# ---------------------------------------------------------------------------
+# THE THREE DOCUMENTS THIS FILE CITES, AND WHERE THEY LIVE
+#
+#   They are in two repositories, and that is deliberate rather than a mistake
+#   waiting to be tidied: each document lives with its readers.
+#
+#   specifications-v2.md          Operations Console repo, docs/reference/
+#   blueprint-v2.md               Operations Console repo, docs/reference/
+#
+#     The Console's canonical scope. Its CLAUDE.md names both as the definition
+#     of what the system is, its README links them, and `/impl-feature`
+#     instructs reading the module's section before designing anything. Eleven
+#     in-repo references depend on those paths. Moving them here to sit beside
+#     the third would break the way that repository is built, to fix a
+#     convenience for this one.
+#
+#   burkham-wickmont-marketing-plan-intake.md    THIS repo, docs/reference/
+#
+#     Zero readers in the Console. It is not a specification of anything the
+#     Console does — it is a marketing and compliance intake document, and the
+#     only artifact that reads it is this library. It is tracked here as of
+#     31 August 2026; before that it existed in one person's Downloads folder,
+#     untracked, while three entries cited it as a source.
+#
+#   HOW TO CITE ANY OF THEM. Document name, then section, then the phrase, in
+#   quotes:
+#
+#     Marketing Plan Intake §4.2 Claims we make, item 8: "Flat success fees on
+#     approved and funded capital, not percentage-of-limit."
+#
+#   NOT a line number, and NOT a repository-relative path. Both were in this
+#   file and both were wrong in their own way:
+#
+#     · Two citations read a repository-relative path into blueprint-v2.  That path
+#       did not
+#       exist in this repository. It resolved only for a reader who happened to
+#       be standing in the Console, and had been wrong here since it was written.
+#
+#     · Fifteen cited line numbers. All of them still resolved, by luck: the
+#       edit made to the Marketing Plan on 31 August replaced two lines in place
+#       and added none. One line inserted anywhere above the first citation
+#       would have silently invalidated six of them, and nothing would have
+#       reported it.
+#
+#   A quoted phrase survives an edit that does not change the sentence. If the
+#   sentence DOES change, that is a fact this library should notice rather than
+#   a citation that should keep resolving.
+#
+#   `scripts/check_compliance_library.py` refuses both discarded forms.
 #
 # ---------------------------------------------------------------------------
 # WHY THIS FILE EXISTS
@@ -241,7 +292,8 @@
 #     no workflow, no approval step and no mention of founders. The words "hybrid"
 #     and "both-founder" appear nowhere in the document.
 #
-#     The real mechanism is line 386: "Marketing claims — versioned in Marketing
+#     The real mechanism is specifications-v2 §7.4 Change management: "Marketing
+#     claims — versioned in Marketing
 #     Claim Library, Compliance Review Board approval required." One board, and no
 #     section number. §6 adds that the Board reviews new marketing claims, state-law
 #     concerns and edge-case funding recommendations on a WEEKLY cadence, which is
@@ -274,11 +326,11 @@
 #     THE PRINCIPLE HAS A SOURCE. The Marketing Plan Intake states it three times,
 #     and states it as architecture rather than aspiration:
 #
-#       · line 402, item 8 of the compliance architecture list: "Flat success fees on
+#       · §4.2 Claims we make, item 8: "Flat success fees on
 #         approved and funded capital, not percentage-of-limit."
-#       · line 133: "Success fees flat, not percentage-of-limit (the Seek Capital
-#         lesson)."
-#       · line 1128: "Firms in the space have faced class-action exposure for
+#       · §2 Group C, the advisor-referrer objection table: "Success fees flat, not
+#         percentage-of-limit (the Seek Capital lesson)."
+#       · §9.5 Has anything already gone wrong: "Firms in the space have faced class-action exposure for
 #         percentage-of-credit-limit success fees... Burkham's flat success-fee
 #         schedule + fee-exhibit-at-signing + 60-day refund trigger are architected
 #         specifically to prevent this pattern."
@@ -289,7 +341,8 @@
 #     Marketing Plan Intake, the Console repository including git history, and this
 #     library.
 #
-#     The schedule was SCHEDULED, not written. Marketing Plan Intake line 422, Day 8
+#     The schedule was SCHEDULED, not written. Marketing Plan Intake §4.3 Proof for
+#     each claim, row 8 — Day 8
 #     of the 90-day plan: "Fee schedule exhibit attached to engagement letter.
 #     Documented per-product schedule (Placement Program)." That deliverable does not
 #     exist. The figures were reconstructed to fill it.
@@ -1080,7 +1133,7 @@ entries:
       decision rather than a default.
 
       RAISED BY REVIEW — the Section 6.2 collision, resolved by naming the document. In
-      `docs/reference/blueprint-v2.md` §6.2 is the Funding Ethics Firewall. Any reference
+      blueprint-v2 §6.2 is the Funding Ethics Firewall. Any reference
       to Blueprint drafting or the Readiness Score under that number is pointing at a
       different document and must say which — "marketing plan §6.2", not "Section 6.2".
       Two documents in this venture carry a §6.2 and they are unrelated.
@@ -1282,10 +1335,10 @@ entries:
         review_by: "Compliance & Evidence for the phrasing, and FOUNDERS for the cap itself — no ceiling exists in the pricing model, so the CAPPED attribute currently has nothing to state"
       - claim: "Success fees are flat on approved and funded capital, not a percentage of limit"
         tag: sourced
-        source: "Marketing Plan Intake line 402 (compliance architecture item 8), restated line 133 and line 1128 as the Seek Capital class-action pattern the firm is 'architected specifically to prevent'. NOT implemented: billing prices in basis points of approvedCreditLimit."
+        source: "Marketing Plan Intake §4.2 Claims we make, item 8: 'Flat success fees on approved and funded capital, not percentage-of-limit.' Restated in §2 Group C and in §9.5 as the Seek Capital class-action pattern the firm is 'architected specifically to prevent'."
       - claim: "The per-product success fee schedule — $7,500 LOC cap, $20,000 SBA cap, flat per-card"
         tag: reconstructed
-        basis: "Written into a draft counsel brief on 31 August 2026 and traceable to no specification, decision, seed, test or note. Marketing Plan Intake line 422 scheduled the schedule as a Day 8 deliverable that was never produced; these figures filled the gap. Recorded in the standing note at the head of this file."
+        basis: "Written into a draft counsel brief on 31 August 2026 and traceable to no specification, decision, seed, test or note. Marketing Plan Intake §4.3 row 8 — 'Documented per-product schedule (Placement Program)' — scheduled it as a Day 8 deliverable that was never produced; these figures filled the gap. Recorded in the standing note at the head of this file."
       - claim: "No testimonials in V1; case studies with consent are permitted"
         tag: sourced
         source: "Founder decision, 31 August 2026, ratifying the DECIDED note in this entry. Rests on the FTC Endorsement Guides' typical-results and substantiation requirements."
@@ -1334,9 +1387,10 @@ entries:
       behind it, and the pricing model implements the pattern the firm says it exists to
       prevent.
 
-      Marketing Plan Intake line 402 lists as compliance architecture item 8: "Flat
-      success fees on approved and funded capital, not percentage-of-limit." Line 1128
-      gives the reason: firms in this space "have faced class-action exposure for
+      Marketing Plan Intake §4.2 Claims we make lists as item 8: "Flat
+      success fees on approved and funded capital, not percentage-of-limit." §9.5 Has
+      anything already gone wrong gives the reason: firms in this space "have faced
+      class-action exposure for
       percentage-of-credit-limit success fees", and Burkham's "flat success-fee schedule"
       is "architected specifically to prevent this pattern".
 
@@ -1366,8 +1420,9 @@ entries:
 
       RESOLVED — the conflict with the SEEDED library, and this entry was the half that
       changed. As drafted it banned success rates and timeframe averages "regardless of
-      accuracy", while `packages/claims/src/seed.ts` seeds `success rate` (line 838) and
-      `typical` (line 824) as `requires_disclaimer`, each with a named disclosure. A
+      accuracy", while `packages/claims/src/seed.ts` seeds `success rate` and `typical`
+      as `requires_disclaimer` — both in `REQUIRES_DISCLAIMER`, each with a named
+      disclosure. A
       `requires_disclaimer` claim SHIPS with its disclosure attached and a `banned` one
       does not ship, so the two artifacts obliged different behaviour — and the code was
       the one that ran.
@@ -1400,7 +1455,7 @@ entries:
       performance, which puts them under estimate-not-offer rather than here.
 
       RAISED BY REVIEW — the Section 6.2 reference does not resolve, and the document it
-      referred to must be named. In `docs/reference/blueprint-v2.md` — the canonical
+      referred to must be named. In blueprint-v2 — the canonical
       module specification — §6.2 is the Funding Ethics Firewall. If the intended source
       is the marketing plan or another document, cite it as "marketing plan §6.2" rather
       than a bare section number: this venture now has at least two documents with a §6.2
@@ -2308,7 +2363,8 @@ entries:
       entry should say what professional review would consist of. Leaving both as they
       are means the perimeter and the entry disagree about whether a review path exists.
 
-      RAISED BY REVIEW — CFO Advisory is a Village DEPARTMENT (blueprint line 1124: Phase
+      RAISED BY REVIEW — CFO Advisory is a Village DEPARTMENT (blueprint-v2 Appendix B,
+      the department-to-module ownership map: Phase
       4 workflows, Cost of Capital Calculator, Debt Service Capacity Score, Capital
       Policy Manual generation), not a Console module. It is also not one of the Village's
       twelve real departments, so it carries the same mapping problem as Burkham's other
