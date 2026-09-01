@@ -152,11 +152,18 @@
 #   here because the failure is a pattern rather than three accidents, and because an
 #   entry that leans on one is claiming a protection nobody has written.
 #
-#   TWO OF THE THREE ARE NOW CLOSED. The Firewall's five rules were written on
+#   TWO OF THE FIRST THREE ARE NOW CLOSED. The Firewall's five rules were written on
 #   31 August 2026 and the "2.3 workflow" deferrals were repointed at the mechanism
 #   that actually exists. The Readiness Score's components remain unspecified. The
 #   entries stay here rather than being deleted: the pattern is the finding, and a
 #   list that only holds open items loses the evidence that the pattern is real.
+#
+#   A FOURTH WAS FOUND ON 31 AUGUST 2026 and it is a different shape from the other
+#   three. Those were controls cited internally as coverage they did not have. This
+#   one was a fact about the firm's own pricing, written into a document addressed to
+#   OUTSIDE COUNSEL, with no record behind the specific figures — and with the
+#   codebase implementing the opposite of the principle they were meant to express.
+#   It is listed below as THE CAPPED PER-PRODUCT SUCCESS FEE SCHEDULE.
 #
 #   THE FUNDING ETHICS FIREWALL'S FIVE ETHICAL RULES. — CLOSED 31 August 2026.
 #
@@ -256,6 +263,59 @@
 #     citation is wrong rather than the target empty. It found its way in the same
 #     way "rule 4" did: a section number reads as a checkable reference, so nobody
 #     checks it.
+#
+#   THE CAPPED PER-PRODUCT SUCCESS FEE SCHEDULE. — OPEN, found 31 August 2026.
+#
+#     A draft counsel brief stated that Burkham's success fees carry
+#     "product-specific caps (for example, 1.5% capped at $7,500 for lines of credit;
+#     2% capped at $20,000 for SBA products; flat per-card fees for credit card
+#     placements rather than percentages of approved limits)."
+#
+#     THE PRINCIPLE HAS A SOURCE. The Marketing Plan Intake states it three times,
+#     and states it as architecture rather than aspiration:
+#
+#       · line 402, item 8 of the compliance architecture list: "Flat success fees on
+#         approved and funded capital, not percentage-of-limit."
+#       · line 133: "Success fees flat, not percentage-of-limit (the Seek Capital
+#         lesson)."
+#       · line 1128: "Firms in the space have faced class-action exposure for
+#         percentage-of-credit-limit success fees... Burkham's flat success-fee
+#         schedule + fee-exhibit-at-signing + 60-day refund trigger are architected
+#         specifically to prevent this pattern."
+#
+#     THE NUMBERS HAVE NONE. $7,500, $20,000, 1.5%, 2%, and a flat per-card fee appear
+#     in no specification, no decision, no seed, no test and no note. They appear in
+#     the counsel brief and nowhere else. Searched: both reference documents, the
+#     Marketing Plan Intake, the Console repository including git history, and this
+#     library.
+#
+#     The schedule was SCHEDULED, not written. Marketing Plan Intake line 422, Day 8
+#     of the 90-day plan: "Fee schedule exhibit attached to engagement letter.
+#     Documented per-product schedule (Placement Program)." That deliverable does not
+#     exist. The figures were reconstructed to fill it.
+#
+#     AND THE CODE DOES THE OPPOSITE. `billing/seed.ts` prices success fees as
+#     `successFeeBasisPoints` — 300 for Foundation, 350 for Growth — computed against
+#     `approvedCreditLimit`, with the seed's own comment reading "3% of the approved
+#     credit limit". `successFeeBasis()` returns the limit unchanged; nothing caps it.
+#     `minimumCents` is a FLOOR with no ceiling counterpart. The fee exhibit renders
+#     `successFeeBasisPoints / 100` as a percentage.
+#
+#     That is percentage-of-credit-limit success-fee pricing, uncapped: the exact
+#     pattern the Marketing Plan names as the Seek Capital class-action exposure the
+#     firm is "architected specifically to prevent". Every seeded offer is labelled
+#     DRAFT PRICING, so the likeliest reading is that the code is stale rather than
+#     that the policy changed — but the code is what bills.
+#
+#     WHY IT BELONGS IN THIS LIST. The other three instances cost a reader a wrong
+#     impression. This one was about to be sent to a law firm as a statement of fact
+#     about the firm's compensation — the single fact the entire broker-licensure
+#     question turns on. A counsel opinion on a capped 1.5% would not be an opinion
+#     about a firm charging an uncapped 3.5%.
+#
+#     The brief has NOT been sent. The figures stay in it as written, unmarked in the
+#     document itself, because correcting them is a pricing decision and not a
+#     drafting one.
 #
 #   WHAT TO DO WITH THEM. None was a library entry's job to fix. Both are recorded
 #   The Readiness Score is still recorded as `depends_on` on the entries that need
@@ -1138,7 +1198,12 @@ entries:
 
       1. CONTINGENT — charged only on successful placement; nothing for a decline
 
-      2. CAPPED — the ceiling, stated, regardless of placement size
+      2. CAPPED — the ceiling, stated, regardless of placement size. NO CEILING EXISTS
+      TODAY. `billing/seed.ts` prices success fees as basis points of the approved credit
+      limit (300 for Foundation, 350 for Growth); `successFeeBasis()` returns the limit
+      unchanged and nothing caps it. `minimumCents` is a floor with no ceiling
+      counterpart. Until a cap is set, an agent stating one is stating something untrue,
+      and this attribute cannot be satisfied by phrasing — see notes.
 
       3. TIMED — the triggering event, and that it appears in the per-application
       authorisation signed before submission
@@ -1214,7 +1279,13 @@ entries:
         basis: "shaped from packages/billing/src/exhibit.ts, which assembles the exhibit from the engagement record; the two-tier quoting rule is not stated anywhere"
       - claim: "Success fees carry contingent, capped and timed framing every time"
         tag: proposed
-        review_by: "Compliance & Evidence — approved phrasing not drafted"
+        review_by: "Compliance & Evidence for the phrasing, and FOUNDERS for the cap itself — no ceiling exists in the pricing model, so the CAPPED attribute currently has nothing to state"
+      - claim: "Success fees are flat on approved and funded capital, not a percentage of limit"
+        tag: sourced
+        source: "Marketing Plan Intake line 402 (compliance architecture item 8), restated line 133 and line 1128 as the Seek Capital class-action pattern the firm is 'architected specifically to prevent'. NOT implemented: billing prices in basis points of approvedCreditLimit."
+      - claim: "The per-product success fee schedule — $7,500 LOC cap, $20,000 SBA cap, flat per-card"
+        tag: reconstructed
+        basis: "Written into a draft counsel brief on 31 August 2026 and traceable to no specification, decision, seed, test or note. Marketing Plan Intake line 422 scheduled the schedule as a Day 8 deliverable that was never produced; these figures filled the gap. Recorded in the standing note at the head of this file."
       - claim: "No testimonials in V1; case studies with consent are permitted"
         tag: sourced
         source: "Founder decision, 31 August 2026, ratifying the DECIDED note in this entry. Rests on the FTC Endorsement Guides' typical-results and substantiation requirements."
@@ -1258,6 +1329,40 @@ entries:
       NOTED — this entry deliberately owns no lists. It is the framework the Marketing
       Claim Library applies. Adding phrases here would create a second list, and two
       lists drift.
+
+      OPEN, AND THE MOST SERIOUS THING IN THIS ENTRY — the CAPPED attribute has no cap
+      behind it, and the pricing model implements the pattern the firm says it exists to
+      prevent.
+
+      Marketing Plan Intake line 402 lists as compliance architecture item 8: "Flat
+      success fees on approved and funded capital, not percentage-of-limit." Line 1128
+      gives the reason: firms in this space "have faced class-action exposure for
+      percentage-of-credit-limit success fees", and Burkham's "flat success-fee schedule"
+      is "architected specifically to prevent this pattern".
+
+      `packages/billing/src/seed.ts` prices success fees as `successFeeBasisPoints` — 300
+      for Foundation, 350 for Growth — against `approvedCreditLimit`, with its own comment
+      reading "3% of the approved credit limit". `successFeeBasis()` returns the limit
+      unchanged. Nothing caps it. The fee exhibit renders `successFeeBasisPoints / 100` as
+      a percentage. That is percentage-of-credit-limit pricing, uncapped, which is the
+      named pattern rather than a distance from it.
+
+      Every seeded offer is labelled DRAFT PRICING, so the likeliest reading is that the
+      code is stale rather than that the policy changed. The code is what bills.
+
+      THE UDAAP LINK, raised by review and correct. compliance/client-interest-standard-v1
+      names four places the fee structure pulls against the client and records all four as
+      held by this entry and human judgement. An uncapped basis-point rate on a large
+      placement is the fourth misalignment made concrete: the larger the facility, the
+      larger the fee, with no ceiling and no additional work behind the increment. Nothing
+      checks it. Firewall rule 2 reaches the firm's supply constraints being passed to a
+      client and does not reach this, because this is not about which product was chosen.
+
+      WHAT IS NEEDED, and it is a pricing decision rather than a compliance one: either a
+      per-product flat schedule and caps set and recorded, or the flat-fee principle
+      withdrawn and the Marketing Plan corrected. The first is what every document says.
+      The second is what the code does. An agent cannot state attribute 2 until one of
+      them changes.
 
       RESOLVED — the conflict with the SEEDED library, and this entry was the half that
       changed. As drafted it banned success rates and timeframe averages "regardless of
