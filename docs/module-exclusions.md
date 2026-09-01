@@ -17,7 +17,16 @@ Three shapes, all found while onboarding CapitalForge:
 | `stubbed` | calls a stub client that fabricates a third-party response | `voiceforge.service.ts` uses a `TwilioStubClient` declared inside itself and returns invented Twilio SIDs |
 | `refuses` | answers 501 by design | eleven endpoints, each stating why in its body |
 | `attributed` | answers about a subject it never read, from values the caller supplied | `GET /api/readiness/:businessId` scores from query parameters and stamps the businessId on the result |
-| `fabricated` | answers 200 with invented figures presented as a record | `POST /api/rewards/:clientId/export` reported per-programme points balances, identical for every client, in a domain whose own balance endpoint is a 501 |
+| `fabricated` | answers 200 with invented figures presented as a record | `POST /api/rewards/:clientId/export` reported per-programme points balances, identical for every client, in a domain whose own balance endpoint is a 501. `POST /api/spend-governance/export-evidence` returned an EVIDENCE report naming transactions, merchants and amounts that were read from nowhere |
+
+`fabricated` has been the most common shape by a distance: five instances found
+across five sweeps, and every one of them was an **export**. Three others in the
+same class had already been fixed by the Forge's own team — card-benefits,
+funding-round dossiers, platform reports — each with a comment describing what it
+used to invent. So the class was found and fixed three times before anyone swept
+for it, each time only in the surface someone happened to be looking at. When
+onboarding a Forge, read its exports first: they are the last thing anybody
+rebuilds and the first thing a client or a regulator reads.
 
 ## How it is enforced
 
@@ -81,8 +90,9 @@ mid-call.
 
 ## What is recorded today
 
-Nineteen modules on `capitalforge`: three `platform_workflow_*`, four VoiceForge call
-and outreach modules, the eleven 501s, `rewards_export`, and `readiness_score`.
+Twenty modules on `capitalforge`: three `platform_workflow_*`, four VoiceForge call
+and outreach modules, the twelve 501s, `rewards_export`, `spend_evidence_export`,
+and `readiness_score`.
 
 `readiness_score` is the one to read if you only read one. It is the quietest module
 on the Burkham Pack's list - a score, arithmetic, nothing that touches a person - and

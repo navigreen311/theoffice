@@ -171,6 +171,27 @@ CAPITALFORGE: tuple[ModuleExclusion, ...] = (
     ),
     ModuleExclusion(
         "capitalforge",
+        "spend_evidence_export",
+        "fabricated: POST /api/spend-governance/export-evidence returned a SPEND "
+        "GOVERNANCE EVIDENCE REPORT whose every figure was written into the handler - "
+        "142 transactions reviewed, three violations naming Best Buy at $249.99, "
+        "Western Union at $500.00 and a crypto merchant at $1,200.00 'pending review', "
+        "plus coverage percentages. It took no request parameters at all, so it was the "
+        "same document for every tenant and every client. A report titled EVIDENCE is "
+        "what goes to an auditor or a regulator, and this one asserted an open "
+        "compliance item that does not exist about transactions that never happened. "
+        "Refused 2026-09-01; excluded because the module must not become grantable if "
+        "the endpoint is rebuilt without the data behind it. Note the rest of that "
+        "router is real - only the document summarising it was invented, which is the "
+        "pattern in all five found so far: the export is the last thing anybody "
+        "rebuilds.",
+        "capitalforge: api/routes/spend-governance.routes.ts "
+        "(POST /export-evidence). Fixed in 510b6d8. Related but NOT excluded: "
+        "assemble_evidence maps to complaints.routes.ts export-dossier, which reads "
+        "real rows via RegulatorResponseService.",
+    ),
+    ModuleExclusion(
+        "capitalforge",
         "rewards_export",
         "fabricated: exported a client-facing 'REWARDS PORTFOLIO REPORT' asserting "
         "124,500 Amex points, 89,200 Chase points, $312.47 cash back and a $3,206.72 "
