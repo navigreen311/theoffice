@@ -160,20 +160,21 @@ def author_instructions(conn: psycopg.Connection, modules: tuple[str, ...]) -> N
     # write `"what_it_does": "x"` and `inputs: {"a": "b"}` - which V11 accepted, because
     # V11 only checked that a row existed. Now that it reads the content, a fixture that
     # writes placeholders is a fixture that tests the defect rather than the rule.
-    from tests.world import INSTRUCTION_CONTENT
+    from tests.world import instruction_for, instruction_hash
 
-    content = INSTRUCTION_CONTENT
     with conn.cursor() as cur:
         for module_id in modules:
             forge = "voiceforge" if module_id in VOICE_MODULES else "cre-forge"
+            content = instruction_for(module_id)
             cur.execute(
                 """
                 INSERT INTO forge_operating_instruction
                   (forge_id, module_id, instruction_version, forge_api_version,
                    content, content_hash, authored_by)
-                VALUES (%s, %s, '1.0.0', '1.4.0', %s, '', %s)
+                VALUES (%s, %s, '1.0.0', '1.4.0', %s, %s, %s)
                 """,
-                (forge, module_id, psycopg.types.json.Jsonb(content), str(uuid.uuid4())),
+                (forge, module_id, psycopg.types.json.Jsonb(content),
+                 instruction_hash(content), str(uuid.uuid4())),
             )
     conn.commit()
 
@@ -674,3 +675,124 @@ async def test_v11_missing_instructions_outrank_an_unreachable_forge(
     v11 = report.get("V11")
     assert v11.verdict is Verdict.FAIL
     assert "no Forge Operating Instructions authored" in v11.message
+
+
+# ------------------------------------------------------------------------- V33
+
+async def test_v33_passes_when_every_instruction_has_its_own_hash(
+    greenstone, bridged_world, admin
+):
+    operated = tuple({m for p in greenstone.positions_required for m in p.forge_modules_operated})
+    author_instructions(admin, operated)
+
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+
+    assert report.get("V33").verdict is Verdict.PASS, report.get("V33").message
+
+
+async def test_v33_fails_when_two_modules_share_a_content_hash(
+    greenstone, bridged_world, admin
+):
+    """The state all five live cre-forge instructions were in.
+
+    Byte-identical text, one hash between them, written at the same second by the same
+    author. `curriculum_quality.assess` rated every one `complete` — correctly by its
+    own lights, because it looks for emptiness and this is real prose. It is simply not
+    about any particular module, and no reading of one document alone can tell.
+    """
+    from tests.world import INSTRUCTION_CONTENT, instruction_hash
+
+    shared = instruction_hash(INSTRUCTION_CONTENT)
+    with admin.cursor() as cur:
+        for module_id in ("property_lookup", "comp_analysis"):
+            cur.execute(
+                """
+                INSERT INTO forge_operating_instruction
+                  (forge_id, module_id, instruction_version, forge_api_version,
+                   content, content_hash, authored_by)
+                VALUES ('cre-forge', %s, '1.0.0', '1.4.0', %s, %s, %s)
+                """,
+                (module_id, psycopg.types.json.Jsonb(INSTRUCTION_CONTENT), shared,
+                 str(uuid.uuid4())),
+            )
+    admin.commit()
+
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+
+    v33 = report.get("V33")
+    assert v33.verdict is Verdict.FAIL
+    assert "comp_analysis" in v33.message and "property_lookup" in v33.message
+    assert "which module an agent was certified on" in v33.message
+
+
+async def test_v33_catches_what_the_content_assessor_cannot(
+    greenstone, bridged_world, admin
+):
+    """The two checks answer different questions, and this fixture separates them.
+
+    `assess` reads one document and asks whether it teaches anything. V33 reads two and
+    asks whether they teach anything *different*. Text that is plausible and
+    module-independent passes the first and fails the second, which is the whole reason
+    for adding it — the class the assessor is structurally unable to see.
+    """
+    from broker.curriculum_quality import assess
+    from tests.world import INSTRUCTION_CONTENT, instruction_hash
+
+    assert assess(INSTRUCTION_CONTENT)["state"] == "complete"
+    assert assess(INSTRUCTION_CONTENT)["teaches_nothing"] is False
+
+    shared = instruction_hash(INSTRUCTION_CONTENT)
+    with admin.cursor() as cur:
+        for module_id in ("property_lookup", "underwrite_deal"):
+            cur.execute(
+                """
+                INSERT INTO forge_operating_instruction
+                  (forge_id, module_id, instruction_version, forge_api_version,
+                   content, content_hash, authored_by)
+                VALUES ('cre-forge', %s, '1.0.0', '1.4.0', %s, %s, %s)
+                """,
+                (module_id, psycopg.types.json.Jsonb(INSTRUCTION_CONTENT), shared,
+                 str(uuid.uuid4())),
+            )
+    admin.commit()
+
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+
+    assert report.get("V33").verdict is Verdict.FAIL
+
+
+async def test_v33_ignores_a_superseded_instruction(
+    greenstone, bridged_world, admin
+):
+    """A superseded row keeps its hash so old certifications stay readable.
+
+    It is not a live instruction and must not collide with one. Deleting instead of
+    superseding is the exception, not the rule — see docs/instruction-deletions.md.
+    """
+    operated = tuple({m for p in greenstone.positions_required for m in p.forge_modules_operated})
+    author_instructions(admin, operated)
+
+    with admin.cursor() as cur:
+        cur.execute(
+            "SELECT content, content_hash FROM forge_operating_instruction "
+            "WHERE forge_id = 'cre-forge' AND module_id = 'property_lookup'"
+        )
+        content, content_hash = cur.fetchone()
+        cur.execute(
+            """
+            INSERT INTO forge_operating_instruction
+              (forge_id, module_id, instruction_version, forge_api_version,
+               content, content_hash, authored_by, superseded_at)
+            VALUES ('cre-forge', 'comp_analysis', '0.9.0', '1.4.0', %s, %s, %s, now())
+            """,
+            (psycopg.types.json.Jsonb(content), content_hash, str(uuid.uuid4())),
+        )
+    admin.commit()
+
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+
+    assert report.get("V33").verdict is Verdict.PASS, report.get("V33").message

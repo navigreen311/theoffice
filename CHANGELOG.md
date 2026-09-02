@@ -65,6 +65,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   indistinguishable from a real one. V32's refusal, one table over, on the path that ends
   in a certification.
 
+- **V33: two live instructions on one Forge may not share a `content_hash`.** The class
+  `curriculum_quality.assess` cannot see — it reads one document and asks whether it
+  teaches anything, and plausible prose that happens to be module-independent passes
+  that. Two documents settle it, and comparing hashes is the cheapest way. The test
+  fixtures wrote one blank hash for every module, which was the same defect reproduced
+  in a fixture; they now write per-module content and a real one.
+
 ### Removed
 - **`cre-forge/generate_loi`'s operating instruction and registry row, deleted together.**
   Instructions are normally superseded, not deleted — `superseded_at` keeps "certified on
@@ -88,9 +95,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     five modules, that column cannot say which module an agent was certified on. Four of
     the five now describe modules that at least exist, which is what deleting the fifth
     changed and all it changed.
-  - Not yet fixed: the four remaining instructions still need writing, and `assess` still
-    cannot tell a template from a curriculum. A duplicate-content check across a Forge's
-    instructions would have caught this on the day they were written.
+  - `assess` still cannot tell a template from a curriculum, and that is not fixable by
+    reading one document. **V33** compares hashes instead and fails the Pack, so this
+    fires the day instructions are written rather than the day somebody reads five of
+    them side by side. The four remaining instructions still need writing.
 
 ### Changed
 - **CRE Forge binds `comp_analysis`, `underwrite_deal` and `buyer_match`.** All three

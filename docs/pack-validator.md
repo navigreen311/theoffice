@@ -17,7 +17,7 @@ otherwise.
 ## Shape vs. meaning
 
 Pydantic handles shape — required fields, types, enums — and fails at load.
-The 32 rules handle meaning: cross-references, capacity arithmetic, whether a declared
+The 33 rules handle meaning: cross-references, capacity arithmetic, whether a declared
 framework resolves to a runtime flag.
 
 They are separate because the two failures read differently to an author. A missing
@@ -43,7 +43,7 @@ reports and a snapshot diff is never import-order noise.
 
 ## Some rules read the world, not the document
 
-**V2 (Gate 0), V6, V11, V28, V29, V30, V31, V32.** A Pack that *declares* a Forge is
+**V2 (Gate 0), V6, V11, V28, V29, V30, V31, V32, V33.** A Pack that *declares* a Forge is
 bridged proves nothing — that is precisely the state Gate 0 exists to catch. There is a
 test asserting a Pack cannot declare itself bridged.
 
@@ -136,6 +136,28 @@ The `generate_loi` instruction and its registry row were deleted together on 202
 Instructions are normally superseded rather than deleted, because `superseded_at` keeps
 the answer to "certified on what, exactly" readable; the reasoning for deleting this one
 is in `docs/instruction-deletions.md`.
+
+## V33: one instruction, one content_hash
+
+Two live instructions on the same Forge may not share a `content_hash`.
+
+A certification is bound to `instruction_content_hash`, and that column exists to answer
+one question — certified on what, exactly. All five live `cre-forge` instructions were
+byte-identical, written at the same second by the same author, carrying **one** hash
+between them, with no module's own name appearing anywhere in its own text. Every one
+said "Performs one operation against the Forge and returns its result", which is true of
+any module; `underwrite_deal`'s said it "does not write to any other system", and it
+upserts a `DealAnalysis` row.
+
+**This is the class `curriculum_quality.assess` is structurally unable to see.** That
+assessor reads one document and asks whether it teaches anything — it was built to catch
+`"what_it_does": "Documented."` — and it rated all five `complete`, correctly by its own
+lights. The text is real prose and it does not go nowhere. It is simply not about any
+particular module, and no reading of one document in isolation can establish that. Two
+documents can, and comparing hashes is the cheapest possible way to do it.
+
+Superseded rows are excluded. A superseded instruction keeps its hash so the
+certifications citing it stay readable, and it is not competing to describe a module.
 
 ## V31 asks whether a tier is survivable
 

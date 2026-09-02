@@ -130,7 +130,7 @@ def test_every_rule_from_v1_is_implemented_with_no_gaps():
     """
     ids = validator.all_rule_ids()
     assert ids == [f"V{i}" for i in range(1, len(ids) + 1)], f"got {ids}"
-    assert len(ids) == 32
+    assert len(ids) == 33
 
 
 @pytest.mark.parametrize("rule_id", DOCUMENT_RULES)
@@ -202,7 +202,7 @@ async def test_report_is_deterministic(greenstone):
     assert [(r.rule_id, r.verdict, r.message) for r in a.results] == [
         (r.rule_id, r.verdict, r.message) for r in b.results
     ]
-    assert [r.rule_id for r in a.results] == [f"V{i}" for i in range(1, 33)]
+    assert [r.rule_id for r in a.results] == [f"V{i}" for i in range(1, 34)]
 
 
 async def test_render_names_the_offending_value(greenstone):

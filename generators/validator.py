@@ -1,6 +1,6 @@
 """The Pack Validator — Gate 2 of the provisioning pipeline.
 
-32 rules. Any FAIL blocks provisioning; WARN is reported and does not.
+33 rules. Any FAIL blocks provisioning; WARN is reported and does not.
 
 Four things about the design are load-bearing:
 
@@ -147,7 +147,7 @@ class ValidationReport:
 # V30 were registered below and absent here, so the fixture meta-test demanded document
 # fixtures for rules that cannot be evaluated without the Village. A literal is needed
 # here rather than `set(_WORLD_RULES)` only because the registry is defined further down.
-NEEDS_WORLD = {"V2", "V6", "V11", "V28", "V29", "V30", "V31", "V32"}
+NEEDS_WORLD = {"V2", "V6", "V11", "V28", "V29", "V30", "V31", "V32", "V33"}
 
 # V24 is evaluated at Gate 4.5 against appointment output, which does not exist at
 # Gate 2. Recorded as metadata rather than a comment so the meta-test can see it.
@@ -1011,6 +1011,66 @@ async def _v32_modules_conform(
     )
 
 
+# ----------------------------------- V33: one instruction, one content_hash
+
+async def _v33_instructions_are_distinct(
+    conn: AsyncConnection, pack: BusinessPack
+) -> tuple[bool, str]:
+    """No two live instructions on a Forge may share a `content_hash`.
+
+    A certification is bound to `instruction_content_hash`, and that column exists to
+    answer one question: certified on what, exactly. If two modules on a Forge carry the
+    same hash, it cannot answer it — a certification for a property search and one for a
+    deal underwrite are the same value.
+
+    All five live `cre-forge` instructions were byte-identical, written at the same
+    second by the same author, with **one** hash between them and no module's own name
+    appearing anywhere in its own text. Every one said "Performs one operation against
+    the Forge and returns its result", which is true of any module.
+    `underwrite_deal`'s said it "does not write to any other system", and it upserts a
+    `DealAnalysis` row.
+
+    **This is the class `curriculum_quality.assess` cannot see.** That assessor was
+    built to catch emptiness — `"what_it_does": "Documented."` — and rated all five
+    `complete`, correctly by its own lights: it is real prose, and it does not go
+    nowhere. It is simply not about any particular module, and no reading of one
+    document in isolation can tell. Two documents can.
+
+    Cheap, and it fires the day the instructions are written rather than the day
+    somebody reads five of them side by side.
+    """
+    forges = sorted(
+        {b.forge.lower() for b in pack.forge_dependencies.forge_bindings}
+        | {pack.forge_dependencies.operating_forge.lower()}
+    )
+
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            """
+            SELECT lower(forge_id) AS forge_id, content_hash,
+                   array_agg(module_id ORDER BY module_id) AS modules
+            FROM forge_operating_instruction
+            WHERE superseded_at IS NULL AND lower(forge_id) = ANY(%s)
+            GROUP BY 1, 2 HAVING count(*) > 1
+            """,
+            (forges,),
+        )
+        collisions = await cur.fetchall()
+
+    if not collisions:
+        return True, "every live instruction on a bound Forge has its own content_hash"
+
+    detail = _join(
+        f"{r['forge_id']}: {_join(r['modules'])} share {r['content_hash'][:12] or '(empty)'}"
+        for r in collisions
+    )
+    return False, (
+        f"{detail}. A certification is bound to instruction_content_hash, so one hash "
+        "across several modules cannot say which module an agent was certified on. "
+        "Identical text for two modules also teaches nothing about either."
+    )
+
+
 _WORLD_RULES = {
     "V2": (Severity.FAIL, "Bridge operational for every hard Forge binding (Gate 0)",
            _v2_bridge_operational),
@@ -1028,6 +1088,8 @@ _WORLD_RULES = {
             _v31_unattended_writes),
     "V32": (Severity.FAIL, "Every declared module is dispatched by the Forge itself",
             _v32_modules_conform),
+    "V33": (Severity.FAIL, "No two live instructions on a Forge share a content_hash",
+            _v33_instructions_are_distinct),
 }
 
 
@@ -1107,6 +1169,7 @@ _WORLD_RULE_BLOCKS = {
     "V24": ("positions_required",),
     "V31": ("positions_required", "forge_dependencies"),
     "V32": ("forge_dependencies",),
+    "V33": ("forge_dependencies", "forge_operating_instructions"),
 }
 
 

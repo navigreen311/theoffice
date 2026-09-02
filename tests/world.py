@@ -13,6 +13,8 @@ and a provisioning test that wants Gate 6 or Gate 4.5 to block certifies less th
 
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
 from pathlib import Path
 
@@ -157,6 +159,33 @@ VILLAGE_DEPARTMENTS = (
 )
 
 
+
+def instruction_for(module_id: str) -> dict:
+    """`INSTRUCTION_CONTENT`, saying which module it is about.
+
+    The shared constant is deliberately generic, and for a while every module got it
+    verbatim with `content_hash` left as the empty string. That is the production
+    defect reproduced in a fixture: all five live `cre-forge` instructions were
+    byte-identical and carried one hash between them, so
+    `certification.instruction_content_hash` could not say which module an agent had
+    been certified on, and V33 exists to fail exactly that.
+
+    A fixture that writes one hash for every module cannot exercise V33 and would fail
+    it, so each instruction here names its own module. Still generic prose - `assess`
+    should keep reading it as complete - but no longer one document wearing five names.
+    """
+    content = json.loads(json.dumps(INSTRUCTION_CONTENT))
+    content["what_it_does"] = f"{module_id}: " + content["what_it_does"]
+    return content
+
+
+def instruction_hash(content: dict) -> str:
+    """The hash a certification is bound to. Over canonical JSON, so it is stable."""
+    return hashlib.sha256(
+        json.dumps(content, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
 def seed_departments() -> None:
     """Install the department list the rules validate against."""
     from broker import departments as depts
@@ -274,15 +303,16 @@ def build_world(admin: psycopg.Connection) -> None:
                     (forge_id, module_id, module_id.replace("_", " ").title(),
                      "key", flags),
                 )
+                content = instruction_for(module_id)
                 cur.execute(
                     """
                     INSERT INTO forge_operating_instruction
                       (forge_id, module_id, instruction_version, forge_api_version,
                        content, content_hash, authored_by)
-                    VALUES (%s, %s, '1.0.0', %s, %s, '', %s)
+                    VALUES (%s, %s, '1.0.0', %s, %s, %s, %s)
                     """,
                     (forge_id, module_id, api,
-                     psycopg.types.json.Jsonb(INSTRUCTION_CONTENT),
+                     psycopg.types.json.Jsonb(content), instruction_hash(content),
                      "00000000-0000-5000-8000-00000000aaaa"),
                 )
 
