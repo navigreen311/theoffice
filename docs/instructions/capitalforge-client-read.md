@@ -3,14 +3,14 @@
 **Forge:** CapitalForge
 **Module:** `client_read`
 **Endpoints:** 13 GETs under `/api/clients/:clientId` and `/api/v1/clients/:clientId`
-**Version:** 1.0 — drafted 2 September 2026, against CapitalForge `3d93cff`
+**Version:** 1.1 — drafted 2 September 2026, against CapitalForge `3d93cff`
 **Status:** draft, pending Compliance Review Board
 
 Read `foi-shared-rules.md` first. Sections 1, 2 and 3 govern most of what this module returns, and they are not repeated here.
 
 ## 1. WHAT IT DOES
 
-Reads a client's file — identity, owners, credit, documents, acknowledgments, consent, compliance state, repayment, ACH authorisation, timeline.
+Reads a client's file — identity, owners, credit, documents, acknowledgments, compliance state, repayment, ACH authorisation, timeline.
 
 Thirteen separate calls, one module. They share a blast radius: all read, none write, none contact anyone. The writes on the same URL prefix — `client_profile_update`, `client_compliance_run`, `client_consent_request` — are separate modules with their own grants. A `client_read` grant is not a grant to any of them.
 
@@ -45,25 +45,33 @@ What matters is what happens after. A read gathering context for a placement, a 
 
 ## 5. WHAT FAILURE LOOKS LIKE
 
+**Read the error code, never the status alone.** A 404 on this module carries two unrelated meanings and the status cannot tell them apart.
+
+| Code | Meaning |
+|---|---|
+| `NOT_FOUND` | No such client, or not yours. From the mount guard, before any handler runs |
+| `CLIENT_NOT_FOUND` | Same, from `GET /` — a delete racing the guard |
+| `ACH_AUTHORIZATION_NOT_FOUND` | The client exists. No authorisation is on file |
+
+This is where shared rule 1 inverts if the code is ignored. `NOT_FOUND` is a fact about the world — there is no such client. `ACH_AUTHORIZATION_NOT_FOUND` is a fact about the records. An agent that treats the first as the second reports "no ACH authorisation on file" about a client that does not exist.
+
+On `ACH_AUTHORIZATION_NOT_FOUND`: report "no ACH authorisation on file for this client" and continue. It is not a blocker for a read. It blocks anything that would *use* the authorisation, and that is a different call.
+
+On `NOT_FOUND` or `CLIENT_NOT_FOUND`: stop. There is nothing to report about.
+
 | Response | Meaning |
 |---|---|
-| 200 | The read ran. Check the body for a declared basis before reporting it as a result |
+| 200 | The read ran. Check the body before reporting it as a result |
 | 400 | A required parameter is missing — chiefly `profileType` |
-| 403 | Missing the permission the endpoint requires |
-| 404 | Depends on the endpoint. See below |
-| 422 | `/consent/request` only: no owner on file |
+| 404 | Read the code |
+| 500 | Includes a missing tenant context, which surfaces here rather than as a 401 |
 
-**A 404 here does not mean the client does not exist.** The mount guard already proved it does. On `/ach-authorization` it means no authorisation is on file — a fact about the records, not about the client, and shared rule 1 applies.
+**THIS MODULE HAS NO PERMISSION GATE OF ITS OWN.** The router carries no permission middleware — unlike the document router, which requires `COMPLIANCE_READ`. Everything protecting `/owners` and `/credit/*` is the tenancy guard and upstream authentication. There is no 403 because nothing here can produce one.
 
-Report it as "no ACH authorisation on file for this client" and continue. It is not a blocker for a read. It blocks anything that would *use* the authorisation, and that is a different call.
+**Empty results are real answers, not errors:**
 
-**Three empty results are real answers, not errors:**
-
-- `/owners` returning `[]` — no owners are recorded
-- `/credit/recommendations` returning `[]` with `basis: 'no_credit_profile_on_record'` — nobody has pulled this client's credit
-- `/documents`, `/acknowledgments` returning `[]` — nothing on file
-
-Each is reported by its basis, never as emptiness alone. Shared rules 2 and 3.
+- `/credit/recommendations` returns `[]` with `basis: 'no_credit_profile_on_record'` — nobody has pulled this client's credit. Report the basis. Shared rules 2 and 3.
+- `/owners`, `/documents` and `/acknowledgments` return `[]` with `meta.total` and no basis string. Nothing distinguishes "none recorded" from any other reason for emptiness. Report them as "none on file" — do not infer why, and do not treat the absence as a finding about the client.
 
 ## 6. RETRY VS ESCALATE
 
@@ -95,7 +103,13 @@ This is unusual in CapitalForge and it is a property of this module only. It doe
 
 `compliance/consumer-privacy-rights-v1` — every record readable here is personal data subject to access and deletion requests.
 
-**Note.** `/owners` returns beneficial owner names, ownership percentages, dates of birth, addresses and encrypted SSN. Eight handlers in this module were cross-tenant readable until 1 September 2026 and are now behind the mount guard. The data is as sensitive as anything in the system and the grant should reflect that.
+**Note — two endpoints carry the most sensitive data in the system.**
+
+`/owners` returns beneficial owner names, ownership percentages, dates of birth, addresses, and the full SSN column — the query has no `select`, so `ssn` is returned alongside `ssnLast4`.
+
+`/timeline` returns ledger events whose payloads carry consent evidence references and IP addresses.
+
+Eight handlers here were cross-tenant readable until 1 September 2026 and are now behind the mount guard. With no permission gate on the router, the grant is the only remaining control — and it should reflect what is behind it.
 
 ## PROVENANCE
 
@@ -103,89 +117,66 @@ This is unusual in CapitalForge and it is a property of this module only. It doe
 
 **Decided by the founder, 2 September 2026:** report-and-continue on the 404; the basis rule; the never list; splitting `client_read` from the three write modules.
 
-**Raised, not resolved:** the 404 overloading two meanings — see below.
+**Corrected in 1.1, from a fact-check against `3d93cff`:** the 404 section, which had the inversion backwards; `consent` removed from §1, since no consent endpoint is among the thirteen; the 403 and 422 rows removed; the basis rule scoped to the one endpoint that carries a basis; `/timeline` and the full `ssn` column added to §8.
 
 ## OPEN
 
-**The 404 carries two meanings.** "No authorisation on file" and "no such client" return the same status, and only the mount guard's existence tells a consumer which applies. That is knowledge, not shape.
+**The 404 carries two meanings and only the error code separates them.** A 200 with an explicit empty state and a basis — matching what `/credit/recommendations` already does — would make them distinguishable by shape rather than by reading a code correctly. Raised for CapitalForge; this manual documents current behaviour.
 
-A 200 with an explicit empty state and a basis — matching what `/credit/recommendations` already does — would make the two distinguishable without the consumer having to know how the router is mounted. Raised for CapitalForge; this manual documents the current behaviour.
+**Three endpoints return an empty array with no basis.** `/owners`, `/documents` and `/acknowledgments`. Adding one would make shared rule 2 uniform across the module.
+
+**The router has no permission gate.** A policy decision, not a code one.
 
 **`client_reassign` is defined and not built.** `advisorId` and `status` were removed from the update surface on 2 September and no endpoint replaces them yet. `status` in particular needs transition rules before an endpoint exists.
 
 ---
 
-# APPENDIX — VERIFICATION
+# APPENDIX — VERIFICATION OF 1.1
 
-Checked against CapitalForge `3d93cff` on 2 September 2026. Every claim in the manual above was traced to code. **Corrections are proposed here, not applied above** — the manual is the author's.
+Checked against `3d93cff` on 2 September 2026, and re-checked against `45ae041` the same day.
 
-Nine claims are exact and load-bearing: the thirteen endpoints, the `/v1` alias being the same router, `profileType` required and its reason, the FICO/PAYDEX scale collapse, no point-impact estimates, no write and no audit record of the read, pure-read retry safety, `no_credit_profile_on_record` as the literal basis string, and the mount guard as the tenancy boundary.
+## Every correction from the 1.0 appendix landed correctly
 
-Seven corrections follow, in the order I would make them.
+The seven proposed corrections are all present in 1.1 and all match the code at `3d93cff`. The §5 rewrite in particular is now the strongest section in the manual: it states the inversion in the direction that actually bites — *"an agent that treats the first as the second reports 'no ACH authorisation on file' about a client that does not exist"* — and gives the stop/continue rule per code. Nothing in 1.1 contradicts the code as of `3d93cff`.
 
-## A. `consent` is listed as something this module reads. It is not.
+## THREE STATEMENTS IN 1.1 WERE TRUE AT `3d93cff` AND ARE FALSE AT `45ae041`
 
-§1 says the module reads "identity, owners, credit, documents, acknowledgments, **consent**, compliance state, repayment, ACH authorisation, timeline."
+Three of the OPEN items were fixed immediately after 1.1 was drafted, by founder instruction. **The manual is now behind the code by one commit**, and each of these is a claim an agent would act on.
 
-There is no consent endpoint among the thirteen. `consentRecord` is never queried in `client-detail.routes.ts`. The only consent-related handler on this router is `POST /consent/request`, which is `client_consent_request` — a different module, and a write that sends email.
+### 1. The full SSN is no longer returned
 
-An agent told `client_read` returns consent will look for it, not find it, and may reach for the write. **Proposed:** strike `consent` from the list.
+**§8 says:** *"`/owners` returns … the full SSN column — the query has no `select`, so `ssn` is returned alongside `ssnLast4`."*
 
-## B. There is no 403. The router has no permission middleware.
+**At `45ae041`:** the query has an explicit `select` listing sixteen columns. `ssnLast4` is included; **`ssn` is not.** Nothing consumed the full number — no frontend component reads `.ssn`, and the only plaintext-SSN path in the system is the offboarding data export, which selects it deliberately and writes an audit row recording that the export contained them.
 
-§5 lists "403 — Missing the permission the endpoint requires."
+**Proposed replacement:** *"`/owners` returns beneficial owner names, ownership percentages, dates of birth, addresses and the last four digits of the SSN. The full `ssn` column was returned until 2 September 2026 and is not returned now; the select is explicit, so a column added to `BusinessOwner` does not silently join the response."*
 
-`clientDetailRouter` installs no `requirePermissions` or `requirePermission`, and none is applied to it at the mount. Compare `documentRouter`, which gates its handlers on `PERMISSIONS.COMPLIANCE_READ` explicitly. Authentication is assumed: `getTenantId` throws `'Tenant context is missing — authentication middleware did not run.'` if `req.tenant` is absent, which surfaces as a **500**, not a 401 or 403.
+### 2. The router has a permission gate
 
-Two consequences worth the author's attention:
+**§5 says:** *"THIS MODULE HAS NO PERMISSION GATE OF ITS OWN … There is no 403 because nothing here can produce one."* **The OPEN section repeats it.**
 
-- The 403 row should be struck, or replaced with "**500** — authentication middleware did not run. This is a deployment fault, not a permission denial."
-- More importantly: **this module has no permission gate of its own.** Everything protecting it is the tenancy guard and whatever authenticates upstream. Given §8's note that `/owners` returns dates of birth and SSN, that is worth stating in the manual rather than leaving to inference — and worth raising as a defect in CapitalForge.
+**At `45ae041`:** `clientDetailRouter.use(requirePermissions(PERMISSIONS.BUSINESS_READ))`. A caller without `business:read` now gets **403**.
 
-## C. Three of the four "empty results" have no basis to report.
+This is the correction with the most consequence for an agent: 1.1 tells it no 403 can occur, so an agent seeing one will treat it as an unexpected failure rather than a missing permission it should report.
 
-§5 lists four empty results and says "Each is reported by its basis, never as emptiness alone."
+**Proposed replacement for §5:** restore a 403 row — *"403 — the caller lacks `business:read`"* — and replace the block with: *"This module requires `business:read`, and nothing finer. That is the floor rather than a considered ceiling: `/owners` and `/credit/*` return the most sensitive data in the system and are gated identically to the endpoint returning a client's name. A stricter split is proposed but not built — see `docs/callable-modules.md`."*
 
-Only one emits a basis. `basis:` appears in exactly two places in the file, both in `/credit/recommendations`: `'no_credit_profile_on_record'` when there is no pull, and `'latest_credit_profile'` when there is.
+### 3. All four empty results now carry a basis
 
-`/owners`, `/documents` and `/acknowledgments` return `meta: { total: 0 }` and nothing else. There is no basis string for an agent to pass through, so the instruction cannot be followed for three of the four cases as written.
+**§5 says:** *"`/owners`, `/documents` and `/acknowledgments` return `[]` with `meta.total` and no basis string."*
 
-**Proposed:** say what is true — one endpoint declares a basis; the other three return `meta.total` and the agent must supply the sentence itself ("no owners are recorded for this client"), which is still shared rule 2 in spirit but is a different instruction. **And raise for CapitalForge:** adding `basis` to the other three would make the rule uniform and is a small change.
+**At `45ae041`:** each returns `meta.basis` — `no_owners_on_record`, `no_documents_on_record`, `no_acknowledgments_on_record` when empty, and the record set read when not. Shared rule 2 is now uniform across the module.
 
-## D. The 404 claim needs one qualification, and it is the important one.
+**Proposed replacement:** fold all four into one bullet — *"Every empty result carries a basis. Report it. Shared rules 2 and 3."* — and strike the corresponding OPEN item.
 
-§5 says "**A 404 here does not mean the client does not exist.** The mount guard already proved it does."
+## What did NOT change, and remains correctly documented
 
-That is right about the handlers and wrong about what a consumer sees. Two things:
+- The 404 overloading. §5's code table and the OPEN item both still hold; nothing about the status codes changed.
+- `client_reassign` still defined and not built.
+- Everything in §§1–4, 6, 7 and the rest of §8.
 
-1. **The guard itself returns 404** — `{ code: 'NOT_FOUND', message: 'No business found with id …' }` — for a client that does not exist or belongs to another tenant. It is emitted for the same URL, before any handler. So a 404 from `/api/clients/:clientId/...` **can** mean "no such client", and an agent that treats every 404 as "no record of this type" will misread a genuinely missing client as an empty result.
-2. `GET /` retains its own `CLIENT_NOT_FOUND` 404 (`client-detail.routes.ts:257`). Unreachable behind the guard, kept as defence against a delete racing the guard and against the router being mounted without it. Present in the code an agent's tooling may be generated from.
+## One thing 1.1 says that the fixes make sharper rather than false
 
-The distinguishing signal exists and it is the **error code**, not the status: `NOT_FOUND` (guard, no such client) / `CLIENT_NOT_FOUND` (handler, no such client) / `ACH_AUTHORIZATION_NOT_FOUND` (client exists, no authorisation).
+§8's closing line — *"With no permission gate on the router, the grant is the only remaining control"* — was the argument for the gate, and the gate now exists. But the sentence survives in a modified form worth keeping: **`business:read` does not distinguish `/owners` from `GET /`**, so within this module the grant is still the only control that separates a name from a date of birth. That is the split proposed in `docs/callable-modules.md` and not yet built.
 
-**Proposed:** replace the blanket sentence with the code table. This is the single correction I would make first — the current wording tells an agent to treat a real "client not found" as an absence, which is shared rule 1 inverted.
-
-## E. The 422 row belongs to a different module.
-
-§5 lists "422 — `/consent/request` only: no owner on file." `/consent/request` is not one of the thirteen. No 422 arises from this module.
-
-**Proposed:** strike it, or mark it explicitly as a cross-reference to `client_consent_request`.
-
-## F. "Eight handlers … cross-tenant readable until 1 September 2026" — correct, and worth naming.
-
-Verified at `a34cd2d` (2026-09-01 12:18 PDT), which names all eight: `/owners`, `/ach-authorization`, `/credit/personal`, `/credit/business`, `/credit/history`, `/credit/recommendations`, `/acknowledgments`, `/timeline`. Five siblings — `/`, `/repayment`, `/compliance`, `/compliance/status`, `/documents` — already carried `tenantId`. The router-level gate was generalised to the mount table 10 minutes later at `1aa2ad6`, which closed six further reads elsewhere.
-
-Two additions the author may want:
-
-- **`/timeline` reads ledger events "whose payloads carry consent evidence references and IP addresses"** (from `a34cd2d`). §8 names `/owners` as the sensitive endpoint; `/timeline` is the second one and is not mentioned.
-- **`/owners` returns the `ssn` column, not only `ssnLast4`.** The query is `findMany({ where: { businessId } })` with no `select`, so every column is returned. The manual says "encrypted SSN", which is accurate — but a reader may assume a truncated field is returned. **Raise for CapitalForge:** an explicit `select` on this handler is a five-minute change and closes the gap between "the grant is sensitive" and "the response is minimal."
-
-## G. "Documents carry `sha256Hash` and `cryptoTimestamp` where verification is possible" — true, but nothing verifies them here.
-
-§7's last line is right that the fields exist on `Document`. It may read as though this module checks them. It does not: verification runs in `ComplianceDossierService._verifyDocumentTimestamp`, and `GET /documents` returns rows unverified, with no `timestampIntegrity` field.
-
-**Proposed:** "Documents carry `sha256Hash` and `cryptoTimestamp`, but **this module does not verify them** — the fields are returned as stored. Verification happens in the compliance manifest."
-
-## One thing outside the manual's scope, for the record
-
-The commit that closed the tenancy holes says "Seventeen handlers hang off this router." I count sixteen at `3d93cff` — 13 GETs, 1 PATCH, 2 POSTs. Either one was removed since, or the count was off. It does not affect the manual, which says thirteen GETs and is correct.
+**Recommend a 1.2** carrying the three replacements above. All three are one-paragraph edits, and the second is the one that would otherwise mislead an agent in production.
