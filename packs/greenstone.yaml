@@ -103,11 +103,18 @@ positions_required:
 
   - position_title: Buyer Network Manager
     reports_to: venture_operator
+    # DECISION NEEDED. `generate_loi` was removed 2026-09-02: CRE Forge has no
+    # letter-of-intent service, route or contract template - its four templates
+    # are purchase agreement, assignment, addendum and disclosure - so the module
+    # cannot be granted and will not exist without somebody building it. The
+    # duties below are left as written rather than quietly narrowed: whether this
+    # role still circulates an assignment package, and through what, is Ivan's
+    # call and not a side effect of a module going away.
     duties:
       - Maintain the vetted buyer list and their stated criteria
       - Match a contracted deal to buyers by fit
       - Circulate the assignment package
-    forge_modules_operated: [buyer_match, generate_loi, place_call, transcribe_call]
+    forge_modules_operated: [buyer_match, place_call, transcribe_call]
     source_department: operations
     compliance_flags_in_scope: [recording_consent_required]
     headcount: 2
@@ -133,7 +140,13 @@ forge_dependencies:
     - forge: cre-forge
       api_version: 1.4.0
       criticality: hard
-      modules_expected: [property_lookup, comp_analysis, underwrite_deal, buyer_match, generate_loi]
+      # generate_loi removed 2026-09-02. It cannot be granted: CRE Forge does not
+      # dispatch it and has nothing behind the name - no LOI service, no route, and
+      # no letter-of-intent among its four contract templates. It was declared here
+      # at criticality:hard, so the Pack asserted the workflow could not run without
+      # a module that will never exist. Found by V32 rather than by hand; V6 passed
+      # on all five, because five rows had been written.
+      modules_expected: [property_lookup, comp_analysis, underwrite_deal, buyer_match]
       compliance_flags_propagated: [tsr_disclosure_required]
       fallback_behavior: halt
       rate_limit_policy: {max_rps: 4, burst: 10, backoff: exponential, on_429: queue}

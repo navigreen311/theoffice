@@ -744,14 +744,31 @@ UNSAFE_IDEMPOTENCY = "at_most_once"
 
 @dataclass(frozen=True, slots=True)
 class ModuleShape:
-    """What `forge_module_registry` knows about calling a module twice."""
+    """What `forge_module_registry` knows about calling a module twice, and whence."""
 
     is_mutating: bool
     idempotency_support: str
+    verification_method: str
 
     @property
     def unsafe_unattended(self) -> bool:
         return self.is_mutating and self.idempotency_support == UNSAFE_IDEMPOTENCY
+
+    @property
+    def is_evidence(self) -> bool:
+        """`hand` is a claim. The other two were obtained from the Forge.
+
+        This is the asymmetry the rule turns on. A hand-written row that says a
+        module is an at-most-once writer may be wrong, and refusing on it blocks
+        a Pack that might have been fine — annoying, and safe. A hand-written row
+        that says a module is a harmless read may also be wrong, and passing on
+        it hands an unattended agent a writer. `property_lookup` was recorded
+        mutating by hand and it is a search: the one module anybody had called
+        had the checkable half wrong.
+
+        So a refusal stands on any row, and a pass needs evidence.
+        """
+        return self.verification_method != "hand"
 
 
 def _declared_forges(pack: BusinessPack) -> dict[str, set[str]]:
@@ -798,6 +815,11 @@ def unattended_writes(
                         f"{UNATTENDED_TIER}, and the registry says it is a mutating "
                         f"{UNSAFE_IDEMPOTENCY} module"
                     )
+                elif not shape.is_evidence:
+                    unresolved.append(
+                        f"{position.position_title}: {forge}/{module} "
+                        "(hand-written row, never verified against the Forge)"
+                    )
     return refusals, unresolved
 
 
@@ -832,14 +854,17 @@ async def _v31_unattended_writes(
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
             """
-            SELECT lower(forge_id) AS forge_id, module_id, is_mutating, idempotency_support
+            SELECT lower(forge_id) AS forge_id, module_id, is_mutating,
+                   idempotency_support, verification_method
             FROM forge_module_registry WHERE lower(forge_id) = ANY(%s)
             """,
             (sorted(forges),),
         )
         shapes = {
             (r["forge_id"], r["module_id"]): ModuleShape(
-                is_mutating=r["is_mutating"], idempotency_support=r["idempotency_support"]
+                is_mutating=r["is_mutating"],
+                idempotency_support=r["idempotency_support"],
+                verification_method=r["verification_method"],
             )
             for r in await cur.fetchall()
         }
@@ -853,10 +878,11 @@ async def _v31_unattended_writes(
         )
     if unresolved:
         return None, (
-            f"no registry row for {_join(unresolved)}, so nothing is known about whether "
-            f"those modules survive a retry and no {UNATTENDED_TIER} grant has been "
-            "checked against its module's shape. NOT_RUN is not a pass. V6 says which "
-            "modules do not resolve."
+            f"nothing verified is known about the shape of {_join(unresolved)}, so no "
+            f"{UNATTENDED_TIER} grant has been checked against its module's behaviour. "
+            "NOT_RUN is not a pass. Run scripts/verify_forge_modules.py, which reads "
+            "is_mutating and idempotency_support from the Forge's own adapter; V6 says "
+            "which modules have no row at all."
         )
 
     operated = sum(
@@ -866,7 +892,7 @@ async def _v31_unattended_writes(
     )
     return True, (
         f"{operated} module(s) operated at {UNATTENDED_TIER}, none of them a mutating "
-        f"{UNSAFE_IDEMPOTENCY} write"
+        f"{UNSAFE_IDEMPOTENCY} write, each checked against a shape the Forge stated"
     )
 
 

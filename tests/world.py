@@ -24,8 +24,11 @@ ROOT = Path(__file__).resolve().parents[1]
 PACK_PATH = ROOT / "packs" / "greenstone.yaml"
 
 FORGE_ID = "cre-forge"
-CRE_MODULES = ("property_lookup", "comp_analysis", "underwrite_deal", "buyer_match",
-               "generate_loi")
+# `generate_loi` was removed 2026-09-02 along with the Pack declaration. CRE Forge
+# has no letter-of-intent service, route or contract template, so a world that
+# registered it was a world describing a module that does not exist - which is the
+# state V32 exists to refuse, reproduced inside the fixture that tests V32.
+CRE_MODULES = ("property_lookup", "comp_analysis", "underwrite_deal", "buyer_match")
 VOICE_MODULES = ("place_call", "transcribe_call")
 
 # Fixed agent ids so snapshots are stable across runs and machines. Real agents arrive
@@ -263,11 +266,13 @@ def build_world(admin: psycopg.Connection) -> None:
                     """
                     INSERT INTO forge_module_registry
                       (forge_id, module_id, module_name, idempotency_support,
-                       is_mutating, compliance_flags_implied)
-                    VALUES (%s, %s, %s, %s, TRUE, %s)
+                       is_mutating, compliance_flags_implied,
+                       verified_at, verified_against, verification_method)
+                    VALUES (%s, %s, %s, %s, TRUE, %s,
+                            now(), 'test world', 'adapter_manifest')
                     """,
                     (forge_id, module_id, module_id.replace("_", " ").title(),
-                     "at_most_once" if module_id == "generate_loi" else "key", flags),
+                     "key", flags),
                 )
                 cur.execute(
                     """
@@ -408,7 +413,7 @@ def certify_for_positions(conn: psycopg.Connection) -> None:
             unit_b_departments=["research"])
     certify(conn, finance, ["comp_analysis", "underwrite_deal"], tier="propose",
             unit_b_departments=["banking"])
-    certify(conn, success, ["buyer_match", "generate_loi"], tier="propose",
+    certify(conn, success, ["buyer_match"], tier="propose",
             unit_b_departments=["operations"])
     certify(conn, success, ["place_call", "transcribe_call"], forge="voiceforge",
             tier="propose", unit_b_departments=["operations"])

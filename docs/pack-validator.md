@@ -129,6 +129,15 @@ survives. The finding is the tier over that module, not the module.
 registry row, V31 reports the refusal. A defect that has been found does not stop being
 found because something else could not be checked.
 
+**And a hand-written row cannot produce a PASS.** `is_mutating` is what this rule turns
+on, and the first run of `scripts/verify_forge_modules.py` against the live CRE adapter
+corrected `property_lookup` from `TRUE` to `FALSE` — the one module anybody had ever
+called had been recorded as a writer, by hand, and it is a search. A row that
+understates mutation is the one that hands an unattended agent a writer, so a clean
+answer resting on `verification_method = 'hand'` is NOT_RUN and names the verifier. A
+refusal still stands on such a row: blocking on a claim that might be wrong is the safe
+direction, passing on one is not.
+
 ## V13 arithmetic
 
 ```

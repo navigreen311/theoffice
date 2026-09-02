@@ -71,8 +71,7 @@ async def _record(
     conn: AsyncConnection,
     forge_id: str,
     modules: set[str],
-    provenance: str,
-    method: str,
+    answer: forge_modules.ForgeModules,
 ) -> int:
     async with conn.cursor() as cur:
         await cur.execute(
@@ -83,9 +82,67 @@ async def _record(
                    verification_method = %s
              WHERE lower(forge_id) = %s AND module_id = ANY(%s)
             """,
-            (provenance, method, forge_id, sorted(modules)),
+            (answer.provenance, answer.method, forge_id, sorted(modules)),
         )
         return int(cur.rowcount)
+
+
+async def _corrections(
+    conn: AsyncConnection, forge_id: str, modules: set[str],
+    answer: forge_modules.ForgeModules,
+) -> list[str]:
+    """Rows whose shape disagrees with the Forge's, corrected to the Forge's.
+
+    The registry is not consulted for the answer. `property_lookup` was recorded
+    `is_mutating: TRUE` by hand and it is a search - a hand-written row got the
+    checkable half wrong on the only module anybody had ever called, and V31
+    decides whether an unattended agent may hold a module on exactly that field.
+
+    Where the adapter does not state a shape - an older manifest, or a probe -
+    nothing is written. An unanswered question is not a correction.
+    """
+    if answer.shapes is None:
+        return []
+
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            """
+            SELECT module_id, is_mutating, idempotency_support
+            FROM forge_module_registry
+            WHERE lower(forge_id) = %s AND module_id = ANY(%s)
+            """,
+            (forge_id, sorted(modules)),
+        )
+        rows = await cur.fetchall()
+
+    changed: list[str] = []
+    for row in rows:
+        shape = answer.shapes.get(row["module_id"])
+        if shape is None:
+            continue
+        if (
+            row["is_mutating"] == shape.is_mutating
+            and row["idempotency_support"] == shape.idempotency_support
+        ):
+            continue
+        changed.append(
+            f"{forge_id}/{row['module_id']}: is_mutating "
+            f"{row['is_mutating']} -> {shape.is_mutating}, idempotency_support "
+            f"{row['idempotency_support']!r} -> {shape.idempotency_support!r}"
+        )
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                UPDATE forge_module_registry
+                   SET is_mutating = %s, idempotency_support = %s
+                 WHERE lower(forge_id) = %s AND module_id = %s
+                """,
+                (
+                    shape.is_mutating, shape.idempotency_support,
+                    forge_id, row["module_id"],
+                ),
+            )
+    return changed
 
 
 async def run(only: str | None, check: bool) -> int:
@@ -113,13 +170,19 @@ async def run(only: str | None, check: bool) -> int:
             confirmed = rows & answer.modules
 
             if confirmed and not check:
-                touched = await _record(
-                    conn, forge_id, confirmed, answer.provenance, answer.method
-                )
+                touched = await _record(conn, forge_id, confirmed, answer)
+                corrected = await _corrections(conn, forge_id, confirmed, answer)
                 await conn.commit()
                 print(f"{forge_id}: {touched} row(s) verified via {answer.method}")
+                for line in corrected:
+                    print(f"  CORRECTED {line}")
             else:
                 print(f"{forge_id}: {len(confirmed)} row(s) resolve via {answer.method}")
+                if answer.shapes is None:
+                    print(
+                        f"  {forge_id} states no module shapes, so is_mutating and "
+                        "idempotency_support stay as written and unverified"
+                    )
 
             for module_id in absent:
                 drift = True

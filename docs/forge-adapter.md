@@ -156,6 +156,12 @@ tenant credential as a module call, returning the dispatch map's keys:
 return {"forge": "cre-forge", "modules": sorted(MODULES)}
 ```
 
+The entry for each module carries three fields:
+
+```json
+{"module_id": "underwrite_deal", "is_mutating": true, "idempotency_support": "natural"}
+```
+
 ### Write `sorted(MODULES)`. Never a literal list.
 
 This is the only answer in the whole path that is not a declaration.
@@ -173,6 +179,32 @@ and you cannot delete the function and keep the name. A list maintained beside t
 throws that away and is *worse* than the two declarations that already exist, because it
 drifts silently while carrying the authority of having come from the Forge.
 `test_manifest_is_derived_from_the_dispatch_map` fails the build if one appears.
+
+### One of the three fields is derived. Two are declared.
+
+`module_id` is derived — a name appears if and only if a handler is bound.
+
+`is_mutating` and `idempotency_support` are **declared at the binding site**. They
+travel with the handler rather than living in another system's table, and you cannot
+bind a module without stating them, but they are still somebody's word. Say which is
+which when you report them; do not let a reader believe the whole answer is derived.
+
+They are checked rather than trusted:
+
+- **At runtime.** A module declared `is_mutating=False` whose handler dirties the
+  session is refused by `call_module`, its write rolled back, and a
+  `office.call.contract_violation` logged. That is the only moment the truth is
+  observable, and it is why the declaration is worth more than a registry row.
+- **By The Office.** `scripts/verify_forge_modules.py` **corrects** the registry from
+  the manifest rather than trusting the row. Its first run against CRE Forge moved
+  `property_lookup` from `is_mutating: TRUE` to `FALSE` — it is a search, and the row
+  had said otherwise since the day it was written.
+
+This matters because V31 refuses `auto_execute` over a module that is mutating and
+`at_most_once`. A row that understates mutation hands an unattended agent a writer, so
+**V31 will not PASS on a `verification_method = 'hand'` row** — it reports NOT_RUN and
+names the verifier. A *refusal* still stands on a hand-written row: blocking on a claim
+that might be wrong is safe, and passing on one is not.
 
 ### What a green conformance check proves
 
@@ -239,7 +271,10 @@ than verified. All twelve of the Burkham Pack's modules are in that state today.
 - [ ] `forge_tenant_credential` row with a `credential_ref`, and the value resolvable
       (`env://NAME` in development) — never the value in the table
 - [ ] Adapter serves `GET {base_url}/_modules` from `sorted(MODULES)` — derived from
-      the dispatch map, never a literal list
+      the dispatch map, never a literal list — with `is_mutating` and
+      `idempotency_support` stated at each binding
+- [ ] Every `is_mutating=False` handler verified against the runtime guard: a read that
+      writes is refused and rolled back, not returned as a 200
 - [ ] `forge_module_registry` rows for each module, spelled **exactly** as the adapter's
       dispatch keys, with honest `is_mutating` and `idempotency_support`
 - [ ] `scripts/verify_forge_modules.py --check` exits 0 — every row resolves against the

@@ -47,7 +47,6 @@
           "agent_name": "Faye Buyers",
           "certified_modules": [
             "buyer_match",
-            "generate_loi",
             "place_call",
             "transcribe_call"
           ],
@@ -59,7 +58,6 @@
           "agent_name": "Gil Network",
           "certified_modules": [
             "buyer_match",
-            "generate_loi",
             "place_call",
             "transcribe_call"
           ],

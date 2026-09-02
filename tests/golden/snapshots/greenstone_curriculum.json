@@ -7,8 +7,8 @@
       "uncovered": []
     },
     {
-      "covered": 7,
-      "denominator": 7,
+      "covered": 6,
+      "denominator": 6,
       "dimension": "modules_with_operation_scenarios",
       "uncovered": []
     },
@@ -19,8 +19,8 @@
       "uncovered": []
     },
     {
-      "covered": 7,
-      "denominator": 7,
+      "covered": 6,
+      "denominator": 6,
       "dimension": "modules_with_authored_instructions",
       "uncovered": []
     }
@@ -190,20 +190,6 @@
       "role": "Buyer Network Manager",
       "scenario_id": "op-buyer-network-manager-buyer_match",
       "summary": "Operate buyer_match as Buyer Network Manager: correct sequence, recognise the module's failure signatures (failure vs slow success vs silent partial), honour its retry-vs-escalate rule and its never-do list."
-    },
-    {
-      "compliance_flags_exercised": [
-        "recording_consent_required",
-        "tsr_disclosure_required"
-      ],
-      "domain": "operation",
-      "expected_escalation": true,
-      "instruction_content_hash": "9711528544710550fb27127765aa0b83953fbea56c4543644019e5d0c12483e6",
-      "kind": "operation",
-      "module_id": "generate_loi",
-      "role": "Buyer Network Manager",
-      "scenario_id": "op-buyer-network-manager-generate_loi",
-      "summary": "Operate generate_loi as Buyer Network Manager: correct sequence, recognise the module's failure signatures (failure vs slow success vs silent partial), honour its retry-vs-escalate rule and its never-do list."
     },
     {
       "compliance_flags_exercised": [

@@ -128,8 +128,10 @@ def bridged_world(admin: psycopg.Connection):
                 cur.execute(
                     """
                     INSERT INTO forge_module_registry
-                      (forge_id, module_id, module_name, idempotency_support, is_mutating)
-                    VALUES (%s, %s, %s, 'key', TRUE)
+                      (forge_id, module_id, module_name, idempotency_support, is_mutating,
+                       verified_at, verified_against, verification_method)
+                    VALUES (%s, %s, %s, 'key', TRUE,
+                            now(), 'test world', 'adapter_manifest')
                     """,
                     (forge_id, module_id, module_id.replace("_", " ").title()),
                 )

@@ -79,11 +79,34 @@ SCOPE = (
 #: The adapter's own endpoints live under `_`, which is therefore not a legal module id.
 MANIFEST_PATH = "_modules"
 
+#: The three `forge_module_registry.idempotency_support` accepts. A fourth value from
+#: an adapter is a manifest this cannot read, not a new kind of module.
+IDEMPOTENCY_SUPPORT = frozenset({"key", "natural", "at_most_once"})
+
 #: How long an answer is trusted. Short, because the thing being measured is whether a
 #: Forge still dispatches something, and a stale yes is the answer that misleads.
 TTL = timedelta(minutes=5)
 
 Method = Literal["adapter_manifest", "probe"]
+
+
+@dataclass(frozen=True, slots=True)
+class DispatchShape:
+    """How a module behaves when it is called twice, as the adapter states it.
+
+    **Weaker than the module list, and the difference matters.** A name is in
+    `ForgeModules.modules` because a handler is bound to it — derived, and not
+    something anyone can assert. These two fields are declared at the binding
+    site: they travel with the handler rather than living in another system's
+    table, and the adapter refuses at runtime a module that declares
+    `is_mutating=False` and then writes, but they are still somebody's word.
+
+    Better evidence than a registry row, which is somebody's word in a place
+    where nothing can check it. Not the same thing as derived.
+    """
+
+    is_mutating: bool
+    idempotency_support: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,6 +118,14 @@ class ForgeModules:
     method: Method
     api_version: str
     observed_at: datetime
+    shapes: dict[str, DispatchShape] | None = None
+    """`is_mutating` and `idempotency_support` per module, where the adapter says.
+
+    `None` when it does not — an older adapter answering with a list of names, or
+    a probe, which can only ever establish that a path exists. `None` is not
+    "no shapes"; it means the question was not answered, and the verifier leaves
+    those registry columns alone rather than overwriting them with a guess.
+    """
 
     def missing(self, wanted: set[str]) -> list[str]:
         return sorted(wanted - self.modules)
@@ -236,16 +267,54 @@ async def _via_manifest(
         modules = res.json()["modules"]
     except (ValueError, KeyError, TypeError):
         return Unread(row["forge_id"], "manifest did not answer with a modules list")
-    if not isinstance(modules, list) or not all(isinstance(m, str) for m in modules):
-        return Unread(row["forge_id"], "manifest modules is not a list of names")
+    if not isinstance(modules, list):
+        return Unread(row["forge_id"], "manifest modules is not a list")
+
+    # Two shapes accepted. A list of names is what an adapter written before the
+    # shape fields existed answers, and it is still a real answer to the question
+    # this rule asks - the module list is the derived half. Reading it as an
+    # error would make an older Forge unverifiable for a reason that has nothing
+    # to do with whether its modules exist.
+    names, shapes = _parse_modules(modules)
+    if names is None:
+        return Unread(
+            row["forge_id"],
+            "manifest modules is neither a list of names nor a list of "
+            "{module_id, is_mutating, idempotency_support}",
+        )
 
     return ForgeModules(
         forge_id=row["forge_id"],
-        modules=frozenset(modules),
+        modules=frozenset(names),
         method="adapter_manifest",
         api_version=row["api_version"],
         observed_at=datetime.now(UTC),
+        shapes=shapes,
     )
+
+
+def _parse_modules(
+    modules: list[Any],
+) -> tuple[list[str] | None, dict[str, DispatchShape] | None]:
+    """(names, shapes). `shapes` is None when the adapter did not state them."""
+    if all(isinstance(m, str) for m in modules):
+        return list(modules), None
+
+    names: list[str] = []
+    shapes: dict[str, DispatchShape] = {}
+    for entry in modules:
+        if not isinstance(entry, dict):
+            return None, None
+        module_id = entry.get("module_id")
+        is_mutating = entry.get("is_mutating")
+        idempotency = entry.get("idempotency_support")
+        if not isinstance(module_id, str) or not isinstance(is_mutating, bool):
+            return None, None
+        if idempotency not in IDEMPOTENCY_SUPPORT:
+            return None, None
+        names.append(module_id)
+        shapes[module_id] = DispatchShape(is_mutating, idempotency)
+    return names, shapes
 
 
 async def _via_probe(

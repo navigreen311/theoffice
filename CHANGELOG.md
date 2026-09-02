@@ -40,6 +40,36 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     query parameters it never reads.
   - NOT_RUN, not PASS and not FAIL, where no adapter exists. All twelve of the Burkham
     Pack's modules are in that state today, and Gate 2 blocks on it.
+- **The manifest carries each module's shape, and the verifier corrects the row.**
+  `_modules` now answers `{module_id, is_mutating, idempotency_support}` per module.
+  `module_id` stays derived; the other two are declared at the binding site, which is
+  weaker and is said so in every place they are reported.
+  - They are checked, not trusted. The adapter refuses at runtime a module declared
+    `is_mutating=False` whose handler dirties its session, and rolls the write back —
+    the only moment the truth is observable. `verify_forge_modules.py` then writes the
+    Forge's answer over the registry's.
+  - Its first run against the live CRE adapter corrected `property_lookup` from
+    `is_mutating: TRUE` to `FALSE`. It is a search. The one module anybody had ever
+    called had the checkable half wrong, in a hand-written row, in the field V31 turns on.
+  - So **V31 will not PASS on a `verification_method = 'hand'` row.** A refusal still
+    stands on one: blocking on a claim that might be wrong is safe, passing on one is
+    not. An adapter that answers with bare names still resolves existence and leaves
+    the shape columns alone — an unanswered question is not a correction.
+
+### Changed
+- **CRE Forge binds `comp_analysis`, `underwrite_deal` and `buyer_match`.** All three
+  had registry rows and no handler; V32 found them, and the services behind them were
+  already there. `buyer_match` calls `match_buyers_to_deal(save_matches=False)`: ranking
+  buyers is a question, recording that a deal was offered to them is an act, and an act
+  belongs in its own module with its own grant.
+- **`generate_loi` cut from the Greenstone Pack.** CRE Forge has no letter-of-intent
+  service, route or contract template. It was declared at `criticality: hard`, so the
+  Pack asserted the workflow could not run without a module that will never exist —
+  `bureau_pull`'s shape, one Forge over. Buyer Network Manager's duties are left as
+  written with a DECISION NEEDED rather than quietly narrowed. Removing its workflow
+  step also dropped the projected compliance load from 192 approvals a day to 160; a
+  module that does not exist had been contributing to the review burden that blocks
+  Gate 4.5.
 - **Module exclusion — a module that must never be granted.** Onboarding CapitalForge
   found endpoints that return a plausible success for work that never happens: rules no
   runner consumes, a `TwilioStubClient` returning fabricated SIDs from the endpoint named

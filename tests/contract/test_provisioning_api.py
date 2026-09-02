@@ -308,7 +308,7 @@ async def test_the_real_pack_blocks_at_gate_4_5_through_the_api(world, api, pack
 
     assert result["status"] == "blocked"
     assert result["current_gate"] == "4.5"
-    assert "192 approvals" in result["outcomes"][-1]["reason"]
+    assert "160 approvals" in result["outcomes"][-1]["reason"]
 
 
 async def test_a_run_from_the_console_stops_at_gate_9_5(world, api, feasible_yaml):
