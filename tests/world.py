@@ -18,6 +18,7 @@ from pathlib import Path
 
 import psycopg
 import psycopg.types.json
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 PACK_PATH = ROOT / "packs" / "greenstone.yaml"
@@ -163,12 +164,73 @@ def seed_departments() -> None:
     ])
 
 
+def dispatch_from_registry(
+    admin: psycopg.Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The other half of a prepared world: the adapters are up and dispatching.
+
+    Every other part of this world is a database state, and V32 is deliberately not.
+    It resolves a Pack against what a Forge's adapter actually dispatches, because
+    `forge_module_registry` rows are rows a human wrote and comparing a Pack to them
+    compares two claims. A world built only in the database therefore leaves V32
+    NOT_RUN, which blocks Gate 2 - correctly, and not because anything is wrong with
+    the venture under test.
+
+    So this supplies the state rather than the mechanism: adapters that answer with
+    exactly what the world registered. The mechanism - the manifest read, the probe,
+    and the calibration failure that makes a probe refuse to answer - is driven for
+    real over a mock transport in `tests/validator/test_module_conformance.py`, and
+    a Forge that does *not* dispatch a declared module has its own test there and in
+    `test_world_rules.py`. Standing up three HTTP servers to restate that here would
+    add machinery, not coverage.
+    """
+    from datetime import UTC, datetime
+
+    from broker import forge_modules
+
+    with admin.cursor() as cur:
+        cur.execute(
+            """
+            SELECT lower(r.forge_id) AS forge_id, r.api_version, m.module_id
+            FROM forge_registry r
+            LEFT JOIN forge_module_registry m ON m.forge_id = r.forge_id
+            """
+        )
+        rows = cur.fetchall()
+
+    dispatched: dict[str, set[str]] = {}
+    versions: dict[str, str] = {}
+    for forge_id, api_version, module_id in rows:
+        versions[forge_id] = api_version
+        bucket = dispatched.setdefault(forge_id, set())
+        if module_id is not None:
+            bucket.add(module_id)
+
+    async def _answer(_conn, forge_id: str, **_kw):
+        key = forge_id.lower()
+        if key not in dispatched:
+            return forge_modules.Unread(forge_id, "not in forge_registry")
+        return forge_modules.ForgeModules(
+            forge_id=forge_id,
+            modules=frozenset(dispatched[key]),
+            method="adapter_manifest",
+            api_version=versions[key],
+            observed_at=datetime.now(UTC),
+        )
+
+    monkeypatch.setattr(forge_modules, "read", _answer)
+    forge_modules.forget()
+
+
 def build_world(admin: psycopg.Connection) -> None:
     """A fully prepared world: Forges bridged, instructions authored, roster present.
 
     This is the state Gates 0 through 8 exist to produce. Building it here means the
     golden snapshots - and the provisioning runs - describe a venture that could
     actually provision.
+
+    The adapters are a separate call - `dispatch_from_registry` - because they are the
+    one part of the world that is not a row. A suite that runs Gate 2 needs both.
     """
     seed_departments()
     teardown_world(admin)

@@ -29,6 +29,12 @@ NOTE ON NAMES
     `forge_module_registry` rows for CapitalForge must use these names for these
     endpoints, or the exclusion silently misses and the endpoint becomes grantable
     under a different name. That is the one way this can be defeated by accident.
+
+    Once CapitalForge has an adapter, its dispatch map is the naming authority and the
+    accident stops being possible: a Pack, these exclusions and the registry rows all
+    resolve against `GET {base_url}/_modules`, so a second spelling fails to resolve
+    instead of quietly working. Until then these names are the vocabulary, and the
+    adapter should be built to use them. See `broker/forge_modules.py`.
 """
 
 from __future__ import annotations

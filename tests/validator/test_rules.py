@@ -121,10 +121,16 @@ def test_every_rule_from_v1_is_implemented_with_no_gaps():
 
     V28 was added when Part 6.3 was built: V4 checks that a Pack *names* a compliance
     library entry, which is self-attestation, and V28 checks that the name resolves.
+
+    V31 and V32 arrived the same way, from the same defect one layer down. V6 resolves
+    a Pack's modules against `forge_module_registry`, which is rows a human wrote - two
+    declarations compared to each other. V32 resolves them against what the Forge
+    actually dispatches, and V31 asks whether the tier granted over a module is one it
+    survives.
     """
     ids = validator.all_rule_ids()
     assert ids == [f"V{i}" for i in range(1, len(ids) + 1)], f"got {ids}"
-    assert len(ids) == 30
+    assert len(ids) == 32
 
 
 @pytest.mark.parametrize("rule_id", DOCUMENT_RULES)
@@ -196,7 +202,7 @@ async def test_report_is_deterministic(greenstone):
     assert [(r.rule_id, r.verdict, r.message) for r in a.results] == [
         (r.rule_id, r.verdict, r.message) for r in b.results
     ]
-    assert [r.rule_id for r in a.results] == [f"V{i}" for i in range(1, 31)]
+    assert [r.rule_id for r in a.results] == [f"V{i}" for i in range(1, 33)]
 
 
 async def test_render_names_the_offending_value(greenstone):

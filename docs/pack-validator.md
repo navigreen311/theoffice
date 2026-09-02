@@ -17,7 +17,7 @@ otherwise.
 ## Shape vs. meaning
 
 Pydantic handles shape — required fields, types, enums — and fails at load.
-The 27 rules handle meaning: cross-references, capacity arithmetic, whether a declared
+The 32 rules handle meaning: cross-references, capacity arithmetic, whether a declared
 framework resolves to a runtime flag.
 
 They are separate because the two failures read differently to an author. A missing
@@ -41,11 +41,11 @@ V13 FAIL: 400 projected approvals need 2000 review-minutes against 360 available
 Order is `V1..V27` numerically, so two runs of the same Pack produce byte-identical
 reports and a snapshot diff is never import-order noise.
 
-## Three rules read the world, not the document
+## Some rules read the world, not the document
 
-**V2 (Gate 0), V6, V11.** A Pack that *declares* a Forge is bridged proves nothing —
-that is precisely the state Gate 0 exists to catch. There is a test asserting a Pack
-cannot declare itself bridged.
+**V2 (Gate 0), V6, V11, V28, V29, V30, V31, V32.** A Pack that *declares* a Forge is
+bridged proves nothing — that is precisely the state Gate 0 exists to catch. There is a
+test asserting a Pack cannot declare itself bridged.
 
 "Bridge operational" means all three of: registered in `forge_registry`, health not
 RED, **and** a `forge_tenant_credential` exists. Healthy is not the same as reachable;
@@ -69,6 +69,65 @@ fired might not. The failure mode is a green Pack validation that checked nothin
 
 Mutations are applied to a deep copy of the **real** Greenstone Pack, so each fixture is
 realistic in every respect except the one thing being broken.
+
+## V32 does not trust the database either
+
+V6 resolves a Pack's modules against `forge_module_registry`. Both sides of that
+comparison are things a human wrote — a Pack's `modules_expected` is a list somebody
+typed, and a registry row is a row somebody typed — so V6 compares two claims and can
+find a typo. The Burkham Pack declared twelve CapitalForge modules; three of them did not
+exist, all three were found by hand, and `lender_match` had been granted `auto_execute`
+over a capability that was not there.
+
+**V32 asks the Forge.** Every adapter serves `GET {base_url}/_modules`, which returns
+`sorted(MODULES)` over its dispatch map. That answer is derived rather than asserted: a
+name is in it if and only if a handler is bound to it. It is the only artefact in the
+path with that property, which is why the rule reaches for it instead of for a row.
+
+**What a PASS proves, and `render()` prints it:** a handler is bound to the name. Not
+that it works, and not that it does what the name says. It automates the half of the
+conformance question that was already being done by hand and does not touch the other
+half — `readiness_score` is bound, answers 200, mutates nothing, and scores a business
+from query parameters it never reads. That class is found by reading the source, and it
+lives in `forge_module_exclusion`.
+
+**NOT_RUN is the expected verdict today.** No CapitalForge adapter exists, so all twelve
+of the Burkham Pack's modules are unresolved and Gate 2 blocks. That is neither a FAIL —
+nothing about the Pack is known to be wrong — nor a PASS. `report.passed` is already
+False on any NOT_RUN, and this is the rule that makes that discipline earn its keep.
+
+A probe (`OPTIONS {base_url}/{module_id}`) is the fallback where an adapter exists
+without a manifest. It is calibrated per run against an id that cannot exist, and reports
+NOT_RUN rather than PASS if that id does not 404 — which is what a catch-all
+`POST /{module_id}` dispatcher does, so the fallback usually refuses to answer. That is
+the intended behaviour: an uncalibrated probe is a green light generator.
+
+`scripts/verify_forge_modules.py --check` is the same question outside a Pack, for CI. It
+never deletes a row and never invents one: a module that stopped resolving is reported
+so a human can revoke the grant, and a module the Forge dispatches that the registry has
+never heard of is reported rather than added, because a Forge does not get to enlarge its
+own agent-facing surface.
+
+## V31 asks whether a tier is survivable
+
+A module can resolve perfectly and still be wrong to run with nobody watching. V31
+refuses `auto_execute` over a module the registry records as `is_mutating` **and**
+`idempotency_support = at_most_once`.
+
+That is the shape `regulator_dossier_export` is written around: every call mints an
+`exportId`, writes a row and emits an event, so a retry after a timeout produces a second
+export of the same inquiry and the audit trail then shows two. Its sibling
+`compliance_manifest_assemble` mints nothing and retries freely — same permission, same
+reader, opposite handling. An agent is the caller least likely to go looking for the
+first `exportId` before minting a second, and an unattended agent is the one with nobody
+to stop it.
+
+`key` and `natural` both pass: a retry the Forge de-duplicates is a retry the audit trail
+survives. The finding is the tier over that module, not the module.
+
+**A FAIL outranks an unresolved module.** If one module is refused and another has no
+registry row, V31 reports the refusal. A defect that has been found does not stop being
+found because something else could not be checked.
 
 ## V13 arithmetic
 
@@ -112,8 +171,10 @@ immediately if the first venture becomes Burkham Wickmont against CapitalForge.
 
 ## Known gaps
 
-*Last verified: 2026-08-23.*
+*Last verified: 2026-09-02.*
 
+- **No CapitalForge adapter.** V32 is NOT_RUN for every CapitalForge module, and will be
+  until one exists. The contract it must serve is in `docs/forge-adapter.md`.
 - **The seven generators do not exist yet** (increment 2). The Pack validates; nothing
   consumes it.
 - **Shift assignment and PHI flush** are increment 3.

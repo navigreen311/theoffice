@@ -145,17 +145,110 @@ at WARNING with no handlers — so the adapter's identity lines were formatted a
 A log line that never appears is not a record. Check the effective level of whatever
 logger you use before trusting that the correlation is being written down.
 
+---
+
+## The module manifest, and why the adapter is the naming authority
+
+**Every adapter must serve `GET {base_url}/_modules`**, authenticated with the same
+tenant credential as a module call, returning the dispatch map's keys:
+
+```python
+return {"forge": "cre-forge", "modules": sorted(MODULES)}
+```
+
+### Write `sorted(MODULES)`. Never a literal list.
+
+This is the only answer in the whole path that is not a declaration.
+
+The Office's `forge_module_registry` rows are rows a human typed. A Business Pack's
+`modules_expected` is a list a human typed. V6 compares those two, which means it
+compares two claims and can find a typo — the Burkham Pack declared twelve modules,
+three of them did not exist, and V6 passed on all twelve because somebody had written
+twelve rows. `lender_match` was granted `auto_execute` over a capability that was not
+there.
+
+`sorted(MODULES)` is different because it is derived. A name is in the answer if and
+only if a handler is bound to it: you cannot add the name without adding the function,
+and you cannot delete the function and keep the name. A list maintained beside the dict
+throws that away and is *worse* than the two declarations that already exist, because it
+drifts silently while carrying the authority of having come from the Forge.
+`test_manifest_is_derived_from_the_dispatch_map` fails the build if one appears.
+
+### What a green conformance check proves
+
+**A handler is bound to that name.** Not that the handler works, and not that it does
+what the name says.
+
+This automates the half of the question that was being done by hand — does the module
+exist — and does not touch the other half. `readiness_score` is bound, answers 200,
+mutates nothing, and scores a business from query parameters it never reads. Nothing in
+the manifest will ever find that. Reading the handler will, and the finding goes in
+`forge_module_exclusion`.
+
+### The adapter's keys are the spelling of record
+
+> **If you are about to write `forge_module_registry` rows, read this.**
+
+A `module_id` must be spelled exactly as the key in the adapter's dispatch map, because
+`broker/executor.py` builds the URL as `{base_url}/{module_id}` — the id *is* the
+address. Three separate things resolve against that one set of keys:
+
+| | |
+|---|---|
+| a Pack's `modules_expected` | V32 refuses a Pack declaring a module the Forge does not dispatch |
+| `forge_module_registry` | `scripts/verify_forge_modules.py` stamps the rows that resolve, and reports the ones that do not |
+| `broker/module_exclusions.py` | the exclusion is keyed `(forge_id, module_id)` |
+
+`docs/module-exclusions.md` names the one way an exclusion can be defeated by accident:
+register an excluded endpoint under a second name and the exclusion silently misses, and
+the module becomes grantable. Resolving every side against the adapter's keys closes
+that mechanically instead of by memory — a second spelling does not quietly work, it
+fails to resolve and V32 says so.
+
+### Reserved prefix
+
+Module ids must not start with `_`. That prefix belongs to the adapter's own endpoints,
+and a module named `_modules` would shadow the manifest. Assert it at import beside the
+dict rather than writing it down here only.
+
+### The probe, and when it cannot answer
+
+Where an adapter exists without a manifest, The Office falls back to
+`OPTIONS {base_url}/{module_id}`: a bound path answers 405 or 200, an unbound one 404,
+and no handler runs either way. An authenticated POST would answer the same question by
+executing the module, which is not a thing to do to a mutating one.
+
+It is calibrated on every run against an id that cannot exist, and **if that id does not
+404 the probe reports NOT_RUN rather than PASS.** An adapter built on the CRE template
+routes everything through one `POST /{module_id}`, so every id matches the path template
+and nothing 404s — on that shape the probe is structurally unable to tell a bound module
+from an absent one. Serve the manifest; the probe is there for Forges that cannot yet.
+
+### NOT_RUN is the expected state before an adapter exists
+
+A Forge with no adapter leaves V32 NOT_RUN, which blocks Gate 2. That is correct and it
+is not a defect in the Pack: nothing has been resolved, so the Pack is unverified rather
+than verified. All twelve of the Burkham Pack's modules are in that state today.
+
+---
+
 ## Checklist for Forge number two
 
 - [ ] `forge_registry` row: `base_url` pointing at the adapter, correct `api_version`,
       `auth_model`, `credential_mode`
 - [ ] `forge_tenant_credential` row with a `credential_ref`, and the value resolvable
       (`env://NAME` in development) — never the value in the table
-- [ ] `forge_module_registry` rows for each module, with honest `is_mutating` and
-      `idempotency_support`
+- [ ] Adapter serves `GET {base_url}/_modules` from `sorted(MODULES)` — derived from
+      the dispatch map, never a literal list
+- [ ] `forge_module_registry` rows for each module, spelled **exactly** as the adapter's
+      dispatch keys, with honest `is_mutating` and `idempotency_support`
+- [ ] `scripts/verify_forge_modules.py --check` exits 0 — every row resolves against the
+      adapter, and the adapter dispatches nothing the registry has not heard of
 - [ ] `venture_forge_manifest` row per venture × module — **or every call is UNDECLARED**
 - [ ] Grant at `auto_execute`, with Unit A and Unit B certifications at the same tier —
       **or no call is made at all**
+- [ ] No `auto_execute` grant over a module that is `is_mutating` and `at_most_once` —
+      V31 refuses it, because an unattended retry writes a second record of the same act
 - [ ] Every module checked for a stub, a missing runner, or a 501 - and any found
       recorded in `forge_module_exclusion` **before** the registry rows are written
 - [ ] Adapter reads the header names above verbatim from `broker/executor.py`

@@ -23,7 +23,13 @@ import yaml
 from broker import humans, packs
 from broker.db import connection
 from tests.conftest import wipe_venture
-from tests.world import PACK_PATH, build_world, certify_for_positions, teardown_world
+from tests.world import (
+    PACK_PATH,
+    build_world,
+    certify_for_positions,
+    dispatch_from_registry,
+    teardown_world,
+)
 
 VENTURE = "greenstone"
 
@@ -52,11 +58,20 @@ def _wipe(conn: psycopg.Connection) -> None:
 
 
 @pytest.fixture
-def world(admin: psycopg.Connection) -> Iterator[psycopg.Connection]:
-    """Bridged Forges, authored instructions, roster certified for its positions."""
+def world(
+    admin: psycopg.Connection, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[psycopg.Connection]:
+    """Bridged Forges dispatching their modules, instructions authored, roster certified.
+
+    The adapters are part of this: Gate 2 runs V32, and a Pack whose modules were never
+    resolved against a Forge has not been validated. Without them every run in this
+    suite stops at Gate 2 with a NOT_RUN, which is the right verdict and the wrong
+    subject - these tests are about Gates 3 through 11.
+    """
     _wipe(admin)
     build_world(admin)
     certify_for_positions(admin)
+    dispatch_from_registry(admin, monkeypatch)
     yield admin
     _wipe(admin)
     teardown_world(admin)

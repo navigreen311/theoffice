@@ -67,6 +67,18 @@ recording the exclusion first is also what **fixes the vocabulary**: whoever wri
 these endpoints. Register `POST /api/platform/workflows` under a different name and the
 exclusion silently misses, and the module becomes grantable.
 
+**This now closes mechanically rather than by memory.** The Forge adapter's dispatch map
+is the naming authority: `broker/executor.py` builds the URL as `{base_url}/{module_id}`,
+so the id is the address, and `GET {base_url}/_modules` reports the keys. A Pack's
+`modules_expected`, these exclusions and the registry rows all resolve against that one
+set of names — a second spelling for the same endpoint does not quietly work any more, it
+fails to resolve, and V32 says which name did not. `scripts/verify_forge_modules.py
+--check` is the standing form of the same question.
+
+It closes the accident, not the decision. Somebody who deliberately registers an excluded
+endpoint under the adapter's own key for a *different* module still defeats this, and
+nothing mechanical will catch that.
+
 `broker/module_exclusions.py` is the declared list, with the file and symbol that justify
 each one, so the names are reviewable in a diff before they are needed.
 

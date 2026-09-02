@@ -41,7 +41,7 @@ from broker.app import app
 from broker.db import connection
 from generators.validator import all_rule_ids
 from tests.conftest import requires_db, wipe_venture
-from tests.world import PACK_PATH, build_world
+from tests.world import PACK_PATH, build_world, dispatch_from_registry
 
 pytestmark = [requires_db, pytest.mark.db]
 
@@ -86,9 +86,10 @@ class World:
 
 
 @pytest.fixture
-async def world(admin: psycopg.Connection):
+async def world(admin: psycopg.Connection, monkeypatch: pytest.MonkeyPatch):
     _wipe(admin)
     build_world(admin)
+    dispatch_from_registry(admin, monkeypatch)
 
     async with connection() as conn:
         human_id, token = await humans.create_human(

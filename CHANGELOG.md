@@ -5,6 +5,41 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **Pack module conformance — resolving a Pack against the Forge, not against a row.**
+  A Pack's `modules_expected` is a list a human wrote and a `forge_module_registry` row
+  is a row a human wrote, so V6 compared two claims. The Burkham Pack declared twelve
+  CapitalForge modules, three did not exist, all three were found by hand, and
+  `lender_match` had been granted `auto_execute` over a capability that was not there.
+  - **`GET {base_url}/_modules` on every adapter**, returning `sorted(MODULES)` over the
+    dispatch map. Derived, not declared: a name is in the answer if and only if a handler
+    is bound to it. `test_manifest_is_derived_from_the_dispatch_map` fails the build if
+    anyone replaces it with a literal list, which would be a third declaration and a
+    worse one than the two that already exist.
+  - **V32** resolves a Pack against that answer. **V31** refuses `auto_execute` over a
+    module the registry records as mutating and `at_most_once` — the shape
+    `regulator_dossier_export` is written around, where an unattended retry writes a
+    second record of the same act.
+  - **`OPTIONS` probe as a fallback only**, calibrated per run against an id that cannot
+    exist. If that id does not 404, the probe reports NOT_RUN rather than PASS — which is
+    what a catch-all `POST /{module_id}` dispatcher does, so it usually refuses to
+    answer. An uncalibrated probe is a green light generator.
+  - **Verification provenance on `forge_module_registry`** (migration 0031):
+    `verified_at`, `verified_against`, `verification_method` ∈ `adapter_manifest | probe
+    | hand`, defaulting to `hand` because that is what every existing row is.
+    `scripts/verify_forge_modules.py` writes them and `--check` exits 1 on drift; it
+    never deletes a row and never invents one.
+  - **The adapter is the naming authority.** A Pack, the registry rows and
+    `forge_module_exclusion` now all resolve against one set of keys, so the accident
+    `docs/module-exclusions.md` warned about — an excluded endpoint registered under a
+    second name, silently becoming grantable — fails to resolve instead of quietly
+    working.
+  - **Scope is printed with the verdict.** It proves a handler is bound to the name, not
+    that it works or that it does what the name says. It automates the half of the
+    question that was being done by hand and does not touch the other half:
+    `readiness_score` is bound, answers 200, mutates nothing, and scores a business from
+    query parameters it never reads.
+  - NOT_RUN, not PASS and not FAIL, where no adapter exists. All twelve of the Burkham
+    Pack's modules are in that state today, and Gate 2 blocks on it.
 - **Module exclusion — a module that must never be granted.** Onboarding CapitalForge
   found endpoints that return a plausible success for work that never happens: rules no
   runner consumes, a `TwilioStubClient` returning fabricated SIDs from the endpoint named

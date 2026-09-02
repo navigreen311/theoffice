@@ -1,8 +1,13 @@
-"""V2, V6, V11 and V28 — the rules that read the world rather than the document.
+"""V2, V6, V11, V28, V31 and V32 — the rules that read the world, not the document.
 
 A Pack that *declares* a Forge is bridged proves nothing. That is precisely the state
-Gate 0 exists to catch, so these three rules query the database and cannot be satisfied
-by editing YAML.
+Gate 0 exists to catch, so these rules query the database and cannot be satisfied by
+editing YAML.
+
+V32 goes one further and does not trust the database either. `forge_module_registry` is
+rows a human wrote, so resolving a Pack against it compares two claims; V32 resolves
+against what the Forge's own adapter dispatches. It proves a handler is bound to the
+name — not that it works, and not that it does what the name says.
 
 `ASSUMPTION` — Greenstone's operating Forge is CRE Forge, and the bridge is going to
 CapitalForge first. In production this Pack FAILS V2 until CRE Forge is registered with
@@ -358,16 +363,61 @@ async def test_v28_is_not_run_without_a_connection_never_a_pass(greenstone):
 
 # ---------------------------------------------------------------- whole-Pack gate
 
+@pytest.fixture
+def adapters_dispatching(greenstone, monkeypatch):
+    """Every bound Forge answers `_modules` with exactly what the Pack declares.
+
+    The bridged world registers Forges at `https://example.invalid`, which is right for
+    every other rule and cannot answer this one. Standing up three HTTP servers to make
+    a database fixture complete would be a lot of machinery for a question already
+    answered directly: `tests/validator/test_module_conformance.py` drives the real
+    manifest and probe paths over a mock transport, including the calibration failure.
+
+    What this fixture supplies is the *state* — adapters that are up and dispatch what
+    was declared — so the whole-Pack gate can assert that a fully prepared world has
+    nothing left NOT_RUN.
+    """
+    from datetime import UTC, datetime
+
+    from broker import forge_modules
+
+    async def _answer(_conn, forge_id, **_kw):
+        declared = {
+            m
+            for b in greenstone.forge_dependencies.forge_bindings
+            if b.forge.lower() == forge_id.lower()
+            for m in b.modules_expected
+        }
+        return forge_modules.ForgeModules(
+            forge_id=forge_id,
+            modules=frozenset(declared),
+            method="adapter_manifest",
+            api_version="1.4.0",
+            observed_at=datetime.now(UTC),
+        )
+
+    monkeypatch.setattr(forge_modules, "read", _answer)
+    forge_modules.forget()
+    yield
+    forge_modules.forget()
+
+
 async def test_greenstone_passes_gate_2_in_a_fully_prepared_world(
-    greenstone, bridged_world, stocked_library, admin
+    greenstone, bridged_world, stocked_library, adapters_dispatching, admin
 ):
     """The blueprint acceptance criterion for this increment: the Greenstone Pack
     passes validation.
 
-    'Fully prepared' now means three things, and none of them is true today: the bridge
-    reaches CRE Forge, instructions are authored, and the Compliance Library holds the
-    entries the Pack names. All three are exactly what Gate 0, V11 and V28 exist to
-    require before provisioning.
+    'Fully prepared' now means four things, and none of them is true today: the bridge
+    reaches CRE Forge, instructions are authored, the Compliance Library holds the
+    entries the Pack names, and each Forge's adapter dispatches the modules the Pack
+    declares. All four are exactly what Gate 0, V11, V28 and V32 exist to require
+    before provisioning.
+
+    The fourth is the one that is not a database state. V6 already asked whether the
+    modules resolve in `forge_module_registry` and the fixture satisfies it by writing
+    the rows — which is the point of V32: rows are what somebody typed, and a prepared
+    world is one where the Forge itself dispatches them.
     """
     operated = tuple({m for p in greenstone.positions_required for m in p.forge_modules_operated})
     author_instructions(admin, operated)
@@ -379,3 +429,163 @@ async def test_greenstone_passes_gate_2_in_a_fully_prepared_world(
     assert report.not_run == [r for r in report.not_run if r.rule_id == "V24"], (
         "only V24 may be deferred; every other rule must have run"
     )
+
+
+# ------------------------------------------------------------------------- V31
+
+async def test_v31_passes_when_every_unattended_module_survives_a_retry(
+    greenstone, bridged_world
+):
+    """The fixture registers every module with an idempotency key.
+
+    A retry the Forge de-duplicates is a retry the audit trail survives, so the tier
+    is not the finding here whatever it is set to.
+    """
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+    assert report.get("V31").verdict is Verdict.PASS, report.get("V31").message
+
+
+async def test_v31_refuses_auto_execute_over_a_mutating_at_most_once_module(
+    greenstone, bridged_world, admin
+):
+    """The shape `regulator_dossier_export` is written around.
+
+    Every call mints an id, writes a row and emits an event, so a retry after a
+    timeout produces a second record of the same act and the audit trail then shows
+    two. An unattended agent is the caller with nobody to stop it.
+    """
+    module = greenstone.positions_required[0].forge_modules_operated[0]
+    with admin.cursor() as cur:
+        cur.execute(
+            "UPDATE forge_module_registry SET is_mutating = TRUE, "
+            "idempotency_support = 'at_most_once' WHERE module_id = %s",
+            (module,),
+        )
+    admin.commit()
+    pack = copy.deepcopy(greenstone)
+    pack.positions_required[0].trust_tier_ceiling = "auto_execute"
+
+    async with connection() as conn:
+        report = await validate(pack, conn)
+
+    v31 = report.get("V31")
+    assert v31.verdict is Verdict.FAIL
+    assert module in v31.message
+    assert "propose" in v31.message, "the message must name the way out"
+
+
+async def test_v31_is_not_run_when_the_module_has_no_registry_row(
+    greenstone, bridged_world, admin
+):
+    """An unknown shape is not a safe shape."""
+    module = greenstone.positions_required[0].forge_modules_operated[0]
+    with admin.cursor() as cur:
+        cur.execute("DELETE FROM forge_module_registry WHERE module_id = %s", (module,))
+    admin.commit()
+    pack = copy.deepcopy(greenstone)
+    pack.positions_required[0].trust_tier_ceiling = "auto_execute"
+
+    async with connection() as conn:
+        report = await validate(pack, conn)
+
+    v31 = report.get("V31")
+    assert v31.verdict is Verdict.NOT_RUN
+    assert v31.verdict is not Verdict.PASS
+    assert not report.passed
+
+
+# ------------------------------------------------------------------------- V32
+
+async def test_v32_is_not_run_when_no_adapter_can_be_reached(greenstone, bridged_world):
+    """The state every Forge is in before its adapter exists.
+
+    Not a FAIL: nothing about the Pack is known to be wrong. Not a PASS: nothing has
+    been resolved against the Forge. This is the verdict the whole rule is built to be
+    able to give.
+    """
+    from broker import forge_modules
+
+    forge_modules.forget()
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+
+    v32 = report.get("V32")
+    assert v32.verdict is Verdict.NOT_RUN
+    assert not report.passed, "a Pack nobody could check has not been validated"
+
+
+async def test_v32_fails_on_a_module_the_forge_does_not_dispatch(
+    greenstone, bridged_world, monkeypatch
+):
+    """The `lender_match` shape: declared, granted, and not there.
+
+    The Forge answers, and one declared module is not in what it dispatches. The
+    registry is not consulted — that is V6's question, and a row saying the module
+    exists is exactly the claim this rule exists to disbelieve.
+    """
+    from datetime import UTC, datetime
+
+    from broker import forge_modules
+
+    absent = greenstone.forge_dependencies.forge_bindings[0].modules_expected[0]
+
+    async def _answer(_conn, forge_id, **_kw):
+        declared = {
+            m
+            for b in greenstone.forge_dependencies.forge_bindings
+            if b.forge.lower() == forge_id.lower()
+            for m in b.modules_expected
+        }
+        return forge_modules.ForgeModules(
+            forge_id=forge_id,
+            modules=frozenset(declared - {absent}),
+            method="adapter_manifest",
+            api_version="1.4.0",
+            observed_at=datetime.now(UTC),
+        )
+
+    monkeypatch.setattr(forge_modules, "read", _answer)
+    forge_modules.forget()
+
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+
+    v32 = report.get("V32")
+    assert v32.verdict is Verdict.FAIL
+    assert absent in v32.message
+    assert "capability that is not there" in v32.message
+    assert "not that it works" in v32.message, "a verdict must carry its own scope"
+
+
+async def test_the_report_header_states_what_conformance_proved(
+    greenstone, bridged_world, monkeypatch
+):
+    """The scope belongs where the verdict is read, not only in a docstring."""
+    from datetime import UTC, datetime
+
+    from broker import forge_modules
+
+    async def _answer(_conn, forge_id, **_kw):
+        declared = {
+            m
+            for b in greenstone.forge_dependencies.forge_bindings
+            if b.forge.lower() == forge_id.lower()
+            for m in b.modules_expected
+        }
+        return forge_modules.ForgeModules(
+            forge_id=forge_id,
+            modules=frozenset(declared),
+            method="adapter_manifest",
+            api_version="1.4.0",
+            observed_at=datetime.now(UTC),
+        )
+
+    monkeypatch.setattr(forge_modules, "read", _answer)
+    forge_modules.forget()
+
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+
+    assert report.get("V32").verdict is Verdict.PASS, report.get("V32").message
+    assert "proves a handler is bound to the name" in report.render()
