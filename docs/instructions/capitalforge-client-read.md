@@ -3,7 +3,7 @@
 **Forge:** CapitalForge
 **Module:** `client_read`
 **Endpoints:** 13 GETs under `/api/clients/:clientId` and `/api/v1/clients/:clientId`
-**Version:** 1.1 — drafted 2 September 2026, against CapitalForge `3d93cff`
+**Version:** 1.2 — drafted 2 September 2026, against CapitalForge `45ae041`
 **Status:** draft, pending Compliance Review Board
 
 Read `foi-shared-rules.md` first. Sections 1, 2 and 3 govern most of what this module returns, and they are not repeated here.
@@ -64,14 +64,14 @@ On `NOT_FOUND` or `CLIENT_NOT_FOUND`: stop. There is nothing to report about.
 | 200 | The read ran. Check the body before reporting it as a result |
 | 400 | A required parameter is missing — chiefly `profileType` |
 | 404 | Read the code |
+| 403 | The caller lacks `business:read` |
 | 500 | Includes a missing tenant context, which surfaces here rather than as a 401 |
 
-**THIS MODULE HAS NO PERMISSION GATE OF ITS OWN.** The router carries no permission middleware — unlike the document router, which requires `COMPLIANCE_READ`. Everything protecting `/owners` and `/credit/*` is the tenancy guard and upstream authentication. There is no 403 because nothing here can produce one.
+This module requires `business:read`, and nothing finer. That is a floor rather than a considered ceiling: `/owners` and `/credit/*` return the most sensitive data in the system and are gated identically to the endpoint returning a client's name. A stricter split is proposed and not built — see `docs/callable-modules.md`.
 
 **Empty results are real answers, not errors:**
 
-- `/credit/recommendations` returns `[]` with `basis: 'no_credit_profile_on_record'` — nobody has pulled this client's credit. Report the basis. Shared rules 2 and 3.
-- `/owners`, `/documents` and `/acknowledgments` return `[]` with `meta.total` and no basis string. Nothing distinguishes "none recorded" from any other reason for emptiness. Report them as "none on file" — do not infer why, and do not treat the absence as a finding about the client.
+Every empty result carries a basis. `no_credit_profile_on_record`, `no_owners_on_record`, `no_documents_on_record`, `no_acknowledgments_on_record`. Report it. Shared rules 2 and 3.
 
 ## 6. RETRY VS ESCALATE
 
@@ -105,11 +105,11 @@ This is unusual in CapitalForge and it is a property of this module only. It doe
 
 **Note — two endpoints carry the most sensitive data in the system.**
 
-`/owners` returns beneficial owner names, ownership percentages, dates of birth, addresses, and the full SSN column — the query has no `select`, so `ssn` is returned alongside `ssnLast4`.
+`/owners` returns beneficial owner names, ownership percentages, dates of birth, addresses and the last four digits of the SSN. The full `ssn` column was returned until 2 September 2026 and is not returned now; the select is explicit, so a column added to `BusinessOwner` cannot silently join the response.
 
 `/timeline` returns ledger events whose payloads carry consent evidence references and IP addresses.
 
-Eight handlers here were cross-tenant readable until 1 September 2026 and are now behind the mount guard. With no permission gate on the router, the grant is the only remaining control — and it should reflect what is behind it.
+Eight handlers here were cross-tenant readable until 1 September 2026 and are now behind the mount guard, and the router requires `business:read` since 2 September. But `business:read` does not distinguish `/owners` from `GET /` — within this module the grant is still the only control separating a name from a date of birth.
 
 ## PROVENANCE
 
@@ -117,66 +117,70 @@ Eight handlers here were cross-tenant readable until 1 September 2026 and are no
 
 **Decided by the founder, 2 September 2026:** report-and-continue on the 404; the basis rule; the never list; splitting `client_read` from the three write modules.
 
+**Corrected in 1.2, after three OPEN items were fixed at `45ae041`:** the router now requires `business:read` and can return 403; all four empty results carry a basis; the full `ssn` column is no longer returned.
+
 **Corrected in 1.1, from a fact-check against `3d93cff`:** the 404 section, which had the inversion backwards; `consent` removed from §1, since no consent endpoint is among the thirteen; the 403 and 422 rows removed; the basis rule scoped to the one endpoint that carries a basis; `/timeline` and the full `ssn` column added to §8.
 
 ## OPEN
 
 **The 404 carries two meanings and only the error code separates them.** A 200 with an explicit empty state and a basis — matching what `/credit/recommendations` already does — would make them distinguishable by shape rather than by reading a code correctly. Raised for CapitalForge; this manual documents current behaviour.
 
-**Three endpoints return an empty array with no basis.** `/owners`, `/documents` and `/acknowledgments`. Adding one would make shared rule 2 uniform across the module.
+**`business:read` does not distinguish a name from a social security number.** A three-way split is proposed and not built — `client_read` for business facts, `client_read_pii` for `/owners` and `/timeline`, `client_read_credit` for the four `/credit/*`. The boundary is whether the response is regulated data about a natural person, not whether it is sensitive in general. All three would stay `auto_execute`: making a read wait for a human trains people to approve without looking, and does not reduce what a grant holder can see. The control is who holds the grant.
 
-**The router has no permission gate.** A policy decision, not a code one.
+**`/ach-authorization` sits on the boundary.** It returns a bank authorisation for a business rather than a natural person, so it falls in `client_read` — but an account authorisation reads as personal to most people. If it moves, it moves to `client_read_pii`.
 
 **`client_reassign` is defined and not built.** `advisorId` and `status` were removed from the update surface on 2 September and no endpoint replaces them yet. `status` in particular needs transition rules before an endpoint exists.
 
 ---
 
-# APPENDIX — VERIFICATION OF 1.1
+# APPENDIX — VERIFICATION OF 1.2
 
-Checked against `3d93cff` on 2 September 2026, and re-checked against `45ae041` the same day.
+Checked against `45ae041`, which 1.2 names, and re-checked against `ebe3f5d`, committed the same day.
 
-## Every correction from the 1.0 appendix landed correctly
+## The three 1.1 corrections all landed
 
-The seven proposed corrections are all present in 1.1 and all match the code at `3d93cff`. The §5 rewrite in particular is now the strongest section in the manual: it states the inversion in the direction that actually bites — *"an agent that treats the first as the second reports 'no ACH authorisation on file' about a client that does not exist"* — and gives the stop/continue rule per code. Nothing in 1.1 contradicts the code as of `3d93cff`.
+`business:read` and the 403 row, all four bases, and `ssnLast4` in place of the full column are each stated correctly in 1.2 and each matches `45ae041`. §8's closing paragraph carries the sharpened version of the old argument — *"`business:read` does not distinguish `/owners` from `GET /`"* — which was exactly right at `45ae041`.
 
-## THREE STATEMENTS IN 1.1 WERE TRUE AT `3d93cff` AND ARE FALSE AT `45ae041`
+## THE SPLIT IS BUILT, WHICH CHANGES FOUR STATEMENTS
 
-Three of the OPEN items were fixed immediately after 1.1 was drafted, by founder instruction. **The manual is now behind the code by one commit**, and each of these is a claim an agent would act on.
+1.2 describes the split as proposed and not built. It was built at `ebe3f5d` on founder instruction, with one change to the proposal.
 
-### 1. The full SSN is no longer returned
+### 1. There are three module ids, not one
 
-**§8 says:** *"`/owners` returns … the full SSN column — the query has no `select`, so `ssn` is returned alongside `ssnLast4`."*
+`client_read` is no longer thirteen endpoints. `client_read_pii` and `client_read_credit` are separate ids with separate permissions, and a `client_read` grant now reaches **six** endpoints rather than thirteen: `/`, `/documents`, `/acknowledgments`, `/compliance`, `/compliance/status`, `/repayment`.
 
-**At `45ae041`:** the query has an explicit `select` listing sixteen columns. `ssnLast4` is included; **`ssn` is not.** Nothing consumed the full number — no frontend component reads `.ssn`, and the only plaintext-SSN path in the system is the offboarding data export, which selects it deliberately and writes an audit row recording that the export contained them.
+This affects the header, §1, §5 and the second OPEN item. **A manual describing thirteen endpoints under one id now describes a grant that does not exist.**
 
-**Proposed replacement:** *"`/owners` returns beneficial owner names, ownership percentages, dates of birth, addresses and the last four digits of the SSN. The full `ssn` column was returned until 2 September 2026 and is not returned now; the select is explicit, so a column added to `BusinessOwner` does not silently join the response."*
+### 2. `/ach-authorization` moved, and the manual predicted the wrong outcome
 
-### 2. The router has a permission gate
+1.2's OPEN says: *"It returns a bank authorisation for a business rather than a natural person, so it falls in `client_read` — but an account authorisation reads as personal to most people. If it moves, it moves to `client_read_pii`."*
 
-**§5 says:** *"THIS MODULE HAS NO PERMISSION GATE OF ITS OWN … There is no 403 because nothing here can produce one."* **The OPEN section repeats it.**
+It moved. The founder's reasoning, recorded because it generalises beyond this endpoint: on a small business the owner and the business are effectively the same person, and personal guarantees are everywhere in this venture, so the formal distinction does not survive contact with the product.
 
-**At `45ae041`:** `clientDetailRouter.use(requirePermissions(PERMISSIONS.BUSINESS_READ))`. A caller without `business:read` now gets **403**.
+`/ach-authorization` requires `business:read:pii`.
 
-This is the correction with the most consequence for an agent: 1.1 tells it no 403 can occur, so an agent seeing one will treat it as an unexpected failure rather than a missing permission it should report.
+### 3. Two roles lost access, deliberately
 
-**Proposed replacement for §5:** restore a 403 row — *"403 — the caller lacks `business:read`"* — and replace the block with: *"This module requires `business:read`, and nothing finer. That is the floor rather than a considered ceiling: `/owners` and `/credit/*` return the most sensitive data in the system and are gated identically to the endpoint returning a client's name. A stricter split is proposed but not built — see `docs/callable-modules.md`."*
+`business:read:pii` and `business:read:credit` are held by super admin, tenant admin, compliance officer and advisor. **`readonly` and `client` hold neither.**
 
-### 3. All four empty results now carry a basis
+Both previously reached dates of birth and bureau data with exactly the same permission as an advisor. A `readonly` or `client` session now gets **403** on `/owners`, `/timeline`, `/ach-authorization` and all four `/credit/*`. That is a new failure mode the manual does not mention, and the one an agent is most likely to actually meet.
 
-**§5 says:** *"`/owners`, `/documents` and `/acknowledgments` return `[]` with `meta.total` and no basis string."*
+### 4. The 403 row must name which permission
 
-**At `45ae041`:** each returns `meta.basis` — `no_owners_on_record`, `no_documents_on_record`, `no_acknowledgments_on_record` when empty, and the record set read when not. Shared rule 2 is now uniform across the module.
+§5 says "403 — The caller lacks `business:read`". There are now three permissions and three ways to earn a 403, and the response names the missing one.
 
-**Proposed replacement:** fold all four into one bullet — *"Every empty result carries a basis. Report it. Shared rules 2 and 3."* — and strike the corresponding OPEN item.
+**Proposed row:** *"403 — the caller lacks `business:read`, or `business:read:pii` for `/owners`, `/timeline` and `/ach-authorization`, or `business:read:credit` for the four `/credit/*`. The body names the missing permission."*
 
-## What did NOT change, and remains correctly documented
+## What did not change
 
-- The 404 overloading. §5's code table and the OPEN item both still hold; nothing about the status codes changed.
-- `client_reassign` still defined and not built.
-- Everything in §§1–4, 6, 7 and the rest of §8.
+The 404 overloading and its OPEN item; `client_reassign`; `profileType`; the basis rule; every NEVER; §§2, 4, 6; and all three compliance entries in §8. §8's sensitivity note is still correct and is now enforced rather than only documented.
 
-## One thing 1.1 says that the fixes make sharper rather than false
+## Recommended for 1.3
 
-§8's closing line — *"With no permission gate on the router, the grant is the only remaining control"* — was the argument for the gate, and the gate now exists. But the sentence survives in a modified form worth keeping: **`business:read` does not distinguish `/owners` from `GET /`**, so within this module the grant is still the only control that separates a name from a date of birth. That is the split proposed in `docs/callable-modules.md` and not yet built.
+The cleanest shape is **three manuals**, not one with three sections. A grant names one id, and a manual an agent reads should describe what that grant reaches and nothing else. `client_read` keeps most of this text; `client_read_pii` and `client_read_credit` inherit §§2–4, 6 and 7 wholesale and differ in §1, §5 and §8.
 
-**Recommend a 1.2** carrying the three replacements above. All three are one-paragraph edits, and the second is the one that would otherwise mislead an agent in production.
+If that is too much for now, a 1.3 of this manual carrying the four corrections above is honest and usable — provided the header stops saying thirteen endpoints under one id.
+
+**One thing worth carrying into every other manual**, now recorded in `docs/callable-modules.md` as a rule rather than a note: all three ids are `auto_execute`. Making a read wait for a human trains people to approve without looking and does not reduce what a grant holder can see, because the grant already decided that. For a read, the control is who holds the grant. `propose` is for calls that change something or reach somebody.
+
+**And the second rule, which nearly caught us here:** path depth is not evidence of blast radius. `/credit/*` looked like a natural group because of the path and happens to be one — but `/timeline` sits at the top level and belongs with `/owners`, while `/repayment` sits at the top level and belongs with the business facts. Grouping by prefix would have put `/timeline` in the wrong module and nothing would have failed.
