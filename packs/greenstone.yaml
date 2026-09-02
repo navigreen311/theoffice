@@ -220,13 +220,6 @@ forge_operating_instructions:
     version_sensitivity: major.minor
     content_hash: PENDING_AUTHORING
     authored_by: ivan
-  - forge_id: cre-forge
-    module_id: generate_loi
-    instruction_version: 1.0.0
-    forge_api_version: 1.4.0
-    version_sensitivity: major.minor
-    content_hash: PENDING_AUTHORING
-    authored_by: ivan
 
 triggers:
   - trigger_id: daily_records_sweep

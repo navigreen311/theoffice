@@ -56,6 +56,42 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     not. An adapter that answers with bare names still resolves existence and leaves
     the shape columns alone — an unanswered question is not a correction.
 
+- **V11 asks whether the module its curriculum teaches exists.** It checked that
+  instructions were authored and not hollow — both questions about the document. Neither
+  asked whether anything was on the other end, and `cre-forge/generate_loi` had a live
+  instruction rated `state=complete` for a module CRE Forge has never dispatched. This
+  reaches past a Pack: SimForge trains against that text and binds a certification to its
+  `content_hash`, and afterwards a certification for a module with no handler is
+  indistinguishable from a real one. V32's refusal, one table over, on the path that ends
+  in a certification.
+
+### Removed
+- **`cre-forge/generate_loi`'s operating instruction and registry row, deleted together.**
+  Instructions are normally superseded, not deleted — `superseded_at` keeps "certified on
+  what, exactly" answerable. This one was curriculum for a capability that does not exist,
+  where leaving it makes a certification indistinguishable from a real one. No
+  certification was bound to it. What it said is preserved verbatim in
+  `docs/instruction-deletions.md`, because "an instruction was deleted" is not a record of
+  what was lost.
+
+### Fixed
+- **All five `cre-forge` operating instructions were the same document.** Byte-identical
+  content, **one** `content_hash` between them, authored at the same second by the same
+  author, and no module's own name appearing anywhere in its own instruction. Every one
+  says "Performs one operation against the Forge and returns its result", which is true of
+  any module; `underwrite_deal`'s says it "does not write to any other system", and it
+  upserts a `DealAnalysis` row.
+  - `curriculum_quality.assess` rates all five `complete`. It was built to catch
+    *emptiness* — `"what_it_does": "Documented."` — and this is plausible prose that
+    happens to be module-independent, which is a different failure it cannot see.
+  - The consequence is on `certification.instruction_content_hash`: with one hash across
+    five modules, that column cannot say which module an agent was certified on. Four of
+    the five now describe modules that at least exist, which is what deleting the fifth
+    changed and all it changed.
+  - Not yet fixed: the four remaining instructions still need writing, and `assess` still
+    cannot tell a template from a curriculum. A duplicate-content check across a Forge's
+    instructions would have caught this on the day they were written.
+
 ### Changed
 - **CRE Forge binds `comp_analysis`, `underwrite_deal` and `buyer_match`.** All three
   had registry rows and no handler; V32 found them, and the services behind them were

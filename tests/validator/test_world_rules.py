@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import copy
 import uuid
+from dataclasses import replace
 from pathlib import Path
 
 import psycopg
@@ -35,7 +36,7 @@ pytestmark = [requires_db, pytest.mark.db]
 PACK_PATH = Path(__file__).resolve().parents[2] / "packs" / "greenstone.yaml"
 
 CRE_MODULES = (
-    "property_lookup", "comp_analysis", "underwrite_deal", "buyer_match", "generate_loi",
+    "property_lookup", "comp_analysis", "underwrite_deal", "buyer_match",
 )
 SIM_MODULES = ("run_scenario_pack", "gate_result")
 VOICE_MODULES = ("place_call", "transcribe_call")
@@ -286,8 +287,15 @@ async def test_v11_fails_when_instructions_are_not_authored(greenstone, bridged_
 
 
 async def test_v11_passes_once_every_operated_module_has_instructions(
-    greenstone, bridged_world, admin
+    greenstone, bridged_world, adapters_dispatching, admin
 ):
+    """Authored, not hollow, and each teaching a module the Forge actually dispatches.
+
+    The adapters are part of the condition now. V11 used to be answerable from two
+    tables; since 2026-09-02 it also asks whether the module the curriculum teaches
+    exists, because `cre-forge/generate_loi` had a complete-looking instruction and no
+    handler anywhere.
+    """
     operated = tuple({m for p in greenstone.positions_required for m in p.forge_modules_operated})
     author_instructions(admin, operated)
 
@@ -591,3 +599,78 @@ async def test_the_report_header_states_what_conformance_proved(
 
     assert report.get("V32").verdict is Verdict.PASS, report.get("V32").message
     assert "proves a handler is bound to the name" in report.render()
+
+
+async def test_v11_fails_when_instructions_teach_a_module_the_forge_does_not_dispatch(
+    greenstone, bridged_world, adapters_dispatching, admin, monkeypatch
+):
+    """Curriculum for a capability that is not there.
+
+    `cre-forge/generate_loi` was exactly this until 2026-09-02: a complete-looking
+    instruction, assessed `state=complete`, for a module CRE Forge has never had a
+    service or a route for. V11 passed it, because V11 asked whether the document
+    existed and whether it was hollow — two questions about the document.
+
+    It reaches further than a Pack. SimForge trains against that text and binds a
+    certification to its `content_hash`, and afterwards a certification for a module
+    with no handler reads exactly like one for a real module.
+    """
+    from broker import forge_modules
+
+    operated = tuple({m for p in greenstone.positions_required for m in p.forge_modules_operated})
+    author_instructions(admin, operated)
+    absent = greenstone.forge_dependencies.forge_bindings[0].modules_expected[0]
+
+    real_read = forge_modules.read
+
+    async def _without(conn, forge_id, **kw):
+        answer = await real_read(conn, forge_id, **kw)
+        if isinstance(answer, forge_modules.ForgeModules):
+            return replace(answer, modules=answer.modules - {absent})
+        return answer
+
+    monkeypatch.setattr(forge_modules, "read", _without)
+    forge_modules.forget()
+
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+
+    v11 = report.get("V11")
+    assert v11.verdict is Verdict.FAIL
+    assert absent in v11.message
+    assert "indistinguishable from a real one" in v11.message
+
+
+async def test_v11_is_not_run_when_the_forge_cannot_be_asked(
+    greenstone, bridged_world, admin
+):
+    """Authored, not hollow, and nobody could check that the modules exist.
+
+    Not a pass: curriculum for a module that does not exist reaches certification, and
+    this run ruled nothing out.
+    """
+    from broker import forge_modules
+
+    operated = tuple({m for p in greenstone.positions_required for m in p.forge_modules_operated})
+    author_instructions(admin, operated)
+    forge_modules.forget()
+
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+
+    v11 = report.get("V11")
+    assert v11.verdict is Verdict.NOT_RUN
+    assert "NOT_RUN is not a pass" in v11.message
+    assert not report.passed
+
+
+async def test_v11_missing_instructions_outrank_an_unreachable_forge(
+    greenstone, bridged_world
+):
+    """A document that was never written is a finding without asking anybody."""
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+
+    v11 = report.get("V11")
+    assert v11.verdict is Verdict.FAIL
+    assert "no Forge Operating Instructions authored" in v11.message

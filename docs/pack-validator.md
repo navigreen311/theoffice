@@ -108,6 +108,35 @@ so a human can revoke the grant, and a module the Forge dispatches that the regi
 never heard of is reported rather than added, because a Forge does not get to enlarge its
 own agent-facing surface.
 
+## V11 asks whether the module the curriculum teaches exists
+
+V11 had two questions, and both were about the document: are instructions authored for
+every module a position operates, and do they teach anything (a `content_hash` computed
+over `"what_it_does": "Documented."` is a valid hash of nothing).
+
+Neither asks whether there is anything on the other end. `cre-forge/generate_loi` had a
+live instruction that `curriculum_quality.assess` rated `state=complete`, for a module
+CRE Forge has never dispatched — no service, no route, no letter-of-intent among its four
+contract templates. V11 passed it.
+
+**This one reaches past the Pack.** SimForge trains an agent against that text and issues
+a certification carrying its `content_hash`. Afterwards a certification for a module with
+no handler reads exactly like a certification for a real one: the row is there, the hash
+resolves, the agent is certified, and nothing downstream can tell the two apart. V32
+refuses a Pack that *declares* a module the Forge does not dispatch; this is the same
+refusal one table over, on the path that ends in a certification rather than a grant.
+
+So V11 now resolves each taught module against the Forge's `_modules` manifest and fails
+when one is absent. A missing or hollow instruction still outranks an unreachable Forge —
+a document nobody wrote is a finding without asking anybody — and where the Forge cannot
+be asked at all, V11 reports NOT_RUN rather than passing on the two questions it could
+answer.
+
+The `generate_loi` instruction and its registry row were deleted together on 2026-09-02.
+Instructions are normally superseded rather than deleted, because `superseded_at` keeps
+the answer to "certified on what, exactly" readable; the reasoning for deleting this one
+is in `docs/instruction-deletions.md`.
+
 ## V31 asks whether a tier is survivable
 
 A module can resolve perfectly and still be wrong to run with nobody watching. V31

@@ -561,7 +561,7 @@ async def _v6_modules_resolve(conn: AsyncConnection, pack: BusinessPack) -> tupl
 
 async def _v11_instructions_authored(
     conn: AsyncConnection, pack: BusinessPack
-) -> tuple[bool, str]:
+) -> tuple[bool | None, str]:
     """Every module a position operates must have live instructions that teach it.
 
     Without them SimForge has nothing to test against, so the position can never be
@@ -608,11 +608,64 @@ async def _v11_instructions_authored(
             "certification bound to it inherits that emptiness."
         )
 
+    # And the module the instructions teach has to exist.
+    #
+    # Present, and not hollow, were both questions about the document. Neither asks
+    # whether there is anything on the other end of it. `cre-forge/generate_loi` had a
+    # complete-looking instruction, assessed `state=complete`, for a module CRE Forge
+    # has never dispatched - no service, no route, no letter-of-intent among its
+    # contract templates.
+    #
+    # That reaches further than a Pack. SimForge would train an agent against that text
+    # and issue a certification carrying its `content_hash`, and afterwards a
+    # certification for a module with no handler reads exactly like one for a real
+    # module: the row is there, the hash resolves, the agent is certified. Nothing
+    # downstream can tell them apart. V32 refuses a Pack that *declares* a module the
+    # Forge does not dispatch; this is the same refusal one table over, on the path
+    # that ends in a certification.
+    from broker import forge_modules
+
+    declared = _declared_forges(pack)
+    operating = pack.forge_dependencies.operating_forge.lower()
+    per_forge: dict[str, set[str]] = {}
+    for module in modules:
+        for forge_id in declared.get(module) or {operating}:
+            per_forge.setdefault(forge_id, set()).add(module)
+
+    taught_but_absent: list[str] = []
+    unread: list[str] = []
+    for forge_id, wanted in sorted(per_forge.items()):
+        answer = await forge_modules.read(conn, forge_id, candidates=wanted)
+        if isinstance(answer, forge_modules.Unread):
+            unread.append(f"{forge_id}: {answer.reason}")
+            continue
+        taught_but_absent.extend(f"{forge_id}/{m}" for m in answer.missing(wanted))
+
+    if taught_but_absent:
+        return False, (
+            f"instructions teach a module the Forge does not dispatch: "
+            f"{_join(taught_but_absent)}. SimForge trains against that text and binds a "
+            "certification to its content_hash, and a certification for a module with "
+            "no handler is indistinguishable from a real one afterwards."
+        )
+
     thin = sorted(
         module for module in modules if assess(live[module])["state"] == "thin"
     )
     detail = f" ({_join(thin)} thin)" if thin else ""
-    return True, f"instructions authored for all {len(modules)} module(s){detail}"
+
+    if unread:
+        return None, (
+            f"instructions are authored for all {len(modules)} module(s){detail}, but "
+            f"whether the modules they teach exist could not be checked: {_join(unread)}. "
+            "NOT_RUN is not a pass - curriculum for a module that does not exist reaches "
+            "certification, and nothing here has ruled that out."
+        )
+
+    return True, (
+        f"instructions authored for all {len(modules)} module(s){detail}, each teaching "
+        "a module the Forge dispatches"
+    )
 
 
 async def _v28_library_refs_resolve(
