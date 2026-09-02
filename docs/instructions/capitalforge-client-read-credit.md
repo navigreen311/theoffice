@@ -4,7 +4,7 @@
 **Module:** `client_read_credit`
 **Endpoints:** 4 GETs under `/api/clients/:clientId` and `/api/v1/clients/:clientId`
 **Permission:** `business:read` **and** `business:read:credit`
-**Version:** 1.3 — drafted 2 September 2026, against CapitalForge `ebe3f5d`
+**Version:** 1.4 — drafted 2 September 2026, against CapitalForge `fcc46ab`
 **Status:** draft, pending Compliance Review Board
 
 Read `foi-shared-rules.md` first. Sections 1, 2 and 3 govern most of what this module returns, and they are not repeated here.
@@ -65,7 +65,7 @@ What matters is what happens after. A read gathering context for a placement, a 
 
 Until 2 September 2026 there was no permission gate on this router at all. A `readonly` session and a `client` portal session reached bureau data with exactly the same permission as an advisor, because one permission covered a legal name and a credit file alike. Neither role holds `business:read:credit` now, so both get 403 on all four endpoints.
 
-**A 403 is not an absence.** It says nothing about whether a credit profile exists or what it contains. Shared rule 1 does not apply to it, and an agent that reports "no credit profile on record" after a 403 has manufactured a finding out of its own lack of permission — and one that reads as a statement about the client's credit. Report the 403 as what it is: this grant does not reach this data.
+**A 403 is not an absence — shared rule 1a, which was written for this case.** It says nothing about whether a credit profile exists or what it contains. An agent that reports "no credit profile on record" after a 403 has manufactured a finding out of its own lack of permission, and it is a finding about somebody's creditworthiness. Report the refusal as a refusal — "this grant does not reach the client's credit file" — then stop or ask for the grant.
 
 ### Everything else
 
@@ -83,7 +83,7 @@ A 404 is unambiguous on this module — there is no per-record 404 here, unlike 
 
 `/credit/recommendations` returns `[]` with `basis: 'no_credit_profile_on_record'` when nobody has pulled this client's credit. That basis is the answer. Shared rules 2 and 3.
 
-`/credit/business` and `/credit/personal` return `{ scores: [] }` with `meta.total: 0`. No pull of that type is on record.
+`/credit/business` and `/credit/personal` carry `no_business_credit_profile_on_record` and `no_personal_credit_profile_on_record`. No pull of that type is on record. Report the basis.
 
 **None of these means the client has poor credit, thin credit, or no credit.** It means nobody pulled it, or nobody pulled that type. This is shared rule 1 in the place it does the most damage: an absence in a credit file, entering a placement decision as a negative fact, is a client refused for a record that was never created.
 
@@ -97,7 +97,7 @@ This is a property of this module, not of the URL prefix. It does not extend to 
 
 **Never act on an absence.** No credit profile, no history, no recommendations — each is a fact about Burkham's records. An agent that turns one into a claim about the client's creditworthiness has manufactured a finding, and it is the most consequential finding this system can manufacture.
 
-**Never treat a 403 as an absence.** It is the failure this module produces most often and it means the grant does not reach the data, not that the data is not there.
+**Never treat a 403 as an absence.** Shared rule 1a. It is the failure this module produces most often, and reporting it as a credit finding is the worst available outcome for this module.
 
 **Never report an empty result without its basis.** Shared rule 2. `no_credit_profile_on_record` is the answer.
 
@@ -123,15 +123,15 @@ This is a property of this module, not of the URL prefix. It does not extend to 
 
 ## PROVENANCE
 
-**From the code, read at `ebe3f5d`:** the four endpoints and their permissions, `profileType` being required and why, the basis on `/credit/recommendations`, the absence of point-impact estimates, the `{ scores: [] }` shape, the mount guard, the `/v1` alias.
+**From the code, read at `fcc46ab`:** the four endpoints and their permissions, `profileType` being required and why, the basis on `/credit/recommendations`, the absence of point-impact estimates, the `{ scores: [] }` shape, the mount guard, the `/v1` alias.
 
 **Decided by the founder, 2 September 2026:** the three-way split and its boundary; `auto_execute` with narrow grants rather than `propose`; withholding `business:read:credit` from `readonly` and `client`.
 
-**Split from `client_read` 1.2 on 2 September 2026.** §§2, 4 and 6 are inherited unchanged. §5 leads with the 403 by founder instruction: both affected roles previously reached bureau data with an advisor's permission, and it is the failure an agent will actually hit.
+**Split from `client_read` 1.2 on 2 September 2026, updated to 1.4 the same day** when the last empty results gained a basis and shared rules 1a and 1b were added.
+
+**Split note.** §§2, 4 and 6 are inherited unchanged. §5 leads with the 403 by founder instruction: both affected roles previously reached bureau data with an advisor's permission, and it is the failure an agent will actually hit.
 
 ## OPEN
-
-**`/credit/business` and `/credit/personal` carry no basis on an empty result.** `/credit/recommendations` does. Adding one to the other two would make shared rule 2 uniform across this module — and these are the two where an unqualified empty result is most likely to be read as a statement about the client's credit.
 
 **Nothing records that a credit file was read.** §2 states it as a fact about the module. Whether reading bureau data should leave an audit trail is a policy question nobody has answered, and `compliance/bureau-report-handling-v1` may already require one.
 

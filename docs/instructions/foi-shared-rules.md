@@ -14,6 +14,22 @@ This matters most when a read is gathering context for another action rather tha
 
 Never act on an absence. Report it and let a human decide what it means.
 
+### 1a. A REFUSAL IS NOT AN ABSENCE
+
+A 403 says nothing about whether the data exists. It is a fact about the agent, not about the records and not about the world.
+
+An agent that receives a 403 on a credit endpoint and reports "no credit profile on record" has manufactured a finding out of its own lack of permission — and it is a finding about somebody's creditworthiness.
+
+Report the refusal as a refusal: "this grant does not reach the client's credit file." Then stop, or ask for the grant. Never substitute an answer.
+
+The same holds for a timeout, a 500, and an unreachable service. None of them is evidence about the subject.
+
+### 1b. NEVER INFER WHAT YOU CANNOT READ
+
+Where a decision needs data this grant does not reach, say so. Do not reason toward it from what is visible.
+
+A module split into narrower grants creates this failure mode by construction: an agent that could once read owners and credit together now holds one and can see the shape of the other's absence. That shape is not information.
+
 ## 2. REPORT THE BASIS, NEVER THE EMPTINESS ALONE
 
 Where a result is empty and carries a stated basis, the basis is the answer.
@@ -75,3 +91,5 @@ Where the manual says escalate, escalate. Do not check-then-retry — between th
 - Never backdate. A timestamp records when something was recorded.
 - Never retry a call whose manual does not say it is safe to retry.
 - Never report a count without its denominator where one is offered. "3 eligible" and "3 eligible of 40, 12 never assessed" are different answers.
+- Never report a refusal, a timeout or an error as a finding about the subject. Rule 1a.
+- Never reason toward data this grant does not reach. Rule 1b.

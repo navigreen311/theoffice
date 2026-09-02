@@ -4,7 +4,7 @@
 **Module:** `client_read`
 **Endpoints:** 6 GETs under `/api/clients/:clientId` and `/api/v1/clients/:clientId`
 **Permission:** `business:read`
-**Version:** 1.3 — drafted 2 September 2026, against CapitalForge `ebe3f5d`
+**Version:** 1.4 — drafted 2 September 2026, against CapitalForge `fcc46ab`
 **Status:** draft, pending Compliance Review Board
 
 Read `foi-shared-rules.md` first. Sections 1, 2 and 3 govern most of what this module returns, and they are not repeated here.
@@ -98,7 +98,7 @@ This is a property of this module, not of the URL prefix. It does not extend to 
 
 **Never present this data as verified.** It is what was recorded. Documents carry `sha256Hash` and `cryptoTimestamp`, but **this module does not verify them** — the fields are returned as stored. Verification happens in the compliance manifest.
 
-**Never infer what you cannot read.** If a decision needs owners, credit or the ACH authorisation, this grant does not reach them. Say so.
+**Never infer what you cannot read.** Shared rule 1b. If a decision needs owners, credit or the ACH authorisation, this grant does not reach them. Say so, and do not reason toward them from what is visible.
 
 ## 8. WHICH LAWS THIS TOUCHES
 
@@ -112,11 +112,13 @@ This is a property of this module, not of the URL prefix. It does not extend to 
 
 ## PROVENANCE
 
-**From the code, read at `ebe3f5d`:** the six endpoints and their permission, the mount guard as the tenancy boundary, the two 404 codes, the bases on `/documents` and `/acknowledgments`, the `/v1` alias, the compliance score being computed from whatever checks exist.
+**From the code, read at `fcc46ab`:** the six endpoints and their permission, the mount guard as the tenancy boundary, the two 404 codes, the bases on `/documents` and `/acknowledgments`, the `/v1` alias, the compliance score being computed from whatever checks exist.
 
 **Decided by the founder, 2 September 2026:** the three-way split and its boundary — regulated data about a natural person, not sensitivity in general; `auto_execute` for all three reads; report-and-continue on an absence.
 
-**Split from `client_read` 1.2 on 2 September 2026.** §§2, 4 and 6 are inherited unchanged. §§1, 3, 5, 7 and 8 are narrowed to the six endpoints this grant reaches, and every reference to `/owners`, `/timeline`, `/ach-authorization` and `/credit/*` is removed — an agent holding this grant should not be reading about endpoints it cannot call.
+**Split from `client_read` 1.2 on 2 September 2026, updated to 1.4 the same day** when the last empty results gained a basis and shared rules 1a and 1b were added.
+
+**Split note.** §§2, 4 and 6 are inherited unchanged. §§1, 3, 5, 7 and 8 are narrowed to the six endpoints this grant reaches, and every reference to `/owners`, `/timeline`, `/ach-authorization` and `/credit/*` is removed — an agent holding this grant should not be reading about endpoints it cannot call.
 
 ## OPEN
 

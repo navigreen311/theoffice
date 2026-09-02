@@ -4,7 +4,7 @@
 **Module:** `client_read_pii`
 **Endpoints:** 3 GETs under `/api/clients/:clientId` and `/api/v1/clients/:clientId`
 **Permission:** `business:read` **and** `business:read:pii`
-**Version:** 1.3 — drafted 2 September 2026, against CapitalForge `ebe3f5d`
+**Version:** 1.4 — drafted 2 September 2026, against CapitalForge `fcc46ab`
 **Status:** draft, pending Compliance Review Board
 
 Read `foi-shared-rules.md` first. Sections 1, 2 and 3 govern most of what this module returns, and they are not repeated here.
@@ -61,7 +61,7 @@ What matters is what happens after. A read gathering context for a placement, a 
 
 Until 2 September 2026 there was no permission gate on this router at all. A `readonly` session and a `client` portal session reached dates of birth, IP addresses and the ACH authorisation with exactly the same permission as an advisor, because one permission covered a legal name and a social security number alike. Neither role holds `business:read:pii` now, so both get 403 on all three endpoints.
 
-**A 403 is not an absence.** It says nothing about whether owners exist, whether an authorisation is on file, or anything else about the client. Shared rule 1 does not apply to it, and an agent that reports "no owners on file" after a 403 has manufactured a finding out of its own lack of permission. Report the 403 as what it is: this grant does not reach this data.
+**A 403 is not an absence — shared rule 1a.** It says nothing about whether owners exist, whether an authorisation is on file, or anything else about the client. An agent that reports "no owners on file" after a 403 has manufactured a finding out of its own lack of permission. Report the refusal as a refusal, then stop or ask for the grant.
 
 ### The 404 carries two unrelated meanings
 
@@ -87,7 +87,7 @@ On `NOT_FOUND`: stop. There is nothing to report about.
 
 **Empty results are real answers, not errors.** `/owners` carries `basis: 'no_owners_on_record'` when empty. Report it. Shared rules 2 and 3.
 
-`/timeline` returns `[]` with `meta.total` and no basis. Report it as no events recorded, and do not infer why.
+`/timeline` carries `basis: 'no_timeline_events_on_record'` when empty. Report it. Every empty result in this module carries a basis as of 2 September 2026.
 
 ## 6. RETRY VS ESCALATE
 
@@ -99,7 +99,7 @@ This is a property of this module, not of the URL prefix. It does not extend to 
 
 **Never act on an absence.** No owners recorded, no authorisation on file, no timeline events — each is a fact about Burkham's records. An agent that turns one into a claim about the client has manufactured a finding.
 
-**Never treat a 403 as an absence.** It is the failure this module produces most often and it means the grant does not reach the data, not that the data is not there.
+**Never treat a 403 as an absence.** Shared rule 1a. It is the failure this module produces most often, and it means the grant does not reach the data — not that the data is not there.
 
 **Never report an empty result without its basis.** Shared rule 2.
 
@@ -129,16 +129,16 @@ Eight handlers on this router were cross-tenant readable until 1 September 2026 
 
 ## PROVENANCE
 
-**From the code, read at `ebe3f5d`:** the three endpoints and their permissions, the explicit select on `/owners` and its column list, the two 404 codes, the basis on `/owners`, the absence of a basis on `/timeline`, the mount guard, the `/v1` alias.
+**From the code, read at `fcc46ab`:** the three endpoints and their permissions, the explicit select on `/owners` and its column list, the two 404 codes, the basis on `/owners`, the absence of a basis on `/timeline`, the mount guard, the `/v1` alias.
 
 **Decided by the founder, 2 September 2026:** the three-way split and its boundary; `/ach-authorization` belonging here despite being formally a business authorisation; `auto_execute` with narrow grants rather than `propose`; withholding `business:read:pii` from `readonly` and `client`.
 
-**Split from `client_read` 1.2 on 2 September 2026.** §§2, 4 and 6 are inherited unchanged. §5 leads with the 403 by founder instruction: both affected roles previously reached this data with an advisor's permission, and it is the failure an agent will actually hit.
+**Split from `client_read` 1.2 on 2 September 2026, updated to 1.4 the same day** when the last empty results gained a basis and shared rules 1a and 1b were added.
+
+**Split note.** §§2, 4 and 6 are inherited unchanged. §5 leads with the 403 by founder instruction: both affected roles previously reached this data with an advisor's permission, and it is the failure an agent will actually hit.
 
 ## OPEN
 
 **The 404 carries two meanings and only the error code separates them.** A 200 with an explicit empty state and a basis — matching what `client_read_credit`'s `/credit/recommendations` already does — would make them distinguishable by shape rather than by reading a code correctly. Raised for CapitalForge; this manual documents current behaviour.
-
-**`/timeline` has no basis on an empty result.** `/owners` gained one on 2 September; `/timeline` did not, and adding it would make shared rule 2 uniform across this module.
 
 **Nothing records that this data was read.** §2 states it as a fact about the module. Whether a read of dates of birth and IP addresses should leave an audit trail is a policy question nobody has answered, and the absence is invisible from the response.
