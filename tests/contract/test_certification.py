@@ -251,6 +251,78 @@ async def test_a_certified_result_must_record_its_basis(registered_forge, seed_a
 
 
 
+
+# ------------------------------------------- no instruction is stale, not fresh
+
+async def test_a_unit_a_cert_with_no_live_instruction_goes_stale(
+    registered_forge, seed_agent, admin
+):
+    """The worst case was being treated as the best one.
+
+    `recompute_staleness` guarded its comparison with `live_hash is not None`, so a
+    Unit A cert whose module had no operating instruction at all was skipped and
+    stayed `certified` - and `resolve_grant` dispatches on `state = 'certified'`.
+
+    A certification bound to a hash that corresponds to no text cannot be said to
+    match anything. Every CapitalForge certification was in that position: nine
+    manuals existed as files, none authored into forge_operating_instruction, and
+    the sweep ran and reported success.
+    """
+    forge_id, module_id = registered_forge
+    async with connection() as conn:
+        await certification.record_result(
+            conn, unit="A", forge_id=forge_id, module_id=module_id,
+            office_agent_id=seed_agent, verdict="PASS", rubric_version="1.0.0",
+            certified_tier="auto_execute",
+            # The fixture's forge is at 2.1.0. Passing anything else makes
+            # stale_forge fire and the test measures the wrong rule.
+            instruction_content_hash="c" * 64, forge_api_version="2.1.0",
+        )
+
+        with admin.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM forge_operating_instruction "
+                "WHERE forge_id = %s AND module_id = %s AND superseded_at IS NULL",
+                (forge_id, module_id),
+            )
+            assert cur.fetchone()[0] == 0, "this test needs a module with no instruction"
+
+        changed = await certification.recompute_staleness(conn, forge_id=forge_id)
+
+    assert len(changed) >= 1
+    with admin.cursor() as cur:
+        cur.execute(
+            "SELECT state FROM certification WHERE unit = 'A' AND forge_id = %s "
+            "AND module_id = %s",
+            (forge_id, module_id),
+        )
+        assert cur.fetchone()[0] == certification.STALE_INSTRUCTIONS
+
+
+async def test_unit_b_is_not_swept_stale_for_having_no_module(
+    registered_forge, admin
+):
+    """Unit B carries module_id NULL by design and cannot be compared this way.
+
+    Applying the Unit A rule to it would mark every domain certification in the
+    system stale, including current ones - a different way of being wrong.
+    """
+    forge_id, _ = registered_forge
+    async with connection() as conn:
+        await certification.record_result(
+            conn, unit="B", forge_id=forge_id, department="engineering",
+            verdict="PASS", rubric_version="1.0.0", certified_tier="auto_execute",
+            instruction_content_hash="d" * 64, forge_api_version="2.1.0",
+        )
+        await certification.recompute_staleness(conn, forge_id=forge_id)
+
+    with admin.cursor() as cur:
+        cur.execute(
+            "SELECT state FROM certification WHERE unit = 'B' AND forge_id = %s",
+            (forge_id,),
+        )
+        assert cur.fetchone()[0] == certification.CERTIFIED
+
 # ------------------------------------------------- a bootstrap says it is one
 
 async def test_a_bootstrap_certification_does_not_claim_simforge_ran(

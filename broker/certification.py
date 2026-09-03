@@ -297,11 +297,33 @@ async def recompute_staleness(
     `stale_instructions` when the text changes, because it was never fresh. Doing
     otherwise would erase the distinction between "was good, now out of date" and
     "was never good".
+
+    NO LIVE INSTRUCTION IS STALE, NOT FRESH - and until 3 September 2026 it was
+    the opposite.
+
+    The comparison was guarded by `live_hash is not None`, so a Unit A cert whose
+    module had no operating instruction at all was skipped and stayed `certified`
+    forever. That is the worst case being treated as the best one: a certification
+    bound to a `instruction_content_hash` that corresponds to no text cannot be
+    said to match anything, and `grants.resolve_grant` dispatches it on the
+    strength of `state = 'certified'`.
+
+    It was not hypothetical. Every CapitalForge certification was in exactly that
+    position - nine operating instructions existed as files and none had been
+    authored into `forge_operating_instruction` - so the staleness sweep ran, found
+    nothing to compare, and reported success.
+
+    **Unit B is exempt, and that is not the same loophole.** A Unit B cert is
+    department x forge and carries `module_id IS NULL` by design, so there is no
+    single instruction it could be compared against. Applying the rule to it would
+    mark every domain certification in the system stale, including ones that are
+    genuinely current.
     """
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
             """
-            SELECT c.cert_id, c.instruction_content_hash, c.forge_api_version,
+            SELECT c.cert_id, c.unit, c.module_id, c.instruction_content_hash,
+                   c.forge_api_version,
                    i.content_hash AS live_hash, i.version_sensitivity,
                    r.api_version AS live_api_version
             FROM certification c
@@ -320,6 +342,11 @@ async def recompute_staleness(
 
     changed: list[tuple[uuid.UUID, str]] = []
     for r in rows:
+        # A Unit A cert names a module, so a module with no live instruction means
+        # this cert is bound to a hash of nothing. See the docstring.
+        if r["unit"] == "A" and r["live_hash"] is None:
+            changed.append((r["cert_id"], STALE_INSTRUCTIONS))
+            continue
         if r["live_hash"] is not None and r["instruction_content_hash"] != r["live_hash"]:
             changed.append((r["cert_id"], STALE_INSTRUCTIONS))
             continue
