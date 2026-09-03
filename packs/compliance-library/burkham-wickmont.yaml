@@ -3039,7 +3039,7 @@ entries:
       - documented reasons on every service decline
       - client-facing explanation of routing rationale
       - fair lending review by outside expertise
-      - a submission path that transmits issuer 1071 fields without persisting them, which nothing implements because no bureau or issuer submission path exists
+      - disparate impact monitoring over Recommendation Engine output and Lender Intelligence Database patterns, now TIME-BOUND rather than open-ended: see compliance/cfpb-1071-boundary-v1
 
     citation: "15 U.S.C. § 1691 et seq. (ECOA); Regulation B, 12 C.F.R. Part 1002"
 
@@ -3081,6 +3081,18 @@ entries:
     status: draft_pending_claim_library_approval
 
     notes: >-
+      URGENT RATHER THAN OPEN, as of 1 September 2026. Disparate impact monitoring over
+      Recommendation Engine output is the dependency below that nothing satisfies, and
+      compliance/cfpb-1071-boundary-v1 explains why it now has a clock on it: every
+      application Burkham submits to a covered issuer enters that issuer's Section 1071
+      dataset with its outcome, so the aggregate shape of Burkham's routing becomes
+      reconstructable from published reporting during the 2026-2027 phase-in. A pattern here
+      would be discoverable by someone else before it is discoverable by Burkham, and the
+      first the firm would hear of it is an inquiry.
+
+      Nothing about the discipline in this entry changes. What changed is that the gap stopped
+      being one the firm could close on its own timetable.
+
       NAMED GAP — corrected. The original note said none of the six dependencies exists.
       Four do not. One is built. One is partly built. The correction is in the expensive
       direction: building a thing that already exists costs more than the note saved.
@@ -3495,6 +3507,509 @@ entries:
       names four ways the fee structure pulls against the client; this is the firm choosing
       against itself in the one case where the pull is strongest, because the alternative is
       a fee earned on the product most likely to end the client's business.
+  # =========================================================================
+  # WRITTEN 1 September 2026, replacing the retired compliance/reg-z-trigger-terms-v1.
+  # That template would have stated an obligation the firm does not have. This states
+  # the boundary and what governs instead, which is the part an agent needs.
+  # =========================================================================
+  - entry_ref: compliance/reg-z-advertising-boundary-v1
+    framework: REG_Z_ADVERTISING
+    jurisdiction: [FEDERAL]
+    runtime_flag: trigger_term_disclosure_required
+
+    applicability_rule: >-
+      Any content reaching a person who has not engaged Burkham. Website, landing pages,
+      social posts, partner-distributed material, gated downloads, conference material,
+      outbound copy of any kind.
+
+      THE LINE IS WHO IS READING, NOT WHAT IS SAID. Advertising is anything reaching
+      prospects who have not engaged. Communication inside a live engagement — a Blueprint,
+      a stack recommendation, a fee exhibit, a lender-option memo — belongs to
+      compliance/estimate-not-offer-v1, which requires the hedge in the same sentence as
+      the number. Two disciplines, two audiences, and the same figure can be permitted in
+      one and refused in the other.
+
+      TILA DOES NOT REACH BURKHAM'S ADVERTISING. specifications-v2 §6 records a
+      business-purpose credit exemption from most of TILA; the parts that survive it — card
+      issuance and unauthorized-use rules — are the issuer's obligations and are not
+      advertising rules. This entry exists because that exemption is easy to discover and
+      easy to over-read: exempt from Reg Z is not exempt from FTC Act §5, from UDAAP, or
+      from the firm's own claim discipline.
+
+    agent_behavior_implication: >-
+      BURKHAM DOES NOT ADVERTISE CREDIT TERMS. No rate, no APR, no factor rate, no payment,
+      no term length, no credit limit, in any content reaching a person who has not engaged.
+      Not as a range, not as a floor, not as a typical figure, not attributed to a lender.
+
+      The reason is not Reg Z. It is that a credit term on a public surface is a
+      representation about what a reader could obtain, made before anyone has seen their
+      file — which is compliance/own-claims-and-pricing-v1's banned category, reached by a
+      number instead of a sentence.
+
+      WHAT MAY BE SAID PUBLICLY: the products Burkham helps place, the service, the process,
+      firm-scale aggregates under own-claims-and-pricing-v1's substantiation rule, and
+      Burkham's OWN pricing, which is not a credit term.
+
+      FOUR CROSSINGS, AND WHICH SIDE EACH FALLS ON. These are the cases where the line is
+      actually decided:
+
+      1. THE SAME FIGURE IN TWO PLACES. "Lines of credit from 9% APR" on the pricing page is
+      advertising and is refused. The same 9% inside a Blueprint, hedged in-sentence and
+      attributed, is estimate-not-offer-v1's territory and is permitted. The figure did not
+      change; the reader did.
+
+      2. THE GATED DOWNLOAD. A whitepaper behind an email capture reaches a prospect, not a
+      client. An email address is not an engagement. Gating changes who receives it and not
+      what it is, so the content is advertising and carries no credit terms.
+
+      3. THE PARTNER'S OWN MATERIAL. A Ring 1 referrer writing "Burkham gets lines at around
+      9%" is advertising Burkham's service to prospects, and the fact that Burkham did not
+      write it does not make it someone else's problem — see
+      compliance/facilitator-not-broker-v1 trigger 8 on third-party characterisation.
+      Partner material carrying credit terms is a finding against the partner and a
+      correction request, not a shrug.
+
+      4. THE PAID-BUT-NOT-PLACED CLIENT. Someone who bought a Blueprint has engaged. Content
+      prepared for them is in-engagement even though no placement has happened, so the
+      Blueprint may carry hedged figures. A general marketing email sent to the same person
+      about a different service is advertising again, because it is not prepared for them.
+
+      WHERE THE LINE IS UNCLEAR, IT IS ADVERTISING. The restrictive direction, for the reason
+      compliance/bureau-report-handling-v1 gives for characterising rather than reproducing:
+      the cost of treating an in-engagement document as an advertisement is a hedge nobody
+      needed, and the cost of the reverse is a public credit representation.
+
+    escalation_trigger: >-
+      1. When any credit term appears in content reaching a non-engaged reader. Refuse and
+      rewrite. This is a refusal and not a disclosure obligation — there is no disclosure
+      that makes a public credit term acceptable, because the problem is not that it is
+      unqualified.
+
+      2. When it is unclear whether a reader has engaged. Treat as advertising.
+
+      3. When partner-distributed material carries a credit term. Correction request to the
+      partner, and a `documentation_gap` finding if it repeats.
+
+      4. When somebody argues a figure is permitted because Reg Z does not apply. Escalate.
+      The Reg Z exemption is real and is not the basis of this rule, and an agent reasoning
+      from it has the wrong rule in mind.
+
+      5. When a client-facing deliverable is repurposed as marketing material — a Blueprint
+      excerpt in a case study, a stack recommendation in a pitch deck. It becomes advertising
+      on republication and the figures come out.
+
+    depends_on:
+      - a Scanner rule that refuses a credit term on a public surface, rather than obliging the estimate disclosure written for in-engagement deliverables
+      - a surface classification the Scanner can read, so it knows whether content is public or in-engagement
+
+    citation: "15 U.S.C. § 1601 et seq. and 12 C.F.R. § 1026.2(a)(12) (business-purpose exemption); 12 C.F.R. § 1026.16 (advertising, consumer credit); 15 U.S.C. § 45"
+
+    claim_provenance:
+      - claim: "TILA does not reach Burkham's advertising, because the credit is business-purpose"
+        tag: sourced
+        source: "specifications-v2 §6: 'CFPB Regulation Z - business-purpose credit exemption from most TILA, but card issuance and unauthorized-use rules apply.'"
+      - claim: "Burkham advertises no credit terms at all"
+        tag: proposed
+        review_by: "Compliance Review Board. Stricter than the exemption requires and stricter than most competitors, and it forecloses a category of marketing copy the firm might otherwise want."
+      - claim: "The line is the reader, not the content: advertising is anything reaching a non-engaged person"
+        tag: reconstructed
+        basis: "Written 1 September 2026 to separate this entry from compliance/estimate-not-offer-v1, which governs the same figures inside an engagement. No source draws the line; the two entries needed a boundary and this is where it was put."
+      - claim: "The four crossings, and which side each falls on"
+        tag: reconstructed
+        basis: "Written to make the definition usable. Each is derived from an existing entry - own-claims-and-pricing-v1 on public figures, facilitator-not-broker-v1 trigger 8 on partner characterisation, estimate-not-offer-v1 on in-engagement hedging - rather than from a source that addresses advertising scope."
+      - claim: "Where the line is unclear, treat it as advertising"
+        tag: reconstructed
+        basis: "The same restrictive tie-break compliance/bureau-report-handling-v1 uses for characterise-versus-reproduce, applied to a different boundary."
+
+    status: draft_pending_claim_library_approval
+
+    notes: >-
+      THE SCANNER GAP, STATED PRECISELY BECAUSE THE OBVIOUS VERSION OF IT IS WRONG.
+
+      It is tempting to say a bare rate on a public surface passes every existing check. It
+      does not. `detectLenderNumbers` is wired into `scanText` and obliges an estimate
+      disclosure on any lender-product number, whether or not a Claim Library phrase matched.
+      Verified 1 September 2026:
+
+      "Business lines of credit from 9% APR"  -> requires_disclosure, DISCLOSURE_ESTIMATE
+      "Rates as low as 9% APR"                -> requires_disclosure, DISCLOSURE_LOWEST_RATE
+                                                 + DISCLOSURE_ESTIMATE
+      "Lines of credit up to $250,000"        -> clean
+      "Business funding for growing companies" -> clean
+
+      THE REAL GAP IS THE REMEDY, NOT THE DETECTION. The disclosure obliged is "Estimates are
+      based on the information available at the time of preparation and are not an offer or
+      commitment of credit." That sentence is written for a deliverable prepared for a
+      specific client. On a public advertisement nothing was prepared and there is no client,
+      so attaching it produces a compliant-looking page that says something untrue about
+      itself. The scanner catches the number and prescribes the wrong cure.
+
+      A SECOND GAP, SMALLER AND REAL. "Lines of credit up to $250,000" scans clean. An amount
+      with no rate is not a lender-product number under `NUMBER_SHAPES`, and on a public
+      surface it is still a representation about what a reader could obtain.
+
+      WHAT IS NEEDED is a Scanner rule that REFUSES rather than discloses, conditioned on the
+      surface being public — which means the Scanner needs to know which surface it is
+      scanning, and it currently does not. Both are recorded as dependencies. Neither is this
+      entry's job to build, and the entry states the rule regardless, because the alternative
+      is weakening the rule to match the machinery.
+
+  # =========================================================================
+  # WRITTEN 1 September 2026, replacing the retired
+  # compliance/cfpb-1071-data-collection-v1 and superseding the paragraph folded
+  # into fair-treatment-in-routing-v1 earlier the same day. Not being covered has
+  # two consequences and the fold only carried one of them.
+  # =========================================================================
+  - entry_ref: compliance/cfpb-1071-boundary-v1
+    framework: CFPB_1071
+    jurisdiction: [FEDERAL]
+    runtime_flag: sb_lending_data_collection
+
+    applicability_rule: >-
+      Any point at which demographic or protected-class data about a small business applicant
+      could be collected, transmitted, retained or used. Intake, application preparation,
+      submission, and any analysis of Burkham's own routing.
+
+      BURKHAM IS NOT A COVERED FINANCIAL INSTITUTION. Section 1071 obliges collection and
+      reporting by institutions that ORIGINATE covered credit transactions.
+      specifications-v2 §6 puts the tiers "at the issuer level". Burkham prepares, packages
+      and submits applications; it does not originate, and no 1071 reporting duty attaches
+      to it.
+
+      NOT BEING COVERED HAS TWO CONSEQUENCES AND THEY POINT IN OPPOSITE DIRECTIONS. One
+      narrows what Burkham may do. The other makes an existing gap urgent. Both are here
+      because carrying only the first is how "we are not covered" becomes a reason to stop
+      thinking about it.
+
+    agent_behavior_implication: >-
+      NO 1071 OBLIGATION MEANS NO 1071 COLLECTION AUTHORIZATION. This is the ceiling and it
+      comes first.
+
+      A covered institution may lawfully ask an applicant their ethnicity, race and sex
+      because 1071 requires it to. Burkham has no such requirement, and therefore no such
+      permission. The ECOA prohibition on collecting protected-class information stands
+      undisturbed — it is REINFORCED by not being covered, not relaxed. An agent that
+      reasons "1071 is about collecting this data, so collecting it is normal in small
+      business lending" has drawn the exactly wrong conclusion from the exemption.
+
+      So: Burkham never asks. Not on an intake form, not in conversation, not as an optional
+      field, not to improve a match, and not because a lender will ask later anyway.
+
+      WHERE AN ISSUER COLLECTS THROUGH BURKHAM: transmit what the issuer's own form requires,
+      retain none of it, use none of it in routing or recommendation, and tell the client it
+      goes to the issuer and is used by the issuer. Burkham is a conduit for that field and
+      not a holder of it. The route in is what makes this worth stating separately from the
+      volunteered-information rule in compliance/fair-treatment-in-routing-v1: volunteered
+      data arrives in conversation, and this arrives on a form Burkham is filling in, which
+      makes retaining it the natural mistake rather than the obvious one.
+
+      AND THE SECOND CONSEQUENCE: BURKHAM'S ROUTING BECOMES VISIBLE IN SOMEBODY ELSE'S
+      REPORTING. Every application Burkham submits to a covered issuer enters that issuer's
+      1071 dataset, carrying the demographic data the issuer collected and the outcome. Which
+      lenders Burkham routed which clients to is therefore reconstructable from public
+      reporting, in aggregate, by regulators and by anyone else reading it — without Burkham
+      collecting a single protected-class field itself.
+
+      THAT MAKES THE DISPARATE IMPACT GAP TIME-SENSITIVE RATHER THAN ASPIRATIONAL.
+      compliance/fair-treatment-in-routing-v1 records that disparate impact monitoring over
+      Recommendation Engine output does not exist. Until 1071 reporting begins, that gap is
+      an internal one. Once it does, a pattern in Burkham's routing is discoverable by
+      someone else before it is discoverable by Burkham — and the first the firm would learn
+      of it is an inquiry.
+
+      An agent does not act on this. It is here because the entry that owns the gap needs to
+      know why the clock started.
+
+    escalation_trigger: >-
+      1. When any Burkham-originated form, script or field would collect ethnicity, race, sex
+      or another protected characteristic. Refuse. There is no business justification
+      available, and the 1071 exemption is not one.
+
+      2. When an agent proposes collecting demographic data "because the lender will ask
+      anyway". Refuse and route. The lender asking under its own obligation is not authority
+      for Burkham to ask under none.
+
+      3. When issuer 1071 fields appear in a submission path that persists them. Compliance &
+      Evidence. Transmission is permitted and storage is not, and the difference is an
+      implementation detail nobody will notice by reading the form.
+
+      4. When 1071 reporting begins for any issuer Burkham routes to. Compliance Review Board,
+      and the disparate impact monitoring dependency in
+      compliance/fair-treatment-in-routing-v1 moves from open to overdue.
+
+      5. When a regulator, a lender or a journalist raises a pattern in Burkham's routing
+      drawn from published 1071 data. Compliance Review Board and outside counsel. Do not
+      respond with a denial that cannot be substantiated from Burkham's own records, which
+      today it could not be.
+
+    depends_on:
+      - a submission path that transmits issuer 1071 fields without persisting them, which nothing implements because no issuer submission path exists
+      - disparate impact monitoring over Recommendation Engine output, held by compliance/fair-treatment-in-routing-v1 and now time-bound rather than open-ended
+
+    citation: "15 U.S.C. § 1691c-2 (ECOA § 1071); 12 C.F.R. § 1002.107 (covered financial institution, covered credit transaction); 15 U.S.C. § 1691(a) and 12 C.F.R. § 1002.5(b) (prohibition on requesting protected-class information)"
+
+    claim_provenance:
+      - claim: "Burkham is not a covered financial institution under Section 1071"
+        tag: sourced
+        source: "specifications-v2 §6: 'CFPB Section 1071 - small business lending data collection tiers apply from 2026-2027 at the issuer level.' 12 C.F.R. §1002.107 conditions coverage on originating covered credit transactions; Burkham prepares and submits and does not originate."
+      - claim: "No 1071 obligation means no 1071 collection authorization, so the ECOA prohibition is reinforced rather than relaxed"
+        tag: sourced
+        source: "12 C.F.R. §1002.5(b) prohibits requesting protected-class information; §1002.5(a)(4) permits it only where required by a regulation such as 1071. Burkham has no such requirement and therefore no such exception."
+      - claim: "Issuer 1071 fields are transmitted, never retained, never used in routing"
+        tag: reconstructed
+        basis: "Extends compliance/fair-treatment-in-routing-v1's volunteered-information rule to data arriving on an issuer's form. No source addresses a non-covered intermediary's handling of a covered institution's 1071 collection."
+      - claim: "Burkham's routing becomes reconstructable from issuer 1071 reporting"
+        tag: reconstructed
+        basis: "Follows from every submitted application entering the receiving issuer's dataset with its outcome. Not stated anywhere, and it is the entry's own reasoning about what published data would show."
+      - claim: "The disparate impact monitoring gap is time-bound by the 2026-2027 phase-in"
+        tag: proposed
+        review_by: "Compliance Review Board. It converts an open dependency in fair-treatment-in-routing-v1 into one with a deadline, which is a resourcing decision rather than a compliance reading."
+
+    status: draft_pending_claim_library_approval
+
+    notes: >-
+      WHY THIS IS AN ENTRY AFTER ALL. It was retired as a template on 31 August and folded
+      into compliance/fair-treatment-in-routing-v1 the same day, on the reasoning that a
+      framework that does not bind the firm does not need an entry. That was half right. The
+      fold carried the conduit rule and lost both of the things that make non-coverage
+      consequential: that it removes the only lawful basis for asking, and that Burkham's
+      routing is legible in somebody else's reporting regardless.
+
+      An entry whose whole content is "this does not apply to us" is not worth a slot. An
+      entry that says "this does not apply to us, and here are the two things that follow"
+      is a different document.
+
+      THE FIRST CONSEQUENCE IS THE ONE AN AGENT GETS WRONG. "1071 is about collecting
+      demographic data in small business lending" is true and leads directly to the wrong
+      behaviour, because the collection is authorised BY the obligation. Removing the
+      obligation removes the authorisation. That inference is the reason the behaviour
+      section leads with the ceiling rather than the conduit rule.
+
+      THE SECOND IS THE ONE THE FIRM GETS WRONG. Not being covered reads as not being visible.
+      It is the opposite: Burkham submits into datasets it does not control and cannot see,
+      and the aggregate picture of its routing will exist whether or not it builds the means
+      to look at it.
+
+      OPEN — no issuer submission path exists, so the conduit rule is unenforceable today and
+      the retention risk is not yet live. It becomes live with the first real submission
+      integration, which is also when it will be easiest to get wrong.
+  # =========================================================================
+  # WRITTEN BY IVAN, 1 September 2026. Closes both `privacy_request_handling` Pack
+  # rows — CCPA and STATE_PRIVACY_COMPREHENSIVE — which were the last two rows in the
+  # Pack declaring a gap with no entry at all.
+  #
+  # `framework` set to STATE_PRIVACY_COMPREHENSIVE: STATE_PRIVACY is not a value the
+  # validator accepts, and of the two that are, this is the one whose row is not
+  # already California-scoped.
+  #
+  # `jurisdiction` corrected from [CA, TX, VA, CO, CT, +] to [ALL]. The "+" binds
+  # nothing — this entry's own author made that correction to
+  # compliance/facilitator-not-broker-v1 — and the discipline as written applies to a
+  # request from any person wherever they are, which is what [ALL] says. The five
+  # named regimes are in the citation, where they are checkable.
+  # =========================================================================
+  - entry_ref: compliance/consumer-privacy-rights-v1
+    framework: STATE_PRIVACY_COMPREHENSIVE
+    jurisdiction: [ALL]
+    runtime_flag: privacy_request_handling
+
+    applicability_rule: >-
+      Any request from a person for access to, a copy of, or deletion of personal data
+      Burkham holds about them. Applies whatever their relationship — client, engaged
+      prospect, declined applicant, form-fill respondent, or a person referred by a partner
+      who never engaged.
+
+      NOT CURRENTLY COVERED, AND THAT DOES NOT SETTLE IT. Burkham meets no CCPA threshold:
+      revenue is far below $25M, California consumer volume is far below 100,000, and no
+      personal data is sold. Texas exempts small businesses. Coverage is unlikely in V1 under
+      any state regime.
+
+      Two things make the discipline apply anyway:
+
+      VENDOR CONTRACTS. A data processing agreement typically requires a processor to honour
+      data subject rights flowing from the vendor's own obligations, so the discipline may be
+      contractually required exactly where it is not statutorily required — and a threshold
+      answer does not reach a contract term. WHICH vendors carry such an agreement is
+      unverified and smaller than assumed; see notes.
+
+      THE THRESHOLDS MOVE. Coverage is re-analysed on: revenue crossing $25M, California
+      consumer volume approaching 100,000, activation in any new state, and any change to a
+      vendor DPA. Until one of those, the discipline is voluntary and operationally sound
+      rather than obligatory.
+
+    agent_behavior_implication: >-
+      THE RIGHT ATTACHES TO THE PERSON, NOT THE RELATIONSHIP. A form-fill respondent who
+      never engaged has the same standing as a funded client. Verification differs; the
+      standing does not.
+
+      AN AGENT MAY: acknowledge receipt and state the response timeline; run identity
+      verification; compile what is held across systems; prepare the compiled data for
+      delivery.
+
+      AN AGENT MAY NOT: decide the scope of disclosure; decide a deletion where a retention
+      obligation conflicts; respond to anything beyond a routine access or deletion request;
+      act on a request from someone whose relationship is unclear or contested; act on a
+      request carrying threats or legal framing.
+
+      EVERY RESPONSE IS REVIEWED BY A HUMAN BEFORE DELIVERY. Compilation is mechanical; what
+      leaves the building is not.
+
+      NINE SYSTEMS HOLD DATA ABOUT A PERSON. Client Lifecycle & CRM · Household / Entity
+      Graph · Secure Document Vault · Consent & Authorization Center · Communications Hub
+      recordings and message logs · Compliance Evidence Vault · Event Ledger · Marketing Ops
+      form fills and gated downloads · Partner & Referrer Portal. A response that omits one
+      is incomplete, and nothing currently compiles across them.
+
+      DELETION IS EVALUATED AGAINST RETENTION, NEVER AGAINST CONVENIENCE.
+
+      CANNOT BE DELETED AT ALL, EVER: the Event Ledger. It is append-only and the database
+      rejects UPDATE, DELETE and TRUNCATE outright — enforced by a trigger, not by policy.
+      This is not "retained while an obligation runs" and must never be described that way to
+      a requester: there is no date on which it becomes deletable. What the Ledger holds about
+      a person is what a Ledger holds — that an event occurred, when, and by which actor —
+      and a response says so plainly rather than implying a future erasure that cannot happen.
+
+      Cannot be deleted while the obligation runs: application records (§1014 defence),
+      consent records, bureau reports under Regulatory Engine state rules, compliance evidence
+      artifacts, financial records, communications held as disclosure evidence.
+
+      Can be deleted: marketing contact records for people who never engaged, form fill data
+      past its window, session and analytics data, general correspondence outside a compliance
+      record.
+
+      Where more than one applies, delete what can be deleted and retain what must be
+      retained, documenting both. A partial deletion is stated as one — never presented as a
+      completed erasure.
+
+      SAY WHAT IS RETAINED AND WHY. A request refused in part gets the specific obligation and
+      the date deletion becomes possible, or that there is no such date where the Ledger is
+      concerned. Data Burkham merely finds useful is not retained against a request; only data
+      it is required to keep.
+
+      NON-CLIENT DATA EXPIRES BY DEFAULT. Form fills, gated downloads and referral records for
+      people who do not engage within the defined window expire automatically. This shrinks the
+      compliance surface, matches what a person reasonably expects of an enquiry they made
+      once, and makes most deletion requests trivial.
+
+    escalation_trigger: >-
+      1. A privacy request reaches anyone — agent, Concierge, founder — without routing to
+      Compliance & Evidence with a response timeline. Never handled informally.
+
+      2. Identity verification cannot be completed. Do not disclose. Route for how to handle
+      failure without disclosing to an impostor.
+
+      3. The request asks for something outside a routine access or deletion.
+
+      4. A retention obligation conflicts with the deletion requested.
+
+      5. The request carries threats, legal action, or a complaint — "delete everything or I
+      file", "I'm consulting a lawyer". Compliance Review Board, and consider counsel. No
+      substantive response without founder review.
+
+      6. The person claims Burkham holds their data and no system shows them. Identity
+      confusion, a breach signal, or a fraudulent request — all three need a human.
+
+      7. The request implicates third-party data — deletion of communications that also
+      describe partners, other clients, or family members.
+
+      8. Request volume exceeds what manual handling can meet inside the response window. That
+      is the point at which the compilation capability stops being deferrable.
+
+    depends_on:
+      - consumer data access response capability compiling across the nine systems
+      - a dedicated privacy request intake channel with defined routing
+      - identity verification workflow for non-clients with no portal access
+      - a retention obligation matrix mapping data type to rule and expiry date, which the vault resolves per document and no surface answers per person
+      - auto-expiration for non-client data past its window
+      - response templates approved by Compliance & Evidence
+      - request volume monitoring against response-window capacity
+      - a read of the actual vendor data processing agreements, to establish which of them oblige this discipline contractually
+
+    citation: "Cal. Civ. Code § 1798.100 et seq. (CCPA/CPRA); Tex. Bus. & Com. Code ch. 541 (TDPSA); Va. Code § 59.1-575 (VCDPA); Colo. Rev. Stat. § 6-1-1301 (CPA); Conn. Gen. Stat. § 42-515 (CTDPA)"
+
+    claim_provenance:
+      - claim: "Burkham meets no CCPA threshold in V1"
+        tag: sourced
+        source: "Cal. Civ. Code §1798.140(d): $25M gross revenue, or 100,000 consumers or households, or 50% of revenue from selling or sharing. Burkham meets none, and sells no personal data."
+      - claim: "Texas exempts small businesses"
+        tag: sourced
+        source: "Tex. Bus. & Com. Code §541.002 conditions the TDPSA on not being a small business as defined by the SBA."
+      - claim: "The right attaches to the person, not the relationship"
+        tag: reconstructed
+        basis: "Every regime cited defines a consumer by residency rather than by any commercial relationship. The operational consequence - that a form-fill respondent has a funded client's standing - is this entry's own statement and follows from the definitions rather than from a source that draws it."
+      - claim: "Nine systems hold data about a person, and nothing compiles across them"
+        tag: sourced
+        source: "Verified 1 September 2026: no cross-system subject-data compile exists in the repository. The nine named map to packages clients, graph, vault, consent, comms, evidence, ledger, marketing and partners."
+      - claim: "The Event Ledger cannot be deleted at all, ever"
+        tag: sourced
+        source: "packages/ledger/src/index.ts: 'append-only : the database rejects UPDATE, DELETE and TRUNCATE (migration trigger)'. Structural, not a retention period."
+      - claim: "A partial deletion is stated as one, never presented as a completed erasure"
+        tag: reconstructed
+        basis: "Follows from the same discipline compliance/own-claims-and-pricing-v1 applies to accuracy: a technically true statement that leaves a false impression is the thing being guarded against. No source states it for deletion responses."
+      - claim: "The discipline may be contractually required by vendor DPAs where it is not statutorily required"
+        tag: proposed
+        review_by: "Compliance Review Board, and it needs the agreements read first. `REQUIRED_EVIDENCE` obliges a signed DPA per vendor, but only Plaid among the vendors named is a selected one - see notes."
+      - claim: "Non-client data expires by default"
+        tag: proposed
+        review_by: "Compliance Review Board. The window itself is undecided; 12 to 18 months is a default and not a figure anyone has agreed."
+      - claim: "Coverage is re-analysed on four named triggers"
+        tag: reconstructed
+        basis: "The triggers are derived from the thresholds in the cited statutes plus the per-state activation gate this library already relies on. Not a schedule anybody has adopted."
+
+    status: draft_pending_claim_library_approval
+
+    notes: >-
+      THE ANSWER TO "CAN WE PRODUCE IT" IS CURRENTLY NO. Nine systems hold data about a person
+      and nothing queries across them. Compliance & Evidence can assemble a response by hand
+      at V1 volumes; that stops being true before anyone notices, because the trigger is a
+      response window rather than a workload.
+
+      RAISED BY REVIEW — the vendor list does not survive checking, and the argument that
+      rests on it is weaker than it reads. The draft named Plaid, Nav, Array, ContractWorks
+      and QuickBooks as each carrying a DPA. What the repository holds:
+
+      · PLAID is a selected vendor in `VENDOR_IDS` and does carry a DPA requirement —
+      `REQUIRED_EVIDENCE` obliges a signed DPA for every vendor before activation.
+
+      · NAV is a CANDIDATE, not a selection. `integration/src/index.ts` reads "Decision B -
+      business bureau. Vendor selection still open (Nav / Experian / D&B)."
+
+      · ARRAY is likewise a candidate, named in blueprint-v2 as one option for personal
+      bureau pulls.
+
+      · CONTRACTWORKS appears nowhere in the repository or either reference document.
+
+      · QUICKBOOKS appears once, in specifications-v2 §595, as a recommendation for an
+      ACCOUNTING FORGE integration. It is not a Burkham vendor.
+
+      So of five named vendors, one is real, two are unchosen candidates, one is absent and
+      one belongs to a different venture. The DPA argument is not wrong — a signed DPA is
+      required per vendor and Plaid's will exist — but it currently rests on one agreement
+      rather than five, and no one has read that one to see whether it obliges this
+      discipline. That is now the last `depends_on`.
+
+      OPEN — the vendor DPA question, narrowed. Whether Plaid's DPA contractually requires
+      Burkham to honour data subject rights is unverified, and it is the reason this
+      discipline may bind despite no statutory coverage. Same review as the bureau TOS work
+      already delegated in compliance/bureau-report-handling-v1 — bundle them, and add the
+      remaining vendors as they are selected rather than assuming them now.
+
+      OPEN — the non-client expiry window. 12 to 18 months is a reasonable default and is not
+      a decided figure.
+
+      PARTLY BUILT, and worth knowing which half. `packages/retention/src/deletion.ts` has
+      `requestDeletion`, `assessEligibility`, `decideRequest` and `recordCompletion`, with
+      deletion set at Authority Level 3. What it answers is the LEGAL HOLD half — whether a
+      hold blocks destruction. It deliberately does not answer retention, and says so:
+      "Retention is per document and cannot be answered per client." So the matrix this entry
+      depends on is not missing entirely; what is missing is a per-person view over a vault
+      that resolves per document.
+
+      NOTED — the state privacy landscape is fragmented and moving. This entry names five
+      regimes and does not assume they behave alike. Coverage analysis is per state at
+      activation, alongside the disclosure and broker determinations already required there.
+
+
 
   - entry_ref: compliance/facilitator-not-broker-v1
     framework: STATE_LENDER_LICENSURE

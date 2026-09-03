@@ -186,17 +186,35 @@ market:
       jurisdiction: [CA]
       applies_when: Any California client exercising a privacy right
       runtime_flag: privacy_request_handling
-      library_gap: true
+      library_entry_ref: compliance/consumer-privacy-rights-v1
     - framework: STATE_PRIVACY_COMPREHENSIVE
       jurisdiction: [VA, CO, CT, UT]
       applies_when: Any client in a comprehensive-privacy state exercising a right
       runtime_flag: privacy_request_handling
-      library_gap: true
+      library_entry_ref: compliance/consumer-privacy-rights-v1
     - framework: REFERRAL_FEE_REGULATION
       jurisdiction: ALL
       applies_when: Any payout to a partner or referrer
       runtime_flag: referral_fee_permitted_in_state
       library_gap: true
+    # Both of these were already in scope on a position and declared by no framework.
+    # The Compliance Reviewer and the Stack Manager carry
+    # trigger_term_disclosure_required, the Diagnostic Analyst carries
+    # sb_lending_data_collection, and the flag is the join between a position and an
+    # entry - so an agent held a flag with nothing behind it, and nothing reported that
+    # because no rule reads compliance_flags_in_scope.
+    - framework: REG_Z_ADVERTISING
+      jurisdiction: FEDERAL
+      applies_when: Any content reaching a person who has not engaged Burkham that
+        states a rate, a payment, a term or a fee
+      runtime_flag: trigger_term_disclosure_required
+      library_entry_ref: compliance/reg-z-advertising-boundary-v1
+    - framework: CFPB_1071
+      jurisdiction: FEDERAL
+      applies_when: Any point at which demographic or protected-class data about a
+        small-business applicant could be collected, transmitted, retained or used
+      runtime_flag: sb_lending_data_collection
+      library_entry_ref: compliance/cfpb-1071-boundary-v1
 
 engagement_model:
   service_lines:
