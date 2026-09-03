@@ -1,4 +1,4 @@
-# Onboarding a Forge — the adapter, and three things that fail silently
+# Onboarding a Forge — the adapter, and four things that fail silently
 
 CRE Forge is the first Forge The Office can actually call. Seven more follow, and
 `medlink-wholesale/backend/app/api/forge.py` is the template they will be copied from.
@@ -9,11 +9,15 @@ were found only by making a real call. **Every one of them returned a plausible 
 — no exception, no error log, a 200 in the response — which is why reading did not catch
 them and why they are worth writing down.
 
+The fourth was added after CapitalForge, and it is the one this document did not warn
+about. The first three were all caught here by a reader who had this page open. The
+fourth was not, and it was found the same way the first three were.
+
 If you are onboarding Forge number two, read this section before you write code.
 
 ---
 
-## The three that fail silently
+## The four that fail silently
 
 ### 1. A grant below `auto_execute` never reaches the Forge
 
@@ -83,12 +87,68 @@ The Forge answers with `X-Forge-Request-Id`, which The Office stores as
 `agent_call_ledger.forge_side_ref`. That pair is what makes a call traceable from either
 end; assert on it in whatever check you write, because both sides return 200 without it.
 
+### 4. A manifest can be consistent with everything and still wrong about upstream
+
+Two verifiers stand behind the module list, and **neither of them calls anything.**
+
+    verify_forge_modules.py    forge_module_registry rows  vs  GET /_modules
+    check_module_manuals.py    docs/instructions/*.md      vs  GET /_modules
+
+Both read the manifest. The manifest is derived from the dispatch map, so it is honest
+about *which names are bound* — that is the property the whole design rests on, and it
+holds. What neither verifier can see is **what the bound handler does when it is
+called**, because neither one calls it.
+
+So a binding can be green on every axis and broken on every request:
+
+| axis | says |
+|---|---|
+| `_modules` | the name is bound — **true** |
+| `forge_module_registry` | a row exists and matches — **true** |
+| the operating instruction | a manual describes it — **true** |
+| the actual call | 400 on every attempt |
+
+**Two of CapitalForge's seventeen operations were exactly this.**
+
+    client_read_credit / history    `profileType` is a REQUIRED query parameter on the
+                                    upstream route, not an optional filter. The binding
+                                    omitted it. Every call answered
+                                    PROFILE_TYPE_REQUIRED.
+
+    record_consent / grant          The binding invented `method` and `notes` and omitted
+                                    `consentType`, which GrantConsentBodySchema requires.
+                                    Every call answered VALIDATION_ERROR.
+
+Both had passed design review, `tsc`, `eslint`, a 4,000-test suite, and both verifiers.
+
+**Why the unit tests did not catch it.** The adapter's tests inject a fake inner caller
+and assert the request the adapter *built* — the path, the method, the body. That is the
+adapter's own belief about what upstream wants, checked against itself. A test written
+that way can only ever confirm the assumption it was written from. It will tell you the
+binding is stable; it cannot tell you the binding is right.
+
+**Why it does not look like a defect when it happens.** These do not fail silently
+per-call — they fail loudly, with a clear code and a sensible message. They fail silently
+at the *conformance* level: nothing that watches the Forge is watching answers, so the
+signal never reaches anyone, and the first human to see one reads
+`PROFILE_TYPE_REQUIRED` as bad test data rather than as a wrong binding.
+
+**The rule.** Call every operation of every module against a running Forge before you
+register a single row. Not one per module — every operation, because the two that were
+wrong sat beside fifteen that were right. `_modules` tells you a handler is bound;
+only a real call tells you the binding reaches the thing the manual describes.
+
+Fifteen of seventeen were correct. That ratio is the argument: an adapter written
+carefully from the route definitions is *mostly* right, which is precisely what makes
+the remainder hard to find by reading.
+
 ---
 
-## A fourth: a module that answers without doing the work
+## A fifth: a module that answers without doing the work
 
-The three above are defects in the adapter. This one is a property of the Forge, and it
-is worse, because nothing about the call looks wrong at either end.
+The four above are defects in the adapter or its bindings. This one is a property of
+the Forge, and it is worse, because nothing about the call looks wrong at either end -
+not even a real call, which is what separates it from #4.
 
 CapitalForge has three shapes of endpoint that return a plausible success for work that
 never happens:
@@ -277,8 +337,16 @@ than verified. All twelve of the Burkham Pack's modules are in that state today.
       writes is refused and rolled back, not returned as a 200
 - [ ] `forge_module_registry` rows for each module, spelled **exactly** as the adapter's
       dispatch keys, with honest `is_mutating` and `idempotency_support`
+- [ ] **Every operation of every module called against a running Forge, and the answer
+      read** — before any registry row is written. Not one call per module: the two
+      CapitalForge bindings that were wrong sat beside fifteen that were right. See
+      trap #4; the verifiers below cannot see this, because neither of them calls
+      anything
 - [ ] `scripts/verify_forge_modules.py --check` exits 0 — every row resolves against the
       adapter, and the adapter dispatches nothing the registry has not heard of
+- [ ] `scripts/check_module_manuals.py` exits 0 — every bound module has an operating
+      instruction. A manual with no module is reported, not failed: registering a name
+      to clear that line is how `lender_match` happens
 - [ ] `venture_forge_manifest` row per venture × module — **or every call is UNDECLARED**
 - [ ] Grant at `auto_execute`, with Unit A and Unit B certifications at the same tier —
       **or no call is made at all**
