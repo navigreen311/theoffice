@@ -62,3 +62,8 @@ operator reads.
 **Recorded because a fix that stops at the first surface reads as a fix.** The
 Agents list is right and the agent detail page is not, and the difference is
 invisible to anyone who only opened the list.
+
+**Deferred 2026-09-03**, with nine CapitalForge items - see
+`docs/decisions/deferred.md` in that repository, which explains why the ten were
+left as a group and what would change each answer. Deferred is not dropped: it is
+written down so it is not raised again as new.
