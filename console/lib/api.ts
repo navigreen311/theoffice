@@ -655,8 +655,20 @@ export type RosterAgent = {
   last_shift: string | null;
 };
 
+/** A department as the Village names it: the value to filter by, and the word to show.
+ *
+ * Both, because they do different jobs. `department` is normalized -
+ * `media_production` - and is what a row is grouped and filtered by. `label` is what
+ * the Village UI shows - `Media_Production` - and is what an operator reads.
+ * `broker/departments` says so on the two accessors; the Agents page rendered the first
+ * where the second belongs, and nothing caught it until the smoke script had a Village
+ * to ask and eleven of the twelve labels turned out to be missing from the page.
+ */
+export type DepartmentOption = { department: string; label: string };
+
 export type RosterDepartment = {
   department: string;
+  label: string;
   in_roster: number;
   with_identity: number;
   without_identity: number;
@@ -682,7 +694,7 @@ export type RosterDirectory = {
     not_yet_certified: number;
     no_identity: number;
   };
-  all_departments: string[];
+  all_departments: DepartmentOption[];
 };
 
 export type RosterDiff = {

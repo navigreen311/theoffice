@@ -1,6 +1,8 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
+import type { DepartmentOption } from "@/lib/api";
+
 
 /**
  * Search and filter the roster.
@@ -13,7 +15,7 @@ export function Filters({
   departments,
   current,
 }: {
-  departments: string[];
+  departments: DepartmentOption[];
   current: { search: string; department: string; identity: string; grants: string };
 }) {
   const router = useRouter();
@@ -54,9 +56,9 @@ export function Filters({
           className={`mt-1 block w-64 ${field}`}
         >
           <option value="">All {departments.length}</option>
-          {departments.map((department) => (
-            <option key={department} value={department}>
-              {department}
+          {departments.map((option) => (
+            <option key={option.department} value={option.department}>
+              {option.label}
             </option>
           ))}
         </select>
