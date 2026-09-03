@@ -151,8 +151,18 @@ jobs:
         # anybody looks at. A broken service container would turn several hundred real
         # assertions into a green tick, and nothing in the output would say so.
         #
-        # Zero skips is the correct threshold rather than a lenient one: the suite has
-        # no legitimately skipped test, so any skip is a configuration failure.
+        # Zero skips is the correct threshold rather than a lenient one, and it stays.
+        #
+        # What changed on 2026-09-03 is what the failure SAYS. It named a Postgres
+        # outage as the cause, because when it was written `requires_db` was the only
+        # thing in the suite that could skip. It stopped being the only thing:
+        # `test_no_decision_reads_simulated_agent_state` skips a module it cannot find,
+        # and one of the paths it was given had been deleted. The run failed correctly
+        # and explained itself wrongly, which sends the next reader to check a database
+        # that is fine.
+        #
+        # So the message now names the tests that skipped and the reason each gave.
+        # A guard that refuses to say what it saw costs more than the skip did.
         if: always()
         run: |
           python - <<'PY'
@@ -167,14 +177,36 @@ jobs:
 
           print(f"{total} tests, {skipped} skipped, {failures} failed, {errors} errored")
 
+          # Name them. The threshold is zero either way, but "1 test(s) skipped" with no
+          # further detail is a message that makes somebody go looking, and the XML has
+          # been carrying the answer all along.
+          who = []
+          for case in suite.iter("testcase"):
+              mark = case.find("skipped")
+              if mark is None:
+                  continue
+              name = case.get("classname", "") + "::" + case.get("name", "")
+              why = (mark.get("message") or "").strip() or "no reason given"
+              who.append((name.lstrip(":"), why))
+          if who:
+              print("skipped, and why:")
+              for name, why in who:
+                  print("    " + name)
+                  print("      -> " + why)
+
           problems = []
           if total == 0:
               problems.append("no tests ran at all")
           if skipped:
               problems.append(
-                  f"{skipped} test(s) skipped. Every database test is guarded by "
-                  "requires_db, so a skip here means the Postgres service was not "
-                  "reachable and this run proved nothing."
+                  f"{skipped} test(s) skipped, listed above with the reason each gave. "
+                  "A skip is a pass in every summary anybody reads, so this run has not "
+                  "proved what its tick claims. Two causes look identical here and are "
+                  "not: the DSNs being unset or wrong skips the whole `requires_db` "
+                  "suite and means Postgres was unreachable, while a conditional skip "
+                  "inside one test - a path it could not find, a dependency it could "
+                  "not import - means the test is stale and should be fixed or deleted. "
+                  "Read the reason before checking the database."
               )
           if failures or errors:
               problems.append(f"{failures} failure(s), {errors} error(s)")
