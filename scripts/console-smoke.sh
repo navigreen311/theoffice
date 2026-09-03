@@ -469,12 +469,27 @@ open_run = next(
 )
 run_id = open_run["run_id"] if open_run else call(
     "/api/provisioning/runs", {"venture_id": venture})["run_id"]
-call(f"/api/provisioning/runs/{run_id}/advance")
-print(run_id)
+# Say where it stopped. Seven checks below assume this run reaches gate 4 and the
+# review form renders; when they failed, the gate the run actually stopped at was not
+# in the output and had to be inferred. One line, so it does not have to be again.
+result = call(f"/api/provisioning/runs/{run_id}/advance")
+last = (result.get("outcomes") or [{}])[-1]
+print("|".join(str(x) for x in (
+    run_id,
+    result.get("current_gate", "?"),
+    result.get("status", "?"),
+    last.get("gate", "?"),
+    last.get("verdict", "?"),
+    (last.get("reason") or "")[:200],
+)))
 PY
 )"
 if [ -n "$RUN_ID" ]; then
-  say "run ${RUN_ID:0:8} advanced to its first stop"
+  IFS='|' read -r run_uuid stop_gate stop_status last_gate last_verdict last_reason     <<<"$RUN_ID"
+  RUN_ID="$run_uuid"
+  say "run ${RUN_ID:0:8} stopped at gate $stop_gate ($stop_status)"
+  say "  last gate evaluated: $last_gate -> $last_verdict"
+  if [ -n "$last_reason" ]; then say "  $last_reason"; fi
   curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT/provisioning/$PACK_VENTURE"     > "$WORK"/ladder.html
   code="$(curl -s -b "$COOKIE_JAR" -o /dev/null -w '%{http_code}'     "http://127.0.0.1:$CONSOLE_PORT/provisioning/$PACK_VENTURE")"
   [ "$code" = "200" ] || fail "the gate ladder returned $code"
