@@ -242,6 +242,47 @@ PY
 API_AUTH="Authorization: Bearer $TOKEN"
 say "issued ${TOKEN:0:8}..."
 
+step "One real person, so Access has a row"
+# The Access page separates real accounts from the fixtures this script creates, and
+# every account here was a fixture: smoke-<hex>@example.invalid is classified
+# test_fixture by broker/account_origin, correctly, and the page hides fixtures by
+# default. So it rendered no rows at all, and the check guarding the row-actions
+# overflow menu - the fix for 179 rows of inline forms - reported FAIL for an empty
+# table rather than for inline forms. It was failing on the absence of data.
+#
+# One account the classifier calls a person, which needs only an address outside
+# .invalid. It is a smoke artifact and is named as one; what makes it a person to
+# the classifier is the property the check needs, and it is created deliberately
+# rather than by loosening the operator token's address, because the operator SHOULD
+# be a fixture - this script creates it.
+#
+# Idempotent: a re-run finds it and adds nothing.
+"$VPY" - <<'PY' >/dev/null
+import asyncio, sys
+sys.path.insert(0, ".")
+import broker  # noqa: F401 - event-loop policy
+from broker import humans
+from broker.db import connection
+
+async def main():
+    async with connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "SELECT count(*) FROM office_human WHERE origin = 'human'"
+            )
+            row = await cur.fetchone()
+        if row and row[0]:
+            return
+        await humans.create_human(
+            conn,
+            display_name="Console Operator",
+            email="console.operator@office.smoke",
+        )
+
+asyncio.run(main())
+PY
+say "the Access page has at least one non-fixture account"
+
 step "Console"
 # Its own build directory, so running this script does not break a console the
 # developer already has running. `next build` used to replace `console/.next` while a
@@ -1567,7 +1608,7 @@ if [ -n "$AGENT_ID" ]; then
     grep -qF "$phrase" "$WORK"/agent-text.html || fail "agent detail lost: ${phrase:0:60}"
   done <<'PHRASES'
 A grant with either certification unit missing is not assignable
-One venture per agent per shift. A failed PHI flush blocks the next assignment.
+One venture per agent per Village quarter. A failed PHI flush blocks the next assignment.
 PHRASES
   say "the preserved copy is present verbatim"
 
