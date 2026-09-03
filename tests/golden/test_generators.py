@@ -121,7 +121,7 @@ async def test_no_uuid4_leaks_into_an_artifact(artifacts):
 
 @pytest.mark.parametrize(
     "name",
-    ["roles", "appointment", "workflow", "task_ledger", "curriculum",
+    ["roles", "appointment", "workflow", "approval_projection", "curriculum",
      "forge_manifest", "runtime_config"],
 )
 async def test_golden_snapshot(artifacts, name):
@@ -178,9 +178,9 @@ async def test_shortfall_reports_all_three_capacity_numbers(greenstone_world, ad
     to auto-reject the Pack, auto-appoint an uncertified agent, or reduce scope.
     """
     certify(admin, [ROSTER[0][0]], ["property_lookup", "comp_analysis"],
-            unit_b_departments=["Research & Market Intelligence"])
+            unit_b_departments=["research"])
     certify(admin, [ROSTER[0][0]], ["place_call"], forge="voiceforge",
-            unit_b_departments=["Research & Market Intelligence"])
+            unit_b_departments=["research"])
     pack = load_pack(PACK_PATH)
 
     async with connection() as conn:
@@ -219,21 +219,45 @@ async def test_workflow_steps_follow_the_declared_stage_order(artifacts):
     assert ordered == sorted(ordered, key=lambda s: first_seen[s])
 
 
-async def test_task_ledger_projects_daily_approvals_per_human_role(artifacts):
-    """G8 — 5.4 names this a required output; it is V13's input."""
-    approvals = artifacts.task_ledger.projected_daily_approvals
-    assert approvals, "no approval projection - V13 has nothing to check"
-    assert all(isinstance(v, int) and v > 0 for v in approvals.values())
-    # Only sub-auto_execute tasks generate approvals.
-    assert any(t.trust_tier != "auto_execute" for t in artifacts.task_ledger.tasks)
+async def test_the_projection_counts_approvals_per_human_role(artifacts):
+    """V13's only input, and the reason the Task Ledger Generator was not deleted whole.
+
+    The ledger produced tasks with owners, priorities and SLAs, which is the Village
+    Decomposer's job. This number is not about agent work: it is how many decisions a
+    human will be handed per day, and no part of the Village has an opinion about how
+    many a compliance officer can absorb before they stop reading them.
+    """
+    approvals = artifacts.approval_projection.projected_daily_approvals
+
+    assert approvals, "no role is projected to receive any approval"
+    assert all(isinstance(count, int) and count > 0 for count in approvals.values())
+    # Every role named must be one the Pack actually staffs; a projection against a role
+    # with no coverage hours divides by zero in V13 and reads as infinite overload.
+    assert set(approvals) <= {"venture_operator", "compliance_officer"}
 
 
-async def test_at_most_once_module_carries_its_idempotency_class(artifacts):
-    """generate_loi is registered at_most_once. The ledger must say so, because the
-    call path refuses to auto-retry it."""
-    loi = [t for t in artifacts.task_ledger.tasks if t.module_id == "generate_loi"]
-    assert loi
-    assert all(t.idempotency_class == "at_most_once" for t in loi)
+async def test_the_projection_carries_no_task_shaped_fields(artifacts):
+    """The half that was deleted, asserted absent.
+
+    A field that quietly came back would put The Office back in the business of deciding
+    what an agent does and when, next to a Village that is already deciding it.
+    """
+    projection = artifacts.approval_projection
+    for gone in ("tasks", "sla_minutes", "assigned_agent", "priority", "task_id"):
+        assert not hasattr(projection, gone), (
+            f"{gone!r} is back on the approval projection; assignment is the Village's"
+        )
+
+
+# `test_at_most_once_module_carries_its_idempotency_class` was here. It asserted that the
+# Task Ledger copied a module's retry class onto each task, and there are no tasks any
+# more - the Village Decomposer owns work assignment.
+#
+# The property it existed to protect is untouched and is tested where it is enforced:
+# `tests/contract/test_call_path.py::test_at_most_once_replay_escalates_instead_of_retrying`
+# reads `forge_module_registry` and asserts the call path escalates to a human rather
+# than retrying. That is the behaviour that matters; the ledger only ever carried a copy
+# of the fact.
 
 
 async def test_curriculum_states_a_denominator_for_every_dimension(artifacts):
@@ -282,14 +306,24 @@ async def test_gate_4_5_catches_what_gate_2_could_not(artifacts, greenstone_worl
     gate_2 = await validate(pack)
     assert gate_2.get("V13").verdict.value == "PASS", "Gate 2 estimate is optimistic"
 
-    gate_45 = await validate_gate_4_5(pack, artifacts.task_ledger, artifacts.appointment)
+    gate_45 = await validate_gate_4_5(pack, artifacts.approval_projection, artifacts.appointment)
     v13 = gate_45.get("V13")
     assert v13.verdict.value == "FAIL", (
         "Greenstone as authored routes more approvals to its compliance officer than "
         "the coverage hours can absorb; Gate 4.5 must catch it"
     )
-    assert "compliance_officer" in v13.message
-    assert "decorative" in v13.message
+    assert "compliance officer" in v13.message
+    # The message has to say what goes wrong above the line, not just report numbers.
+    assert "trust tiers stop meaning anything" in v13.message
+
+    # Verbatim, and it earns the pin. The utilisation factor is the one number here
+    # somebody can lower to make the rule pass without changing anything real, so the
+    # message closes that door explicitly - and a later edit that drops the clause
+    # would leave the obvious wrong fix as the easiest one.
+    assert v13.message.rstrip().endswith(
+        "Fix by raising a trust-tier ceiling, adding reviewer coverage, or cutting "
+        "scope - not by lowering the utilisation factor."
+    )
 
 
 async def test_gate_4_5_resolves_v24(artifacts, greenstone_world):
@@ -297,16 +331,38 @@ async def test_gate_4_5_resolves_v24(artifacts, greenstone_world):
     from generators.validator import validate_gate_4_5
 
     pack = load_pack(PACK_PATH)
-    gate_45 = await validate_gate_4_5(pack, artifacts.task_ledger, artifacts.appointment)
+    gate_45 = await validate_gate_4_5(pack, artifacts.approval_projection, artifacts.appointment)
     assert gate_45.get("V24").verdict.value == "PASS", "all positions were filled"
 
 
-async def test_gate_4_5_failure_surfaces_in_the_pipeline_warnings(artifacts):
+async def test_gate_4_5_failure_surfaces_as_a_failure_not_a_warning(artifacts):
     """Gate 4 is a human reading artifacts. A finding that only exists in a log line
-    is a finding that review will miss."""
-    assert any("GATE 4.5" in w and "V13" in w for w in artifacts.warnings), (
-        f"capacity failure not surfaced for human review: {artifacts.warnings}"
+    is a finding that review will miss - and a finding filed under `warnings` is one
+    the reviewer discounts.
+
+    V13 FAILs at Gate 4.5, one gate after the one the human is being asked to clear.
+    Carrying that as a bare string in a list called `warnings` is how the console came
+    to render "Generator warnings (2)" over one blocking failure and one advisory.
+    """
+    v13 = next(
+        (a for a in artifacts.advisories if a.rule_id == "V13"), None
     )
+    assert v13 is not None, (
+        f"capacity failure not surfaced for human review: {artifacts.advisories}"
+    )
+    assert v13.severity == "fail", "a Gate 4.5 FAIL is presented as a warning"
+    assert v13.blocks_at == "4.5", (
+        "the advisory does not say where the run will halt, so the console has to "
+        "infer it from the text of the message"
+    )
+    assert v13.blocking is True
+
+    # And the genuine advisory is still an advisory. The two must not share a severity
+    # any more than they share a container.
+    v25 = next((a for a in artifacts.advisories if a.rule_id == "V25"), None)
+    if v25 is not None:
+        assert v25.severity == "warn"
+        assert v25.blocks_at is None
 
 
 # ---------------------------------------------------------- 5.7 idempotency

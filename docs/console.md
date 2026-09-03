@@ -59,8 +59,8 @@ quiet incident list means nothing if the check producing it is stale.
 | **Agent Identity & Grants** (`/agents/[id]`) | grants, per-Forge migration status, recent shifts |
 | **Approval queue** (`/proposals`) | the screen that can erode a control without bypassing it |
 | **Instruction authoring** (`/instructions`) | index + version, diff, staleness, certification impact |
-| **Pack Editor** (`/packs`, `/packs/[venture]`) | validate and publish as separate acts; version history with hashes |
-| **Provisioning Console** (`/provisioning`, `/provisioning/[venture]`) | the sixteen-gate ladder, with three verdicts rendered three ways |
+| **Packs** (`/packs`, `/packs/[venture]`) | whether each Pack can provision and why not; draft/live/provisioned versions and the drift between them; validate and publish as separate acts |
+| **Provisioning** (`/provisioning`, `/provisioning/[venture]`) | the sixteen-gate ladder, with three verdicts rendered three ways |
 | **Knowledge Base Manager** (`/knowledge`) | coverage for all five stores; blocking gaps render differently from advisory ones |
 | **Access** (`/access`) | people, roles, tokens and active revocations — the screen that removed the shell dependency |
 | **Incidents** (`/incidents`) | open and resolved; resolving appends an account and never edits the detection |
@@ -166,7 +166,7 @@ supersedes the live Pack, and the next run provisions the new one.
 Three rules follow.
 
 **Validate before publish, and show the whole report.** `POST /api/packs/validate` runs
-all 27 rules and stores nothing. FAIL, WARN and NOT_RUN render separately, because
+every rule in the registry and stores nothing. FAIL, WARN and NOT_RUN render separately, because
 `NOT_RUN` is not a pass and an editor that shows it as a green tick teaches the operator
 to read it that way.
 
@@ -345,9 +345,995 @@ Pack still wins on everything it declares.
 The wordmark is a link, Dashboard is the first item under Operate, and pages carry a
 breadcrumb. There was previously no route back to a dashboard from anywhere.
 
+## The Packs page, rebuilt
+
+The old page listed which ventures had a Pack and gave the first sixteen characters of a
+hash. It could not answer the question a reader opens it with: **can this Pack
+provision, and if not, why.** A Pack failing any FAIL rule cannot provision, cannot
+generate and cannot appoint — so validation state is the most consequential thing about
+a Pack, and it was the one thing the page did not carry.
+
+**Four validation states, not two.** `can provision`, `provisions with warnings`, `not
+validated`, `cannot provision`. The third exists because a rule that could not run has
+passed nothing, and rendering "no problems were found" the same as "every rule passed"
+is the specific failure this page exists to prevent. `not validated` renders in the
+warning palette rather than a neutral one: an unknown about whether a Pack can provision
+is not a resting state.
+
+**Deferred is not unrun.** V24 is evaluated at Gate 4.5 against appointment output,
+which does not exist at Gate 2 — Gate 2 excludes it from its own NOT_RUN check. Counting
+it here would make `not validated` permanent and `can provision` unreachable, which
+turns the distinction above into noise. It is reported separately, by rule id.
+
+**The failure names this Pack's problem.** `V11 · no Forge Operating Instructions
+authored for: comp_analysis, place_call`, not the rule's description. The second is a
+specification; only the first tells somebody what to go and do. It comes from the
+validator's own message, so it cannot go stale the way a table of blocker strings does.
+
+**Three version states, because they are three different documents.** The draft somebody
+is writing, the live version that would be provisioned next, and the version the running
+system was actually built from. Live ahead of provisioned is **drift** — the running
+configuration is not the published one — and nothing in the old page could express it.
+When a Pack has drifted and Gate 10 signatures exist, the page says those signatures no
+longer cover what is published: nothing revoked them, they stopped matching.
+
+**Drafts, and why they cannot provision.** Migration 0017 adds `business_pack.status`.
+A draft is unreachable by construction rather than by a check: `packs.live` filters on
+`status = 'live'`, so Gate 1 cannot find a draft and nothing downstream has an input.
+That is what makes it safe to save a Pack that still fails ten rules — and the work of
+authoring a Pack is mostly the work of making it stop failing, so it has to be storable
+in the meantime or it gets written somewhere this console cannot see. Replacing a draft
+supersedes it rather than deleting it: `office_app` has no DELETE on the Pack store, and
+a draft somebody replaced is still a document somebody wrote.
+
+**New Pack, three ways in and one way out.** Paste, template and duplicate differ only
+in where the text comes from; all three end at the same textarea and the same save. A
+separate "create from template" route that wrote its own row would be a second way to
+author a Pack, and the second way is always the one that skips a check.
+
+**A template fails validation on purpose.** Every field whose value depends on the
+venture is `REPLACE_ME`, and every venture-specific number is zero — so V18 fails on the
+budget caps, and that failure is the mechanism that makes somebody choose real ones. A
+template that shipped a plausible budget would produce a Pack that passes V18 on a
+figure this repository invented. What a template *does* carry is the compliance surface
+for its category, because that does not depend on the venture, marked `library_gap:
+true`. Every other choice defaults to its safe end: `sandbox`, `suggest`, `halt`,
+`fail_closed`, `distinct_humans` — an unfinished Pack that reached a run anyway cannot
+be more permissive than the operator intended.
+
+**Every denominator is computed.** The brief that specified this page said 27 validator
+rules and 17 schema blocks. The registry has 28 and the model has 18, and both numbers
+were already wrong when the brief was written — so the page reads them from
+`all_rule_ids()` and `BusinessPack.model_fields` rather than carrying them as copy.
+
+**Two bugs this increment found.** `/api/packs/directory` was registered after
+`/api/packs/{venture_id}`, and FastAPI matches in declaration order — so the literal
+segment was handed to the parameterised route as a venture id and the endpoint answered
+200 with the detail for a venture named "directory". Nothing failed; the wrong route
+answered with a plausible body. And `PORTFOLIO` declared the cyber venture's only
+framework as `NRS_648` where the Pack schema's literal is `NRS_648_NV` — so no Pack for
+that venture could ever have declared it. Nothing had noticed, because nothing tried to
+generate a Pack from the portfolio until templates existed. Both are pinned by tests.
+
+## The Provisioning page, rebuilt
+
+The page's own subtitle promised that a run "stops at the first gate that blocks and
+says which". It named the gate number and stopped there. Sixteen gates were represented
+by `5 of 16` - a number with no map - and the page could not say what happened at the
+gate that stopped the run, what cleared before it, or what is still ahead. It also
+carried no action at all, which made the provisioning page the one place you could not
+provision from.
+
+**The ladder replaces the fraction.** Every gate renders, in order, whether or not it
+ran, and it is never collapsed or truncated: seeing the whole path is the point. The
+gate a run stopped at is filled in danger; the ceiling gate is filled in warning
+wherever the run stopped. Those are two unrelated walls - the one this run hit, and the
+one every run in this deployment will hit - and the old page gave no way to tell them
+apart.
+
+**Plain-language names on the ladder, the spec's names underneath.** `GATE_TITLES` says
+what a gate checks, in the vocabulary of the document that defined it - "Human review of
+artifacts, BOM and appointment gap report". That is right on the gate's own row, where
+there is room; a sixteen-row ladder needs "Human review". `GATE_NAMES` is the second
+map, and the ladder carries the long form as the row's title attribute rather than
+losing it.
+
+**The numbering is explained rather than left contradictory.** A page showing "Gate 4"
+and "5 of 16" at the same time reads as a bug. Gates 3.5, 4.5 and 9.5 were inserted
+after the original twelve, so the gate number and the cleared count legitimately differ,
+and the footnote says so - computed from the ladder, including which gates are the
+fractional ones, so inserting a gate 6.5 later cannot make the sentence wrong.
+
+**Why the run stopped, in this run's own words.** The old page said `aborted, gate 4`.
+Gate 4 is human review, so that could have been a rejection, a timeout or an error. The
+stop block now names the gate, the disposition, the human who acted and when, then what
+happened and what it means downstream - including how many gates never ran as a result.
+The reason is always the recorded outcome; rendering the gate's generic description here
+would produce a sentence true of every run and about none of them.
+
+**A run somebody ended does not have its reason in the gate results.** The gate recorded
+why it was *waiting*; the human recorded why they stopped it, and that went to the audit
+log. So a cancelled or rejected run reads its disposition from `audit_log` - actor,
+timestamp and reason - and that overrides the gate's message. The first build of this
+page credited a cancellation to whoever *started* the run, which for a run cancelled
+days later is the wrong person.
+
+**The status vocabulary is the reader's, not the machine's.** `aborted` reads as though
+somebody cancelled it - which is what it means, and what it fails to distinguish from a
+gate refusing. Stored status stays as it is; the display status is derived:
+
+| Shown | When |
+| --- | --- |
+| `running at gate N` | in progress |
+| `awaiting review at gate N` | a gate has put something to a human |
+| `stopped at gate N` | a gate blocked on policy |
+| `failed at gate N` | a gate threw. Marked at the gate with `evidence.error`, not guessed from the reason string |
+| `rejected at gate N` | a human declined at a gate awaiting their decision |
+| `cancelled` | a human abandoned the run. Says nothing about the artifacts |
+| `at ceiling` | reached 9.5 and can go no further in this deployment |
+| `complete` | reached gate 12 |
+
+**`at ceiling` is not a failure.** A run that reaches 9.5 has done everything currently
+possible, and conflating that with failing would misrepresent a successful run as a
+broken one. It is drawn on the *evidence*, not the gate number: a held-out verdict of
+`FAIL` at the same gate is a real failure, and reading the two the same way would report
+a venture that failed adversarial testing as merely waiting for infrastructure.
+
+**Gate 4 can now say no.** Until this increment `record_human_review` could only record
+that a human had reviewed the artifacts - there was no way to decline. A review that can
+only approve is not a review, and what a reviewer actually had was `abort_run`, which
+means something different: abandoning a run rather than judging it. Migration 0018 adds
+`rejected` as a terminal status, and it is only reachable while a gate is
+`awaiting_human` - rejecting a run nothing has put to a human would be a way to stop it
+mid-flight while dressing it as a judgement. Like an abort, it does not deactivate
+grants: a rejection is not a revocation.
+
+**Resume, and when it is refused.** Resuming is `advance` from the gate the run stopped
+at - the same mechanism, so it cannot drift from one. It is unavailable when the Pack
+changed underneath the run, including the case a version string cannot catch: the same
+version re-stored with different content. The run holds the Pack hash it began with, and
+resuming against different content would provision something nobody started.
+
+**No override, anywhere.** The ceiling notice states there is none deliberately, and a
+UI offering one would make that copy a lie. `test_no_route_can_pass_a_gate_that_blocked`
+enumerates the provisioning write surface and fails on any route whose path contains
+force, skip, override, bypass or unblock - so the guarantee is enforced rather than
+remembered. Every write there either starts a run, runs gates in order, or stops one.
+
+**Ceiling styling.** The notice was styled identically to body copy, which is how the
+strongest sentence in the console came to read like an aside. It now carries the warning
+palette and a lock icon.
+
+### The run detail page
+
+The structure here was already right — sixteen rows including the gates still ahead, the
+review form beside the numbers it is about, advance and abandon as separate acts. What
+was wrong was what the page knew and did not say.
+
+**It knew the next gate would fail.** At gate 4 it held `GATE 4.5 V13 FAIL` and filed it
+under *Generator warnings (2)*, then asked a human to write a review and press *Advance
+from gate 4* — while already holding the reason the run halts one gate later. That
+spends somebody's attention to manufacture another abandoned run. A danger banner now
+states it above the form: which gate, which rule, and what advancing will do. It
+deliberately does **not** disable Advance: an operator may legitimately want to confirm
+the halt, and a page that decides for them has stopped informing and started enforcing,
+which is the gates' job.
+
+**A failure was being counted as a warning.** `_collect_warnings` returned a flat list of
+strings, so a rule that FAILs at 4.5 and a genuine advisory shared a container and a
+count. The fix is at the source rather than in the console: `Advisory` carries
+`severity`, `rule_id` and `blocks_at`, so the two cannot be conflated by any reader, and
+the console renders *Blocking failures (1)* and *Warnings (1)* as separate blocks with
+separate counts. Deriving it in the page from a substring match on `"FAIL"` would have
+worked until the day a warning mentioned the word.
+
+**Raw JSON was the default view.** Three capacity numbers as an object literal and a
+warnings array with escaped quotes, printed at the human about to take responsibility for
+what they read. Capacity is three metric cards, unfilled positions render as a sentence
+when empty, the artifacts hash truncates with a copy control and one line on what it
+binds. The raw object stays behind a *View raw* toggle — engineers need it, and when a
+rendered summary and the underlying object disagree the object is the one that is true.
+
+**V13 reads as English.** It was a formula: `192 approvals x 6 min = 1152 minutes against
+144 available`. It is now three sentences that keep every number, and the last one is
+pinned verbatim by a test — the utilisation factor is the one number in that rule
+somebody can lower to make it pass without changing anything real, so the message closes
+that door explicitly.
+
+**Run history states its finding.** Six runs, all Pack 1.0.0, all stopped at gate 4,
+rendered as six identical rows: the pattern was the most useful fact on the page and the
+reader had to derive it. The heading now carries it, the Pack version is on every row —
+consecutive runs sharing a version is the signal that nothing changed — and older
+identical outcomes collapse behind a count.
+
+**`aborted` and `rejected` no longer share a colour.** Abandonment is neutral and says
+nothing about the artifacts; rejection is a judgement about them. `aborted` also renders
+as *abandoned*, because "aborted" reads as a crash when somebody chose it.
+
+**Gate 9.5 reads the same on both screens.** It said *not run* here and *blocked —
+ceiling* on the index, because each screen described the ladder in its own terms. Both
+now call `provisioning.ladder_for`, so one gate cannot mean two things depending on which
+page you opened.
+
+**Two review actions instead of two cards.** *Record review and advance* and *Record
+review only*, in one form. They sat in separate cards with no stated relationship, so
+whether advancing needed the review first was something an operator found out by trying.
+
+**Two smaller defects found on the way.** The shared `Button` hardcoded `text-white` on
+`bg-surface-inverse`; that surface flips with the theme, so every filled button rendered
+white-on-white for dark-mode readers. And starting a second run for a venture surfaced
+the `ux_run_active` constraint as a bare **500** — a deliberate rule reported as an
+internal error teaches an operator that the system is broken when it is working. It now
+refuses with a message naming the run in the way. The constraint is still the control:
+the pre-check loses a race between two simultaneous requests, and a test proves the
+database refuses independently by inserting past the check.
+
+### The Pack editor
+
+The directory rebuild gave Packs drafts, templates, four validation states and a publish
+step. None of it reached the editor — which is the screen where the work those things
+describe actually happens.
+
+**A draft saved from the directory was invisible here.** The detail route returned only
+the live Pack, so the editor opened that over the top of the draft. The draft was still
+stored; it just was not on the screen built to work on it, and the next save wrote over
+it with text the operator had never seen as a draft. The route now returns both, and the
+editor opens the draft in preference, saying which version stays live meanwhile.
+
+**A draft was rendered as live.** The version history keyed "live" off
+`superseded_at IS NULL` — which is true of a draft as well, so an unpublished draft
+appeared with a green live badge beside the version actually in force. Two rows both
+claiming to be what a run would provision. It reads `status` now, which exists precisely
+so this cannot be inferred wrongly.
+
+**Three acts, three forms.** Validate writes nothing; saving a draft stores a document
+that cannot provision; publishing supersedes the live Pack. A stored draft gets its own
+publish control, which says explicitly that it promotes the stored draft rather than the
+text in the box — those differ the moment somebody types.
+
+**One validation state machine.** `packs.validation_state` is shared by the directory and
+the editor, so a Pack cannot read `valid` on one screen and `not validated` on the other,
+and the rule count comes from the registry rather than the copy — the editor said "all 27
+rules" against a registry of 28.
+
+### The editor's validation badge, and what a stage can claim
+
+The badge read `can provision - 28 of 28 rules checked`. Both halves overclaimed, and
+the second has a principle behind it.
+
+**Not evaluable, passed and failed are three states.** One rule - V24 - had not been
+evaluated at all: it tests appointment output, which does not exist until the generators
+run at Gate 3. Counting it in "28 of 28 checked" claims the document was examined more
+thoroughly than it was, on the screen where somebody decides whether to publish it. The
+result is now three numbers that partition the rule set, and a test asserts the
+partition rather than the wording.
+
+**"Can provision" is a claim about the pipeline, not about this stage.** V13 passes at
+Gate 2, which estimates approvals from headcount, and fails at Gate 4.5, which computes
+them from the real Task Ledger - the two disagree by an order of magnitude and the Gate
+2 estimate is the optimistic one. So a Pack with no failures here has not been shown to
+be provisionable. The badge says `No blocking failures at this stage`, which is the
+finding the validator can actually support, and rules that a later gate re-checks say so.
+
+`GATE_45_RECHECKS` names those rules, and a test reads the source of
+`validate_gate_4_5` to assert the constant matches what the function evaluates - a list
+that drifts from the thing it describes is worse than no list, because the editor would
+go quietly back to implying Gate 2 is the last word.
+
+**Every unevaluable rule names the gate that settles it and why this one cannot.** A bare
+NOT_RUN says something did not happen without saying what would, which leaves a reader
+to decide whether it is a defect, a gap in the Pack, or normal.
+
+### The diff, the history, and the publish guard
+
+**A diff, on the document that gets signed.** Its hash pins every provisioning run that
+started from it and Gate 10 signatures bind to the artifacts it generates, and there was
+no way to see what differed from the live version. `lib/diff.ts` is a plain LCS -
+implemented rather than imported, because a dependency on this page is a dependency on
+the one screen that must not surprise anybody. Identical text says so rather than
+rendering an empty panel, which reads as a diff that failed to load.
+
+**Migration 0019 separates `abandoned` from `superseded`.** A released version replaced
+by a later release and a draft nobody published were both `superseded`, which is why an
+abandoned draft above the live version read as a broken sort - the list was ordered
+correctly and the label was not saying what happened. The first attempt distinguished
+them by a `-draft` suffix on the version string; that is a naming convention rather than
+a fact, wrong for a draft called `1.2.0` and for a release called `2.0.0-draft`. The
+store records which one it was.
+
+**The history keeps its own promise.** "A run names the version it provisioned" was copy
+under a list that could not say it: versions were here and runs were on another screen.
+Each row now carries its run count, its author, a diff against live or any other
+version, and Restore as draft - which restores as a *draft* rather than publishing,
+because restoring is usually recovery and that is exactly the moment not to put a
+document into force in one click.
+
+**Publish confirms.** Version transition, diff summary, the rules the text is known to
+carry, and what publishing does not do. The warning names Gate 10 signatures rather than
+certifications: `certification.instruction_content_hash` binds to a Forge Operating
+Instruction, not to a Pack, so publishing a Pack does not void certifications. What it
+voids is signatures, which bind to the artifacts the Pack generates.
+
+### Block navigation, and where the actions live
+
+342 lines in one scroll, with Validate, Save draft and Publish below all of them. Editing
+`budget` at line 129 meant scrolling past 128 lines to reach it and the rest of the
+document to act on it.
+
+**A sidebar of every block the schema defines, present or not.** A list of the blocks a
+document happens to contain cannot say "this Pack has no `kpi_targets`" - the absence has
+no line to scroll to, so the sidebar is the only place it can appear.
+
+**The mapping from rule to block is derived, not written down.** The sidebar marks blocks
+a failing rule reads, which needs a rule-to-block map. Twenty-eight table entries
+maintained beside twenty-eight functions, with nothing forcing them to agree, is the
+shape of the blocker-string table the ventures page replaced. A rule already names the
+fields it reads - `pack.budget`, `pack.positions_required` - so `rule_blocks()` reads it
+back out of the source. All 28 rules map; the four world rules, which are appended by
+`validate` rather than registered by the decorator, are named explicitly because they are
+about the bridge rather than about a block.
+
+**Icons only where they mean something.** A failing rule, or an absent block. Marking
+every row would make the two that matter indistinguishable from the sixteen that do not.
+
+**Line numbers and presence come from the buffer, not the stored Pack.** The sidebar has
+to follow what is being typed, including a document that does not parse yet - which is
+the state it is most useful in, and the state a YAML parser returns nothing for. So
+`lib/blocks.ts` reads top-level keys out of the text, and the server sends only the
+schema's block list.
+
+**The actions are pinned to the bottom of the editor card**, and submit the same three
+forms as the reference row below the document via `form=` rather than duplicating them.
+Publish still opens its confirmation: a pinned button that skipped it would be a
+one-click supersede, which is what the confirmation exists to prevent.
+
+**`min-w-0` on the editor column is load-bearing.** Without it the monospace content sets
+the flex item's minimum width and the document pushes the sidebar off the screen instead
+of scrolling.
+
+**A note on the fixture.** The smoke check for "every block has a row" was passing for
+the wrong reason: Greenstone's Pack contains all eighteen blocks, so a sidebar listing
+only what it found was indistinguishable from one listing the whole schema. The check now
+runs against a draft with one block removed, and reinstating the present-only filter
+fails the suite.
+
+### Restarting is not revoking
+
+`dev-up.sh` reissued the operator token on every run, which made restarting the servers
+and locking the operator out of the console the same act. Restarting is something you do
+constantly - after a rebuild, after a migration, in the middle of debugging something
+else - and each one silently invalidated the token whoever was using the console had.
+Three sessions lost a login to it before the pattern was obvious.
+
+The token survives a restart perfectly well; nothing about bringing servers up requires a
+new one. So a plain run leaves it alone and says so, and `--new-token` reissues - which is
+a thing to ask for rather than a side effect. It still cannot be recovered, because it is
+stored as a hash and returned exactly once; that is why "already exists" must not be
+allowed to mean "you are locked out of your own dev instance".
+
+## The Agents page, rebuilt
+
+The list rendered the agents holding an Office identity - seven of them - with no count
+and nothing indicating anybody else existed, so a reader concluded the Village has seven
+people. The agents The Office *cannot* appoint are the most consequential rows on this
+page: they are the work that has not been done.
+
+**The denominator is now a fact rather than a number.** The blueprint describes a Village
+of 106. The Compliance page hit this first and refused to write it down - "reporting 0 of
+106 against a roster of seven would invent a denominator, on the page whose own copy
+insists on real ones" - which was right, and left the gap unfixable rather than merely
+unreported. Migration 0020 adds `village_agent`, so the roster has somewhere to live and
+"7 of 106" becomes something this database can support. Until a roster is imported the
+banner says the roster has not been imported, which is true and is a different statement
+from "the Village has seven agents".
+
+**No control creates an agent.** The page's own subtitle states the model, so an "add
+agent" button would contradict it and become a second source of truth for who exists.
+What exists instead: *Sync from Village roster*, which previews a diff and writes nothing
+until confirmed; *Register Village agent*, which requires the Village's own reference
+because without it no later import can reconcile the row; and *Issue identity*, which
+makes an existing agent appointable. `issue_identity` refuses an agent the roster has
+never reported - an identity for somebody the Village has not mentioned is The Office
+inventing a colleague. A test enumerates the agent write surface so a fourth route cannot
+be added quietly.
+
+**A departure is a decision.** Importing a roster that omits an agent produces a diff
+naming what that agent still holds: an identity, and how many live grants. That is a
+revocation somebody has to perform, and an import that silently dropped the row would
+take the evidence with it. Departed agents are marked, never deleted.
+
+**Not declared is not a low tier.** The table showed an empty declared tier beside a
+populated certified one, which inverts the stated rule - the Pack declares a ceiling,
+SimForge certifies what was earned - and a reader could not tell which governed. The list
+shows one effective tier, the lower of the two, with both on hover; `not declared` and
+`no tier` are distinct from a value; and certified above the declared ceiling is flagged,
+because the Pack is the ceiling.
+
+**Certified with no grants is explained.** Every agent showed a certified tier and zero
+grants, two facts in unrelated columns. It is one state, with one sentence: certification
+makes an agent eligible; a grant is what lets it reach a Forge. It is also a filter.
+
+**The detail page has certifications.** It had none, while the list claimed a certified
+tier for the same agent. Both units render, scoped: Unit A per Forge and module with the
+instruction hash and Forge version it was earned under, Unit B per department and Forge.
+A bare "certified: auto_execute" is the same failure as a green check with no
+denominator.
+
+**Forge health and this agent's access are two facts.** "No grants. This agent cannot
+reach any Forge" sat directly above three Forges marked GREEN. Both true, and together
+they read as a bug. Each row now carries the Forge's health and this agent's access
+separately.
+
+**Revocation is on the agent's page.** It is the kill switch under the brokered model -
+the Forge attributes calls to the tenant, so pulling the grant is the only way to stop
+one agent reaching one Forge - and it was absent from the screen where somebody decides
+to use it.
+
+**A bug the SQL-shape guard caught.** The departure diff counted live grants with
+`count(*) FILTER (WHERE g.revoked_at IS NULL)` after a LEFT JOIN, which counts the
+all-NULL row - so an agent holding no grants reported one, in the diff somebody confirms
+a departure from. `tests/test_sql_shapes.py` failed on the new file the first time the
+suite ran.
+
+## The Approvals page, rebuilt
+
+The page was an empty state and nothing else: no design for a pending item, no reviewer
+capacity, no decision history, and an empty state that named the wrong cause.
+
+**The empty state is derived.** It said to check whether the agents' trust tiers were set
+to `auto_execute` - a real cause of an empty queue, and not this cause. No agent held a
+grant to any Forge and none had ever made a call, so the queue was empty because nothing
+could act. Sending a reader to inspect trust tiers wasted their time and implied the
+system was further along than it was. There are now four states with four sentences and
+no generic fallback, because a fallback would be wrong in three of them.
+
+**Expiry never approves.** `expired` had been a valid proposal status since the schema was
+written and nothing could ever set it - there was no deadline to pass. Migration 0021 adds
+`expires_at`, stored per proposal rather than computed from a setting, because the
+question afterwards is "when was this due" and a deadline derived from a setting that has
+since changed cannot answer it. A queue that drains itself looks like a queue being
+worked, which is exactly why auto-approval on timeout is the most attractive shortcut here
+and why there is no setting for it: an agent below `auto_execute` asked to act, nobody
+answered, and it did not act.
+
+**There is no bulk approve, and there is no route that could become one.** Bulk approval
+is this page's own warning industrialised - one click authorising fifty payloads nobody
+read, each one audited and counted. A test pins the proposal write surface to a single
+route. Bulk *deny* would be acceptable, because denying is the safe direction; the
+asymmetry is recorded so whoever adds it knows which half is safe.
+
+**Reviewer capacity comes from the Pack.** `human_capacity` is where reviewers are
+declared and what V13 checks against, so this is the page where that rule either holds or
+fails in practice. When pending exceeds what anybody can still decide today, the page says
+the overflow will not be reviewed before the window closes rather than showing a longer
+list. A reviewer is matched to their decisions by display name; where the two do not match
+it reports no decisions rather than inventing a join.
+
+**The five-second threshold is measured.** It was stated in copy with no data against it.
+`review_seconds` was already computed in the database from `created_at` - so a client
+cannot report a review it did not perform - and sub-threshold approvals already raised an
+incident. What was missing was the surface: decisions today, median, count under the
+threshold, approval rate, and the reviewers responsible. Flagged and recorded; nothing is
+blocked or undone.
+
+**Decision history carries the payload as it stood.** The proposal row holds the payload
+and is never rewritten, so the decision and the document it was made against cannot drift
+apart - which is what "show me who approved this and what they saw" asks for.
+
+**`useNow` is now the only place the console reads the clock.** The pending card needs to
+know how close an item is to expiring, which depends on the current time - the hydration
+mismatch that blanked pages once already. One hook reads it after mount and everything
+else derives from that, which keeps the smoke guard's blunt rule honest instead of
+widening its exemption list.
+
+## The Instructions pages, rebuilt
+
+`authored` meant a row exists and no section is empty. The live cre-forge curriculum
+satisfied that with:
+
+    "what_it_does": "Documented."
+    "what_it_does_not_do": "Documented."
+    "inputs": {"a": "b"}
+    "correct_sequence": ["a", "b"]
+
+Eight sections present, none empty, a valid `content_hash` over the lot, and 21
+certifications across the portfolio bound to those hashes - two of them on
+`cre-forge/buyer_match` alone. A hash of the word "Documented." is a valid hash of
+nothing, and every certification bound to it inherits that emptiness: the agents read as
+certified to operate a module nobody has described.
+
+**Completeness is assessed from the content, in one place.**
+`broker/curriculum_quality.py` returns four states - `complete`, `thin`, `stub`,
+`missing` - and three readers use it: the console renders it, V11 refuses a Pack on it,
+and the compliance page counts it. A screen that decided for itself what "thin" meant
+would eventually disagree with the rule that blocks a release.
+
+`thin` and `stub` are kept apart deliberately. Thin is real content that does not go far
+enough - one failure signature, a two-word sentence - and blocking a release on a short
+but honest line would teach people to pad. A stub is not content.
+
+**V11 fails a Pack whose instructions teach nothing.** The rule checked that a row
+existed, which is exactly what a placeholder satisfies. It now assesses the content, so a
+`content_hash` computed over "Documented." can no longer carry a venture through Gate 2.
+
+**The eight sections render individually**, each with the specific reason it fails -
+"Placeholder — the entire section reads 'Documented.'" rather than a badge over a JSON
+dump. The raw JSON stays behind a toggle.
+
+**A stub with live certifications names the agents.** Two on `buyer_match`: Faye Buyers
+and Gil Network. "2 agents are certified against a stub" is a number; the names are the
+people whose certifications have to be redone.
+
+**Instructions can now be written.** The page displayed content and offered no way to
+produce it, while the whole Teach section depends on that content existing. The form
+assesses as you type and will not publish while any section is a stub - publishing a stub
+is what produced this state.
+
+**The rules exist in two languages, and a shared fixture keeps them honest.**
+`console/lib/curriculum.ts` mirrors the Python so the form can grey out Publish without a
+round trip. Both test suites read `tests/fixtures/curriculum_cases.json`, so a rule added
+to one side without the other fails on the side that was not updated.
+
+**Two fixtures were testing the defect.** `tests/world.py` and a helper in
+`test_world_rules.py` both seeded the same placeholder curriculum, so every gate test
+downstream ran against agents certified to operate modules nobody had described - the
+tests passed and described nothing. Both now seed a curriculum that teaches the module,
+and the dev world has been re-seeded with it.
+
+**A teardown FK gap, found while re-seeding.** `teardown_world` deleted agents without
+clearing the proposals referencing them. That is the same shape as the `wipe_venture`
+failure recorded earlier: a teardown that names some dependents and not others breaks on
+whichever one the next feature adds.
+
+## The Knowledge Bases page, rebuilt
+
+The page reported 60 personas and 61 historical records. Every persona was named
+`Smoke 481920`, written by `scripts/console-smoke.sh`; 60 of the 61 records were
+`provisioning_abandoned` entries summarised "console smoke test". The library held no
+personas and said sixty. What the number measured was how often the smoke test had run.
+
+**Origin is derived, not stored.** A column would have been the obvious fix and could
+never have worked here: `historical_record` carries an append-only trigger and
+`office_app` holds only INSERT and SELECT on it, so no backfill could set the flag on the
+rows that need it and nothing could correct it later. `broker/knowledge_origin.py`
+classifies a row from its content — `authored`, `system`, or `test_fixture` — which also
+means a fixture written tomorrow is recognised without a migration.
+
+**Fixtures are declared, excluded, and filtered by default.** The overview states the
+fraction — "120 of 132 entries are test data" — no headline count includes them, and
+every table hides them until `include_fixtures` is set. The smoke check asserts both
+halves: that the default listing contains no fixture, *and* that asking for them returns
+more rows than the default. Checking only the first passes when the route is broken,
+which is exactly how the block-sidebar and bulk-approve checks first passed.
+
+**Each base states its gap in the terms of the thing that is missing.** "0 entries" is a
+number. "greenstone has 3 positions across 6 lifecycle stages and no written SOP for any
+of them" is a finding, and it is computed from the live Pack rather than written down —
+the Compliance page set the rule that a denominator nothing can support is not a
+denominator.
+
+**Two of the five block Gate 6; three are advisory.** They were rendered as five equal
+tables, which is what let a blocking gap sit beside a cosmetic one for the same length of
+time.
+
+**The five bases became five addresses.** One page with five tables on it could not be
+searched, filtered, paged, or linked to. Each is now its own tab with URL-driven search,
+filters and paging; Instructions links out to the pages that already own it.
+
+**Historical records are never deleted.** Personas can be — they are never production
+data — and the page says so. Records cannot: the store refuses it, and the page says what
+to do instead, which is to append a compensating entry. Excluding a fixture from a count
+is a reading decision, and the decision is itself recorded.
+
+**Writing a persona now has a step before the irreversible act.** The runtime role holds
+no read privilege on a persona body, so an accidental submit was unrecoverable through
+the UI — no undo, and no way to see what had been written. The form takes structured
+fields, refuses a placeholder disposition, confirms what cannot be undone, and returns
+the body hash, which is the only thing an author can keep to verify against later.
+
+**Publishing and withdrawing a share were adjacent buttons.** Withdrawing takes access
+away from a venture relying on it. It is its own card now.
+
+### The purge the brief asked for does not exist, and should not
+
+The brief asked for a "Purge smoke fixtures" action. Neither store can be purged.
+`office_app` holds INSERT and UPDATE on `persona` and no DELETE - the store is write-only
+by design, which is the same privilege boundary that stops a persona body being read back
+- and `historical_record` refuses DELETE to everyone by trigger, including the admin role
+and including its own migration. Widening a grant to put the button on screen would undo
+a boundary drawn on purpose.
+
+So the overview was claiming something the system does not support. `personas_deletable`
+was hardcoded `True`, reasoned from "personas are never production data" - true, and
+beside the point. Both flags are read from `information_schema.table_privileges` now, so
+a later GRANT moves the page instead of leaving it asserting yesterday's privileges, and
+a smoke check compares the page's claim against the grants directly.
+
+What replaces the purge is the half the brief's own rule asks for: **the exclusion is
+recorded, not applied silently.** `POST /api/knowledge/fixtures/exclude` appends a
+`knowledge_fixture_exclusion` record naming how many rows are being left out of the
+counts and who decided it, and touches nothing it describes. Migration 0022 adds the
+record type; it is its own type rather than a `note` because "why does this count differ
+from the row count" should be findable by kind.
+
+That migration's downgrade widens rather than narrows. Removing the type would mean
+deleting the rows that use it, and that table refuses deletion - so the downgrade restores
+the comment and leaves the type valid. A migration that would have to destroy history to
+reverse is not reversible; it is destructive with a tidier name.
+
+### The smoke harness was not counting its own failures
+
+Twelve checks computed their verdict in Python and printed `FAIL ...` down a pipe into
+`sed`. `FAILURES` is incremented by the `fail()` shell function alone, so those twelve
+were decorative: the script could print FAIL in its own output and exit 0. That is the
+failure this script exists to catch, one level up from where it was looking.
+
+`pycheck()` now wraps them and counts what they print, including a non-zero exit. Turning
+it on surfaced two real failures that had been printing invisibly:
+
+- The Manager's denominator check grepped raw HTML for `[0-9]+ of [0-9]+`. React writes
+  `9<!-- --> of <!-- -->9` across three elements, so the check answered no to a page that
+  plainly said it. It reads the text-stripped copy now.
+- The blocking/advisory check wanted copy this rebuild had shortened away. The badge
+  carries the full phrasing again.
+
+**The append-only probe asserts the message, not the error class.** The trigger raises
+with `ERRCODE = 'insufficient_privilege'`, which is also what a missing GRANT raises — so
+a table whose trigger had been dropped *and* whose grant had been revoked would answer
+identically to one properly guarded. The check requires the string `append-only
+violation` from the admin role, which holds DELETE on that table and is refused anyway.
+
+**A guard that flagged the paragraph explaining it.** `test_the_api_module_contains_no_
+raw_mutation` lowercases `broker/app.py` and looks for `update `, and a docstring saying
+the record store "refuses update and delete" tripped it. It reads tokens now, with
+comments and docstrings stripped — stricter, not laxer, since every real statement is
+still code. `test_the_raw_mutation_guard_still_sees_a_real_statement` holds the teeth,
+because a guard narrowed in response to a false positive is the kind that quietly stops
+guarding.
+
+## Pages were checked by asking the server, which cannot see hydration
+
+Three "Application error: a client-side exception has occurred" reports have now arrived
+by hand for pages the smoke script called green, and every time the check that should
+have caught it was a `curl` returning 200. The server renders the HTML, answers 200, and
+the page dies in the browser a moment later:
+
+- a React 19 API (`useActionState`, `<form action={async fn}>`) against the pinned React
+  18.3.1 — type-checks, builds, server-renders, throws on hydration;
+- `Date.now()` and `toLocaleString()` during SSR, where server HTML and client render
+  disagree and React discards the tree;
+- a JS chunk answering **400**, because `next build` rewrote `.next` under a running
+  `next start` and the HTML referenced chunks the server no longer had.
+
+The third is what produced the latest report, and it was self-inflicted: `dev-up.sh`
+builds and then starts, so a normal run is consistent, but running `npm run build`
+separately while the dev console keeps running leaves the live app serving HTML whose
+chunks 400. React fails with minified error #423 and Next shows its client-side exception
+page. Restarting the console fixes it; nothing warned that it was broken.
+
+**`scripts/hydration-check.mjs` opens every page in a real browser.** It drives Chrome
+over CDP — Node 22+ has a built-in WebSocket, so this adds no dependency — waits for
+hydration, and reports uncaught exceptions, console errors, and any sub-resource that
+failed to load. The smoke script runs it across all thirteen routes plus the four
+Knowledge tabs.
+
+It was mutation-tested rather than trusted: a component made to throw only when `window`
+is defined renders fine on the server and is invisible to every other check in the file.
+The step named the page, printed `MUTATION: client-only boom`, and reported the same
+React #423 the user saw.
+
+**Two ways it nearly shipped covering less than it claimed.** Git Bash rewrites any
+argument beginning with `/` into a Windows path, so `/knowledge` reached the checker as
+`C:/Program Files/Git/knowledge` and every page "rendered nothing at all". Disabling path
+conversion wholesale then broke the script path, which genuinely needs converting, so
+routes are passed dot-prefixed instead. Stripping the slash instead had turned `/` into
+the empty string, which the shell dropped — the dashboard silently stopped being checked
+while the step still reported every page hydrating. The checker is now told how many
+routes to expect and treats a mismatch as fatal.
+
+### Reported broken again, and the check still said clean
+
+The knowledge page was reported broken a second time, after the browser check had been
+added and reported every route hydrating. It was right and it was insufficient: it loaded
+every page **by URL**, and nobody reaches a page that way. Clicking `Knowledge` in the nav
+failed immediately, with the page chunk answering 400 and a `ChunkLoadError`.
+
+A direct load fetches a page's chunks fresh. A client-side transition asks the app that is
+already running, using the build manifest it holds. The two only disagree when the build
+changes underneath a running server — and then the direct load keeps working, which is
+what made this look intermittent and unreproducible.
+
+**The smoke script was the thing changing the build.** It ran `next build` in `console/`,
+replacing `console/.next` while the developer's `next start` on 3100 was serving from it.
+Every smoke run broke the running console. It builds into `.next-smoke` now, via
+`distDir: process.env.NEXT_DIST_DIR || ".next"`, and this was verified the only way worth
+trusting: run the whole smoke suite, then click into the knowledge page on 3100 and watch
+it still work.
+
+**The browser check now makes the transition itself the thing under test.** Each route is
+approached from the page that links to it — the dashboard for a top-level page, the parent
+for a tab — and the click is what gets checked. `/knowledge/personas` is not linked from
+the dashboard, so a pass that only followed dashboard links would have skipped exactly the
+pages that were reported broken. It reports how many of the linkable routes it actually
+clicked, because a sweep that quietly covers less is the shape of every failure in this
+file.
+
+**`app/error.tsx`: a stale build now refreshes instead of dying.** Next's default is
+"Application error: a client-side exception has occurred (see the browser console for more
+information)" — a dead end that names nothing and offers nothing, reported by hand three
+times here. Two of those were a tab holding half of a build that had been replaced: one
+refresh away from working, and it said so to nobody. A chunk-loading failure now reloads
+once automatically, guarded by a `sessionStorage` flag so an error that survives the
+refresh shows its message rather than looping. Anything else gets a page that says what
+happened, notes that nothing was written, and offers reload and retry.
+
+That last one is not a dev-server nicety. It is what every open tab experiences during a
+production redeploy.
+
+## The Incidents and Revocation pages, rebuilt
+
+Both had strong copy and controls that did not match the stakes.
+
+### Incidents
+
+**The page deferred an answer it could compute.** It said an empty list is only good news
+if the checks are fresh, and sent the reader to the compliance dashboard. Freshness is
+`sweeps.freshness()`, one call away, so the banner now states it. The brief for this
+rebuild said all four controls had never run; three of them had. The banner is generated
+from what is true, and a smoke check asserts both halves — every unhealthy control is
+named, and no healthy one is called stale. A false alarm here costs exactly the attention
+the banner exists to buy.
+
+**"Nothing matches" implied a filter that did not exist**, so an empty list read as "your
+filter hid everything" when it meant "there are none" — opposite readings of one screen.
+There are filters now (severity, kind, venture, state, date), and the two empty states are
+different sentences.
+
+**`kind` had no constraint at all.** `severity` always had one; `kind` was a free-text
+column with a schema-shaped name, and the fixtures proved it: one seeded `'test'` and
+another `'rubber_stamp'`, which is not the kind the code raises — `rubber_stamp_approval`
+is. Both passed for as long as nothing checked.
+
+`broker/incident_taxonomy.py` publishes the list, migration 0023 imports it into a CHECK
+rather than retyping it, and `test_every_incident_kind_raised_in_the_source_is_published`
+walks the source so a kind added to `sweeps.py` and not to the taxonomy fails immediately
+rather than at the first occurrence months later.
+
+The brief listed `phi_flush_failure`, `rate_limit_breach`, `spend_cap_breach` and
+`audit_write_failure`. Nothing in the broker raises any of them, and two name concepts the
+system does not have. Publishing a kind nothing can produce is the same defect as a
+denominator nothing supports — it reads as coverage. The taxonomy carries the eight kinds
+that are actually raised plus the three a person can file, and records the brief's names as
+aliases so somebody searching for one finds the answer.
+
+**An incident a person noticed could not be recorded.** The blueprint names three
+detection sources and only agent flag arrives on its own, so a regulator's question lived
+in an inbox while the page showed an empty list. `POST /api/incidents` files one; it
+carries the filer's name and a human detection source, and a control-raised kind cannot be
+filed by hand — that would claim a check ran that did not.
+
+**There was no view of a single incident.** There is now, and it keeps two things visibly
+apart: the detection, which is never editable, and the response, which is appended.
+`incident_account` is a new append-only table with the same trigger the other ledgers
+carry. Each of Part 9's five stages is either accounted for or says it is outstanding — a
+stage rendered blank reads as nothing to report, and it means nobody has reported.
+
+### Revocation
+
+**The emergency control asked for four UUIDs as free text.** Nobody recalls a UUID under
+pressure, and a typo either fails or stops the wrong thing — the second is worse and
+silent. Every target is now picked by name with its id beside it, and only the fields the
+chosen scope uses are rendered. The four scopes are buttons with plain labels; the effect
+and required authority are restated for whichever is chosen rather than left in a table.
+
+**Blast radius is shown before the act.** Revoking a venture stops every grant for an
+engagement including ones issued later; at Forge scope the broker refuses every call from
+every venture. Neither number was on screen. It is a query against existing state, not an
+authorization decision — the console still pre-checks nobody's authority, because a second
+implementation of that rule would drift from the first.
+
+Shifts report `n/a` rather than `0` at Forge scope. Zero would say "this affects no
+shifts", which is not what is true: the question does not apply.
+
+**The radius is stored with the revocation.** Recomputed six months later the same query
+answers about today's grants, not the ones it stopped, and nothing in the number shows the
+difference.
+
+**Revoking now asks twice**, and at venture and Forge scope the target's name must be
+typed. **Re-enabling has the ritual §1.4 asks for**: a written account, the person doing
+it, and at the two wide scopes a second named human who is not the first. Enforced in
+`revocation.reinstate` and again by a CHECK constraint, because a rule that lives only in
+application code is one the next route can forget to call.
+
+**Nothing is ever removed.** Re-enabling appends; the revocation stays with both accounts
+attached. `test_no_route_deletes_a_revocation` enumerates the surface.
+
+### Three checks that failed for the wrong reason
+
+All three were mine, and the pages were right in every case.
+
+- The overstatement check searched for a healthy control's name within forty characters of
+  "never run" in the flattened page. In the freshness grid one control's row sits beside
+  another's, so `manifest_reconciliation verified 24h ago restore_drill never run` matched.
+  It reads the headline sentence now, which is where the claim is made.
+- The raise-form check searched the whole page for control-only kinds and found them — in
+  the *filter*, which should offer every kind. Only the raise form's select submits, so
+  only it carries `name="kind"`, and that is what is read.
+- The typed-confirmation check grepped the served HTML for a prompt that only exists after
+  the operator asks to review. It could never have been true.
+  `scripts/revocation-confirm-check.mjs` drives the real form in a browser instead: it
+  selects each scope and counts the fields, chooses a target and waits for the radius,
+  opens the review, and asserts the revoke control stays shut until the right name is
+  typed — and stays shut for the wrong one.
+
+That last one needed its own lesson twice: the first version clicked a scope and read the
+DOM in the same round trip, before React had re-rendered, so every scope reported the
+fields of the one before it.
+
+### `text-page` was a dead class
+
+Fifteen call sites styled their page title with `text-page`, and the compiled CSS contains
+no such rule. `page` exists under `colors.surface`, so the class reads as though it
+resolves; it produced nothing, and every page title took its size from whatever it
+inherited. A dead utility class is invisible in review and in the browser — it is not a
+wrong size, it is no rule at all. `page: ["18px"]` is in the scale now.
+
+## The Access and Forge Map pages, rebuilt
+
+### Access had a live privilege problem, not a layout one
+
+179 accounts, and the page rendered 179 rows that all looked like colleagues. 178 are
+fixtures created by this project's own test paths - `scripts/console-smoke.sh` and the
+ad-hoc checks run while building this console each create a human, grant it `ivan`, and
+never remove it. 94 of them held `ivan`, which is the stated authority for Forge-scope
+revocation: each could stop every agent on every Forge in the portfolio.
+
+Nothing was wrong with any individual account. What was wrong is that the one fact worth
+knowing was spread across ninety-five rows, which is the same as not being there. The
+banner states it, counts it, says what the role authorises, and offers the action.
+
+**Origin is derived, not stored.** The brief asked for a column with a pattern backfill.
+Derived is strictly better for the same reason it was for knowledge fixtures: the smoke
+script creates more on every run, and a column filled by one migration describes the
+accounts that existed the day it ran. `service` is the exception - nothing about a service
+account is inferable from its name - so that one is stored.
+
+**Suspension, never deletion.** There is no delete route, and
+`test_no_route_deletes_an_account` enumerates the surface to keep it that way. Deleting
+destroys the record of who held what and who granted it, which is the property this page's
+own copy exists to protect. The bulk action never suspends the actor.
+
+**Dana.** Greenstone's Pack names her as compliance officer under `separation_of_duties:
+distinct_humans`, and she has no account, so Gate 10 cannot be signed. Nothing said so - a
+run that cannot be finished looked exactly like one nobody had got to. The reconciliation
+prefers the role somebody holds in their own right over the one they are the understudy
+for: deduping in encounter order described Dana as a venture operator, which is Ivan's
+backup slot rather than the role Gate 10 needs her in.
+
+**Roles are defined**, with holder counts, and the revocation scopes come from
+`revocation.SCOPE_MIN_ROLE` rather than being retyped - a page carrying its own copy of the
+authority table eventually describes an arrangement that has changed.
+
+**`last_seen_at` and MFA.** 178 accounts had never signed in and the roster had no column
+for it. `mfa_enrolled_at` is kept apart from `auth_method` because every account already
+claims `sso_mfa` - that is the column default and nothing has ever checked. A Gate 10
+signer whose second factor is a claim rather than an enrolment weakens exactly the
+non-repudiation the signature carries.
+
+### Forge Map promised a diff it could not show
+
+The subtitle said "Declared x Required x In-Use" and the table had one Required column.
+Worse, all three states came from one place: a `venture_forge_manifest` row was both the
+declaration and the requirement, so the diff it advertised could not exist.
+
+They come from three sources now - the Pack's `forge_bindings`, the generator output, and
+the call ledger - which is also why the page has content. The generators have never run,
+so the manifest is empty and the table rendered nothing while the Pack declares nine
+modules. "Everything declared, nothing required yet" is a finding; "nothing declared" was
+not even true.
+
+**The empty state names the cause.** "Generator 5.6 produces these rows from a Pack" is
+the mechanism. The cause is that no run has passed gate 4 - 83 have stopped there - and
+that is a query away. The brief said six; the number is computed.
+
+**All eight Forges**, not just the ones one venture declares. `forge_map.ESTATE` declares
+the portfolio beside the code that reads it, exactly as `ventures.PORTFOLIO` does, and a
+test asserts it carries no status field: bridged, instructed and healthy are computed, so
+the page cannot go on calling a Forge unbridged after somebody bridges it. Five have
+neither bridge nor instructions.
+
+**A preserved sentence that had become false.** "Nothing declared for this venture" sat
+above a table listing nine declared modules. Both sentences are preserved verbatim, each
+where it is true: the full copy in the genuinely empty state, and "Generator 5.6 produces
+these rows from a Pack" in the blocked banner.
+
+### Two regressions the smoke caught before the commit
+
+Renaming the forge-map route's `declared` field to make room for the reconciliation broke
+`/ventures/{venture}` with a 500 - a field that route had always returned, read by a page
+with no reason to change. And the rebuild dropped the "Change a role" form, which left the
+only route to a role being to create a new account with one: the exact shape of
+over-granting the new banner warns about.
+
+The legacy check that caught the second one looked for an "Administrators" heading the
+rebuild replaced. It follows the fact now rather than the heading, and is not weaker for
+it - the banner has to name the role and a count to pass.
+
+## The Audit page, rebuilt
+
+Ordering and copy were already right: chain integrity above the log, with the reason
+stated. Both are unchanged. What was wrong was the claim being made above the log, and
+what the log itself would not tell you.
+
+### Two screens, one property, contradictory answers
+
+The page reported "chain integrity verified over 1,157 entries". The Compliance page
+reported `audit_chain` with a maximum age of one day. Both were telling the truth and they
+disagreed, because they were answering from different places: this page ran an ad-hoc
+check on load and recorded it nowhere, while Compliance read the last *recorded* control
+result.
+
+The recorded result turned out to be sharper than the brief's framing. It covered **73
+entries, from the previous day**. There were 1,157. So 1,084 entries had never been
+covered by any verification that left a record, and the page carried an unqualified green
+badge over all of them.
+
+The page now reports the recorded verification - the same `sweep_run` row Compliance reads
+- so the two agree by construction rather than by disclaimer. It states the fraction, the
+timestamp, the method (`full re-hash of every entry`, which is what
+`audit_log_verify_chain()` does) and the head hash. **Verify now** runs the check and
+records it, which is what makes the agreement structural.
+
+**Green means fresh, not zero-lag.** Running a verification writes an audit entry of its
+own, so a live append-only log is always at least one entry ahead of any check. Treating
+that as a warning would make the banner permanently amber, which is how a banner stops
+being read. The badge follows the control's own max age; the fraction is stated either
+way.
+
+**The route is `/api/controls/audit-chain`, not `/api/audit/verify`.** A guard refuses any
+console write route whose path names a protected surface, and it was right to fire: the
+fragment test is a good proxy for "could edit a protected store". This is the case where
+the proxy is wrong, and the fix was to make the guard precise - a documented exception
+carrying the argument for why the surface is safe - rather than renaming the route until
+the substring stopped matching. That is the same avoidance the raw-mutation guard was
+fixed for earlier in this project. The exception list also fails if it outlives the route
+it excuses.
+
+### The log would not tell you who acted
+
+All 1,157 entries showed `human`. That is a type, and 95 accounts could have written any
+of those rows, which defeats the only property this log exists to provide. Entries name
+the person now, with the account id beside them; the type stays as its own signal because
+distinguishing a person from an agent from the platform matters - it just must not be the
+only thing shown. There is an actor filter, so "what did Dana do" is answerable.
+
+**Timestamps are absolute with the zone.** "23m ago" cannot go into an export, a regulator
+conversation, or a post-mortem across time zones.
+
+**1,093 of 1,157 entries were fixtures** - written by accounts this project's own test
+paths created, which is a fact about the actor rather than an inference from the event
+sequence. They are tagged, filtered by default, counted in a banner, and never deleted:
+the store is append-only, so filtering changes the view and not the record, and the export
+says which it did.
+
+**Entries expand** to show the payload, the trace and both hashes, with the link to the
+previous entry checked rather than asserted. That last line is what makes the chain
+legible instead of decorative - a reader can compare the two hashes by eye and the page
+says what the comparison found. The first entry says it has no predecessor, which is a
+different thing from a broken link.
+
+**Event types have labels and a published reference.** `broker/audit_events.py` describes
+all 41, and a test walks `broker/` and fails on an event it does not describe - the same
+arrangement the incident taxonomy uses, because a glossary that drifts from the code reads
+as authoritative and is worse than none.
+
+**Export exists** and carries the filters that produced it, whether fixtures were
+included, the chain verification state, the head hash, and its caveats on its face -
+exactly as the Compliance export does.
+
 ## Known gaps
 
-*Last verified: 2026-08-23.*
+*Last verified: 2026-08-25.*
 
 - **Playbooks and personas are authored but not consumed.** There is no knowledge-
   retrieval path for agents in The Office at all, and SimForge has no instance. See
@@ -371,6 +1357,94 @@ breadcrumb. There was previously no route back to a dashboard from anywhere.
   rejected session redirects to the login page — it used to throw a 500, because only a
   *missing* cookie raised `NotAuthenticated` while a *rejected* one raised `ApiError`
   that no page caught.
+- **The SimForge cross-link is not built.** Each `never_do` entry wants a matching
+  `never_do_violation` scenario and each failure signature wants one exercising it; the
+  curriculum generator produces scenarios and the page does not yet show which rules have
+  one. An unenforced never-do rule is a sentence rather than a control, and the page
+  cannot currently say which are which.
+- **Staleness is reported per module, not per agent.** The list marks a curriculum whose
+  Forge has moved past its `version_sensitivity`; it does not yet list the agents whose
+  certifications that invalidates, or link to re-certification.
+- **Authoring writes a new version; there is no draft.** The brief asks for save-as-draft
+  at any completeness with publish gated on complete. Publishing is gated, but everything
+  saved is published - `forge_operating_instruction` has no draft status, unlike
+  `business_pack` which gained one in migration 0017.
+- **The approval queue has never had a real item in production use.** Everything on the
+  page is exercised by a smoke fixture that queues a proposal, renders it, and denies it;
+  no agent has yet held a grant, so nothing has proposed anything of its own.
+- **Expiry runs when the queue is read, not on a schedule.** Opening the page expires
+  anything overdue. Nothing expires while nobody is looking, so a proposal can sit past
+  its deadline until somebody visits - the status is correct whenever it is observed, and
+  a sweep would make it correct continuously.
+- **Escalation to the named backup is not implemented.** The Pack names a backup human
+  and the capacity card shows who it is; nothing routes to them when a coverage window
+  closes with items pending.
+- **No Village roster has been imported, so the Agents page reports the roster as
+  unknown.** The mechanism is built and tested; the data is the external dependency. Once
+  a roster is imported the banner reads "N of M Village agents hold an Office identity"
+  from the two tables.
+- **`village_agent_ref` is not a foreign key from `office_agent_identity`.** Identities
+  exist that predate the roster table, and refusing to load the console until somebody
+  backfills them would be a worse failure than an unmatched row. They are reported as
+  having no roster row rather than hidden - making the two counts agree by losing a row
+  is not making them agree.
+- **The capability matrix and the per-agent audit trail are not built.** The certification
+  sections cover agent x Forge x module for what has been certified; a full trained /
+  certified / neither matrix across every module, and an identity-and-grant history on
+  the agent's own page, are still only reachable through the audit explorer.
+- **Roster import is a paste, not a connection.** There is no Village API client, because
+  there is no Village API in this repository to call. CSV or JSON in, diff, confirm.
+- **Nothing in this project executes client JavaScript.** `tsc`, `next build`, the unit
+  tests and the smoke script all pass against a page that is broken in a browser: the
+  server render is correct and only a browser hydrates. Two failures have shipped through
+  that hole - `useActionState`, and a function passed to a form `action`, both React 19
+  APIs that type-check against the definitions Next ships while the pinned runtime is
+  React 18.3.1. The smoke script now greps for the shapes that have bitten, which catches
+  a repeat and not a new one. Closing it properly means a headless browser in CI loading
+  each page and asserting no uncaught error - roughly a minute of CI time and a real
+  dependency, so it is a decision to take deliberately rather than a side effect.
+- **The editor is a textarea with line numbers, not a code editor.** No YAML syntax
+  highlighting, and no parse-error marking distinct from rule failures. Block navigation
+  and deep links now exist; highlighting still wants a real editor component (CodeMirror
+  or Monaco), which is a bundle and a CSP decision rather than a side effect.
+- **Scroll-spy measures line height from computed style.** It assumes every line is one
+  line tall, which a textarea guarantees only while wrapping is off. It is, and the
+  gutter depends on the same assumption; a wrapped line would put both out by the number
+  of visual rows it occupies.
+- **Download YAML and Replace from file are not implemented.** The text is selectable and
+  the diff is readable, so nothing is blocked; it was cut for the items above it.
+- **The publish confirmation lists rules the *stored* Pack carries, not the edited text.**
+  Validating the buffer would need a round trip the confirmation does not make. Validate
+  first and the panel above is authoritative; the confirmation says "as stored".
+- **Schema completeness is on the Packs directory, not in the editor.** The directory
+  computes it per Pack; the editor would need to compute it against the unsaved buffer,
+  which is the same round-trip question as above.
+- **A run started before this increment has the old gate-4 evidence.** Advisories are
+  recorded when the gate runs, so runs already parked at gate 4 carry the flat `warnings`
+  list and show no downstream banner. Re-running produces the structured form; nothing
+  backfills.
+- **"Awaiting you" means "awaiting somebody with your role".** Gate 4 names no individual
+  — any venture operator can review — so the page says "awaiting you" to anyone who could
+  act and "awaiting a venture operator" to anyone who could not. It is not a personal
+  assignment and does not claim to be.
+- **Per-gate timing is measured from the previous gate's record, not from when the gate
+  started.** With gates that take milliseconds this is the same number; a gate that waits
+  on a human shows the wait rather than the work, which is arguably the more useful
+  figure and is definitely not the one the column name implies.
+- **History is fetched per venture on demand and is not paginated.** A venture with
+  hundreds of runs would return all of them. Nothing has more than a handful today.
+- **`failed at gate N` depends on gates marking their own faults.** Gates 3 and 5 set
+  `evidence.error` when they catch an exception; a gate added later that blocks on a
+  caught error without setting it will read as `stopped`, which understates it.
+- **The Pack directory validates every Pack on every page load.** Each card runs the
+  full rule set against the live database, which is why a Pack that passed yesterday can
+  fail today — a Forge went unreachable, an instruction was withdrawn. With one Pack
+  that is correct and cheap; with fifty it is fifty validation passes per render, and it
+  will need caching with an explicit staleness statement rather than a silent one.
+- **Duplicating a Pack does not rewrite the identity for you.** The copy arrives with
+  the source venture's `identity.venture_name`, and `venture_id` derives from it, so
+  saving unchanged overwrites the source venture's own draft rather than creating a new
+  one. The action says so; it does not prevent it.
 - **Pagination covers audit and incidents only.** Proposals, history and the knowledge
   lists still return everything they have. They are bounded by the business today and
   will not stay that way.

@@ -43,6 +43,10 @@ export async function createHumanAction(
         email: text("email"),
         role: text("role") || null,
         venture_id: text("venture_id") || null,
+        // What the Packs specify for a named human. The form captured none, so every
+        // account took the column default and the roster reported a second factor
+        // nobody had enrolled.
+        auth_method: text("auth_method") || "sso_mfa",
       },
     );
     revalidatePath("/access");
@@ -197,6 +201,35 @@ export async function resolveIncidentAction(
     revalidatePath("/incidents");
     revalidatePath("/");
     return { ok: "Resolved. The incident itself is unchanged — this is an append." };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/**
+ * Suspend every account this project's own test paths created.
+ *
+ * Suspension, never deletion. There is no delete route in the API and there should not
+ * be: removing an account destroys the record of who held what and who granted it, which
+ * is the property this page's copy exists to protect. A roster that looks tidier because
+ * the evidence is gone is a worse roster.
+ */
+export async function suspendFixturesAction(
+  _prev: AccessState | null,
+  _form: FormData,
+): Promise<AccessState> {
+  try {
+    const result = await api.post<{ suspended: number }>(
+      "/api/access/suspend-test-fixtures",
+      {},
+    );
+    revalidatePath("/access");
+    return {
+      ok:
+        result.suspended === 0
+          ? "Nothing to suspend — every test account is already suspended."
+          : `Suspended ${result.suspended} test accounts. Reversible, and each one is still in the record.`,
+    };
   } catch (error) {
     return fail(error);
   }

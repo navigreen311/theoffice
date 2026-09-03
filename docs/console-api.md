@@ -42,18 +42,28 @@ pass — it is whether that route should exist.
 
 | Write route | Delegates to |
 |---|---|
+| `GET /api/agents/roster` | `roster.directory` — the Village roster and the identity gap |
+| `POST /api/agents/roster/preview` | `roster.diff` — **writes nothing** |
+| `POST /api/agents/roster` | `roster.apply` |
+| `POST /api/agents/identities` | `roster.issue_identity` — makes an existing agent appointable; never creates one |
+| `POST /api/agents/village` | `roster.register_village_agent` — requires the Village's own ref |
 | `POST /api/revocations` | `revocation.revoke` |
 | `POST /api/revocations/{id}/reinstate` | `revocation.reinstate` |
 | `POST /api/proposals/{id}/decide` | `proposals.decide` |
 | `POST /api/dispositions/resolve` | `sweeps.disposition` |
+| `GET /api/instructions/directory` | `instructions.directory` — completeness assessed from content, not from a row existing |
 | `POST /api/instructions` | `instructions.author` |
 | `POST /api/ventures/{id}/reverse-hard-cap` | `budget.reverse_hard_cap` |
 | `POST /api/signoffs` | `humans.sign_off` |
 | `POST /api/packs/validate` | `validator.validate` — **writes nothing** |
 | `POST /api/packs` | `packs.store` |
+| `POST /api/packs/draft` | `packs.store(publish=False)` — stored, and unreachable by Gate 1 |
+| `POST /api/packs/{venture_id}/publish` | `packs.publish_draft` |
+| `GET /api/me` | the signed-in human, so a screen can say "awaiting you" rather than `awaiting_human` |
 | `POST /api/provisioning/runs` | `provisioning.start_run` |
 | `POST /api/provisioning/runs/{id}/advance` | `provisioning.advance` |
 | `POST /api/provisioning/runs/{id}/review` | `provisioning.record_human_review` |
+| `POST /api/provisioning/runs/{id}/reject` | `provisioning.reject_run` — a human declines at a gate awaiting their decision. Distinct from abort |
 | `POST /api/provisioning/runs/{id}/abort` | `provisioning.abort_run` |
 | `POST /api/provisioning/runs/{id}/signoff` | `provisioning.sign_off_run` |
 | `POST /api/knowledge/playbooks` | `knowledge.author_playbook` |
@@ -160,6 +170,85 @@ under a docstring reading "all three, always — one hides the state".
 The checks are scoped to `LEFT JOIN` because with an inner join every group has at least
 one row and both idioms are correct. They are proved able to fail against the two
 queries as they were actually written.
+
+## Knowledge listings are paged, and hide fixtures by default
+
+`GET /api/knowledge/personas` and `GET /api/knowledge/history` returned a bare array.
+They now return an envelope:
+
+    {"rows": [...], "total": 0, "page": 1, "pages": 1,
+     "total_before_filters": 60, "excluded_fixtures": 60}
+
+`excluded_fixtures` is the count the caller is *not* seeing, so a client cannot render
+"no personas" over a library that has sixty rows it was not shown. `include_fixtures=true`
+returns them, each row carrying an `origin` of `authored`, `system` or `test_fixture`.
+
+Origin is derived per request by `broker/knowledge_origin.py` rather than stored.
+`historical_record` is append-only and `office_app` holds no UPDATE on it, so a column
+could not have been backfilled onto existing rows or corrected afterwards.
+
+`GET /api/knowledge/overview` returns the five bases with a count, a denominator, and the
+gap in words, plus a `fixtures` block. Denominators come from the live Packs — target
+personas, positions, lifecycle stages, runtime flags — so a base with nothing in it can
+say what it is missing rather than reporting zero.
+
+Three contract tests indexed those routes as arrays and broke when the envelope landed,
+which is the envelope working: `test_a_persona_body_appears_in_no_response`,
+`test_a_note_is_recorded_against_the_human_who_wrote_it`, and
+`test_resolving_an_incident_appends_and_never_edits`.
+
+## Incidents publish their taxonomy; revocation reports its blast radius
+
+`GET /api/incidents/taxonomy` serves the severities, kinds, detection sources and response
+stages from `broker/incident_taxonomy.py`. The console renders from it rather than keeping
+its own copy: a screen holding a private enumeration disagrees with the database the first
+time a value is added, and the disagreement shows up as a row rendering blank.
+
+`kind` now has a CHECK constraint, written by migration 0023 from that same module. Two
+test fixtures were seeding kinds the code never raises - `'test'` and `'rubber_stamp'`,
+where the real one is `rubber_stamp_approval` - and both passed for as long as the column
+was free text.
+
+`POST /api/incidents` files one a person noticed; only the three human kinds are accepted,
+because filing `audit_chain_broken` by hand would claim a check ran that did not.
+`POST /api/incidents/{id}/accounts` appends one stage account. Neither edits anything:
+`incident` refuses UPDATE by grant, `incident_account` by trigger.
+
+`GET /api/incidents/overview` returns control freshness, open counts and the cross-venture
+grouping by kind. The page states freshness instead of pointing at the compliance
+dashboard for it.
+
+`GET /api/revocations/blast-radius` counts what a revocation would stop, before it is
+issued - agents, live grants, in-flight calls, shifts today, and the forward-looking
+effect. It is a read against existing state and says nothing about authority; the console
+still pre-checks nobody's permission. The same figures are stored on the revocation when
+it is issued, because recomputing them later answers about today's grants rather than the
+ones it stopped.
+
+`POST /api/revocations/{id}/reinstate` takes `second_human`, required at `venture` and
+`forge` scope and refused if it names the caller. `GET /api/revocations/targets` and
+`/history` back the pickers and the regulator-export view.
+
+## Audit reads are evidence, and say what they are
+
+`GET /api/audit/chain` returns the live check under its published field names - the
+dashboard reads them - plus `live_check_is_recorded: false` and a `recorded_verification`
+block. The distinction is the point: the live check is real and is not evidence, because
+nothing records it and Compliance cannot see it.
+
+`POST /api/controls/audit-chain` runs the sweep and records a `sweep_run` row. One
+verification, one row, both screens reading it. It sits under `/api/controls` because that
+is what it does; a guard refuses console write routes that name a protected surface, and
+the exception it carries is documented with the argument rather than dodged by renaming.
+
+`GET /api/audit/entries` resolves the actor to a person, tags fixture entries by account
+origin, filters them out by default and reports `excluded_fixtures`. `GET /api/audit/{id}`
+adds the payload, the trace siblings, both hashes and whether the entry links to its
+predecessor. `GET /api/audit/shape` gives counts by event type, actor and venture before
+anybody pages. `GET /api/audit/events` publishes the glossary.
+
+`GET /api/audit/export` carries its filters, its fixture inclusion, the chain state and a
+caveat list. An export from a log nothing has verified says so on its face.
 
 ## Known gaps
 

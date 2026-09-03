@@ -247,7 +247,7 @@ These are controls, not preferences. Code that weakens one is wrong even if it p
 
 ### Build order — do not reorder
 
-- **Phase 0 — the bridge.** Schema → identities for all 106 agents → Vault + CRE Forge credential → broker skeleton → client library → network policy → revocation → **one agent, one module, one real authenticated call, one ledger row naming that agent.** Nothing else starts first.
+- **Phase 0 — the bridge.** Schema → identities for all 186 agents → Vault + CRE Forge credential → broker skeleton → client library → network policy → revocation → **one agent, one module, one real authenticated call, one ledger row naming that agent.** Nothing else starts first.
 - **Phase 1** — governance in the path: trust tiers, manifest check, rate limits, cost metering, four revocation scopes, fail-closed audit.
 - **Phase 2** — Forge Operating Instructions + SimForge held-out partition + the no-read-path check + certification gating grants.
 - **Phase 3** — Greenstone: Pack, validator, seven generators with golden snapshots, appointment, shift flush, sandbox then live.

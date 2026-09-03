@@ -5,6 +5,24 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **Module exclusion — a module that must never be granted.** Onboarding CapitalForge
+  found endpoints that return a plausible success for work that never happens: rules no
+  runner consumes, a `TwilioStubClient` returning fabricated SIDs from the endpoint named
+  "initiate outbound call", and ten 501s. Granting one gives an agent a 200 and gives the
+  ledger a row that reads afterwards as evidence the work was done.
+  - `forge_module_exclusion` (migration 0030), deliberately with **no foreign key** to
+    `forge_registry`: an exclusion must be recordable before a Forge is onboarded, which
+    is the only moment at which it prevents rather than reacts.
+  - BEFORE INSERT trigger on `agent_forge_grant` — the guard holds for a writer that
+    never heard of it, which is the point, since two production paths write grants.
+    INSERT only: an excluded grant must stay revokable.
+  - `broker.errors.ModuleExcluded`, raised by `grants.resolve_grant` ahead of every
+    per-agent refusal, audited as `call_refused_module_excluded`.
+  - `broker/module_exclusions.py` — the declared list with per-module evidence, and
+    `scripts/apply_module_exclusions.py` to apply it (`--check` for CI).
+  - 17 exclusions recorded for `capitalforge`; `docs/module-exclusions.md`, and a fourth
+    silent-failure section in `docs/forge-adapter.md`.
+
 - **Phase 0.1 — core schema, append-only ledger, tamper-evident hash chain.**
   - Blueprint §2 tables: `office_agent_identity`, `forge_registry`,
     `forge_module_registry`, `forge_tenant_credential`, `agent_forge_grant`,

@@ -33,6 +33,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
+from psycopg.rows import dict_row
+
 MANIFEST_PATH = Path(__file__).with_name("simforge_response_manifest.json")
 
 # Substrings that, appearing in a field name, indicate scenario content. Deliberately
@@ -205,6 +207,90 @@ def parse_gate_result(body: dict[str, Any]) -> GateResult:
         certified_tier=body.get("certified_tier"),
         scenario_count=body["scenario_count"],
         coverage_denominator=body["coverage_denominator"],
+    )
+
+
+# ------------------------------------------------------- the timeout that never came
+
+#: How long a submitted curriculum may sit without a result before it is treated as
+#: TIMEOUT. Deliberately generous: an operation battery is slow, and resolving a
+#: still-running run to `in_training` is harmless (it already is in training) while
+#: resolving one too eagerly churns certifications.
+DEFAULT_RUN_DEADLINE_HOURS = 24
+
+
+async def overdue_submissions(
+    conn: Any,
+    *,
+    deadline_hours: int = DEFAULT_RUN_DEADLINE_HOURS,
+) -> list[dict[str, Any]]:
+    """Submissions that were handed over and never answered.
+
+    THE GAP THIS CLOSES
+    ===================
+
+        `certification.VERDICT_TO_STATE` maps TIMEOUT to `in_training`, and Part 10.1
+        requires that a timeout never resolve to PASS. That mapping is correct and it
+        was also unreachable: **SimForge does not emit a TIMEOUT verdict.** Its outbound
+        shape carries states, not verdicts, and none of them means "this run did not
+        finish".
+
+        So the real failure mode was never a TIMEOUT resolving to PASS. It was a hung
+        run resolving to *nothing at all* — no callback, no verdict, no row, and a
+        certification left in whatever state it held before. That is a different failure
+        with the same consequence, and it is worse in one respect: a verdict that never
+        arrives raises no error anywhere.
+
+    WHY THE OFFICE HAS TO DETECT THIS AND NOT SIMFORGE
+    ==================================================
+
+        SimForge should report a run it knows exceeded its window, and that is being
+        asked of it separately. But the case that matters most is the one where
+        SimForge's worker died — and a process that has died cannot report that it has.
+        A deadline held by the party that is *waiting* is the only version of this check
+        that survives the failure it exists to catch.
+
+        This is the same reasoning as the shift flush: a control that depends on the
+        failing component to announce its own failure is not a control.
+    """
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            """
+            SELECT submission_id, venture_id, forge_id, module_id, department,
+                   scenario_pack_ref, simforge_run_ref, submitted_at,
+                   instruction_content_hash,
+                   EXTRACT(EPOCH FROM (now() - submitted_at)) / 3600.0 AS hours_waiting
+            FROM curriculum_submission
+            WHERE result_received_at IS NULL
+              AND submitted_at < now() - make_interval(hours => %s)
+            ORDER BY submitted_at
+            """,
+            (deadline_hours,),
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+def timeout_gate_result(submission: dict[str, Any], *, rubric_version: str) -> GateResult:
+    """The verdict a silent run resolves to.
+
+    Constructed here rather than by the caller so there is exactly one place that can
+    decide what an unanswered run means, and it cannot be PASS: `verdict` is fixed at
+    TIMEOUT, and `score` and `certified_tier` are None because nothing was measured.
+
+    A `score` of 0.0 would have been the tempting default and is wrong — it says the
+    agent scored zero, which is a claim about the agent rather than about the run.
+    """
+    return GateResult(
+        run_ref=submission.get("simforge_run_ref") or f"unanswered:{submission['submission_id']}",
+        unit="A" if submission.get("module_id") else "B",
+        verdict="TIMEOUT",
+        rubric_kind="operation" if submission.get("module_id") else "domain",
+        rubric_version=rubric_version,
+        score=None,
+        threshold=None,
+        certified_tier=None,
+        scenario_count=0,
+        coverage_denominator=0,
     )
 
 

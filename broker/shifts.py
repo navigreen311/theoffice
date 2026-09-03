@@ -4,6 +4,14 @@ Master prompt Part 7.5 and Part 8. **The PHI wall is temporal, not spatial.** On
 Village, one agent, consecutive shifts on different ventures — so the wall runs at the
 boundary rather than between two places.
 
+**The window is an agent-quarter.** An assignment names the Village quarter it falls in,
+and one agent works one venture for the whole of it. Two wall-clock timestamps do not
+name a window: the Village runs at 5 minutes to 720, so an eight-hour shift here spans a
+stretch of Village time nobody can state, and `assert_on_shift_for` only ever ruled out
+switching *within* a shift. An agent could hold a morning shift on one venture and an
+evening shift on another with a clean flush between them; each shift was fine and the
+quarter was not. `one_venture_per_agent_quarter` says so in the schema.
+
 The boundary is one operation in a fixed order, and every step's position matters:
 
     1. flush PHI-tagged working memory
@@ -42,7 +50,7 @@ from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from broker import audit
+from broker import audit, village
 from broker.errors import OfficeError
 
 # Classifications the boundary destroys. PHI is the statutory one; a call recording in a
@@ -81,6 +89,34 @@ class OffShift(OfficeError):
     """
 
     audit_event = "call_refused_off_shift"
+
+
+class QuarterUnknown(OfficeError):
+    """The Village did not say what quarter it is, so no assignment can be made.
+
+    Refusing rather than defaulting. A wall-clock quarter would be wrong by construction
+    - the Village runs at 5/720 and the two share a name and nothing else - and a
+    remembered one is worse, because the constraint that keeps an agent on one venture
+    per quarter would then be enforced against a quarter that may have rolled over.
+
+    The same shape as `broker.departments` returning None: an answer we do not have is
+    reported as not having it, never as a default that reads like an answer.
+    """
+
+    audit_event = "shift_assignment_refused_no_quarter"
+    status_code = 503
+
+
+class QuarterConflict(OfficeError):
+    """This agent already works a different venture in this quarter.
+
+    The database refuses this too, and that constraint is the one that actually holds.
+    This exists so the refusal arrives with the other venture named in it - a caller
+    handed `ExclusionViolation` knows only that something collided.
+    """
+
+    audit_event = "shift_assignment_refused_quarter_conflict"
+    status_code = 409
 
 
 @dataclass(frozen=True, slots=True)
@@ -259,6 +295,36 @@ async def assert_on_shift_for(
     return uuid.UUID(str(shift["shift_id"]))
 
 
+async def quarter_venture(
+    conn: AsyncConnection, office_agent_id: uuid.UUID, quarter: str
+) -> str | None:
+    """The venture this agent already works in this quarter, if any."""
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "SELECT venture_id FROM shift_assignment "
+            "WHERE office_agent_id = %s AND quarter = %s LIMIT 1",
+            (office_agent_id, quarter),
+        )
+        row = await cur.fetchone()
+    return str(row[0]) if row else None
+
+
+async def current_quarter() -> str:
+    """The Village's quarter, or a refusal. Never a guess."""
+    try:
+        value = await village.quarter()
+    except village.VillageUnreachableError as exc:
+        raise QuarterUnknown(
+            f"the Village did not answer ({exc}), so the quarter this assignment would "
+            "fall in is unknown. Nothing was assigned."
+        ) from exc
+    if not value:
+        raise QuarterUnknown(
+            "the Village answered without a quarter on its clock. Nothing was assigned."
+        )
+    return value
+
+
 async def assign_shift(
     conn: AsyncConnection,
     *,
@@ -267,11 +333,16 @@ async def assign_shift(
     shift_start: datetime,
     shift_end: datetime,
     assigned_by: uuid.UUID,
+    quarter: str | None = None,
 ) -> uuid.UUID:
     """Create a shift assignment, refusing if the previous shift was never flushed.
 
     The block lives here rather than in a caller because this is the only function
     that creates assignments. A check in a caller is a check the next caller forgets.
+
+    `quarter` defaults to whatever the Village says it is now. It is an argument at all
+    so that a rotation can pass the quarter it already resolved, rather than asking twice
+    and risking a roll-over between the two calls - not so that a caller can name one.
     """
     prior = await previous_shift(conn, office_agent_id)
     if prior is not None and not prior["flush_verified"]:
@@ -283,15 +354,34 @@ async def assign_shift(
             flush_verified=False,
         )
 
+    quarter = quarter or await current_quarter()
+
+    # `one_venture_per_agent_quarter` refuses this at the database and that is the
+    # constraint that holds. Checked here first only so the refusal can name the other
+    # venture: an operator handed an exclusion violation learns that something collided
+    # and not what.
+    held = await quarter_venture(conn, office_agent_id, quarter)
+    if held is not None and held != venture_id:
+        raise QuarterConflict(
+            f"this agent already works {held} in {quarter}. One agent works one venture "
+            "per agent-quarter; assigning a second is the wider form of the mid-shift "
+            "switch Part 7.5 rules out.",
+            quarter=quarter,
+            held_venture_id=held,
+            requested_venture_id=venture_id,
+        )
+
     shift_id = uuid.uuid4()
     async with conn.cursor() as cur:
         await cur.execute(
             """
             INSERT INTO shift_assignment
-              (shift_id, office_agent_id, venture_id, shift_start, shift_end, assigned_by)
-            VALUES (%s, %s, %s, %s, %s, %s)
+              (shift_id, office_agent_id, venture_id, shift_start, shift_end,
+               assigned_by, quarter)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             """,
-            (shift_id, office_agent_id, venture_id, shift_start, shift_end, assigned_by),
+            (shift_id, office_agent_id, venture_id, shift_start, shift_end,
+             assigned_by, quarter),
         )
     await conn.commit()
 
@@ -303,6 +393,7 @@ async def assign_shift(
         subject={
             "shift_id": str(shift_id),
             "office_agent_id": str(office_agent_id),
+            "quarter": quarter,
             "shift_start": shift_start.isoformat(),
             "shift_end": shift_end.isoformat(),
             "previous_shift_id": str(prior["shift_id"]) if prior else None,
@@ -332,7 +423,32 @@ async def rotate(
     Certification state is not consulted. A revoked or suspended agent still flushes:
     the flush is a control, not a competence claim, and the agents most likely to have
     made a mess are the ones least likely to be in good standing.
+
+    The flush runs on every rotation, including one that stays on the same venture. It
+    would be defensible to skip that case - the data belongs to the venture the agent is
+    still on - and it is not skipped, because the neighbouring rule in this module exists
+    on the grounds that a uniform rule is enforceable where a conditional one is not. The
+    condition is where the bug would live.
+
+    What the quarter changes is that a rotation to a *different* venture inside one
+    agent-quarter is now refused outright rather than being a clean flush into a window
+    with no name.
     """
+    # The quarter is resolved before anything is destroyed. A rotation that would be
+    # refused for a quarter conflict must be refused while the outgoing venture's working
+    # memory is still intact - flushing first and failing afterwards destroys data on
+    # behalf of a rotation that never happened.
+    quarter = await current_quarter()
+    held = await quarter_venture(conn, office_agent_id, quarter)
+    if held is not None and held != to_venture_id:
+        raise QuarterConflict(
+            f"this agent already works {held} in {quarter}; rotating to {to_venture_id} "
+            "would put two ventures in one agent-quarter. Nothing was flushed.",
+            quarter=quarter,
+            held_venture_id=held,
+            requested_venture_id=to_venture_id,
+        )
+
     # 1 + 2. Raises FlushFailed if anything survived, which stops the rotation here.
     await flush_phi(conn, office_agent_id=office_agent_id, shift_id=from_shift_id)
 
@@ -352,6 +468,10 @@ async def rotate(
         shift_start=shift_start,
         shift_end=shift_end,
         assigned_by=assigned_by,
+        # The quarter resolved above, not re-read. Asking twice invites a roll-over
+        # between the check and the write, which is how a second venture would get into
+        # an agent-quarter that had just been checked for exactly that.
+        quarter=quarter,
     )
 
     # 5. Audit the boundary itself, distinctly from the flush and the assignment.
@@ -364,6 +484,7 @@ async def rotate(
             "from_shift_id": str(from_shift_id),
             "to_shift_id": str(shift_id),
             "to_venture_id": to_venture_id,
+            "quarter": quarter,
             "grants_resolved": grants,
             "order": ["flush", "verify", "resolve_grants", "switch_context", "audit"],
         },

@@ -153,6 +153,150 @@ async def _bootstrap_human(name: str, email: str, role: str) -> int:
     return 0
 
 
+async def _bootstrap_phase0(venture_id: str, ref: str | None, confirm: bool) -> int:
+    """Put one agent on the path so the first real call can be made.
+
+    Reports what it would do unless `--confirm` is given. The thing being issued is
+    authority to call a Forge, and that should never happen as a side effect of running
+    a command to see what it does.
+    """
+    from broker import bootstrap_phase0, humans
+    from broker.db import connection
+
+    async with connection() as conn:
+        try:
+            actor = await humans.attributable_actor(conn)
+        except humans.NoAttributableActorError as exc:
+            print(f"bootstrap-phase0: {exc}")
+            return 1
+
+        human = await humans.get_human(conn, actor)
+        if human is None:
+            print("bootstrap-phase0: the attributed account could not be loaded")
+            return 1
+
+        try:
+            detail = await bootstrap_phase0.plan(conn, ref=ref)
+        except bootstrap_phase0.BootstrapError as exc:
+            print(f"bootstrap-phase0: {exc}")
+            return 1
+
+        agent = detail["agent"]
+        print(
+            f"Agent    {agent['agent_name']} ({agent['village_agent_ref']}) · "
+            f"{agent['department']} · {agent['role_key']}"
+        )
+        print(f"Forge    {detail['forge_id']} {detail['forge']['api_version']} "
+              f"· {detail['forge']['health_status']} · {detail['forge']['base_url']}")
+        print(f"Module   {detail['module_id']} at tier {detail['tier']}")
+        print(f"Actor    {human.display_name}")
+        print(f"Venture  {venture_id}")
+
+        if not confirm:
+            print(
+                "\nNothing was written. Re-run with --confirm to issue the identity, "
+                "two certifications, one grant and one shift.\n"
+                "Every row is marked as a Phase 0 bootstrap: it is what makes the first "
+                "call possible, not evidence that the provisioning ladder was run."
+            )
+            return 0
+
+        try:
+            result = await bootstrap_phase0.apply(
+                conn, human=human, venture_id=venture_id, ref=ref, confirmed=True
+            )
+        except bootstrap_phase0.BootstrapError as exc:
+            print(f"bootstrap-phase0: {exc}")
+            return 1
+        except Exception as exc:
+            print(f"bootstrap-phase0 failed: {type(exc).__name__}: {exc}")
+            return 1
+
+    print("\nIssued.")
+    for key in ("office_agent_id", "grant_id", "unit_a_cert", "unit_b_cert", "shift_id"):
+        print(f"  {key:18} {result[key]}")
+    return 0
+
+
+async def _sync_roster(confirm: bool) -> int:
+    """Diff the Village roster against The Office, and apply only when told to.
+
+    Run without `--confirm` this reads both sides and prints what would change. That is
+    the normal way to run it: the destructive half of a sync is a departure, which
+    revokes whatever grants the departed agent held, and nobody should discover that
+    from a summary printed after the fact.
+    """
+    from broker import sync_roster
+    from broker.db import connection
+
+    async with connection() as conn:
+        try:
+            diff = await sync_roster.diff(conn)
+        except sync_roster.SyncError as exc:
+            print(f"sync-roster: {exc}")
+            return 1
+
+        print(f"Village {diff.village_total} agents · Office {diff.office_total} known")
+        if diff.empty:
+            print("No change.")
+            return 0
+
+        for kind, heading in (
+            ("new", "New in the Village"),
+            ("departed", "Gone from the Village"),
+            ("department", "Changed department"),
+            ("role", "Changed role"),
+            ("reporting", "Changed manager"),
+        ):
+            rows = diff.of(kind)
+            if not rows:
+                continue
+            print(f"\n{heading} ({len(rows)})")
+            for change in rows[:40]:
+                print(f"  {change.agent_name:28} {change.detail}")
+            if len(rows) > 40:
+                print(f"  ... and {len(rows) - 40} more")
+
+        if not confirm:
+            print(
+                "\nNothing was applied. Re-run with --confirm to write these changes.\n"
+                "A departure revokes the grants that agent held."
+            )
+            return 0
+
+        # The audit entry names a person, and a real one. This used to be "the oldest
+        # active account holding ivan", which the one real account won by being oldest
+        # while 222 fixtures held the same role.
+        from broker import humans
+
+        try:
+            actor = await humans.attributable_actor(conn)
+        except humans.NoAttributableActorError as exc:
+            print(f"sync-roster: {exc}")
+            return 1
+
+        # Every failure path returns non-zero. The first run of this command hit a
+        # CHECK constraint and the shell still saw 0, because the only thing standing
+        # between an exception and a zero exit was an unhandled traceback - which a pipe
+        # or a wrapper swallows. A command that writes to the identity table must not be
+        # able to report success it did not have.
+        try:
+            result = await sync_roster.apply(conn, actor=actor, confirmed=True)
+        except sync_roster.SyncError as exc:
+            print(f"sync-roster: {exc}")
+            return 1
+        except Exception as exc:
+            print(
+                f"sync-roster failed: {type(exc).__name__}: {exc}\n"
+                "Nothing was written - the roster and its audit entry are one "
+                "transaction, so a failure rolls both back."
+            )
+            return 1
+
+        print(f"\nApplied. {result['new']} new, {result['departed']} departed.")
+        return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="broker")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -182,6 +326,32 @@ def main() -> int:
                                            "venture_operator"),
     )
 
+    sr = sub.add_parser(
+        "sync-roster",
+        help="Diff the Village roster against The Office; apply with --confirm",
+    )
+    sr.add_argument(
+        "--confirm",
+        action="store_true",
+        help="Apply the diff. Without this the command only reports what would change.",
+    )
+
+    bp = sub.add_parser(
+        "bootstrap-phase0",
+        help="Issue one identity, certification pair, grant and shift for the first call",
+    )
+    bp.add_argument(
+        "--venture", default="greenstone", help="Venture the grant and shift are for"
+    )
+    bp.add_argument(
+        "--agent", default=None,
+        help="Village agent ref. Defaults to the lowest-ranked active engineer.",
+    )
+    bp.add_argument(
+        "--confirm", action="store_true",
+        help="Actually issue. Without this the command only reports what it would do.",
+    )
+
     args = parser.parse_args()
     if args.command == "serve":
         return _serve(args.host, args.port, args.reload)
@@ -189,6 +359,12 @@ def main() -> int:
         return asyncio.run(_sweep(args.restore_drill))
     if args.command == "health":
         return asyncio.run(_health())
+    if args.command == "sync-roster":
+        return asyncio.run(_sync_roster(args.confirm))
+    if args.command == "bootstrap-phase0":
+        return asyncio.run(
+            _bootstrap_phase0(args.venture, args.agent, args.confirm)
+        )
     if args.command == "human":
         return asyncio.run(_bootstrap_human(args.name, args.email, args.role))
     return 2

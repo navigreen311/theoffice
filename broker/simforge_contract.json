@@ -1,0 +1,109 @@
+{
+  "_README": [
+    "The vocabulary The Office and SimForge share, in one machine-readable place.",
+    "",
+    "WHY THIS FILE EXISTS",
+    "",
+    "  Three contract mismatches between these two systems were found by inspection",
+    "  rather than by CI, and every one of them failed in a way that looked like",
+    "  success: a state the CHECK constraint could not store, a verdict The Office",
+    "  handled that SimForge never sends, and a dimension-level value nobody had",
+    "  declared. Reading is not a control. This file is what a test can compare.",
+    "",
+    "HOW IT IS ENFORCED",
+    "",
+    "  Office side: tests/contract/test_simforge_vocabulary.py asserts that",
+    "  broker/certification.py's constants, migration 0029's CHECK constraint and the",
+    "  response manifest all agree with this file.",
+    "",
+    "  SimForge side: a copy lives at docs/contracts/office-simforge-contract.json and",
+    "  apps/api/tests/test_office_contract.py asserts SimForge's own enums agree with",
+    "  it. Both copies carry the same `contract_version`; a change to one without the",
+    "  other fails on whichever side was not updated.",
+    "",
+    "  Adding a value here is the reviewable act. Adding one anywhere else fails."
+  ],
+
+  "contract_version": "2.0.0",
+
+  "certification_states": {
+    "_purpose": "Every value `certification.state` may hold. Migration 0029 is the constraint; these are the same eight.",
+    "certified": {
+      "assignable": true,
+      "meaning": "Earned and current. The only state that permits a Forge call.",
+      "requires_basis": ["instruction_content_hash", "forge_api_version", "certified_tier"]
+    },
+    "provisional": {
+      "assignable": false,
+      "meaning": "Passed the threshold, but the rubric did not discriminate or a required never-do dimension went untested. Certification WITHHELD. A governance hold, not a low score.",
+      "requires_basis": ["instruction_content_hash", "forge_api_version"]
+    },
+    "stale_instructions": {
+      "assignable": false,
+      "meaning": "Instructions rewritten since the cert was earned. Re-cert required.",
+      "requires_basis": []
+    },
+    "stale_forge": {
+      "assignable": false,
+      "meaning": "Forge released a version affecting this module. Re-cert required.",
+      "requires_basis": []
+    },
+    "in_training": {
+      "assignable": false,
+      "meaning": "A battery is running, or a run did not finish. Not a failure.",
+      "requires_basis": []
+    },
+    "never_certified": {
+      "assignable": false,
+      "meaning": "Never run for this unit. A real absence, NOT a bad score.",
+      "requires_basis": []
+    },
+    "failed": {
+      "assignable": false,
+      "meaning": "Ran and did not pass. Distinct from never_certified.",
+      "requires_basis": []
+    },
+    "revoked": {
+      "assignable": false,
+      "meaning": "Voided — content-hash mismatch, drift, or a misoperation incident.",
+      "requires_basis": []
+    }
+  },
+
+  "gate_verdicts": {
+    "_purpose": "Every verdict `get_gate_result` may return, and the state each resolves to. `broker/certification.py:VERDICT_TO_STATE` is this table in Python.",
+    "PASS": "certified",
+    "PROVISIONAL": "provisional",
+    "FAIL": "failed",
+    "TIMEOUT": "in_training",
+    "NOT_RUN": "never_certified",
+    "IN_PROGRESS": "in_training",
+    "REVOKED": "revoked"
+  },
+
+  "timeout": {
+    "_purpose": "How a run that never answers is resolved, and by whom.",
+    "never_resolves_to": "certified",
+    "resolves_to": "in_training",
+    "emitted_by_simforge_when": "SimForge observes a run exceeding its own window and is still alive to report it.",
+    "detected_by_office_when": "A curriculum_submission has result_received_at IS NULL past the deadline. This is the case that matters: a SimForge worker that died cannot report that it died, so the party waiting holds the deadline.",
+    "office_default_deadline_hours": 24
+  },
+
+  "rubric_result_verdicts": {
+    "_purpose": "Per-dimension and per-scenario-class verdicts INSIDE a SimForge run. These are SimForge-internal and do NOT cross the boundary — the response manifest carries no rubric results, deliberately, because a rich enough explanation of a failure reconstructs the scenario. Declared here so their absence from the manifest is intentional and reviewable rather than accidental.",
+    "values": ["PASS", "FAIL", "NOT_RUN", "not_applicable"],
+    "crosses_office_boundary": false,
+    "not_applicable_note": "A not_applicable dimension carries NO score. It is not a zero, and it must never be averaged as one."
+  },
+
+  "trust_tiers": {
+    "_purpose": "The certified tier caps the declared tier (Part 10.1). Ordered weakest to strongest.",
+    "values": ["suggest", "propose", "auto_execute"]
+  },
+
+  "certification_units": {
+    "A": "agent x forge x module — operation competence, operation rubric",
+    "B": "department x forge — judgment in context, domain rubric"
+  }
+}

@@ -30,6 +30,7 @@ from typing import Any
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 
+from broker import account_origin
 from broker.errors import NotAuthorized
 from broker.revocation import ROLE_RANK
 
@@ -94,8 +95,18 @@ async def create_human(
     async with conn.cursor() as cur:
         await cur.execute(
             "INSERT INTO office_human (human_id, display_name, email, auth_method, "
-            "token_hash) VALUES (%s, %s, %s, %s, %s)",
-            (human_id, display_name, email, auth_method, hash_token(plaintext)),
+            "token_hash, origin) VALUES (%s, %s, %s, %s, %s, %s)",
+            (
+                human_id,
+                display_name,
+                email,
+                auth_method,
+                hash_token(plaintext),
+                # Marked at the moment it is created, by the one classifier. The column
+                # is what attribution reads, and a fixture that arrives unmarked is a
+                # fixture eligible to sign an audit entry.
+                account_origin.origin_of({"display_name": display_name, "email": email}),
+            ),
         )
     await conn.commit()
     return human_id, plaintext
@@ -146,6 +157,20 @@ async def authenticate(conn: AsyncConnection, token: str) -> Human | None:
 
     if row is None:
         return None
+
+    # Presence, recorded where authentication happens rather than inferred from the
+    # audit log. 178 of 179 accounts had never signed in and the roster had no column
+    # for it, so a page full of accounts nobody has ever used looked like a team.
+    #
+    # Written on its own connection state and committed here: the caller's transaction
+    # may go on to fail for reasons that have nothing to do with whether this person
+    # turned up, and a request that is refused is still a request they made.
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "UPDATE office_human SET last_seen_at = now() WHERE human_id = %s",
+            (row["human_id"],),
+        )
+    await conn.commit()
 
     roles = tuple(
         (pair[0], pair[1] or None) for pair in (row["roles"] or [])
@@ -406,6 +431,119 @@ async def get_human(conn: AsyncConnection, human_id: uuid.UUID) -> Human | None:
     )
 
 
+async def suspend_test_fixtures(
+    conn: AsyncConnection, *, actor: uuid.UUID
+) -> dict[str, Any]:
+    """Suspend every account this project's own test paths created.
+
+    179 accounts existed and 178 were fixtures; 94 of those held `ivan`, the authority
+    for Forge-scope revocation. Suspending them one at a time through 94 inline forms is
+    not a thing anybody does, so it never happened and the strongest role in the system
+    stayed spread across 95 accounts.
+
+    Suspension, never deletion. It is reversible, it is audited, and it leaves the record
+    of who held what and who granted it intact - which is the property the Access page's
+    own copy exists to protect. A cleaner roster bought by destroying that record is a
+    worse roster.
+
+    The actor is never suspended by this, whatever their account looks like: a bulk
+    action that can lock out the person running it is a bulk action that eventually does.
+    """
+    from broker import account_origin
+
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT human_id, display_name, email, origin, status FROM office_human "
+            "WHERE status = 'active'"
+        )
+        rows = [dict(r) for r in await cur.fetchall()]
+
+    targets = [
+        row for row in rows
+        if account_origin.origin_of(row) == account_origin.TEST_FIXTURE
+        and row["human_id"] != actor
+    ]
+    if not targets:
+        return {"suspended": 0, "names": []}
+
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "UPDATE office_human SET status = 'suspended', suspended_at = now(), "
+            "suspended_by = %s WHERE human_id = ANY(%s)",
+            (actor, [row["human_id"] for row in targets]),
+        )
+    await conn.commit()
+    return {
+        "suspended": len(targets),
+        "names": sorted(row["display_name"] for row in targets)[:20],
+    }
+
+
+async def note_seen(conn: AsyncConnection, *, human_id: uuid.UUID) -> None:
+    """Record that this account authenticated.
+
+    178 accounts had never signed in and nothing on the roster showed it, which is the
+    single clearest signal that nobody is behind one. Written on every verified request,
+    so "last active" means what it says.
+    """
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "UPDATE office_human SET last_seen_at = now() WHERE human_id = %s",
+            (human_id,),
+        )
+
+
+class NoAttributableActorError(Exception):
+    """Nothing could sign this. There is no real account able to act."""
+
+
+async def attributable_actor(
+    conn: AsyncConnection, *, required_role: str = "ivan"
+) -> uuid.UUID:
+    """The person an audited action is recorded against.
+
+    `origin = 'human'` is the condition that matters, and it is why this function exists
+    rather than each caller writing the query. `sync-roster` resolved its actor as "the
+    oldest active account holding ivan", and 222 of the 223 accounts in the development
+    database are smoke fixtures that all hold `ivan`. The real account won that query by
+    being the oldest, which is luck rather than a rule: a re-seed, a restore, or one
+    fixture created a second earlier would have signed a change to the identity table as
+    `smoke-1a2b3c4d`.
+
+    An audit entry signed by a fixture is worthless. Non-repudiation is the whole reason
+    this log exists and it does not survive an actor nobody can call.
+
+    Raises rather than returning None. A caller that treats "nobody could sign this" as a
+    value will eventually write the row anyway with a null actor, and the point is that
+    the write must not happen.
+    """
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            """
+            SELECT h.human_id, h.display_name
+              FROM office_human h
+              JOIN office_human_role r ON r.human_id = h.human_id
+             WHERE r.role = %s
+               AND h.status = 'active'
+               AND h.origin = 'human'
+             ORDER BY h.created_at
+             LIMIT 1
+            """,
+            (required_role,),
+        )
+        row = await cur.fetchone()
+
+    if row is None:
+        raise NoAttributableActorError(
+            f"no active account with origin 'human' holds {required_role!r}. Test "
+            "fixtures are excluded deliberately: an audit entry signed by a fixture "
+            "names nobody who can answer for it. Create a real account first: "
+            "python -m broker human create."
+        )
+    actor_id: uuid.UUID = row["human_id"]
+    return actor_id
+
+
 async def list_humans(conn: AsyncConnection) -> list[dict[str, Any]]:
     """Everyone, with their roles. Never a token and never a hash.
 
@@ -418,6 +556,7 @@ async def list_humans(conn: AsyncConnection) -> list[dict[str, Any]]:
             """
             SELECT h.human_id::text AS human_id, h.display_name, h.email, h.status,
                    h.auth_method, h.created_at, h.suspended_at,
+                   h.origin, h.last_seen_at, h.mfa_enrolled_at,
                    h.token_hash IS NOT NULL AS has_token,
                    COALESCE(
                      json_agg(

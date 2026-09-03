@@ -176,3 +176,129 @@ export const CONTROL_ICON: Record<
   manifest_reconciliation: ListCheck,
   restore_drill: DatabaseOff,
 };
+
+/** tabler: copy */
+export function Copy(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z" />
+      <path d="M4.012 16.737a2 2 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" />
+    </Icon>
+  );
+}
+
+/** tabler: git-compare */
+export function GitCompare(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M6 6m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />
+      <path d="M18 18m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" />
+      <path d="M11 6h5a2 2 0 0 1 2 2v7" />
+      <path d="M14 9l-3 -3l3 -3" />
+      <path d="M13 18h-5a2 2 0 0 1 -2 -2v-7" />
+      <path d="M10 15l3 3l-3 3" />
+    </Icon>
+  );
+}
+
+/** tabler: file-text */
+export function FileText(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+      <path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" />
+      <path d="M9 9l1 0" />
+      <path d="M9 13l6 0" />
+      <path d="M9 17l6 0" />
+    </Icon>
+  );
+}
+
+/** tabler: check */
+export function Check(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5 12l5 5l10 -10" />
+    </Icon>
+  );
+}
+
+/** tabler: x */
+export function X(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M18 6l-12 12" />
+      <path d="M6 6l12 12" />
+    </Icon>
+  );
+}
+
+/** tabler: lock */
+export function Lock(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2z" />
+      <path d="M11 16a1 1 0 1 0 2 0a1 1 0 0 0 -2 0" />
+      <path d="M8 11v-4a4 4 0 1 1 8 0v4" />
+    </Icon>
+  );
+}
+
+/** tabler: minus */
+export function Minus(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5 12l14 0" />
+    </Icon>
+  );
+}
+
+/** tabler: loader-2 */
+export function Loader(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 3a9 9 0 1 0 9 9" />
+    </Icon>
+  );
+}
+
+/** tabler: player-play */
+export function PlayerPlay(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M7 4v16l13 -8z" />
+    </Icon>
+  );
+}
+
+/** tabler: refresh */
+export function Refresh(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" />
+      <path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />
+    </Icon>
+  );
+}
+
+/** tabler: history */
+export function History(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 8l0 4l2 2" />
+      <path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5" />
+    </Icon>
+  );
+}
+
+/** tabler: hourglass */
+export function Hourglass(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M6.5 7h11" />
+      <path d="M6.5 17h11" />
+      <path d="M6 20v-2a6 6 0 1 1 12 0v2a1 1 0 0 1 -1 1h-10a1 1 0 0 1 -1 -1z" />
+      <path d="M6 4v2a6 6 0 1 0 12 0v-2a1 1 0 0 0 -1 -1h-10a1 1 0 0 0 -1 1z" />
+    </Icon>
+  );
+}

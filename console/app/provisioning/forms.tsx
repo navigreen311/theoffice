@@ -29,14 +29,25 @@ function Submit({
   label,
   busy,
   variant,
+  name,
+  value,
 }: {
   label: string;
   busy: string;
-  variant?: "default" | "danger";
+  variant?: "default" | "danger" | "quiet";
+  /** So two submits in one form can say which one was pressed. */
+  name?: string;
+  value?: string;
 }) {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" variant={variant} disabled={pending}>
+    <Button
+      type="submit"
+      variant={variant}
+      disabled={pending}
+      name={name}
+      value={value}
+    >
       {pending ? busy : label}
     </Button>
   );
@@ -76,11 +87,19 @@ export function AdvanceForm({
     <form action={action}>
       <input type="hidden" name="run_id" value={runId} />
       <input type="hidden" name="venture_id" value={venture} />
-      <p className="mb-2 text-xs text-ink-secondary">
+      {/*
+        Above the button and labelled. A green box under "Advance" reading "6 gate(s)
+        ran. Stopped at gate 4" is unreadable as either a prediction of what pressing it
+        will do or a record of what pressing it did.
+      */}
+      {state ? (
+        <p className="mb-2 text-meta text-ink-muted">Last advance:</p>
+      ) : null}
+      <Result state={state} />
+      <p className="mb-2 mt-2 text-desc text-ink-secondary">
         Runs from gate {currentGate} until a gate stops it. Gates are not skippable.
       </p>
       <Submit label={`Advance from gate ${currentGate}`} busy="Running gates…" />
-      <Result state={state} />
     </form>
   );
 }
@@ -94,7 +113,29 @@ export function AdvanceForm({
  * unfilled positions, the capacity triple and the generator warnings expanded above
  * this form, and the note is required rather than optional.
  */
-export function ReviewForm({ runId, venture }: { runId: string; venture: string }) {
+/**
+ * Gate 4, as two actions rather than two cards.
+ *
+ * "Record review" and "Advance from gate 4" sat in separate cards with no stated
+ * relationship, so whether advancing needed the review first — and whether recording one
+ * advanced by itself — was something an operator found out by trying. Recording and
+ * advancing is what almost everybody wants; recording alone is the real second case,
+ * for a reviewer who is not the person who will advance.
+ *
+ * The hint names what to write. "What did you review?" with no guidance produces
+ * one-word entries, and a one-word entry in an append-only log is worthless as evidence
+ * later — which is the only reason the log exists. Deliberately no minimum length: a
+ * word count produces padding, not substance.
+ */
+export function ReviewForm({
+  runId,
+  venture,
+  artifactsHash,
+}: {
+  runId: string;
+  venture: string;
+  artifactsHash?: string | null;
+}) {
   const [state, action] = useFormState(reviewRunAction, null);
   return (
     <form action={action} className="space-y-2">
@@ -102,11 +143,30 @@ export function ReviewForm({ runId, venture }: { runId: string; venture: string 
       <input type="hidden" name="venture_id" value={venture} />
       <Field
         label="What did you review?"
-        hint="Required. Recorded against your name in the append-only log."
+        hint={
+          "Required. Recorded against your name in the append-only log." +
+          " Name what you actually checked — the appointment gaps, the bill of" +
+          " materials, the capacity failure above." +
+          (artifactsHash ? ` Bound to artifact hash ${artifactsHash.slice(0, 8)}…` : "")
+        }
       >
-        <textarea className={inputClass} name="note" rows={3} />
+        <textarea
+          className={inputClass}
+          name="note"
+          rows={3}
+          placeholder="Checked the appointment gap report — all 3 positions filled by certified agents. Read the V13 capacity failure: 192 approvals/day against 144 review-minutes. Advancing to confirm the halt at 4.5 before revising the Pack."
+        />
       </Field>
-      <Submit label="Record review" busy="Recording…" />
+      <div className="flex flex-wrap items-center gap-2">
+        <Submit label="Record review and advance" busy="Recording…" name="then" value="advance" />
+        <Submit
+          label="Record review only"
+          busy="Recording…"
+          variant="quiet"
+          name="then"
+          value="record"
+        />
+      </div>
       <Result state={state} />
     </form>
   );
@@ -152,7 +212,12 @@ export function AbortForm({ runId, venture }: { runId: string; venture: string }
         label="Reason"
         hint="Abandoning frees the venture for a new run. It does not revoke anything — grants keep whatever state they are in."
       >
-        <input className={inputClass} name="note" />
+        {/*
+          `required` rather than a red error rendered at page load. "Abandoning a run
+          needs a reason" showing before anybody has typed anything is a validation
+          failure reported against a form nobody has submitted.
+        */}
+        <input className={inputClass} name="note" required />
       </Field>
       <Submit label="Abandon run" busy="Abandoning…" variant="danger" />
       <Result state={state} />

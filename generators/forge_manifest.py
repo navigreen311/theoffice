@@ -29,11 +29,11 @@ one, which inverts the entire point of a Bill of Materials.
 
 from __future__ import annotations
 
-from generators.artifacts import ForgeManifest, ManifestEntry, Reconciliation, TaskLedger, Workflow
+from generators.artifacts import ForgeManifest, ManifestEntry, Reconciliation, Workflow
 from generators.pack import BusinessPack
 
 
-def generate(pack: BusinessPack, workflow: Workflow, task_ledger: TaskLedger) -> ForgeManifest:
+def generate(pack: BusinessPack, workflow: Workflow) -> ForgeManifest:
     declared: dict[str, tuple[str, str, bool]] = {}
     for binding in pack.forge_dependencies.forge_bindings:
         for module in binding.modules_expected:
@@ -43,8 +43,6 @@ def generate(pack: BusinessPack, workflow: Workflow, task_ledger: TaskLedger) ->
     for step in workflow.steps:
         for module in step.forge_modules:
             required_by.setdefault(module, set()).add(f"workflow step {step.number}")
-    for task in task_ledger.tasks:
-        required_by.setdefault(task.module_id, set()).add(f"task {task.position}")
 
     entries: list[ManifestEntry] = []
     for module in sorted(set(declared) | set(required_by)):

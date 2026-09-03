@@ -18,6 +18,9 @@ from generators import (
     appointment as appointment_gen,
 )
 from generators import (
+    approval_projection as approvals_gen,
+)
+from generators import (
     curriculum as curriculum_gen,
 )
 from generators import (
@@ -30,12 +33,10 @@ from generators import (
     runtime_config as runtime_gen,
 )
 from generators import (
-    task_ledger as ledger_gen,
-)
-from generators import (
     workflow as workflow_gen,
 )
 from generators.artifacts import (
+    Advisory,
     Appointment,
     ForgeManifest,
     GeneratedArtifacts,
@@ -43,7 +44,12 @@ from generators.artifacts import (
     ScenarioPack,
 )
 from generators.pack import BusinessPack
-from generators.validator import ValidationReport, Verdict, validate_gate_4_5
+from generators.validator import (
+    ValidationReport,
+    Verdict,
+    rule_blocks,
+    validate_gate_4_5,
+)
 
 
 async def run_all(pack: BusinessPack, conn: AsyncConnection) -> GeneratedArtifacts:
@@ -62,32 +68,32 @@ async def run_all(pack: BusinessPack, conn: AsyncConnection) -> GeneratedArtifac
     )
     workflow = workflow_gen.generate(pack, roles)
 
-    idempotency = await _idempotency_classes(conn)
-    task_ledger = ledger_gen.generate(
-        pack, roles, workflow, appointment,
-        module_forge=module_forge, idempotency_by_module=idempotency,
-    )
+    # The projection counts human decisions and needs neither the Forge each module
+    # sits on nor its retry class - both were per-task facts, and there are no tasks.
+    approval_projection = approvals_gen.generate(pack, roles, workflow, appointment)
 
     curriculum = await curriculum_gen.generate(pack, roles, workflow, appointment, conn)
-    forge_manifest = manifest_gen.generate(pack, workflow, task_ledger)
+    forge_manifest = manifest_gen.generate(pack, workflow)
     runtime = runtime_gen.generate(
         pack, roles, appointment, forge_manifest, module_forge=module_forge
     )
 
     # Gate 4.5 re-checks capacity against the real Task Ledger. V13 at Gate 2 could
     # only estimate from the Pack, and that estimate is the optimistic one.
-    gate_4_5 = await validate_gate_4_5(pack, task_ledger, appointment)
+    gate_4_5 = await validate_gate_4_5(pack, approval_projection, appointment)
 
     return GeneratedArtifacts(
         venture_id=pack.venture_id,
         roles=roles,
         appointment=appointment,
         workflow=workflow,
-        task_ledger=task_ledger,
+        approval_projection=approval_projection,
         curriculum=curriculum,
         forge_manifest=forge_manifest,
         runtime_config=runtime,
-        warnings=_warnings(roles, appointment, forge_manifest, curriculum, gate_4_5),
+        advisories=_warnings(
+            roles, appointment, forge_manifest, curriculum, gate_4_5
+        ),
     )
 
 
@@ -103,31 +109,56 @@ def _warnings(
     forge_manifest: ForgeManifest,
     curriculum: ScenarioPack,
     gate_4_5: ValidationReport,
-) -> list[str]:
+) -> list[Advisory]:
     """Everything a human should see at Gate 4, in one place.
 
     Collected rather than logged: Gate 4 is a human reviewing artifacts, and a
     warning that only exists in a log line is a warning that review will miss.
     """
-    out: list[str] = []
+    out: list[Advisory] = []
+
+    # A rule that FAILS at Gate 4.5 is not a warning. It is a known halt one gate after
+    # the one the human is being asked to clear, and the reviewer is entitled to know
+    # that before they write a review nothing will use.
     for result in gate_4_5.results:
         if result.verdict is Verdict.FAIL:
-            out.append(f"GATE 4.5 {result.rule_id} FAIL: {result.message}")
+            out.append(Advisory(
+                severity="fail", message=result.message,
+                source="gate_4_5", rule_id=result.rule_id, blocks_at="4.5",
+                blocks=tuple(rule_blocks().get(result.rule_id, ())),
+            ))
+
     if roles.unresolved_modules:
-        out.append(
-            f"Modules not in forge_module_registry: {', '.join(roles.unresolved_modules)}"
-        )
+        out.append(Advisory(
+            severity="warn",
+            message=(
+                "Modules not in forge_module_registry: "
+                f"{', '.join(roles.unresolved_modules)}"
+            ),
+            source="roles",
+        ))
     if appointment.shortfall:
-        out.append(appointment.escalation)
+        out.append(Advisory(
+            severity="warn", message=appointment.escalation, source="appointment",
+        ))
     if forge_manifest.reconciliation.declared_not_required:
-        out.append(
-            "DECLARED_NOT_REQUIRED (V25): "
-            f"{', '.join(forge_manifest.reconciliation.declared_not_required)}"
-        )
+        out.append(Advisory(
+            severity="warn",
+            message=(
+                "Declared and paid for, used by nothing: "
+                f"{', '.join(forge_manifest.reconciliation.declared_not_required)}"
+            ),
+            source="forge_manifest", rule_id="V25",
+        ))
     for coverage in curriculum.coverage:
         if not coverage.complete:
-            out.append(
-                f"Coverage {coverage.dimension}: {coverage.covered}/{coverage.denominator}"
-                f" - missing {', '.join(coverage.uncovered)}"
-            )
+            out.append(Advisory(
+                severity="warn",
+                message=(
+                    f"Coverage {coverage.dimension}: {coverage.covered}/"
+                    f"{coverage.denominator} - missing "
+                    f"{', '.join(coverage.uncovered)}"
+                ),
+                source="curriculum",
+            ))
     return out

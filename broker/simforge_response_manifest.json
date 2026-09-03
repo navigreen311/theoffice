@@ -34,7 +34,7 @@
     "fields": {
       "run_ref": "Correlates to the submission.",
       "unit": "'A' or 'B'. Which certification unit this verdict is for.",
-      "verdict": "PASS | FAIL | TIMEOUT | NOT_RUN | IN_PROGRESS | REVOKED.",
+      "verdict": "PASS | PROVISIONAL | FAIL | TIMEOUT | NOT_RUN | IN_PROGRESS | REVOKED. PROVISIONAL is a governance hold - passed the threshold, rubric did not discriminate - and is not assignable. TIMEOUT never resolves to PASS. The full table lives in simforge_contract.json.",
       "rubric_kind": "'operation' or 'domain'. Never a merged score.",
       "rubric_version": "Version stamp of the rubric applied.",
       "score": "Numeric score. A number carries no scenario content.",

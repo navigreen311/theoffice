@@ -1,6 +1,8 @@
+import type * as React from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { Ago } from "@/components/local-time";
 import { Breadcrumb } from "@/components/breadcrumb";
 import { ExternalLink, PlugOff } from "@/components/icons";
 import {
@@ -10,7 +12,6 @@ import {
   type VentureCard,
   type VentureDirectory,
 } from "@/lib/api";
-import { relativeAge } from "@/lib/severity";
 
 import { NewVenture, VentureMenu } from "./forms";
 
@@ -58,7 +59,7 @@ function Metric({
   alarming,
 }: {
   label: string;
-  value: string;
+  value: React.ReactNode;
   note?: string;
   alarming?: boolean;
 }) {
@@ -122,7 +123,7 @@ function Stat({
   muted,
 }: {
   label: string;
-  value: string;
+  value: React.ReactNode;
   muted?: boolean;
 }) {
   return (
@@ -197,7 +198,7 @@ function VentureCardView({ venture }: { venture: VentureCard }) {
         <Stat
           label="Spend / cap"
           // "Unmetered" means no budget row exists, not a zero cap.
-          value={cap === null ? "unmetered" : `$${venture.spend_this_month.toLocaleString()} of $${cap.toLocaleString()}`}
+          value={cap === null ? "unmetered" : `$${venture.spend_this_month.toLocaleString("en-US")} of $${cap.toLocaleString("en-US")}`}
           muted={cap === null}
         />
         <Stat
@@ -211,7 +212,9 @@ function VentureCardView({ venture }: { venture: VentureCard }) {
         />
         <Stat
           label="Last activity"
-          value={venture.last_activity ? relativeAge(venture.last_activity) : "none yet"}
+          value={
+            venture.last_activity ? <Ago iso={venture.last_activity} /> : "none yet"
+          }
           muted={!venture.last_activity}
         />
       </div>
@@ -223,14 +226,14 @@ function VentureCardView({ venture }: { venture: VentureCard }) {
           <span className="text-warn">unmetered</span>
         ) : (
           <span className="text-ink-secondary">
-            {venture.hard_cap_action ?? "pause"} at ${cap.toLocaleString()}
+            {venture.hard_cap_action ?? "pause"} at ${cap.toLocaleString("en-US")}
             {venture.soft_cap_pct
-              ? ` · soft cap ${venture.soft_cap_pct}% ($${softCapAt?.toLocaleString()})`
+              ? ` · soft cap ${venture.soft_cap_pct}% ($${softCapAt?.toLocaleString("en-US")})`
               : ""}
           </span>
         )}
         {venture.hard_cap_reversed_at ? (
-          <span className="text-warn">reversed {relativeAge(venture.hard_cap_reversed_at)}</span>
+          <span className="text-warn">reversed <Ago iso={venture.hard_cap_reversed_at} /></span>
         ) : null}
       </div>
 
@@ -358,7 +361,7 @@ export default async function VenturesPage() {
         />
         <Metric
           label="Spend this month"
-          value={`$${scorecard.spend_this_month.value.toLocaleString()} of $${scorecard.spend_this_month.denominator.toLocaleString()}`}
+          value={`$${scorecard.spend_this_month.value.toLocaleString("en-US")} of $${scorecard.spend_this_month.denominator.toLocaleString("en-US")}`}
           note={scorecard.spend_this_month.note}
         />
         <Metric

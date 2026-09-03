@@ -41,9 +41,14 @@ def _clean_humans(admin: psycopg.Connection):
 def _wipe(conn: psycopg.Connection) -> None:
     with conn.cursor() as cur:
         cur.execute("DELETE FROM signoff_record")
+        # Revocations first: `revoked_by`, `reinstated_by` and now
+        # `reinstatement_second_human` all reference `office_human`, so deleting humans
+        # while a revocation still points at one fails on the foreign key. This is the
+        # fourth time a teardown has broken because it named some dependents and not
+        # the one a later feature added - the order is the fix, not a softer constraint.
+        cur.execute("DELETE FROM revocation")
         cur.execute("DELETE FROM office_human_role")
         cur.execute("DELETE FROM office_human")
-        cur.execute("DELETE FROM revocation")
         cur.execute("DELETE FROM manifest_disposition")
     conn.commit()
 
@@ -189,18 +194,22 @@ async def test_reinstatement_requires_the_same_authority_as_the_revocation(
     assert created.status_code == 201
     revocation_id = created.json()["revocation_id"]
 
-    _oid, operator_token = await make_human(name="Op", role="venture_operator")
+    oid, operator_token = await make_human(name="Op", role="venture_operator")
     refused = await api.post(
         f"/api/revocations/{revocation_id}/reinstate",
         headers=auth(operator_token),
-        json={"reason": "seems fine to me"},
+        json={"reason": "seems fine to me", "second_human": str(oid)},
     )
     assert refused.status_code == 403
 
+    # A venture stop now needs a second named human to lift, on top of the role check
+    # this test is about. Both refusals are 403 and they are different refusals: the one
+    # above is "your role is too weak", this one would be "one judgement is not a
+    # ritual". The test supplies the second human so it keeps testing the first.
     allowed = await api.post(
         f"/api/revocations/{revocation_id}/reinstate",
         headers=auth(compliance_token),
-        json={"reason": "investigated, see INC-4"},
+        json={"reason": "investigated, see INC-4", "second_human": str(oid)},
     )
     assert allowed.status_code == 200
 
@@ -425,7 +434,31 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
         "certification", "cert", "flush", "ledger", "shift", "memory",
         "grant", "audit", "chain", "manifest/declare",
     )
+
+    # Routes that *verify* a protected surface without being able to change it.
+    #
+    # The fragment test is a proxy for "could edit a protected store", and it is a good
+    # proxy: a path naming one of these is nearly always a route that writes to it. This
+    # is the case where the proxy is wrong, and the honest fix is to make the guard
+    # precise rather than to rename the route until the substring stops matching - which
+    # is the same avoidance the raw-mutation guard was fixed for earlier.
+    #
+    # Every entry needs the argument for why the surface is still safe, and the argument
+    # has to be something other than "it looks fine".
+    verifies_without_editing = {
+        # Re-hashes the audit log and records the result as a control run. It cannot
+        # change the log by construction, not by intention: `audit_log` refuses UPDATE
+        # and DELETE by trigger to every role including the admin one, which
+        # `test_the_audit_log_refuses_an_edit` exercises through the app role. What it
+        # writes is a `sweep_run` row and one audit entry - and recording is the whole
+        # point, because a verification nothing records is what let the Audit page and
+        # the Compliance page report contradictory states about the same property.
+        "/api/controls/audit-chain",
+    }
+
     for path in writes:
+        if path in verifies_without_editing:
+            continue
         for fragment in forbidden_fragments:
             assert fragment not in path.lower(), (
                 f"write route {path!r} touches {fragment!r}. Certification state, PHI "
@@ -434,7 +467,21 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
                 "this route cannot bypass a control before adding it here."
             )
 
+    # The exception list cannot outlive the routes it excuses. An entry for a route that
+    # no longer exists is an exemption nobody is checking, sitting ready for the next
+    # route that happens to take that path.
+    stale = verifies_without_editing - writes
+    assert not stale, f"these routes are excused and do not exist: {sorted(stale)}"
+
     assert writes == {
+        # The Village roster. None of these creates an agent: they import what the
+        # Village reports, record one it cannot report, and issue identities for agents
+        # that already exist. An "add agent" route would contradict the page's own
+        # subtitle and become a second source of truth for who exists.
+        "/api/agents/roster",
+        "/api/agents/roster/preview",
+        "/api/agents/identities",
+        "/api/agents/village",
         "/api/revocations",
         "/api/revocations/{revocation_id}/reinstate",
         "/api/proposals/{proposal_id}/decide",
@@ -453,6 +500,11 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
         "/api/provisioning/runs",
         "/api/provisioning/runs/{run_id}/advance",
         "/api/provisioning/runs/{run_id}/review",
+        # Stops a run; it cannot start or advance one. Added deliberately: Gate 4
+        # review could previously only approve, so the only way for a human to say no
+        # was to abandon the run - which means something different to the next person
+        # who provisions this venture.
+        "/api/provisioning/runs/{run_id}/reject",
         "/api/provisioning/runs/{run_id}/abort",
         "/api/provisioning/runs/{run_id}/signoff",
         # Knowledge Base Manager. Four stores that author content, and none of them
@@ -466,6 +518,31 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
         "/api/knowledge/compliance",
         "/api/knowledge/personas",
         "/api/knowledge/history",
+        # Records that smoke fixtures are being excluded from the knowledge counts. It
+        # writes one append-only row and touches nothing it describes: there is no purge
+        # route, because `persona` is write-only to this role and `historical_record`
+        # refuses DELETE to everyone. The write IS the control - an exclusion nobody
+        # recorded is a filter nobody noticed.
+        "/api/knowledge/fixtures/exclude",
+        # Filing an incident a person noticed, and appending one account to an
+        # incident's response. Neither edits anything: `incident` refuses UPDATE by
+        # grant and `incident_account` refuses it by trigger, so both of these are
+        # appends to append-only stores. The write IS the control - a detection nobody
+        # could record is a detection that stays in somebody's inbox.
+        "/api/incidents",
+        "/api/incidents/{incident_id}/accounts",
+        # Suspending every account this project's own test paths created. It writes
+        # `status`, which is exactly the control it appears to bypass - and does not:
+        # suspension is the reversible, audited half. There is no delete route here or
+        # anywhere, because deleting an account destroys the record of who held what and
+        # who granted it, which is what the Access page exists to protect.
+        "/api/access/suspend-test-fixtures",
+        # Running the chain verification and recording it as a control result. It
+        # writes a `sweep_run` row and one audit entry, and touches the audit log in no
+        # other way - the log itself refuses UPDATE and DELETE by trigger. Recording is
+        # the point: a verification nothing records is what let this page and Compliance
+        # report contradictory states about the same property.
+        "/api/controls/audit-chain",
         # Human and role administration — the most privilege-sensitive surface in this
         # file. The rules live in `humans.assert_may_grant`: a role may be granted only
         # by somebody holding a STRICTLY stronger one, and never to yourself.
@@ -498,7 +575,43 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
         # decision to stop operating a venture, and collapsing the two would make
         # archiving a quiet way to pull authority with no revocation record.
         "/api/ventures/{slug}/lifecycle",
+        # Pack drafting. A draft cannot provision - `packs.live` does not return one, so
+        # Gate 1 cannot find it and nothing downstream can generate from it. Publishing
+        # is the separate act that puts one in force.
+        "/api/packs/draft",
+        "/api/packs/{venture_id}/publish",
     }, f"the write surface changed: {sorted(writes)}"
+
+
+def _statements_only(source) -> str:
+    """The Python in a module with its comments and docstrings removed.
+
+    Tokens are rejoined with a single space, which is enough for substring matching:
+    `UPDATE agent` lexes as two tokens and rejoins as `update agent`, still containing
+    the `update ` the caller looks for.
+    """
+    import tokenize
+
+    standalone = {
+        tokenize.ENCODING,
+        tokenize.INDENT,
+        tokenize.DEDENT,
+        tokenize.NEWLINE,
+        tokenize.NL,
+    }
+    code: list[str] = []
+    previous = tokenize.ENCODING
+    with open(source, encoding="utf-8") as handle:
+        for token in tokenize.generate_tokens(handle.readline):
+            if token.type == tokenize.COMMENT:
+                continue
+            # A string sitting where a statement would start is a docstring.
+            if token.type == tokenize.STRING and previous in standalone:
+                continue
+            if token.type != tokenize.NL:
+                previous = token.type
+            code.append(token.string)
+    return " ".join(code)
 
 
 async def test_the_api_module_contains_no_raw_mutation():
@@ -511,12 +624,60 @@ async def test_the_api_module_contains_no_raw_mutation():
     from pathlib import Path
 
     source = Path(__file__).resolve().parents[2] / "broker" / "app.py"
-    text = source.read_text(encoding="utf-8").lower()
+
+    # Comments and docstrings are stripped before the scan. The first version lowercased
+    # the whole file, so a docstring explaining that the historical-record store refuses
+    # UPDATE and DELETE tripped the very guard that exists to stop raw statements - the
+    # same trap the React 19 check fell into, where a rule that greps for a phrase flags
+    # the paragraph explaining it.
+    #
+    # Stripping makes this stricter, not laxer: every real statement is still code, and a
+    # guard that forces people to avoid a word in prose is one somebody eventually argues
+    # down instead. `test_the_raw_mutation_guard_still_sees_a_real_statement` holds the
+    # teeth, because a check loosened in response to a false positive is exactly the kind
+    # that quietly stops checking.
+    text = _statements_only(source).lower()
     for statement in ("update ", "delete from", "insert into"):
         assert statement not in text, (
             f"broker/app.py contains a raw {statement.strip()!r}. Every write must go "
             "through the guarded domain function that owns that rule."
         )
+
+
+def test_the_raw_mutation_guard_still_sees_a_real_statement(tmp_path):
+    """The guard above learned to skip prose. This proves it did not stop looking.
+
+    A check that passes because it was narrowed is worse than no check, and this one was
+    narrowed in response to a false positive - the circumstance under which a guard most
+    often stops guarding. So: hand `_statements_only` a module whose only mutations are
+    real code, and require all three to survive the strip; then hand it one where the
+    same words appear only in a docstring and a comment, and require silence.
+    """
+
+    def scan(text: str, name: str) -> list[str]:
+        source = tmp_path / name
+        source.write_text(text, encoding="utf-8")
+        body = _statements_only(source).lower()
+        return sorted(s for s in ("update ", "delete from", "insert into") if s in body)
+
+    real = (
+        '"""A docstring that says nothing about statements."""\n'
+        "def route(cur):\n"
+        '    cur.execute("UPDATE agent SET tier = 2")\n'
+        '    cur.execute("DELETE FROM grant WHERE grant_id = 1")\n'
+        '    cur.execute("INSERT INTO audit_log (kind) VALUES (1)")\n'
+    )
+    assert scan(real, "real.py") == ["delete from", "insert into", "update "], (
+        "the guard stopped catching raw statements when it learned to skip prose"
+    )
+
+    prose = (
+        '"""This store refuses update and delete; rows insert into it once."""\n'
+        "# A comment mentioning delete from and insert into for good measure.\n"
+        "def route():\n"
+        "    return knowledge.record_note()\n"
+    )
+    assert scan(prose, "prose.py") == [], "prose still trips the guard"
 
 
 async def test_serve_does_not_let_uvicorn_replace_the_event_loop_policy():

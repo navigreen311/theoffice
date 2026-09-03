@@ -1,0 +1,482 @@
+# BUSINESS PACK — Burkham Wickmont · schema_version: 3 · **DRAFT, NOT LIVE**
+#
+# WHAT THIS IS, AND WHAT IT IS NOT
+#
+#   This is not the Burkham Wickmont Business Pack. No such Pack exists. What exists is
+#   a platform decision record — `blueprint-v2.md` (1,150 lines) and
+#   `specifications-v2.md` (657 lines) in the Console repository — and that is a
+#   different document in a different schema answering different questions.
+#
+#   This file was written to answer one question: **what does the validator say about
+#   Burkham?** That question needs an input, and there was none. Every value below is
+#   drawn from the two Console documents where they say something, and is a placeholder
+#   where they do not. The placeholders are the finding, not the values.
+#
+#   The `.draft.` in the filename is load-bearing. Do not promote this file. A real Pack
+#   is authored by the people who can answer the questions this one guesses at, and
+#   several of its answers are things only Ivan can decide.
+#
+# WHAT IS GUESSED, AND SO WHAT THE VALIDATOR OUTPUT MEANS
+#
+#   human_capacity, budget, capacity_demand, availability, KPI measurement sources,
+#   data_retention and the whole scenario set are INVENTED. They are set to the most
+#   plausible small values so that the rules which depend on them run at all — a Pack
+#   that fails to LOAD produces no rule results, and a list of thirty schema errors is
+#   less useful than a list of the rules that actually fail.
+#
+#   So: a rule that FAILS here fails for a real structural reason. A rule that PASSES
+#   here may be passing on an invented value. The failures are the signal.
+#
+# THE ONE THING THAT COULD NOT BE GUESSED
+#
+#   `source_department` must name a department the Village actually has. Burkham's ten
+#   departments (Compliance & Evidence, CapitalForge Ops, Funding Strategy, Concierge
+#   Desk, Risk & Defense, Channel Partnerships, Capital Operations, Founder/Executive)
+#   intersect the Village's twelve at ZERO. Every position below therefore names a
+#   Village department chosen as the nearest fit, and each choice is marked. That
+#   mapping is a decision nobody has made.
+
+schema_version: 3
+
+identity:
+  venture_name: Burkham Wickmont
+  legal_entity: Burkham Wickmont LLC
+  parent: Green Companies LLC
+  operating_status: launching
+  category: Business credit structuring and capital placement
+  positioning_one_liner: >-
+    Structured business credit and capital placement for operating companies, with
+    every recommendation carrying the source of the rule behind it.
+
+environment: sandbox
+
+market:
+  target_personas:
+    - Operating business owner seeking working capital without a personal guarantee
+    - Founder with strong personal credit and no business credit file
+    - Partner accountant referring a client who was declined elsewhere
+  target_geographies:
+    - Nevada
+    - California
+    - New York
+    - Texas
+    - Florida
+    - Arizona
+    - Utah
+  compliance_surface:
+    # TEN frameworks, per specifications-v2 §6.3. Six of these had no value in the
+    # schema until the enum was extended; `library_entry_ref` is omitted throughout
+    # and `library_gap: true` set instead, because the Compliance Library ships EMPTY
+    # — no entry is committed anywhere in this repository. Claiming a ref that
+    # resolves to nothing is what V28 exists to catch.
+    - framework: CROA
+      jurisdiction: FEDERAL
+      applies_when: Any discussion of a client's credit profile, score, tradelines or negative items
+      runtime_flag: croa_perimeter_required
+      library_entry_ref: compliance/not-a-credit-repair-organization-v1
+    - framework: FTC_ACT
+      jurisdiction: FEDERAL
+      applies_when: Anything Burkham says about its own service, results or pricing
+      runtime_flag: own_claims_discipline_required
+      library_entry_ref: compliance/own-claims-and-pricing-v1
+    - framework: UDAAP
+      jurisdiction: FEDERAL
+      applies_when: Any client-facing claim about approval, cost or outcome
+      runtime_flag: client_interest_standard_required
+      library_entry_ref: compliance/client-interest-standard-v1
+    # TWO UDAAP rows, for the reason FCRA and FALSE_STATEMENT_TO_LENDER have two: a
+    # standard and one absolute application of it are different obligations. The row
+    # above is the standard - whether Burkham is optimising for the client's outcome,
+    # judged case by case. This one is the single product where the answer was decided
+    # in advance and does not vary: advances are not placed, at any fee.
+    #
+    # This is also the FIRST row in this Pack to carry a `library_entry_ref` rather than
+    # `library_gap: true`. Twenty-two rows admit no entry exists; fourteen entries have
+    # since been written and the Pack has not been updated to point at any of them. That
+    # is a separate and larger correction, not made here.
+    - framework: UDAAP
+      jurisdiction: FEDERAL
+      applies_when: Any point at which a merchant cash advance could be recommended, applied for or submitted
+      runtime_flag: advance_placement_prohibited
+      library_entry_ref: compliance/no-advance-placement-v1
+    # REG_Z_ADVERTISING RETIRED 1 September 2026. specifications-v2 §6: "CFPB Regulation Z -
+    # business-purpose credit exemption from most TILA, but card issuance and unauthorized-use
+    # rules apply". Trigger terms are an advertising rule under the exempt part; the parts that
+    # do apply are the ISSUER's obligations. Burkham's advertising is governed by
+    # compliance/own-claims-and-pricing-v1 and the Marketing Claim Library, which already
+    # carry "0% interest", "introductory rate" and "as low as" with required disclosures.
+    # CFPB_1071 RETIRED 1 September 2026. specifications-v2 §6 puts the collection duty "at
+    # the issuer level" and Burkham does not originate credit, so it is not a covered
+    # financial institution. The real agent behaviour - what Burkham does with demographic
+    # data an issuer collects through an application Burkham submits - is folded into
+    # compliance/fair-treatment-in-routing-v1, which already governs protected-class data.
+    - framework: STATE_COMMERCIAL_FINANCING_DISCLOSURE
+      jurisdiction: [NY, UT, VA, GA, CT, FL]
+      applies_when: Commercial financing offer presented in a disclosure state
+      runtime_flag: estimate_not_offer_required
+      library_entry_ref: compliance/estimate-not-offer-v1
+    - framework: MCA_DISCLOSURE_CA_SB1235
+      jurisdiction: [CA]
+      applies_when: Commercial financing offer presented to a California business
+      runtime_flag: estimate_not_offer_required
+      library_entry_ref: compliance/estimate-not-offer-v1
+    # TWO rows, as with FCRA. Authorization and truthfulness are different offences:
+    # a truthful application nobody authorised and an authorised application that
+    # misstates revenue are each a violation on their own.
+    - framework: FALSE_STATEMENT_TO_LENDER
+      jurisdiction: FEDERAL
+      applies_when: Authorizing an application submitted to an issuer on a client's behalf
+      runtime_flag: per_application_authorization_required
+      library_entry_ref: compliance/application-authorization-v1
+    - framework: FALSE_STATEMENT_TO_LENDER
+      jurisdiction: FEDERAL
+      applies_when: Preparing, populating or staging any field of a lender application
+      runtime_flag: application_truthfulness_required
+      library_entry_ref: compliance/application-truthfulness-v1
+    - framework: CARD_NETWORK_RULES
+      jurisdiction: FEDERAL
+      applies_when: Any representation about card use, cash advance or fees
+      runtime_flag: card_product_discipline_required
+      library_entry_ref: compliance/card-product-characterisation-v1
+    # TWO rows, one flag each. FCRA splits into authorization (before the pull) and
+    # handling (after the report comes back), and a compliance_surface row can only
+    # declare one runtime_flag. See compliance/bureau-report-handling-v1, which states
+    # the split explicitly and excludes authorization from its own scope.
+    - framework: STATE_LENDER_LICENSURE
+      jurisdiction: ALL
+      applies_when: Every engagement, in every state, from intake through placement
+      runtime_flag: facilitator_status_required
+      library_entry_ref: compliance/facilitator-not-broker-v1
+    - framework: FTC_TSR
+      jurisdiction: FEDERAL
+      applies_when: Any Burkham-initiated contact with an individual, any channel
+      runtime_flag: outbound_contact_boundary_required
+      library_entry_ref: compliance/outbound-contact-boundary-v1
+    - framework: ECOA
+      jurisdiction: FEDERAL
+      applies_when: Any decision on which lenders a client is shown, or whether to serve them
+      runtime_flag: fair_treatment_required
+      library_entry_ref: compliance/fair-treatment-in-routing-v1
+    - framework: TWO_PARTY_CONSENT_RECORDING
+      jurisdiction: [CA, FL, IL, MD, MA, MT, NH, OR, PA, WA, CT]
+      applies_when: Any recorded call, whoever dialled
+      runtime_flag: recording_consent_required
+      library_entry_ref: compliance/call-recording-consent-v1
+    - framework: TAX_ADVICE_SCOPE
+      jurisdiction: FEDERAL
+      applies_when: Any client interaction touching tax treatment
+      runtime_flag: tax_advice_boundary_required
+      library_entry_ref: compliance/tax-advice-boundary-v1
+    - framework: FCRA
+      jurisdiction: FEDERAL
+      applies_when: Authorizing a consumer or business bureau pull
+      runtime_flag: per_pull_authorization_required
+      library_entry_ref: compliance/fcra-pull-authorization-v1
+    - framework: FCRA
+      jurisdiction: FEDERAL
+      applies_when: Handling a bureau report once the Integration Layer has returned it
+      runtime_flag: bureau_report_handling_required
+      library_entry_ref: compliance/bureau-report-handling-v1
+    - framework: GLBA
+      jurisdiction: FEDERAL
+      applies_when: Any Plaid connection or handling of client financial account data
+      runtime_flag: per_connection_authorization_required
+      library_entry_ref: compliance/glba-plaid-connection-v1
+    - framework: CCPA
+      jurisdiction: [CA]
+      applies_when: Any California client exercising a privacy right
+      runtime_flag: privacy_request_handling
+      library_entry_ref: compliance/consumer-privacy-rights-v1
+    - framework: STATE_PRIVACY_COMPREHENSIVE
+      jurisdiction: [VA, CO, CT, UT]
+      applies_when: Any client in a comprehensive-privacy state exercising a right
+      runtime_flag: privacy_request_handling
+      library_entry_ref: compliance/consumer-privacy-rights-v1
+    - framework: REFERRAL_FEE_REGULATION
+      jurisdiction: ALL
+      applies_when: Any payout to a partner or referrer
+      runtime_flag: referral_fee_permitted_in_state
+      library_gap: true
+    # Both of these were already in scope on a position and declared by no framework.
+    # The Compliance Reviewer and the Stack Manager carry
+    # trigger_term_disclosure_required, the Diagnostic Analyst carries
+    # sb_lending_data_collection, and the flag is the join between a position and an
+    # entry - so an agent held a flag with nothing behind it, and nothing reported that
+    # because no rule reads compliance_flags_in_scope.
+    - framework: REG_Z_ADVERTISING
+      jurisdiction: FEDERAL
+      applies_when: Any content reaching a person who has not engaged Burkham that
+        states a rate, a payment, a term or a fee
+      runtime_flag: trigger_term_disclosure_required
+      library_entry_ref: compliance/reg-z-advertising-boundary-v1
+    - framework: CFPB_1071
+      jurisdiction: FEDERAL
+      applies_when: Any point at which demographic or protected-class data about a
+        small-business applicant could be collected, transmitted, retained or used
+      runtime_flag: sb_lending_data_collection
+      library_entry_ref: compliance/cfpb-1071-boundary-v1
+
+engagement_model:
+  service_lines:
+    - service_line_name: Capital readiness and placement
+      # The Console's Workflow Engine seeds phase-0 / phase-1 / phase-2 plus
+      # post-funding follow-up. blueprint-v2 §2.2 describes Phase 0 through Phase 5.
+      lifecycle_stages:
+        - Intake
+        - Diagnostic
+        - Readiness
+        - Placement
+        - Funded
+        - Stack management
+      pricing_structure: hybrid
+      revenue_model: hybrid
+  conversion_events:
+    - Client signs the engagement agreement
+    - First funding round closes with an approved limit
+  disqualification_criteria:
+    - Client is on the Do Not Fund list
+    - Client requests credit repair or removal of accurate derogatory information
+    - Client will not provide per-application written authorization
+  out_of_scope_at_launch:
+    - Credit repair of any kind
+    - Taking a lending position on the firm's own balance sheet
+    - Consumer (non-business-purpose) credit
+
+positions_required:
+  # EVERY `source_department` below is a GUESS. Burkham's own department names exist
+  # nowhere in the Village roster, and V29 checks against the live roster.
+  - position_title: Intake Concierge
+    reports_to: venture_operator
+    duties:
+      - Open the client file and capture the engagement agreement
+      - Collect per-application, per-pull and per-connection authorizations
+      - Answer client questions from approved scripts only
+    forge_modules_operated: [client_lookup, record_consent]
+    source_department: operations       # Burkham calls this "Concierge Desk"
+    compliance_flags_in_scope:
+      [per_application_authorization_required, per_pull_authorization_required,
+       per_connection_authorization_required]
+    headcount: 2
+    # Level 2 "Communicate with approval" is the Console's nearest equivalent.
+    trust_tier_ceiling: propose
+    lifecycle_stages_owned: [Intake]
+
+  - position_title: Diagnostic Analyst
+    reports_to: venture_operator
+    duties:
+      - Pull bank and bureau data under a recorded authorization
+      - Compute the funding readiness assessment
+      - Produce the diagnostic deliverable for compliance review
+    # DECISION NEEDED. Two of this position's three modules are gone (see the
+    # forge binding below), so its duties now exceed what it can operate: it can
+    # pull bank data, not bureau data, and it cannot compute the readiness
+    # assessment through a Forge at all. The duties above are left as written
+    # rather than quietly narrowed - what this role is for is Ivan's call, not a
+    # side effect of a module going away.
+    forge_modules_operated: [statement_pull]
+    source_department: banking          # Burkham calls this "CapitalForge Ops"
+    compliance_flags_in_scope:
+      [per_pull_authorization_required, bureau_report_handling_required,
+       per_connection_authorization_required, sb_lending_data_collection]
+    headcount: 2
+    trust_tier_ceiling: propose
+    lifecycle_stages_owned: [Diagnostic, Readiness]
+
+  - position_title: Placement Strategist
+    reports_to: venture_operator
+    duties:
+      - Match a ready client to approved providers using sourced issuer rules
+      - Assemble the lender packet
+      - Submit applications under written client authorization
+    forge_modules_operated: [lender_match, build_packet, submit_application]
+    source_department: banking          # Burkham calls this "Funding Strategy"
+    compliance_flags_in_scope:
+      [per_application_authorization_required, application_truthfulness_required,
+       estimate_not_offer_required,
+       card_product_discipline_required]
+    headcount: 2
+    trust_tier_ceiling: propose
+    lifecycle_stages_owned: [Placement, Funded]
+
+  - position_title: Compliance Reviewer
+    reports_to: compliance_officer
+    duties:
+      - Scan outbound client communications before send
+      - Record compliance state transitions
+      - Assemble evidence bundles for review
+    forge_modules_operated: [scan_communication, assemble_evidence]
+    source_department: administration   # Burkham calls this "Compliance & Evidence"
+    compliance_flags_in_scope:
+      [client_interest_standard_required, own_claims_discipline_required,
+       croa_perimeter_required,
+       trigger_term_disclosure_required,
+       card_product_discipline_required]
+    headcount: 1
+    trust_tier_ceiling: propose
+    lifecycle_stages_owned: [Readiness, Placement]
+
+  - position_title: Stack Manager
+    reports_to: venture_operator
+    duties:
+      - Monitor promotional period expiry and utilisation
+      - Recommend re-stacking windows
+      - Track funding outcomes against the recommendation
+    forge_modules_operated: [portfolio_health, restack_recommend]
+    source_department: operations       # Burkham calls this "Capital Operations"
+    compliance_flags_in_scope: [trigger_term_disclosure_required]
+    headcount: 1
+    trust_tier_ceiling: propose
+    lifecycle_stages_owned: [Stack management]
+
+capacity_demand:
+  agent_days_per_week: 40
+  peak_concurrent_positions: 8
+  shift_pattern: One venture per agent per quarter; 5 shifts/week
+  ramp_schedule:
+    - {week: 1, agent_days: 10}
+    - {week: 4, agent_days: 40}
+
+forge_dependencies:
+  operating_forge: capitalforge
+  training_forge: SimForge
+  forge_bindings:
+    - forge: capitalforge
+      api_version: 2.0.0
+      criticality: hard
+      # bureau_pull and readiness_score removed 2026-09-01. Neither can be granted:
+      #   bureau_pull      CapitalForge does not pull a bureau score and has no path to
+      #                    one. Its own specification section 2 says so; SBSS is an input
+      #                    an advisor types, not a value the system obtains.
+      #   readiness_score  excluded in forge_module_exclusion. GET /api/readiness/:id
+      #                    never reads the business - it scores from query parameters the
+      #                    caller supplies and stamps the businessId on the answer.
+      # They were declared at criticality:hard, so the Pack asserted the workflow could
+      # not run without two modules that will never exist.
+      modules_expected:
+        [client_lookup, record_consent, statement_pull,
+         lender_match, build_packet, submit_application, scan_communication,
+         assemble_evidence, portfolio_health, restack_recommend]
+      compliance_flags_propagated:
+        [per_application_authorization_required, per_pull_authorization_required,
+         per_connection_authorization_required, client_interest_standard_required]
+      fallback_behavior: halt
+      rate_limit_policy: {max_rps: 4, burst: 10, backoff: exponential, on_429: queue}
+      credential_mode: brokered
+      cost_center: burkham-operations
+
+    - forge: simforge
+      api_version: 3.2.0
+      criticality: hard
+      modules_expected: [run_scenario_pack, gate_result]
+      compliance_flags_propagated: []
+      fallback_behavior: halt
+      rate_limit_policy: {max_rps: 1, burst: 3, backoff: linear, on_429: queue}
+      credential_mode: brokered
+      cost_center: burkham-training
+
+  external_software:
+    - name: Plaid
+      purpose: Bank statement and account data (Decision A)
+      criticality: hard
+      data_types_transmitted: [financial_account_data, counterparty_pii]
+      dpa_or_baa_status: pending
+    - name: Business credit bureau
+      purpose: Business bureau pull (Decision B - vendor not selected)
+      criticality: hard
+      data_types_transmitted: [business_credit_data, counterparty_pii]
+      dpa_or_baa_status: pending
+    - name: Personal credit provider
+      purpose: Personal credit pull (Decision B - vendor not selected)
+      criticality: hard
+      data_types_transmitted: [consumer_credit_data, consumer_pii]
+      dpa_or_baa_status: pending
+
+# EMPTY, and that is the finding. No Forge Operating Instructions exist for any
+# CapitalForge module. V11 reads the live instruction set and will say so.
+forge_operating_instructions: []
+
+triggers:
+  - {trigger_id: daily_promo_expiry_sweep, type: scheduled}
+  - {trigger_id: application_decision_received, type: forge_webhook}
+  - {trigger_id: analyst_pursues_client, type: agent_initiated,
+     max_invocations_per_hour: 30, max_chain_depth: 3}
+  - {trigger_id: operator_requests_placement, type: human_initiated}
+
+budget:
+  # INVENTED. Nothing in either Console document states a budget.
+  monthly_usd_cap: 6000
+  soft_cap_pct: 80
+  hard_cap_action: pause
+  per_agent_usd_daily_cap: 30
+  per_task_usd_ceiling: 8
+  cost_alert_recipients: [ivan@greencompanies.example]
+
+human_capacity:
+  # INVENTED, and modelled on Greenstone's staffing so the Gate 4.5 comparison in the
+  # report is like for like. Burkham names no reviewer anywhere.
+  - human_name: Ivan
+    role: venture_operator
+    coverage_hours: 6
+    timezone: America/Los_Angeles
+    backup_human: Dana
+    max_daily_approvals: 60
+    median_review_minutes: 4
+    auth_method: sso_mfa
+  - human_name: Dana
+    role: compliance_officer
+    coverage_hours: 4
+    timezone: America/Los_Angeles
+    backup_human: Ivan
+    max_daily_approvals: 30
+    median_review_minutes: 6
+    auth_method: sso_mfa
+
+separation_of_duties:
+  gate_signoff_policy: distinct_humans
+
+availability:
+  office_unreachable_behavior: degrade_to_propose
+  audit_write_failure_behavior: fail_closed
+  rto_minutes: 60
+  rpo_minutes: 15
+
+data_retention:
+  - {data_type: financial_account_data, retention: 7 years,
+     legal_basis: Business record and GLBA, deletion_mechanism: crypto_shred}
+  - {data_type: business_credit_data, retention: 7 years,
+     legal_basis: FCRA-adjacent business record, deletion_mechanism: crypto_shred}
+  - {data_type: consumer_credit_data, retention: 25 months,
+     legal_basis: FCRA / ECOA record retention, deletion_mechanism: crypto_shred}
+  - {data_type: consumer_pii, retention: 3 years after last contact,
+     legal_basis: Legitimate business interest, deletion_mechanism: crypto_shred}
+  - {data_type: counterparty_pii, retention: 3 years after last contact,
+     legal_basis: Legitimate business interest, deletion_mechanism: crypto_shred}
+
+kpi_targets:
+  # INVENTED sources. blueprint-v2 §9.1-9.4 name dashboards and never name a source.
+  day_30:
+    # DECISION NEEDED. This measured agent_call_ledger.module_id=readiness_score.
+    # That module is excluded, so no ledger row can ever carry it and the KPI would
+    # read zero forever - indistinguishable from nobody doing the work. Left named
+    # here with the source marked unmeasurable rather than deleted, because the
+    # target is a real business intention and only its measurement is broken.
+    - {kpi_name: Clients through diagnostic, target_value: 20, unit: count,
+       measurement_source: UNMEASURABLE - was agent_call_ledger.module_id=readiness_score,
+       measurement_frequency: weekly, owner: Ivan}
+  day_90:
+    - {kpi_name: Funded rounds, target_value: 8, unit: count,
+       measurement_source: venture CRM funding outcome ledger,
+       measurement_frequency: monthly, owner: Ivan}
+
+# DELIBERATELY EMPTY. No scenarios have been authored for Burkham. V23 requires
+# >=3 per role x domain and >=1 expected_escalation per role; leaving this empty
+# makes the size of that gap visible rather than papering over it with a handful of
+# invented ones that would still fail.
+scenarios: []
+
+lifecycle:
+  teardown_policy:
+    forge_tenant_disposition: Revoke Forge-wide; rotate the CapitalForge tenant credential
+    audit_log_disposition: Retain 7 years; retention survives decommission
+    phi_disposition: Not applicable - Burkham Wickmont handles no PHI
+    teardown_signoff_required: true

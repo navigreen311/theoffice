@@ -167,6 +167,14 @@ class Appointment(Artifact):
     escalation: str
     """§7.3: flag to Ivan for decision. Never auto-reject the Pack, never auto-appoint
     an uncertified agent, never silently reduce scope."""
+    escalation_path: str = "governance"
+    """Which of the two routes this takes: `governance` leaves the Village, `operational`
+    goes up its chain of command to the COO.
+
+    A capacity shortfall is always governance. The COO runs the organisation whose
+    capacity is in question, and an escalation that stayed inside it would be that
+    organisation deciding whether it has enough people - which is the reason The Office
+    sits above the Village. `broker.escalation.assert_path` refuses the other value."""
 
 
 # ----------------------------------------------------------------------- 5.3 Workflow
@@ -201,28 +209,21 @@ class Workflow(Artifact):
 # -------------------------------------------------------------------- 5.4 Task Ledger
 
 @dataclass(frozen=True, slots=True)
-class LedgerTask:
-    task_id: str
-    step_number: int
-    position: str
-    assigned_agent: str | None
-    forge_id: str
-    module_id: str
-    trust_tier: str
-    compliance_flags: list[str]
-    sla_minutes: int
-    expected_daily_volume: int
-    idempotency_class: str
+class ApprovalProjection(Artifact):
+    """What the humans will be asked to decide, per day, per role.
 
+    This replaced `TaskLedger`. The ledger carried task ids, owners, SLAs, per-task
+    volumes and assignment - all of it The Office deciding what an agent does and when,
+    which is the Village Decomposer's job. Two systems producing tasks with no
+    arbitration between them is one too many.
 
-@dataclass(frozen=True, slots=True)
-class TaskLedger(Artifact):
+    The projection is what survived, because it is not about agent work at all: it is
+    about human capacity, and it is the sole input to validator rule V13. Deleting it
+    with the rest of the ledger would have deleted Gate 4.5's capacity check.
+    """
+
     venture_id: str
-    tasks: list[LedgerTask]
     projected_daily_approvals: dict[str, int]
-    """Per human role. 5.4 names this a required additional output, and it is the
-    input to validator rule V13 - approval volume no human can absorb is what makes
-    a trust tier decorative."""
 
 
 # --------------------------------------------------------------------- 5.5 Curriculum
@@ -325,13 +326,55 @@ class RuntimeConfig(Artifact):
 # ------------------------------------------------------------------- the whole set
 
 @dataclass(frozen=True, slots=True)
+class Advisory(Artifact):
+    """Something a human should see at Gate 4, and how much it matters.
+
+    This used to be a bare string in a list called `warnings`, which is how a rule that
+    FAILS at the next gate came to be filed under "Generator warnings (2)" alongside a
+    genuine advisory. A reviewer reading that count sees two warnings; what they have is
+    one blocking failure and one warning, and the difference decides whether advancing
+    is worth doing at all.
+
+    `blocks_at` is the gate that will stop the run. Carrying it means the console can say
+    *where* the run will halt rather than inferring it from the text of a message.
+    """
+
+    severity: str            # "fail" | "warn"
+    message: str
+    source: str              # which generator or gate raised it
+    rule_id: str | None = None
+    blocks_at: str | None = None
+    # Pack blocks the rule reads. Lets a console link land on the fields to change
+    # rather than at the top of the document.
+    blocks: tuple[str, ...] = ()
+
+    @property
+    def blocking(self) -> bool:
+        return self.severity == "fail"
+
+
+@dataclass(frozen=True, slots=True)
 class GeneratedArtifacts(Artifact):
     venture_id: str
     roles: RoleDefinition
     appointment: Appointment
     workflow: Workflow
-    task_ledger: TaskLedger
+    approval_projection: ApprovalProjection
     curriculum: ScenarioPack
     forge_manifest: ForgeManifest
     runtime_config: RuntimeConfig
-    warnings: list[str] = field(default_factory=list)
+    advisories: list[Advisory] = field(default_factory=list)
+
+    @property
+    def warnings(self) -> list[str]:
+        """The flat strings, for callers that predate `advisories`.
+
+        Derived rather than stored, so the two cannot disagree - and deliberately still
+        includes the failures, because a caller asking for "everything a human should
+        see" should not silently stop being shown the blocking half.
+        """
+        return [a.message for a in self.advisories]
+
+    @property
+    def blocking_advisories(self) -> list[Advisory]:
+        return [a for a in self.advisories if a.blocking]

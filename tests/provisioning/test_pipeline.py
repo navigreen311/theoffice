@@ -113,7 +113,7 @@ async def test_a_run_stops_at_the_first_blocking_gate_and_names_it(
         assert blocking.gate == "4.5"
         assert blocking.verdict == provisioning.BLOCKED
         assert "192 approvals" in blocking.reason
-        assert "compliance_officer" in blocking.reason
+        assert "compliance officer" in blocking.reason
         assert state is not None
         assert state.status == "blocked"
         assert state.current_gate == "4.5"
@@ -842,15 +842,51 @@ async def test_a_gate_result_cannot_be_deleted_by_the_runtime_role(
 
 async def test_two_concurrent_runs_for_one_venture_are_refused(feasible_pack, operator):
     """Two runs would each issue grants for the same engagement, each unaware of the
-    other's gate state. The database refuses rather than the code remembering to."""
+    other's gate state.
+
+    Both halves matter, and they are different claims.
+
+    `start_run` checks first and says something useful, because this surfaced in the
+    console as a bare 500 - a deliberate rule reported as an internal error teaches an
+    operator that the system is broken when it is working exactly as designed.
+
+    The **database** is still what refuses. The pre-check is a courtesy and loses a race:
+    two requests can both read no-active-run before either inserts. So the constraint is
+    asserted separately, by inserting directly and bypassing the check entirely - which
+    is the only way to prove the guarantee does not depend on the code remembering.
+    """
     async with connection() as conn:
-        await provisioning.start_run(
+        first = await provisioning.start_run(
             conn, venture_id=VENTURE, started_by=operator.human_id
         )
-        with pytest.raises(psycopg.errors.UniqueViolation):
+
+        with pytest.raises(provisioning.ProvisioningError) as caught:
             await provisioning.start_run(
                 conn, venture_id=VENTURE, started_by=operator.human_id
             )
+        assert "already has an active run" in str(caught.value)
+        assert str(first)[:8] in str(caught.value), (
+            "the refusal does not name the run that is in the way, so the operator "
+            "cannot go and deal with it"
+        )
+
+        # Past the check, straight at the constraint. This is the control.
+        run = await packs.live(conn, VENTURE)
+        assert run is not None
+        with pytest.raises(psycopg.errors.UniqueViolation):
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    """
+                    INSERT INTO provisioning_run
+                      (run_id, venture_id, pack_version, pack_hash, status,
+                       current_gate, started_by)
+                    VALUES (%s, %s, %s, %s, 'running', '0', %s)
+                    """,
+                    (
+                        uuid.uuid4(), VENTURE, run.pack_version, run.content_hash,
+                        operator.human_id,
+                    ),
+                )
         await conn.rollback()
 
 

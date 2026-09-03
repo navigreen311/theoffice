@@ -73,6 +73,10 @@ FORGE_DEPENDENTS = (
     "agent_forge_grant",
     "forge_tenant_credential",
     "forge_module_registry",
+    # No FK, so ordering is irrelevant here - but a test forge that left its
+    # exclusions behind would make the NEXT test's grant fail for a reason
+    # belonging to the last one.
+    "forge_module_exclusion",
 )
 
 

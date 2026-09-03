@@ -263,8 +263,9 @@ def test_overlapping_shifts_for_one_agent_are_rejected(app, seed_agent):
         cur.execute(
             """
             INSERT INTO shift_assignment
-              (shift_id, office_agent_id, venture_id, shift_start, shift_end, assigned_by)
-            VALUES (%s, %s, 'greenstone', %s, %s, %s)
+              (shift_id, office_agent_id, venture_id, shift_start, shift_end,
+               assigned_by, quarter)
+            VALUES (%s, %s, 'greenstone', %s, %s, %s, '2026Q1')
             """,
             (str(uuid.uuid4()), seed_agent, start, start + timedelta(hours=8),
              str(uuid.uuid4())),
@@ -275,9 +276,13 @@ def test_overlapping_shifts_for_one_agent_are_rejected(app, seed_agent):
         cur.execute(
             """
                 INSERT INTO shift_assignment
-                  (shift_id, office_agent_id, venture_id, shift_start, shift_end, assigned_by)
-                VALUES (%s, %s, 'medlink', %s, %s, %s)
+                  (shift_id, office_agent_id, venture_id, shift_start, shift_end,
+                   assigned_by, quarter)
+                VALUES (%s, %s, 'medlink', %s, %s, %s, '2026Q2')
                 """,
+            # A different quarter: this row is testing the overlap exclusion, and in
+            # 2026Q1 it would now be refused by one_venture_per_agent_quarter instead -
+            # a pass for the wrong reason.
             (str(uuid.uuid4()), seed_agent, start + timedelta(hours=4),
              start + timedelta(hours=12), str(uuid.uuid4())),
         )
@@ -293,8 +298,8 @@ def test_flush_verified_requires_completion_timestamp(app, seed_agent):
             """
                 INSERT INTO shift_assignment
                   (shift_id, office_agent_id, venture_id, shift_start, shift_end,
-                   flush_verified, assigned_by)
-                VALUES (%s, %s, 'greenstone', %s, %s, TRUE, %s)
+                   flush_verified, assigned_by, quarter)
+                VALUES (%s, %s, 'greenstone', %s, %s, TRUE, %s, '2026Q1')
                 """,
             (str(uuid.uuid4()), seed_agent, start, start + timedelta(hours=8),
              str(uuid.uuid4())),

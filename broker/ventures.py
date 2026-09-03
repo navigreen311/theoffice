@@ -84,7 +84,7 @@ PORTFOLIO = [
         "display_name": "Cybersecurity venture",
         "category": "Cybersecurity services",
         "operating_status": "launching",
-        "frameworks": ["NRS_648"],
+        "frameworks": ["NRS_648_NV"],
         "note": (
             "Blocked before it starts: CyberForge is a module gap (J7), so this "
             "venture cannot pass Gate 3.5 whatever its Pack says."

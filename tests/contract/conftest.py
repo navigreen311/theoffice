@@ -484,11 +484,14 @@ def on_shift(admin: psycopg.Connection, _clean_shifts: None):
                 """
                 INSERT INTO shift_assignment
                   (shift_id, office_agent_id, venture_id, shift_start, shift_end,
-                   assigned_by)
+                   assigned_by, quarter)
                 VALUES (%s, %s, %s, now() - interval '1 hour',
-                        now() + interval '7 hours', %s)
+                        now() + interval '7 hours', %s, %s)
                 """,
-                (str(shift_id), agent_id, venture_id, str(uuid.uuid4())),
+                # A literal rather than a call to the Village. These tests are about the
+                # shift gate, and reaching for a live quarter here would couple every one
+                # of them to a service that is not part of what they assert.
+                (str(shift_id), agent_id, venture_id, str(uuid.uuid4()), '2026Q1'),
             )
         admin.commit()
         return shift_id

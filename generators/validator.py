@@ -21,9 +21,12 @@ meta-test fails if any rule lacks either.
 
 from __future__ import annotations
 
+import inspect
+import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from enum import StrEnum
+from functools import lru_cache
 from typing import Any
 
 from psycopg import AsyncConnection
@@ -111,7 +114,12 @@ class ValidationReport:
 
 
 # Rules that cannot be answered from the document alone.
-NEEDS_WORLD = {"V2", "V6", "V11", "V28"}
+# Kept in step with `_WORLD_RULES` by `test_needs_world_matches_the_world_rules`, which
+# exists because these two lists drifted the first time a world rule was added: V29 and
+# V30 were registered below and absent here, so the fixture meta-test demanded document
+# fixtures for rules that cannot be evaluated without the Village. A literal is needed
+# here rather than `set(_WORLD_RULES)` only because the registry is defined further down.
+NEEDS_WORLD = {"V2", "V6", "V11", "V28", "V29", "V30"}
 
 # V24 is evaluated at Gate 4.5 against appointment output, which does not exist at
 # Gate 2. Recorded as metadata rather than a comment so the meta-test can see it.
@@ -137,6 +145,38 @@ def _join(items: Iterable[Any], limit: int = 5) -> str:
 
 
 # --------------------------------------------------------------------- document rules
+
+# Rules Gate 4.5 evaluates against real generator output. Two different situations share
+# this list and the difference matters to a reader:
+#
+#   V24  cannot be evaluated at Gate 2 at all - it tests appointment output, which does
+#        not exist until Gate 3 has run. It reports NOT_RUN, and NOT_RUN is not a pass.
+#   V13  can be evaluated at Gate 2, from headcount and a conservative per-agent-day
+#        factor, and is evaluated again at Gate 4.5 against the real Task Ledger. The
+#        two can disagree by an order of magnitude and **the Gate 2 estimate is the
+#        optimistic one** - Greenstone passes here and fails there.
+#
+# So a Pack with no failures at Gate 2 has not been shown to be provisionable. It has
+# been shown to have no failures *that Gate 2 can see*, which is a weaker statement and
+# the one the editor is entitled to make.
+GATE_45_RECHECKS = ("V13", "V24")
+
+# Why each rule cannot be, or has not finally been, settled at Gate 2. Keyed by rule so
+# the console can say which gate will answer it rather than leaving a bare NOT_RUN.
+LATER_GATE_REASONS = {
+    "V24": (
+        "4.5",
+        "Tests appointment output, which does not exist until the generators run at "
+        "Gate 3.",
+    ),
+    "V13": (
+        "4.5",
+        "Estimated here from headcount and a conservative per-agent-day factor, and "
+        "re-checked at Gate 4.5 against the real Task Ledger. The estimate here is the "
+        "optimistic one.",
+    ),
+}
+
 
 @rule("V1", Severity.FAIL, "All required fields present")
 def v1(pack: BusinessPack) -> tuple[bool, str]:
@@ -218,14 +258,20 @@ def v9(pack: BusinessPack) -> tuple[bool, str]:
 
 @rule("V10", Severity.FAIL, "Every position names >=1 Forge module and a source department")
 def v10(pack: BusinessPack) -> tuple[bool, str]:
-    from generators.pack import VILLAGE_DEPARTMENTS
+    """Presence only. Whether the department *exists* is V29, which has to ask.
 
+    This rule used to check the name against a tuple of twelve departments kept in
+    `generators/pack.py`. The Village was rebuilt and nine of them stopped existing;
+    nothing failed, because the copy could not know. A Pack naming
+    `Research & Market Intelligence` validated cleanly for two days after that department
+    ceased to exist.
+    """
     bad = []
     for p in pack.positions_required:
         if not p.forge_modules_operated:
             bad.append(f"{p.position_title}: no modules")
-        if p.source_department not in VILLAGE_DEPARTMENTS:
-            bad.append(f"{p.position_title}: {p.source_department!r} is not a Village department")
+        if not (p.source_department or "").strip():
+            bad.append(f"{p.position_title}: no source department")
     return (not bad, _join(bad) if bad else f"{len(pack.positions_required)} position(s) resolve")
 
 
@@ -488,25 +534,57 @@ async def _v6_modules_resolve(conn: AsyncConnection, pack: BusinessPack) -> tupl
 async def _v11_instructions_authored(
     conn: AsyncConnection, pack: BusinessPack
 ) -> tuple[bool, str]:
-    """Every module a position operates must have live instructions.
+    """Every module a position operates must have live instructions that teach it.
 
     Without them SimForge has nothing to test against, so the position can never be
     certified and the appointment can never be filled.
+
+    **A row is not a curriculum.** This rule used to check that an instruction set
+    existed, which the live cre-forge set satisfies with `"what_it_does": "Documented."`
+    and `"inputs": {"a": "b"}` - eight sections present, none empty, a valid
+    `content_hash` over the lot. A hash computed over placeholder text satisfies the
+    letter of this rule and defeats its purpose: SimForge trains against that text, an
+    agent is certified against that hash, and the certification is a statement about
+    nothing.
+
+    So the content is assessed, in the same place the console and the compliance page
+    assess it. `thin` passes - it is real content that does not go far enough, and
+    blocking a release on a short but honest sentence would teach people to pad. `stub`
+    and `missing` do not.
     """
+    from broker.curriculum_quality import assess
+
     modules = {m for p in pack.positions_required for m in p.forge_modules_operated}
     if not modules:
         return True, "no modules operated"
 
     async with conn.cursor() as cur:
         await cur.execute(
-            "SELECT module_id FROM forge_operating_instruction WHERE superseded_at IS NULL"
+            "SELECT module_id, content FROM forge_operating_instruction "
+            "WHERE superseded_at IS NULL"
         )
-        authored = {r[0] for r in await cur.fetchall()}
+        live = {r[0]: r[1] for r in await cur.fetchall()}
 
-    missing = sorted(modules - authored)
-    return (not missing,
-            f"no Forge Operating Instructions authored for: {_join(missing)}" if missing
-            else f"instructions authored for all {len(modules)} module(s)")
+    missing = sorted(modules - set(live))
+    if missing:
+        return False, f"no Forge Operating Instructions authored for: {_join(missing)}"
+
+    hollow = sorted(
+        module for module in modules
+        if assess(live[module])["teaches_nothing"]
+    )
+    if hollow:
+        return False, (
+            f"instructions exist but teach nothing for: {_join(hollow)}. A content_hash "
+            "computed over placeholder text is a valid hash of nothing, and every "
+            "certification bound to it inherits that emptiness."
+        )
+
+    thin = sorted(
+        module for module in modules if assess(live[module])["state"] == "thin"
+    )
+    detail = f" ({_join(thin)} thin)" if thin else ""
+    return True, f"instructions authored for all {len(modules)} module(s){detail}"
 
 
 async def _v28_library_refs_resolve(
@@ -551,6 +629,77 @@ async def _v28_library_refs_resolve(
     )
 
 
+async def _v29_departments_exist(
+    conn: AsyncConnection, pack: BusinessPack
+) -> tuple[bool | None, str]:
+    """Every position's department is one the Village actually has.
+
+    The failure names all twelve, in the casing the Village UI shows, because the
+    operator's next action is to pick one and they should not have to go and find the
+    list to do it.
+    """
+    from broker import departments as depts
+
+    known = await depts.names()
+    if known is None:
+        return (
+            None,
+            "the department list could not be read from the Village "
+            f"({depts.unreachable_reason() or 'no answer'}), so no position's department "
+            "has been checked. NOT_RUN is not a pass.",
+        )
+
+    labels = await depts.labels() or ()
+    bad = [
+        f"{p.position_title}: {p.source_department!r}"
+        for p in pack.positions_required
+        if depts.normalize(p.source_department) not in known
+    ]
+    if bad:
+        return (
+            False,
+            f"{_join(bad)} - not a Village department. The twelve are: "
+            f"{', '.join(labels)}.",
+        )
+    return (True, f"{len(pack.positions_required)} position(s) name a real department")
+
+
+async def _v30_department_has_seats(
+    conn: AsyncConnection, pack: BusinessPack
+) -> tuple[bool | None, str]:
+    """The department is big enough for what the Pack asks. Warns here.
+
+    Two different questions, split deliberately. This one asks whether the department is
+    large enough at all - a Pack wanting 20 researchers from a department of 14 is wrong
+    on its face and should be caught while somebody is still editing it. Gate 4.5 asks
+    the harder question, whether those seats are uncommitted, which needs appointment
+    output that does not exist at Gate 2.
+    """
+    from broker import departments as depts
+
+    seats = await depts.seats()
+    if seats is None:
+        return (
+            None,
+            "department headcount could not be read from the Village, so no position has "
+            "been checked against the size of its department.",
+        )
+
+    wanted: dict[str, int] = {}
+    for position in pack.positions_required:
+        key = depts.normalize(position.source_department)
+        wanted[key] = wanted.get(key, 0) + int(getattr(position, "headcount", 1) or 1)
+
+    over = [
+        f"{name} wants {count} of {seats.get(name, 0)} seat(s)"
+        for name, count in sorted(wanted.items())
+        if name in seats and count > seats[name]
+    ]
+    if over:
+        return (False, f"{_join(over)}. The department is not that large.")
+    return (True, f"{len(wanted)} department(s) have seats for what the Pack asks")
+
+
 _WORLD_RULES = {
     "V2": (Severity.FAIL, "Bridge operational for every hard Forge binding (Gate 0)",
            _v2_bridge_operational),
@@ -560,6 +709,10 @@ _WORLD_RULES = {
             _v11_instructions_authored),
     "V28": (Severity.FAIL, "Every library_entry_ref resolves in the Compliance Library",
             _v28_library_refs_resolve),
+    "V29": (Severity.FAIL, "Every position names a department the Village has",
+            _v29_departments_exist),
+    "V30": (Severity.WARN, "Every department has seats for the positions requested",
+            _v30_department_has_seats),
 }
 
 
@@ -583,6 +736,14 @@ async def validate(
                 ))
                 continue
             ok, message = await fn(conn, pack)
+            if ok is None:
+                # The rule ran and could not reach what it needed. Not a pass - the Pack
+                # is unvalidated in this respect - and not a failure either, because
+                # nothing about the Pack is known to be wrong.
+                report.results.append(RuleResult(
+                    rule_id, severity, Verdict.NOT_RUN, message,
+                ))
+                continue
         elif rule_id in GATE_45_RULES:
             report.results.append(RuleResult(
                 rule_id, Severity.FAIL, Verdict.NOT_RUN,
@@ -608,6 +769,51 @@ def _rule_order() -> list[str]:
     return sorted(ids, key=lambda r: int(r[1:]))
 
 
+# Which Pack block each rule is about, derived from the rule's own source.
+#
+# The editor's block sidebar marks the blocks a failing rule lives in, and needs a map
+# from rule to block to do it. A hand-written table would be right the day it was
+# written: twenty-eight entries maintained beside twenty-eight functions, with nothing
+# forcing them to agree, is the same shape as the blocker-string table the ventures page
+# replaced for exactly this reason.
+#
+# A rule function names the fields it reads - `pack.budget`, `pack.positions_required` -
+# so the mapping is already stated in the code that does the work. Reading it back is
+# not a guess about intent; it is the same fact, from the same place.
+#
+# The four world rules are appended by `validate` rather than registered by the
+# decorator, and are about the bridge and the registry rather than about a block, so
+# they are named here with the block whose contents they check against the world.
+_WORLD_RULE_BLOCKS = {
+    "V2": ("forge_dependencies",),
+    "V6": ("forge_dependencies",),
+    "V11": ("positions_required", "forge_operating_instructions"),
+    "V28": ("forge_dependencies",),
+    "V24": ("positions_required",),
+}
+
+
+@lru_cache(maxsize=1)
+def rule_blocks() -> dict[str, tuple[str, ...]]:
+    """rule_id -> the Pack blocks it reads. Empty tuple when it reads none."""
+    fields = set(BusinessPack.model_fields)
+    reads = re.compile(r"pack\.([a-z_]+)")
+
+    out: dict[str, tuple[str, ...]] = {}
+    for rule_id, _severity, _description, fn in _RULES:
+        try:
+            source = inspect.getsource(fn)
+        except OSError:  # pragma: no cover - only when running from a zip
+            source = ""
+        out[rule_id] = tuple(
+            sorted({name for name in reads.findall(source) if name in fields})
+        )
+
+    for rule_id, blocks in _WORLD_RULE_BLOCKS.items():
+        out.setdefault(rule_id, blocks)
+    return out
+
+
 def all_rule_ids() -> list[str]:
     return _rule_order()
 
@@ -626,7 +832,7 @@ def rule_severity(rule_id: str) -> Severity:
 # ------------------------------------------------------------------------ Gate 4.5
 
 async def validate_gate_4_5(
-    pack: BusinessPack, task_ledger: Any, appointment: Any
+    pack: BusinessPack, approval_projection: Any, appointment: Any
 ) -> ValidationReport:
     """Gate 4.5 — capacity and budget feasibility, against real generator output.
 
@@ -667,15 +873,27 @@ async def validate_gate_4_5(
         )
         review_minutes_by_role.setdefault(human.role, human.median_review_minutes)
 
+    # Written as sentences rather than as a formula. The reviewer this message is for is
+    # the person whose day it describes, and "192 x 6 = 1152 against 144" asks them to
+    # do the arithmetic before they can tell whether it matters. The numbers all survive;
+    # what changes is that they arrive inside a sentence that says what they mean.
     overloaded = []
-    for role, approvals in sorted(task_ledger.projected_daily_approvals.items()):
-        needed = approvals * review_minutes_by_role.get(role, 5.0)
+    for role, approvals in sorted(approval_projection.projected_daily_approvals.items()):
+        each = review_minutes_by_role.get(role, 5.0)
+        needed = approvals * each
         available = coverage_by_role.get(role, 0.0)
         if needed > available:
+            over = needed / available if available else float("inf")
+            multiple = (
+                "with no reviewer coverage at all" if available == 0
+                else f"{over:.0f} times over" if over >= 2
+                else f"{(over - 1) * 100:.0f}% over"
+            )
             overloaded.append(
-                f"{role}: {approvals} approvals x "
-                f"{review_minutes_by_role.get(role, 5.0):g} min = {needed:.0f} minutes "
-                f"against {available:.0f} available"
+                f"The {role.replace('_', ' ')} would receive {approvals:,.0f} "
+                f"approvals a day. At {each:g} minutes each that is "
+                f"{needed:,.0f} minutes of review against "
+                f"{available:,.0f} minutes available - {multiple}."
             )
 
     report.results.append(
@@ -683,11 +901,14 @@ async def validate_gate_4_5(
             "V13", Severity.FAIL,
             Verdict.FAIL if overloaded else Verdict.PASS,
             (
-                "approval volume exceeds human capacity - "
-                + "; ".join(overloaded)
-                + ". Trust tiers become decorative above this. Fix by raising a "
-                "trust-tier ceiling, adding reviewer coverage, or reducing scope - "
-                "not by lowering the utilisation factor."
+                " ".join(overloaded)
+                + "\n\nAbove this line trust tiers stop meaning anything: the reviewer "
+                "approves without reading, and the dashboard still shows green."
+                # Verbatim, and last. It closes off the obvious wrong fix - the
+                # utilisation factor is the one number here somebody can change to make
+                # the rule pass without changing anything real.
+                + "\n\nFix by raising a trust-tier ceiling, adding reviewer coverage, "
+                "or cutting scope - not by lowering the utilisation factor."
             )
             if overloaded
             else "projected approvals fit within reviewer capacity",

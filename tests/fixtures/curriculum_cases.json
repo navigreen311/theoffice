@@ -1,0 +1,127 @@
+{
+  "_why": [
+    "The completeness rules exist in two languages: broker/curriculum_quality.py refuses",
+    "a publish and fails V11, console/lib/curriculum.ts greys out the Publish button as",
+    "somebody types. Two implementations of one rule drift, and the drift is invisible -",
+    "the form says a section is fine and the server rejects the save, or worse, the form",
+    "says it is a stub and the server accepts it.",
+    "",
+    "So the cases live here and both test suites read this file. A rule added to one side",
+    "without the other fails on the side that was not updated."
+  ],
+  "cases": [
+    {
+      "name": "placeholder prose is a stub",
+      "section": "what_it_does",
+      "value": "Documented.",
+      "state": "stub"
+    },
+    {
+      "name": "placeholder prose, lowercase and unpunctuated",
+      "section": "what_it_does",
+      "value": "documented",
+      "state": "stub"
+    },
+    {
+      "name": "TODO is a stub",
+      "section": "what_it_does",
+      "value": "TODO",
+      "state": "stub"
+    },
+    {
+      "name": "TBD is a stub",
+      "section": "retry_vs_escalate",
+      "value": "TBD",
+      "state": "stub"
+    },
+    {
+      "name": "N/A is a stub",
+      "section": "what_it_does_not_do",
+      "value": "N/A",
+      "state": "stub"
+    },
+    {
+      "name": "a dash is a stub",
+      "section": "what_it_does",
+      "value": "-",
+      "state": "stub"
+    },
+    {
+      "name": "whitespace is missing, not a stub",
+      "section": "what_it_does",
+      "value": "   ",
+      "state": "stub"
+    },
+    {
+      "name": "an empty string is missing",
+      "section": "what_it_does",
+      "value": "",
+      "state": "missing"
+    },
+    {
+      "name": "metasyntactic keys document a shape, not a meaning",
+      "section": "inputs",
+      "value": { "a": "b" },
+      "state": "stub"
+    },
+    {
+      "name": "single-character list entries are placeholders",
+      "section": "correct_sequence",
+      "value": ["a", "b"],
+      "state": "stub"
+    },
+    {
+      "name": "short prose is thin, not a stub",
+      "section": "retry_vs_escalate",
+      "value": "Retry twice.",
+      "state": "thin"
+    },
+    {
+      "name": "one failure signature is thin",
+      "section": "failure_signatures",
+      "value": { "silent_partial": "short result" },
+      "state": "thin"
+    },
+    {
+      "name": "a one-step sequence is thin",
+      "section": "correct_sequence",
+      "value": ["Confirm the grant is assignable before calling the module."],
+      "state": "thin"
+    },
+    {
+      "name": "real prose is complete",
+      "section": "what_it_does",
+      "value": "Matches a property against the buyer network and returns ranked buyers.",
+      "state": "complete"
+    },
+    {
+      "name": "named inputs with meanings are complete",
+      "section": "inputs",
+      "value": {
+        "property_id": "The subject property; must already exist in the CRE Forge.",
+        "max_results": "How many ranked buyers to return."
+      },
+      "state": "complete"
+    },
+    {
+      "name": "several failure signatures are complete",
+      "section": "failure_signatures",
+      "value": {
+        "silent_partial": "A 200 with fewer results than requested.",
+        "rate_limited": "429 with Retry-After.",
+        "timeout": "No response inside the deadline."
+      },
+      "state": "complete"
+    },
+    {
+      "name": "a real sequence is complete",
+      "section": "correct_sequence",
+      "value": [
+        "Confirm the grant is assignable for this module.",
+        "Call the module once with a stable idempotency key.",
+        "Escalate rather than repeating on a 4xx."
+      ],
+      "state": "complete"
+    }
+  ]
+}

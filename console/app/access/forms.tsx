@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 
 import { Badge, Button, Field, inputClass } from "@/components/ui";
@@ -65,8 +66,30 @@ function Result({ state }: { state: AccessState | null }) {
   );
 }
 
-export function CreateHumanForm({ ventures }: { ventures: string[] }) {
+/**
+ * Creating a person.
+ *
+ * Two additions. The Packs specify `auth_method: sso_mfa` for every named human and the
+ * form captured none, so every account took the column default and the roster reported a
+ * second factor nobody had enrolled.
+ *
+ * And a role stronger than `venture_operator` now says how many people will hold it once
+ * this one does. 95 accounts came to hold `ivan` one grant at a time, and no single grant
+ * ever looked like the problem.
+ */
+export function CreateHumanForm({
+  ventures,
+  holders,
+}: {
+  ventures: string[];
+  holders?: Record<string, number>;
+}) {
   const [state, action] = useFormState(createHumanAction, null);
+  const [role, setRole] = useState("");
+
+  const strong = role === "ivan" || role === "compliance_officer";
+  const after = (holders?.[role] ?? 0) + 1;
+
   return (
     <form action={action} className="space-y-3">
       <div className="grid gap-3 sm:grid-cols-2">
@@ -80,13 +103,27 @@ export function CreateHumanForm({ ventures }: { ventures: string[] }) {
           label="Initial role"
           hint="Optional. You can only grant a role weaker than your own."
         >
-          <select className={inputClass} name="role" defaultValue="">
+          <select
+            className={inputClass}
+            name="role"
+            value={role}
+            onChange={(event) => setRole(event.target.value)}
+          >
             <option value="">none</option>
             {ROLES.map((r) => (
               <option key={r} value={r}>
                 {r}
               </option>
             ))}
+          </select>
+        </Field>
+        <Field
+          label="Authentication"
+          hint="What the Packs specify for a named human. Enrolment is recorded separately: this is the requirement, not the evidence."
+        >
+          <select className={inputClass} name="auth_method" defaultValue="sso_mfa">
+            <option value="sso_mfa">sso_mfa — single sign-on with a second factor</option>
+            <option value="mfa_only">mfa_only — second factor, no SSO</option>
           </select>
         </Field>
         <Field label="Venture" hint="Blank means every venture — what ivan holds.">
@@ -100,6 +137,14 @@ export function CreateHumanForm({ ventures }: { ventures: string[] }) {
           </select>
         </Field>
       </div>
+      {strong ? (
+        <p className="rounded-lg border border-warn-line bg-warn-bg px-3 py-2 text-desc text-warn">
+          <code className="text-ident">{role}</code> is stronger than{" "}
+          <code className="text-ident">venture_operator</code>. Granting it here makes{" "}
+          {after} account{after === 1 ? "" : "s"} that hold it.
+        </p>
+      ) : null}
+
       <Submit label="Create" busy="Creating…" />
       <Result state={state} />
     </form>

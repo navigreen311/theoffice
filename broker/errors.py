@@ -73,6 +73,22 @@ class UnknownForge(OfficeError):
     status_code = 404
 
 
+class ModuleExcluded(OfficeError):
+    """The module is recorded in forge_module_exclusion and must never be granted.
+
+    This is a registry-level fact, not an agent-level one: it outranks every
+    per-agent refusal, because no agent may hold this and the reason has nothing
+    to do with which agent asked.
+
+    The database refuses the grant INSERT outright. This exists for the grant that
+    predates the exclusion, or was written by a superuser, and to turn a constraint
+    violation into an audited reason.
+    """
+
+    audit_event = "call_refused_module_excluded"
+    status_code = 403
+
+
 class CredentialUnavailable(OfficeError):
     """The credential ref did not resolve.
 

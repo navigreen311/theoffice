@@ -1,22 +1,27 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
-import { Badge, Card, Cell, Row, Table } from "@/components/ui";
+import { Breadcrumb } from "@/components/breadcrumb";
+import { AsOf } from "@/components/local-time";
 import {
   api,
   NotAuthenticated,
-  type Gates,
   type PackDetail,
   type RunSummary,
 } from "@/lib/api";
-import { relativeAge } from "@/lib/severity";
 
 import { PackEditor } from "../editor";
+import { VersionHistory } from "./history";
+import { runsPath } from "@/lib/runs";
 
 export const dynamic = "force-dynamic";
 
 /**
  * Pack Editor for one venture — Part 17 screen 12.
+ *
+ * The directory rebuild gave Packs drafts, templates, validation states and a publish
+ * step, and none of it reached this screen — which is where the work those things
+ * describe actually happens.
  *
  * The version history is not decoration. A run records the version it started from and
  * stays pinned to it, so "which text did this run provision" is a question an operator
@@ -30,89 +35,77 @@ export default async function PackEditorPage({
   const venture = decodeURIComponent(params.venture);
 
   let detail: PackDetail;
-  let runs: RunSummary[];
-  let gates: Gates;
+  let runList: { runs: RunSummary[]; excluded_fixtures: number };
   try {
-    [detail, runs, gates] = await Promise.all([
+    [detail, runList] = await Promise.all([
       api.get<PackDetail>(`/api/packs/${encodeURIComponent(venture)}`),
-      api.get<RunSummary[]>(
-        `/api/provisioning/runs?venture_id=${encodeURIComponent(venture)}`,
+      api.get<{ runs: RunSummary[]; excluded_fixtures: number }>(
+        runsPath(venture),
       ),
-      api.get<Gates>(`/api/ventures/${encodeURIComponent(venture)}/gates`),
     ]);
   } catch (error) {
     if (error instanceof NotAuthenticated) redirect("/login");
     throw error;
   }
 
+  // The listing filters smoke-test runs out by default and says how many.
+  const runs = runList.runs;
+
   // A venture with neither a Pack nor a run is not a venture this screen knows about.
   // Rendering an empty editor for a mistyped slug would invite publishing a Pack under
   // a venture id nobody meant, and the id is not a parameter anywhere downstream — it
   // comes from the document.
-  if (!detail.live && detail.versions.length === 0 && runs.length === 0) notFound();
+  if (!detail.live && !detail.draft && detail.versions.length === 0 && runs.length === 0) {
+    notFound();
+  }
 
-  const active = runs.find((r) =>
-    ["running", "blocked", "awaiting_human"].includes(r.status),
-  );
-  const gate10 = gates.signoffs.find((s) => s.gate === "gate_10")?.signatures ?? 0;
+  // The venture's own name for itself, out of the document. The slug is a database key
+  // and reads like one; it stays, in mono, beside the name rather than instead of it.
+  const source = detail.draft?.yaml_source ?? detail.live?.yaml_source ?? "";
+  const displayName =
+    /^\s*venture_name:\s*(.+?)\s*$/m.exec(source)?.[1] ?? venture;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-baseline justify-between">
-        <div>
-          <h2 className="text-base font-semibold">{venture} — Business Pack</h2>
-          <p className="mt-1 text-xs text-ink-muted">
+      <Breadcrumb
+        trail={[
+          { label: "Dashboard", href: "/" },
+          { label: "Packs", href: "/packs" },
+          { label: displayName },
+        ]}
+      />
+
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="max-w-3xl">
+          <h1 className="text-page font-medium text-ink">
+            {displayName} — Business Pack{" "}
+            <code className="text-ident font-normal text-ink-muted">{venture}</code>
+          </h1>
+          <p className="mt-1 text-desc text-ink-secondary">
             Publishing supersedes the live version and starts nothing. Provisioning is a
             separate act on a separate screen.
           </p>
         </div>
-        <Link
-          href={`/provisioning/${encodeURIComponent(venture)}`}
-          className="text-sm text-ink-secondary underline underline-offset-2"
-        >
-          Provisioning →
-        </Link>
+        <div className="flex flex-col items-end gap-1">
+          <span className="text-meta text-ink-muted">
+            <AsOf iso={detail.as_of} />
+          </span>
+          <Link
+            href={`/provisioning/${encodeURIComponent(venture)}`}
+            className="text-desc text-ink underline underline-offset-2"
+          >
+            Provisioning
+          </Link>
+        </div>
       </div>
 
       <PackEditor
-        initialSource={detail.live?.yaml_source ?? ""}
-        liveVersion={detail.live?.pack_version ?? null}
-        activeRun={
-          active
-            ? {
-                run_id: active.run_id,
-                status: active.status,
-                current_gate: active.current_gate,
-              }
-            : null
-        }
-        signatures={gate10}
+        venture={venture}
+        detail={detail}
+        signatures={detail.bindings.gate_10_signatures}
       />
 
-      <Card
-        title="Version history"
-        subtitle="Superseded versions stay readable — a run names the version it provisioned."
-      >
-        <Table
-          head={["Version", "Content hash", "Authored", "State"]}
-          empty="No version has been published for this venture."
-        >
-          {detail.versions.map((v) => (
-            <Row key={v.pack_version}>
-              <Cell mono>{v.pack_version}</Cell>
-              <Cell mono>{v.content_hash.slice(0, 16)}…</Cell>
-              <Cell>{relativeAge(v.authored_at)}</Cell>
-              <Cell>
-                {v.superseded_at ? (
-                  <Badge>superseded {relativeAge(v.superseded_at)}</Badge>
-                ) : (
-                  <Badge severity="ok">live</Badge>
-                )}
-              </Cell>
-            </Row>
-          ))}
-        </Table>
-      </Card>
+      <VersionHistory venture={venture} versions={detail.versions} />
     </div>
   );
 }

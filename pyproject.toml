@@ -44,6 +44,8 @@ select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
 # broker/shifts.py defines three more domain refusals for the same reason:
 # `raise ShiftBlocked(...)` and `raise OffShift(...)` say what happened.
 "broker/shifts.py" = ["N818"]
+# And broker/escalation.py: `raise SeatVacant(...)` and `raise WrongPath(...)`.
+"broker/escalation.py" = ["N818"]
 
 [tool.mypy]
 python_version = "3.11"

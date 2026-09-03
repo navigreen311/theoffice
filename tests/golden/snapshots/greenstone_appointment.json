@@ -10,7 +10,7 @@
             "property_lookup"
           ],
           "certified_tier": "auto_execute",
-          "department": "Research & Market Intelligence",
+          "department": "research",
           "office_agent_id": "11111111-1111-5111-8111-111111111111"
         },
         {
@@ -21,7 +21,7 @@
             "property_lookup"
           ],
           "certified_tier": "auto_execute",
-          "department": "Research & Market Intelligence",
+          "department": "research",
           "office_agent_id": "22222222-2222-5222-8222-222222222222"
         },
         {
@@ -32,7 +32,7 @@
             "property_lookup"
           ],
           "certified_tier": "auto_execute",
-          "department": "Research & Market Intelligence",
+          "department": "research",
           "office_agent_id": "33333333-3333-5333-8333-333333333333"
         }
       ],
@@ -52,7 +52,7 @@
             "transcribe_call"
           ],
           "certified_tier": "propose",
-          "department": "Client Success & Operations",
+          "department": "operations",
           "office_agent_id": "66666666-6666-5666-8666-666666666666"
         },
         {
@@ -64,7 +64,7 @@
             "transcribe_call"
           ],
           "certified_tier": "propose",
-          "department": "Client Success & Operations",
+          "department": "operations",
           "office_agent_id": "77777777-7777-5777-8777-777777777777"
         }
       ],
@@ -82,7 +82,7 @@
             "underwrite_deal"
           ],
           "certified_tier": "propose",
-          "department": "Finance & Administration",
+          "department": "banking",
           "office_agent_id": "44444444-4444-5444-8444-444444444444"
         },
         {
@@ -92,7 +92,7 @@
             "underwrite_deal"
           ],
           "certified_tier": "propose",
-          "department": "Finance & Administration",
+          "department": "banking",
           "office_agent_id": "55555555-5555-5555-8555-555555555555"
         }
       ],
@@ -108,6 +108,7 @@
     "produced_not_yet_certified": 0
   },
   "escalation": "No shortfall. All positions filled by certified agents.",
+  "escalation_path": "governance",
   "shortfall": false,
   "venture_id": "greenstone"
 }

@@ -4,6 +4,10 @@ import { revalidatePath } from "next/cache";
 
 import { ApiError, api } from "@/lib/api";
 
+/** One objection per line. Named because a literal newline in this file has been
+ *  mangled by tooling more than once. */
+const NEWLINE = String.fromCharCode(10);
+
 export type KnowledgeActionState = { error?: string; ok?: string };
 
 function fail(error: unknown): KnowledgeActionState {
@@ -166,26 +170,47 @@ export async function authorPersonaAction(
     return { error: "A persona needs a venture, a name and the target it stands in for." };
   }
 
-  let body: Record<string, unknown>;
-  try {
-    body = JSON.parse(text("persona_body") || "{}");
-  } catch {
-    return { error: "The body must be JSON." };
-  }
-  if (Object.keys(body).length === 0) {
-    return { error: "A persona with an empty body teaches SimForge nothing." };
+  // Structured fields rather than a JSON scaffold. The old form pre-filled
+  // `{"disposition": "", "objections": []}`, which is a well-formed body that says
+  // nothing - the same shape as the placeholder curricula, in a store with no read path
+  // to notice it afterwards.
+  const disposition = text("disposition");
+  if (!disposition) {
+    return {
+      error:
+        "A persona needs a disposition. An empty one cannot be reviewed later, because " +
+        "the body cannot be read back from this console.",
+    };
   }
 
+  const body: Record<string, unknown> = {
+    disposition,
+    objections: text("objections")
+      .split(NEWLINE)
+      .map((line) => line.trim())
+      .filter(Boolean),
+  };
+
   try {
-    const result = await api.post<{ note: string }>("/api/knowledge/personas", {
-      venture_id: text("venture_id"),
-      persona_name: text("persona_name"),
-      target_persona: text("target_persona"),
-      persona_version: text("persona_version") || "1.0.0",
-      persona_body: body,
-    });
+    const result = await api.post<{ note: string; body_hash?: string }>(
+      "/api/knowledge/personas",
+      {
+        venture_id: text("venture_id"),
+        persona_name: text("persona_name"),
+        target_persona: text("target_persona"),
+        persona_version: text("persona_version") || "1.0.0",
+        persona_body: body,
+      },
+    );
     revalidatePath("/knowledge");
-    return { ok: `${text("persona_name")} written. ${result.note}` };
+    revalidatePath("/knowledge/personas");
+    // The hash is the only thing the author keeps: the body is beyond this console's
+    // reach the moment it lands.
+    return {
+      ok:
+        `${text("persona_name")} written. ${result.note}` +
+        (result.body_hash ? ` Body hash ${result.body_hash}.` : ""),
+    };
   } catch (error) {
     return fail(error);
   }
@@ -211,6 +236,29 @@ export async function recordNoteAction(
     });
     revalidatePath("/knowledge");
     return { ok: "Recorded. Historical records are append-only — this cannot be edited." };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/**
+ * Write down that the smoke fixtures are being excluded from the counts.
+ *
+ * There is no purge here because there is no purge anywhere: the console holds no DELETE
+ * on either store. Recording the decision is the whole action, and it is the difference
+ * between a filter somebody left on and a call somebody made.
+ */
+export async function recordExclusionAction(
+  _prev: KnowledgeActionState | null,
+  _form: FormData,
+): Promise<KnowledgeActionState> {
+  try {
+    await api.post("/api/knowledge/fixtures/exclude", {});
+    revalidatePath("/knowledge");
+    revalidatePath("/knowledge/history");
+    return {
+      ok: "Recorded. The exclusion is now a historical record, and cannot be edited.",
+    };
   } catch (error) {
     return fail(error);
   }

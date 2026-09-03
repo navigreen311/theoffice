@@ -13,6 +13,7 @@ and a provisioning test that wants Gate 6 or Gate 4.5 to block certifies less th
 
 from __future__ import annotations
 
+import json
 import uuid
 from pathlib import Path
 
@@ -32,19 +33,19 @@ VOICE_MODULES = ("place_call", "transcribe_call")
 # named so a snapshot diff shows who moved.
 ROSTER = [
     ("11111111-1111-5111-8111-111111111111", "Ada Sourcing",
-     "Research & Market Intelligence"),
+     "research"),
     ("22222222-2222-5222-8222-222222222222", "Bram Records",
-     "Research & Market Intelligence"),
+     "research"),
     ("33333333-3333-5333-8333-333333333333", "Cleo Comps",
-     "Research & Market Intelligence"),
+     "research"),
     ("44444444-4444-5444-8444-444444444444", "Dorian Model",
-     "Finance & Administration"),
+     "banking"),
     ("55555555-5555-5555-8555-555555555555", "Esme Ledger",
-     "Finance & Administration"),
+     "banking"),
     ("66666666-6666-5666-8666-666666666666", "Faye Buyers",
-     "Client Success & Operations"),
+     "operations"),
     ("77777777-7777-5777-8777-777777777777", "Gil Network",
-     "Client Success & Operations"),
+     "operations"),
 ]
 
 # Part 6.3's six fields. The Greenstone Pack's `library_entry_ref` values resolve to
@@ -80,14 +81,86 @@ COMPLIANCE_ENTRIES = [
     },
 ]
 
+# A curriculum that teaches the module, because a world where agents are certified
+# against `"what_it_does": "Documented."` is not a prepared world - it is the bug.
+#
+# This constant used to be exactly that: eight sections present, none empty, `inputs`
+# of `{"a": "b"}` and a `correct_sequence` of `["a", "b"]`. It satisfied V11, which
+# checked only that a row existed, and every gate test downstream ran against agents
+# certified to operate a module nobody had described. The tests passed and described
+# nothing.
+#
+# V11 now assesses the content, so this had to become real. Deliberately generic - it is
+# seeded for every module - but it is prose, and `broker.curriculum_quality` reads it as
+# complete rather than as a placeholder.
 INSTRUCTION_CONTENT = {
-    "what_it_does": "Documented.", "what_it_does_not_do": "Documented.",
-    "inputs": {"a": "b"}, "correct_sequence": ["a", "b"],
-    "failure_signatures": {"silent_partial": "short result"},
-    "retry_vs_escalate": "Retry 5xx twice; escalate 4xx.",
-    "never_do": ["Never re-submit after a 200"],
+    "what_it_does": (
+        "Performs one operation against the Forge and returns its result. The result "
+        "is data for the agent to act on in a later step, never an action in itself."
+    ),
+    "what_it_does_not_do": (
+        "Does not retry on the agent's behalf, does not write to any other system, and "
+        "does not decide what happens next. Nothing here is a commitment to a third "
+        "party."
+    ),
+    "inputs": {
+        "venture_id": "Which venture this call belongs to. Scopes the grant and the "
+                      "ledger entry.",
+        "idempotency_key": "Stable across retries of the same task. A new key is a new "
+                           "call, not a retry of the old one.",
+    },
+    "correct_sequence": [
+        "Confirm the grant is assignable for this module before calling.",
+        "Call the module once with a stable idempotency key.",
+        "Read the result; escalate rather than repeating on a 4xx.",
+    ],
+    "failure_signatures": {
+        "silent_partial": "A 200 with fewer results than requested. The upstream index "
+                          "is stale; the call did not fail.",
+        "rate_limited": "429 with Retry-After. Wait the stated interval; do not retry "
+                        "immediately.",
+        "timeout": "No response inside the deadline. The call may still have landed - "
+                   "re-send only with the same idempotency key.",
+    },
+    "retry_vs_escalate": (
+        "Retry a 5xx twice with backoff. Escalate any 4xx to a human: a 4xx means the "
+        "request was wrong, and repeating it will not make it right."
+    ),
+    "never_do": [
+        "Never re-submit after a 200.",
+        "Never generate a new idempotency key to force a retry.",
+    ],
     "compliance_coupling": ["tsr_disclosure_required"],
 }
+
+
+#: The Village's twelve, as of the rebuild. Seeded rather than fetched: a suite that
+#: needs a second application running to validate a Pack fails for reasons unrelated to
+#: the code under test. Seats are the live figures, so the headcount rule is exercised
+#: against real numbers - research really does have 14.
+#: The twelve, read from the file the smoke script's stub Village also serves.
+#:
+#: One copy. The Office carried its own tuple of department names once and nine of the
+#: twelve were wrong, with nothing failing because nothing checked - and a second copy
+#: here, kept in step with a stub by hand, is the same bet with a shorter fuse.
+VILLAGE_DEPARTMENTS = tuple(
+    (d["department"], d["label"], d["seats"])
+    for d in json.loads(
+        (ROOT / "scripts" / "fixtures" / "village-departments.json").read_text(
+            encoding="utf-8"
+        )
+    )["departments"]
+)
+
+
+def seed_departments() -> None:
+    """Install the department list the rules validate against."""
+    from broker import departments as depts
+
+    depts.seed([
+        depts.Department(department=name, label=label, seats=seats)
+        for name, label, seats in VILLAGE_DEPARTMENTS
+    ])
 
 
 def build_world(admin: psycopg.Connection) -> None:
@@ -97,6 +170,7 @@ def build_world(admin: psycopg.Connection) -> None:
     golden snapshots - and the provisioning runs - describe a venture that could
     actually provision.
     """
+    seed_departments()
     teardown_world(admin)
     with admin.cursor() as cur:
         for forge_id, api, modules, flags in (
@@ -235,6 +309,13 @@ def teardown_world(conn: psycopg.Connection) -> None:
                 (entry["entry_ref"],),
             )
         cur.execute("DELETE FROM forge_operating_instruction")
+        # Proposals reference the agents about to be removed. `wipe_venture` learned this
+        # the hard way with provisioning_run; a teardown that names some dependents and
+        # not others fails on whichever one the next feature adds.
+        cur.execute(
+            "DELETE FROM proposal WHERE office_agent_id IN "
+            "(SELECT office_agent_id FROM office_agent_identity)"
+        )
         for agent_id, _n, _d in ROSTER:
             cur.execute("DELETE FROM office_agent_identity WHERE office_agent_id = %s",
                         (agent_id,))
@@ -255,17 +336,17 @@ def certify_for_positions(conn: psycopg.Connection) -> None:
     how the cross-Forge appointment bug hid: one Forge per position was assumed, and
     `place_call` was never certifiable.
     """
-    research = [a for a, _n, d in ROSTER if d == "Research & Market Intelligence"]
-    finance = [a for a, _n, d in ROSTER if d == "Finance & Administration"]
-    success = [a for a, _n, d in ROSTER if d == "Client Success & Operations"]
+    research = [a for a, _n, d in ROSTER if d == "research"]
+    finance = [a for a, _n, d in ROSTER if d == "banking"]
+    success = [a for a, _n, d in ROSTER if d == "operations"]
 
     certify(conn, research, ["property_lookup", "comp_analysis"],
-            unit_b_departments=["Research & Market Intelligence"])
+            unit_b_departments=["research"])
     certify(conn, research, ["place_call"], forge="voiceforge",
-            unit_b_departments=["Research & Market Intelligence"])
+            unit_b_departments=["research"])
     certify(conn, finance, ["comp_analysis", "underwrite_deal"], tier="propose",
-            unit_b_departments=["Finance & Administration"])
+            unit_b_departments=["banking"])
     certify(conn, success, ["buyer_match", "generate_loi"], tier="propose",
-            unit_b_departments=["Client Success & Operations"])
+            unit_b_departments=["operations"])
     certify(conn, success, ["place_call", "transcribe_call"], forge="voiceforge",
-            tier="propose", unit_b_departments=["Client Success & Operations"])
+            tier="propose", unit_b_departments=["operations"])

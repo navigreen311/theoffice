@@ -190,3 +190,209 @@ async def diff(
         "added": sorted(k for k in keys if k not in before),
         "removed": sorted(k for k in keys if k not in after),
     }
+
+
+# ------------------------------------------------------------------- the directory
+
+async def directory(conn: AsyncConnection) -> dict[str, Any]:
+    """Every module with instructions, assessed by what those instructions contain.
+
+    `authored` meant a row exists. The live cre-forge set satisfies that with
+    `"what_it_does": "Documented."` and 234 certifications across the portfolio bound to
+    its hash, so the column said `authored` about a document that teaches nothing.
+
+    Also reports the Forges that have no instruction set at all. No agent can be
+    certified to operate a module on one of them, and a page listing only the Forges it
+    found cannot say which it did not.
+    """
+    from broker.curriculum_quality import assess
+
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            """
+            SELECT i.forge_id, i.module_id, i.instruction_version, i.forge_api_version,
+                   i.version_sensitivity, i.sensitivity_rationale, i.content,
+                   i.content_hash, i.authored_at,
+                   h.display_name AS author,
+                   m.module_name, m.is_mutating, m.idempotency_support,
+                   m.compliance_flags_implied,
+                   r.api_version AS forge_current_version, r.health_status,
+                   count(c.cert_id) FILTER (
+                     WHERE c.state = 'certified'
+                   ) AS certifications
+            FROM forge_operating_instruction i
+            LEFT JOIN office_human h ON h.human_id = i.authored_by
+            LEFT JOIN forge_module_registry m
+                   ON m.forge_id = i.forge_id AND m.module_id = i.module_id
+            LEFT JOIN forge_registry r ON r.forge_id = i.forge_id
+            LEFT JOIN certification c
+                   ON c.instruction_content_hash = i.content_hash
+                  AND c.forge_id = i.forge_id AND c.module_id = i.module_id
+            WHERE i.superseded_at IS NULL
+            GROUP BY i.forge_id, i.module_id, i.instruction_version,
+                     i.forge_api_version, i.version_sensitivity,
+                     i.sensitivity_rationale, i.content, i.content_hash, i.authored_at,
+                     h.display_name, m.module_name, m.is_mutating,
+                     m.idempotency_support, m.compliance_flags_implied,
+                     r.api_version, r.health_status
+            ORDER BY i.forge_id, i.module_id
+            """
+        )
+        rows = [dict(r) for r in await cur.fetchall()]
+
+        # Modules the registry knows that nobody has written instructions for. No agent
+        # can be certified to operate one, so the gap is the point rather than a
+        # rounding error in a count.
+        await cur.execute(
+            """
+            SELECT m.forge_id, m.module_id, m.module_name
+            FROM forge_module_registry m
+            WHERE NOT EXISTS (
+              SELECT 1 FROM forge_operating_instruction i
+              WHERE i.forge_id = m.forge_id AND i.module_id = m.module_id
+                AND i.superseded_at IS NULL
+            )
+            ORDER BY m.forge_id, m.module_id
+            """
+        )
+        unwritten = [dict(r) for r in await cur.fetchall()]
+
+        await cur.execute(
+            "SELECT forge_id, api_version, health_status FROM forge_registry "
+            "ORDER BY forge_id"
+        )
+        forges = [dict(r) for r in await cur.fetchall()]
+
+    modules: list[dict[str, Any]] = []
+    for row in rows:
+        quality = assess(row["content"])
+        # `version_sensitivity` decides when a Forge release invalidates certification.
+        # `major.minor` means a minor bump does it, so a Forge that has moved past the
+        # version this was authored against has already invalidated it.
+        stale_forge = _forge_moved_past(
+            row["forge_api_version"],
+            row["forge_current_version"],
+            row["version_sensitivity"],
+        )
+        modules.append({
+            "forge_id": row["forge_id"],
+            "module_id": row["module_id"],
+            "module_name": row["module_name"],
+            "instruction_version": row["instruction_version"],
+            "forge_api_version": row["forge_api_version"],
+            "forge_current_version": row["forge_current_version"],
+            "version_sensitivity": row["version_sensitivity"],
+            "sensitivity_rationale": row["sensitivity_rationale"],
+            "content_hash": row["content_hash"],
+            "authored_at": row["authored_at"].isoformat() if row["authored_at"] else None,
+            "author": row["author"],
+            "is_mutating": row["is_mutating"],
+            "idempotency_support": row["idempotency_support"],
+            "compliance_flags_implied": row["compliance_flags_implied"],
+            "certifications": int(row["certifications"] or 0),
+            "quality": quality,
+            "stale_forge": stale_forge,
+            # The finding this page exists for: a certification is a statement about a
+            # document, and this document says nothing.
+            "certifications_on_hollow": (
+                int(row["certifications"] or 0) if quality["teaches_nothing"] else 0
+            ),
+        })
+
+    by_forge: dict[str, dict[str, Any]] = {}
+    for forge in forges:
+        mine = [m for m in modules if m["forge_id"] == forge["forge_id"]]
+        missing = [u for u in unwritten if u["forge_id"] == forge["forge_id"]]
+        by_forge[forge["forge_id"]] = {
+            "forge_id": forge["forge_id"],
+            "api_version": forge["api_version"],
+            "health_status": forge["health_status"],
+            "modules": mine,
+            "unwritten": missing,
+            "written": len(mine),
+            "total": len(mine) + len(missing),
+            "stub": len([m for m in mine if m["quality"]["state"] in ("stub", "missing")]),
+            "thin": len([m for m in mine if m["quality"]["state"] == "thin"]),
+        }
+
+    hollow = [m for m in modules if m["quality"]["teaches_nothing"]]
+    return {
+        "forges": list(by_forge.values()),
+        "modules": modules,
+        "unwritten": unwritten,
+        "totals": {
+            "modules_with_instructions": len(modules),
+            "forges_with_instructions": len(
+                {m["forge_id"] for m in modules}
+            ),
+            "forges_registered": len(forges),
+            "complete": len([m for m in modules if m["quality"]["state"] == "complete"]),
+            "thin": len([m for m in modules if m["quality"]["state"] == "thin"]),
+            "hollow": len(hollow),
+            "modules_without_instructions": len(unwritten),
+            # The number that matters: certifications resting on a document that
+            # teaches nothing.
+            "certifications_on_hollow": sum(
+                m["certifications_on_hollow"] for m in modules
+            ),
+        },
+    }
+
+
+def _forge_moved_past(
+    authored_against: str | None, current: str | None, sensitivity: str | None
+) -> str | None:
+    """Whether the Forge has released past the point this curriculum tolerates.
+
+    `major.minor` means a minor release invalidates certification; `major` means only a
+    major one does. Returns the reason when it has moved, `None` when it has not - a
+    boolean would lose the version numbers, which are the only useful part.
+    """
+    if not authored_against or not current or authored_against == current:
+        return None
+
+    def parts(version: str) -> list[int]:
+        out = []
+        for piece in version.split("."):
+            try:
+                out.append(int(piece))
+            except ValueError:
+                out.append(0)
+        return [*out, 0, 0, 0][:3]
+
+    was, now = parts(authored_against), parts(current)
+    depth = {"major": 1, "major.minor": 2, "major.minor.patch": 3}.get(
+        sensitivity or "major.minor", 2
+    )
+    if was[:depth] != now[:depth]:
+        return (
+            f"authored against {authored_against}; the Forge is on {current}, and "
+            f"sensitivity is {sensitivity}"
+        )
+    return None
+
+
+async def certifications_on(
+    conn: AsyncConnection, forge_id: str, module_id: str, content_hash: str
+) -> list[dict[str, Any]]:
+    """The agents certified against this exact text.
+
+    Named rather than counted, because "2 agents are certified against a stub" is a
+    number and "Ada Sourcing and Bram Records are" is a list of people whose
+    certifications have to be redone.
+    """
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            """
+            SELECT c.office_agent_id::text AS office_agent_id, i.agent_name,
+                   i.department, c.state, c.certified_tier, c.updated_at
+            FROM certification c
+            LEFT JOIN office_agent_identity i
+                   ON i.office_agent_id = c.office_agent_id
+            WHERE c.forge_id = %s AND c.module_id = %s
+              AND c.instruction_content_hash = %s
+            ORDER BY i.agent_name
+            """,
+            (forge_id, module_id, content_hash),
+        )
+        return [dict(r) for r in await cur.fetchall()]

@@ -315,6 +315,77 @@ export type Proposal = {
   review_seconds: string | null;
 };
 
+export type PackTemplateCategory = {
+  category: string;
+  frameworks: string[];
+  example: string;
+};
+
+export type RuleHit = { rule_id: string; message: string };
+
+/**
+ * A Pack's validation state. Four values, and the reason there are four rather than two
+ * is `not_validated`: a rule that could not run has not passed. Rendering "no failures
+ * found" the same way as "every rule passed" is the single thing this page must not do.
+ */
+export type PackValidation = {
+  state: "failing" | "not_validated" | "warnings" | "valid";
+  failures: RuleHit[];
+  warnings: RuleHit[];
+  not_run: RuleHit[];
+  /** Rules evaluated at a later gate. Deferred is not the same as unrun. */
+  deferred: RuleHit[];
+  rules_checked: number;
+};
+
+export type PackVersionRef = {
+  version: string;
+  content_hash: string;
+  authored_at: string;
+  author: string | null;
+};
+
+export type PackArtifact = {
+  name: string;
+  count: number | null;
+  persisted: boolean;
+  note: string | null;
+};
+
+export type PackCard = {
+  venture_id: string;
+  display_name: string;
+  validation: PackValidation;
+  versions: {
+    draft: PackVersionRef | null;
+    live: PackVersionRef | null;
+    provisioned: string | null;
+  };
+  drift: boolean;
+  never_provisioned: boolean;
+  signatures: number;
+  signatures_voided_by_publish: boolean;
+  schema: {
+    present: number;
+    total: number;
+    missing: string[];
+    required_missing: string[];
+  };
+  artifacts: PackArtifact[];
+  nothing_generated: boolean;
+};
+
+export type PackDirectory = {
+  as_of: string;
+  packs: PackCard[];
+  packless: string[];
+  registered_ventures: number;
+  unregistered_portfolio: PortfolioGap[];
+  portfolio_size: number;
+  rules_total: number;
+  schema_blocks: number;
+};
+
 export type PackSummary = {
   venture_id: string;
   pack_version: string;
@@ -328,16 +399,93 @@ export type PackVersion = {
   authored_by: string;
   authored_at: string;
   superseded_at: string | null;
+  /**
+   * `draft` | `live` | `superseded`. Read this, never `superseded_at`: a draft has no
+   * `superseded_at` either, so the old check rendered an unpublished draft with a green
+   * "live" badge beside the version that was actually in force.
+   */
+  status: "draft" | "live" | "superseded" | "abandoned";
+  /**
+   * What became of it, in words: `live`, `draft`, `superseded by 1.1.0`, `abandoned
+   * draft`. One word for both a released version replaced by a later release and a
+   * draft nobody published is what made the history read as an unsorted list.
+   */
+  disposition: string;
+  superseded_by: string | null;
+  author: string | null;
+  /** Provisioning runs that started from this version. The section promises this. */
+  runs: number;
+  last_run_at: string | null;
+};
+
+export type PackSource = {
+  pack_version: string;
+  content_hash: string;
+  yaml_source: string;
 };
 
 export type PackDetail = {
+  as_of: string;
   venture_id: string;
-  live: {
-    pack_version: string;
-    content_hash: string;
-    yaml_source: string;
-  } | null;
+  live: PackSource | null;
+  /** The unpublished draft. The editor opens this in preference to `live`. */
+  draft: PackSource | null;
+  validation: PackValidationReport | null;
+  /**
+   * The schema's block list, in document order. Presence is deliberately not here: the
+   * editor's sidebar describes the buffer being typed into, and a parsed model reads an
+   * optional field with a default as present even when the document never mentions it.
+   */
+  schema: {
+    blocks: { name: string; required: boolean }[];
+    total: number;
+  };
+  bindings: {
+    /** Bound to the *artifacts* hash, which is generated from this Pack. */
+    gate_10_signatures: number;
+    open_runs: {
+      run_id: string;
+      pack_version: string;
+      status: string;
+      current_gate: string;
+    }[];
+  };
   versions: PackVersion[];
+};
+
+/** A rule, and how far this stage could actually get with it. */
+export type StagedRule = RuleRow & {
+  /** False when the rule could not be evaluated here at all. */
+  evaluable: boolean;
+  /** The gate that settles it, when this one cannot. */
+  settled_at_gate: string | null;
+  why_not_here: string | null;
+  /** Passed here, and evaluated again later against real generator output. */
+  rechecked_later: boolean;
+  rechecked_reason: string | null;
+  /**
+   * The Pack blocks this rule reads, derived from the rule's own source. Lets the
+   * editor mark the block a failure lives in rather than only listing the failure.
+   */
+  blocks: string[];
+};
+
+/**
+ * Three states, never two.
+ *
+ * `passed + failed + not_evaluable` is the whole rule set. A rule that could not be
+ * evaluated has established nothing, and folding it into a "checked" count produces a
+ * badge claiming the document was examined more thoroughly than it was.
+ */
+export type PackValidationReport = {
+  state: "failing" | "not_validated" | "warnings" | "valid";
+  rules: StagedRule[];
+  passed: number;
+  failed: number;
+  not_evaluable: number;
+  /** Passed here but re-checked later. Not a failure, and not a clean bill either. */
+  rechecked_later: number;
+  rules_total: number;
 };
 
 export type RuleRow = {
@@ -359,6 +507,426 @@ export type ValidationResponse = {
   rules_checked?: number;
 };
 
+export type LadderRow = {
+  gate: string;
+  /** Plain language, for scanning. `title` is what the gate actually checks. */
+  name: string;
+  title: string;
+  /** One line on what the gate does, so a pending row is not just a name. */
+  description: string;
+  state: "passed" | "blocked" | "awaiting" | "running" | "pending";
+  reason: string | null;
+  evidence: Record<string, unknown>;
+  recorded_at: string | null;
+  /** Elapsed from the previous gate, so a slow gate is visible. */
+  seconds: number | null;
+  is_current: boolean;
+  is_ceiling: boolean;
+  /** Never ran, because the run stopped before reaching it. Not the same as "not yet". */
+  downstream_of_stop: boolean;
+};
+
+/** Who ended a run, when, and the reason they gave. Read from the audit log. */
+export type Disposition = {
+  actor: string | null;
+  at: string;
+  reason: string | null;
+  gate: string | null;
+};
+
+/**
+ * Something a human should see at gate 4, and how much it matters.
+ *
+ * `severity` is the whole point: a rule that FAILs at gate 4.5 was being rendered in a
+ * block labelled "Generator warnings" beside a genuine advisory, sharing a count. One
+ * of those halts the run one gate later and the other does not.
+ */
+export type Advisory = {
+  severity: "fail" | "warn";
+  message: string;
+  source: string;
+  rule_id: string | null;
+  /** The gate this will stop the run at, when it is a failure. */
+  blocks_at: string | null;
+  /** Pack blocks the rule reads, so "Fix in Pack editor" can land on one. */
+  blocks?: string[];
+};
+
+export type RunStop = {
+  gate: string;
+  name: string;
+  reason: string;
+  evidence: Record<string, unknown>;
+  at: string | null;
+  /** Who acted at the gate — not who started the run. Different people, often. */
+  actor: string | null;
+};
+
+export type RunCard = {
+  run_id: string;
+  status: string;
+  /** The reader's vocabulary: `stopped at gate 4`, `at ceiling`, `cancelled`. */
+  display_status: string;
+  current_gate: string;
+  current_gate_name: string;
+  pack_version: string;
+  started_at: string;
+  completed_at: string | null;
+  started_by: string | null;
+  gates_passed: number;
+  stop: RunStop | null;
+};
+
+export type ProvisioningCard = {
+  venture_id: string;
+  display_name: string;
+  has_live_pack: boolean;
+  live_pack_version: string | null;
+  run: RunCard | null;
+  ladder: LadderRow[];
+  runs_total: number;
+  resumable: boolean;
+  resume_blocked_because: string | null;
+  pack_changed: boolean;
+};
+
+export type ProvisioningDirectory = {
+  as_of: string;
+  ventures: ProvisioningCard[];
+  startable: { venture_id: string; display_name: string }[];
+  gates_total: number;
+  ceiling_gate: string;
+  portfolio_size: number;
+  empty_ladder: LadderRow[];
+};
+
+export type Me = {
+  human_id: string;
+  display_name: string;
+  roles: string[];
+};
+
+export type HistoryRun = {
+  run_id: string;
+  status: string;
+  display_status: string;
+  current_gate: string;
+  current_gate_name: string;
+  pack_version: string;
+  started_at: string;
+  completed_at: string | null;
+  actor: string | null;
+  gates_passed: number;
+  reason: string | null;
+};
+
+/* ------------------------------------------------------- the Village roster */
+
+/**
+ * One agent, and how far into The Office it has got.
+ *
+ * `in_roster` and `has_identity` are different facts and the gap between them is the
+ * page: the Village creates agents, The Office appoints them, and an agent in the first
+ * set and not the second is visible but unappointable.
+ */
+export type RosterAgent = {
+  village_agent_ref: string | null;
+  agent_name: string;
+  department: string;
+  in_roster: boolean;
+  roster_status: string;
+  source: string | null;
+  office_agent_id: string | null;
+  has_identity: boolean;
+  identity_status: string | null;
+  live_grants: number;
+  assignable_grants: number;
+  certifications: number;
+  /** The Pack's ceiling. `null` means no Pack appoints this agent — not a low tier. */
+  declared_tier: string | null;
+  /** What SimForge certified was earned. */
+  certified_tier: string | null;
+  /** The lower of the two, or null when neither exists. */
+  effective_tier: string | null;
+  /** Certified above the declared ceiling. The Pack is the ceiling, so this is wrong. */
+  tier_inconsistent: boolean;
+  /** Certification makes an agent eligible; a grant is what lets it reach a Forge. */
+  certified_without_grants: boolean;
+  last_shift: string | null;
+};
+
+/** A department as the Village names it: the value to filter by, and the word to show.
+ *
+ * Both, because they do different jobs. `department` is normalized -
+ * `media_production` - and is what a row is grouped and filtered by. `label` is what
+ * the Village UI shows - `Media_Production` - and is what an operator reads.
+ * `broker/departments` says so on the two accessors; the Agents page rendered the first
+ * where the second belongs, and nothing caught it until the smoke script had a Village
+ * to ask and eleven of the twelve labels turned out to be missing from the page.
+ */
+export type DepartmentOption = { department: string; label: string };
+
+export type RosterDepartment = {
+  department: string;
+  label: string;
+  in_roster: number;
+  with_identity: number;
+  without_identity: number;
+  agents: RosterAgent[];
+};
+
+export type RosterDirectory = {
+  as_of: string;
+  agents: RosterAgent[];
+  departments: RosterDepartment[];
+  departments_total: number;
+  departments_represented: number;
+  /** Rows in the Village roster. Zero means no roster has been imported. */
+  roster_total: number;
+  roster_imported: boolean;
+  with_identity: number;
+  without_identity: number;
+  /** Identities whose Village agent the roster cannot account for. */
+  unmatched_identities: number;
+  capacity: {
+    certified_and_free: number;
+    holding_grants: number;
+    not_yet_certified: number;
+    no_identity: number;
+  };
+  all_departments: DepartmentOption[];
+};
+
+export type RosterDiff = {
+  added: { village_agent_ref: string; agent_name: string; department: string }[];
+  departed: {
+    village_agent_ref: string;
+    agent_name: string;
+    department: string;
+    live_grants: number;
+    has_identity: boolean;
+  }[];
+  moved: {
+    village_agent_ref: string;
+    agent_name: string;
+    from_department: string;
+    to_department: string;
+  }[];
+  renamed: { village_agent_ref: string; from_name: string; to_name: string }[];
+  unchanged: number;
+  incoming_total: number;
+  current_total: number;
+};
+
+/** A certification is always *for* a Forge and a module. Never a bare tier. */
+export type Certification = {
+  unit: "A" | "B";
+  forge_id: string;
+  module_id: string | null;
+  department: string | null;
+  state: string;
+  certified_tier: string | null;
+  instruction_content_hash: string | null;
+  forge_api_version: string | null;
+  rubric_kind: string | null;
+  rubric_version: string | null;
+  score: number | null;
+  threshold: number | null;
+  simforge_verdict: string | null;
+  issued_at: string | null;
+  updated_at: string | null;
+};
+
+export type ForgeAccess = {
+  forge_id: string;
+  credential_mode: string;
+  /** The Forge itself is up. Says nothing about whether this agent can reach it. */
+  health_status: string;
+  grants_here: number;
+  reachable: boolean;
+};
+
+/* ---------------------------------------------------------- the approval queue */
+
+export type PendingApproval = {
+  proposal_id: string;
+  office_agent_id: string;
+  agent_name: string | null;
+  department: string | null;
+  venture_id: string;
+  forge_id: string;
+  module_id: string;
+  module_name: string | null;
+  task_id: string;
+  trust_tier: string;
+  payload: Record<string, unknown>;
+  payload_hash: string;
+  created_at: string;
+  /** When this stops being decidable. Expiry fails the task; it never approves it. */
+  expires_at: string;
+  trace_id: string;
+  /** From the module registry — what the call would touch, not what the agent claims. */
+  compliance_flags_implied: string[] | null;
+  is_mutating: boolean | null;
+};
+
+export type DecidedApproval = {
+  proposal_id: string;
+  office_agent_id: string;
+  agent_name: string | null;
+  venture_id: string;
+  forge_id: string;
+  module_id: string;
+  status: string;
+  decision_reason: string | null;
+  review_seconds: string | number | null;
+  decided_at: string | null;
+  reviewer: string | null;
+  /** The payload as it stood at decision time — the row is never rewritten. */
+  payload: Record<string, unknown>;
+  payload_hash: string;
+};
+
+export type Reviewer = {
+  venture_id: string;
+  name: string;
+  role: string;
+  coverage_hours: number;
+  timezone: string;
+  backup_human: string | null;
+  max_daily_approvals: number;
+  median_review_minutes: number | null;
+  decisions_today: number;
+  remaining_today: number;
+  median_seconds_today: number | null;
+  matched_to_a_human: boolean;
+};
+
+export type ApprovalQueue = {
+  as_of: string;
+  pending: PendingApproval[];
+  history: DecidedApproval[];
+  reviewers: Reviewer[];
+  metrics: {
+    decisions_today: number;
+    approvals_today: number;
+    approval_rate: number | null;
+    median_seconds: number | null;
+    under_threshold: number;
+    threshold_seconds: number;
+    by_reviewer: {
+      reviewer: string | null;
+      decisions: number;
+      approvals: number;
+      fast_approvals: number;
+      median_seconds: string | number | null;
+    }[];
+  };
+  capacity: {
+    reviewers: number;
+    remaining_today: number;
+    pending: number;
+    over_capacity: boolean;
+  };
+  state: {
+    live_grants: number;
+    grants_below_auto: number;
+    calls_ever: number;
+    proposals_today: number;
+  };
+  /** Why the queue is empty, in this system's terms. Null when it is not empty. */
+  empty_reason: string | null;
+};
+
+/* --------------------------------------------------- curriculum completeness */
+
+/**
+ * One of the eight required sections, and whether it teaches anything.
+ *
+ * `authored` used to mean a row exists. The live cre-forge curriculum satisfies that
+ * with `"what_it_does": "Documented."` — every section present, none empty, a valid
+ * content_hash over the lot, and certifications bound to it.
+ */
+export type CurriculumSection = {
+  section: string;
+  title: string;
+  state: "complete" | "thin" | "stub" | "missing";
+  /** Names the specific defect, for whoever has to fix it. Null when complete. */
+  reason: string | null;
+};
+
+export type CurriculumQuality = {
+  state: "complete" | "thin" | "stub" | "missing";
+  sections: CurriculumSection[];
+  complete: number;
+  total: number;
+  placeholder_sections: string[];
+  missing_sections: string[];
+  thin_sections: string[];
+  /** `stub` or `missing`. A Pack may not pass V11 against one of these. */
+  teaches_nothing: boolean;
+};
+
+export type InstructionModule = {
+  forge_id: string;
+  module_id: string;
+  module_name: string | null;
+  instruction_version: string;
+  forge_api_version: string;
+  forge_current_version: string | null;
+  version_sensitivity: string;
+  sensitivity_rationale: string | null;
+  content_hash: string;
+  authored_at: string | null;
+  author: string | null;
+  is_mutating: boolean | null;
+  idempotency_support: string | null;
+  compliance_flags_implied: string[] | null;
+  certifications: number;
+  quality: CurriculumQuality;
+  /** Why the Forge has moved past what this curriculum tolerates. Null when it has not. */
+  stale_forge: string | null;
+  certifications_on_hollow: number;
+};
+
+export type InstructionForge = {
+  forge_id: string;
+  api_version: string;
+  health_status: string;
+  modules: InstructionModule[];
+  unwritten: { forge_id: string; module_id: string; module_name: string | null }[];
+  written: number;
+  total: number;
+  stub: number;
+  thin: number;
+};
+
+export type InstructionDirectory = {
+  as_of: string;
+  forges: InstructionForge[];
+  modules: InstructionModule[];
+  unwritten: { forge_id: string; module_id: string; module_name: string | null }[];
+  totals: {
+    modules_with_instructions: number;
+    forges_with_instructions: number;
+    forges_registered: number;
+    complete: number;
+    thin: number;
+    hollow: number;
+    modules_without_instructions: number;
+    certifications_on_hollow: number;
+  };
+};
+
+export type BoundCertification = {
+  office_agent_id: string;
+  agent_name: string | null;
+  department: string | null;
+  state: string;
+  certified_tier: string | null;
+  updated_at: string | null;
+};
+
 export type RunSummary = {
   run_id: string;
   venture_id: string;
@@ -372,24 +940,19 @@ export type RunSummary = {
   gates_passed: number;
 };
 
-export type GateRow = {
-  gate: string;
-  title: string;
-  verdict: "passed" | "blocked" | "awaiting_human" | null;
-  reason: string | null;
-  evidence: Record<string, unknown>;
-  recorded_at: string | null;
-  is_current: boolean;
-};
-
 export type RunDetail = {
+  as_of: string;
   run_id: string;
   venture_id: string;
   pack_version: string;
   status: string;
+  /** The reader's vocabulary. `awaiting_human` is a column value, not a sentence. */
+  display_status: string;
+  disposition: Disposition | null;
   current_gate: string;
+  current_gate_name: string;
   artifacts_hash: string | null;
-  ladder: GateRow[];
+  ladder: LadderRow[];
   history: {
     gate: string;
     verdict: string;
@@ -530,6 +1093,10 @@ export type IncidentRow = Incident & {
   resolution: string | null;
   resolved_at: string | null;
   resolved_by: string | null;
+  // How the detection arrived, and who filed it if a person did. An incident somebody
+  // reported must never render as one a control caught.
+  detection_source: string;
+  reported_by: string | null;
 };
 
 export type ControlRow = {

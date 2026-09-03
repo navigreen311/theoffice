@@ -44,30 +44,49 @@ from psycopg.rows import dict_row
 from pydantic import BaseModel, Field
 
 from broker import (
+    access_overview,
     audit,
+    audit_events,
+    audit_view,
     budget,
     certification,
+    curriculum_quality,
+    departments,
+    forge_map,
     humans,
     incidents,
     instructions,
     knowledge,
+    knowledge_origin,
+    pack_templates,
     packs,
     proposals,
     provisioning,
     revocation,
+    roster,
     sweeps,
     ventures,
+    village,
+)
+from broker import (
+    incident_taxonomy as incident_taxonomy_module,
 )
 from broker.db import close_pool, connection
 from broker.errors import NotAuthorized, OfficeError
 from broker.humans import Human
+from generators.validator import (
+    GATE_45_RECHECKS,
+    LATER_GATE_REASONS,
+    all_rule_ids,
+    rule_blocks,
+)
 from generators.validator import validate as validate_pack
 
 # The migration this build expects. `/api/ready` compares it to what the database
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0016"
+EXPECTED_SCHEMA_REVISION = "0030"
 
 
 @asynccontextmanager
@@ -268,6 +287,16 @@ async def health(conn: DB, _me: ME) -> dict[str, Any]:
 
 @app.get("/api/audit/chain")
 async def audit_chain(conn: DB, _me: ME) -> dict[str, Any]:
+    """Chain integrity: the live check, and the recorded verification beside it.
+
+    Both, because they answer different questions and the page used to conflate them.
+    `audit_log_verify_chain()` says whether the chain is intact *right now*. The
+    `sweep_run` row says what was last verified, when, and over how many entries - and
+    that is the row the Compliance page reads, so reporting it here is what stops the two
+    screens describing the same property and disagreeing.
+
+    The live fields keep their published names: the dashboard reads them.
+    """
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
             "SELECT ok, checked_count, first_break_audit_id, tail_gap, reason "
@@ -275,7 +304,97 @@ async def audit_chain(conn: DB, _me: ME) -> dict[str, Any]:
         )
         row = await cur.fetchone()
     assert row is not None
-    return dict(row)
+
+    return {
+        **dict(row),
+        "as_of": datetime.now(UTC).isoformat(),
+        # The live check is real and is not evidence: nothing records it, so it cannot
+        # be produced later and Compliance cannot see it.
+        "live_check_is_recorded": False,
+        "recorded_verification": await audit_view.chain_state(conn),
+    }
+
+
+@app.post("/api/controls/audit-chain", status_code=201)
+async def audit_verify(conn: DB, me: ME) -> dict[str, Any]:
+    """Run the chain verification and record the result as a control run.
+
+    This is what makes the Audit page and the Compliance page agree by construction:
+    there is one verification, it leaves one row, and both screens read it. Requires
+    `compliance_officer` because it writes a control result - a sweep anybody could
+    record on demand is a control whose freshness means nothing.
+    """
+    humans.authorize(me, required_role="compliance_officer")
+    result = await sweeps.sweep_audit_chain(conn)
+    await _audit_human_action(
+        me, "console_controls_run",
+        {"requested": "audit_chain", "ran": ["audit_chain"],
+         "checked": result.denominator},
+    )
+    return {"recorded_verification": await audit_view.chain_state(conn)}
+
+
+@app.get("/api/audit/events")
+async def audit_event_glossary(_me: ME) -> dict[str, Any]:
+    """Every event type, what it means, and what writes it.
+
+    Event names reached the page as raw identifiers with no glossary, and the filter
+    asked the reader to type one - usable only by somebody who already knew the answer.
+    """
+    return {"events": audit_events.published()}
+
+
+@app.get("/api/audit/shape")
+async def audit_shape(
+    conn: DB,
+    _me: ME,
+    include_fixtures: bool = Query(default=False),
+    since: Annotated[str | None, Query()] = None,
+    until: Annotated[str | None, Query()] = None,
+) -> dict[str, Any]:
+    """Counts by event type, actor and venture before anybody pages through."""
+    return {
+        "as_of": datetime.now(UTC).isoformat(),
+        **await audit_view.shape(
+            conn, include_fixtures=include_fixtures, since=since, until=until
+        ),
+    }
+
+
+@app.get("/api/audit/export")
+async def audit_export(
+    conn: DB,
+    me: ME,
+    include_fixtures: bool = Query(default=False),
+    event_type: Annotated[str | None, Query()] = None,
+    venture_id: Annotated[str | None, Query()] = None,
+    trace_id: Annotated[str | None, Query()] = None,
+    actor_id: Annotated[str | None, Query()] = None,
+    since: Annotated[str | None, Query()] = None,
+    until: Annotated[str | None, Query()] = None,
+) -> dict[str, Any]:
+    """A structured export that states its own limits.
+
+    Part 9 requires record export on demand. An export that does not say which filters
+    produced it, whether fixtures were in it, and how much of the log the chain
+    verification actually covered is a document that looks like evidence and is not.
+    """
+    humans.authorize(me, required_role="compliance_officer", venture_id=venture_id)
+    manifest = await audit_view.export_manifest(
+        conn,
+        filters={
+            "event_type": event_type, "venture_id": venture_id, "trace_id": trace_id,
+            "actor_id": actor_id, "since": since, "until": until,
+        },
+        include_fixtures=include_fixtures,
+    )
+    await _audit_human_action(
+        me, "console_compliance_exported",
+        {"kind": "audit_log", "entries": manifest["entries_included"],
+         "fixtures_included": include_fixtures},
+        venture_id,
+    )
+    return {"as_of": datetime.now(UTC).isoformat(), **manifest}
 
 
 # =============================================================== read: agents
@@ -308,6 +427,29 @@ async def list_agents(conn: DB, _me: ME) -> list[dict[str, Any]]:
             """
         )
         return [dict(r) for r in await cur.fetchall()]
+
+
+# Declared BEFORE `/api/agents/{office_agent_id}`. FastAPI matches in declaration order,
+# so a literal segment registered after a parameterised one is unreachable.
+@app.get("/api/agents/roster")
+async def agent_roster(
+    conn: DB,
+    _me: ME,
+    search: str | None = Query(default=None),
+    department: str | None = Query(default=None),
+    identity: str | None = Query(default=None),
+    grants: str | None = Query(default=None),
+) -> dict[str, Any]:
+    """The Village roster, and how far each agent has got into The Office.
+
+    The old list rendered the seven agents holding an identity, so a reader concluded
+    the Village has seven people. The agents it *cannot* appoint are the most
+    consequential rows here: they are the work that has not been done.
+    """
+    result = await roster.directory(
+        conn, search=search, department=department, identity=identity, grants=grants,
+    )
+    return {"as_of": datetime.now(UTC).isoformat(), **result}
 
 
 @app.get("/api/agents/{office_agent_id}")
@@ -346,18 +488,130 @@ async def agent_detail(office_agent_id: uuid.UUID, conn: DB, _me: ME) -> dict[st
         forges = [dict(r) for r in await cur.fetchall()]
 
         await cur.execute(
-            "SELECT shift_id, venture_id, shift_start, shift_end, flush_verified "
+            "SELECT shift_id, venture_id, shift_start, shift_end, flush_verified, "
+            "       quarter "
             "FROM shift_assignment WHERE office_agent_id = %s "
             "ORDER BY shift_start DESC LIMIT 5",
             (office_agent_id,),
         )
         shifts_recent = [dict(r) for r in await cur.fetchall()]
 
+        # Both certification units, scoped. The page claimed a certified tier for this
+        # agent and had no certifications section at all - and a bare "certified:
+        # auto_execute" is the same failure as a green check with no denominator,
+        # because a certification is always *for* a specific Forge and module.
+        await cur.execute(
+            """
+            SELECT unit, forge_id, module_id, department, state, certified_tier,
+                   instruction_content_hash, forge_api_version, rubric_kind,
+                   rubric_version, score, threshold, simforge_verdict,
+                   issued_at, updated_at
+            FROM certification
+            WHERE office_agent_id = %s
+            ORDER BY unit, forge_id, module_id
+            """,
+            (office_agent_id,),
+        )
+        certifications = [dict(r) for r in await cur.fetchall()]
+
+        # Recent activity. Under the brokered model the Office ledger is the only
+        # record naming this agent, so "never called a Forge" is a fact worth stating
+        # rather than an empty table.
+        await cur.execute(
+            """
+            SELECT call_id::text AS call_id, forge_id, module_id, venture_id,
+                   status_code, latency_ms, trust_tier_at_call, ts_start,
+                   trace_id::text AS trace_id
+            FROM agent_call_ledger
+            WHERE office_agent_id = %s
+            ORDER BY ts_start DESC
+            LIMIT 10
+            """,
+            (office_agent_id,),
+        )
+        calls = [dict(r) for r in await cur.fetchall()]
+
+        await cur.execute(
+            """
+            SELECT count(*) AS calls,
+                   coalesce(sum(usd_cost), 0) AS spend_total,
+                   coalesce(sum(usd_cost) FILTER (
+                     WHERE ts_start >= date_trunc('day', now())
+                   ), 0) AS spend_today
+            FROM agent_call_ledger
+            WHERE office_agent_id = %s
+            """,
+            (office_agent_id,),
+        )
+        cost = dict(await cur.fetchone() or {})
+
+    unit_a = [c for c in certifications if c["unit"] == "A"]
+    unit_b = [c for c in certifications if c["unit"] == "B"]
+
+    # Which Forges this agent can actually reach, as two separate facts. A Forge being
+    # GREEN and this agent being unable to reach it are different statements, and the
+    # old page put them in one column - "No grants. This agent cannot reach any Forge"
+    # directly above three Forges marked GREEN.
+    live_by_forge: dict[str, int] = {}
+    for grant in grants:
+        if grant["revoked_at"] is None:
+            live_by_forge[grant["forge_id"]] = live_by_forge.get(grant["forge_id"], 0) + 1
+
+    forge_access = [
+        {
+            **forge,
+            "grants_here": live_by_forge.get(forge["forge_id"], 0),
+            "reachable": live_by_forge.get(forge["forge_id"], 0) > 0,
+        }
+        for forge in forges
+    ]
+
+    # The Village's live view of this agent: mood, lifecycle stage, what they are doing
+    # right now. Displayed, and acted on by nothing.
+    #
+    # This is the boundary the whole integration turns on. The Village is a simulation
+    # with grief, exhaustion, ambition and death in it; The Office governs regulated
+    # work. An agent who is grieving is still certified, still holds the grants somebody
+    # granted them, and is still refused for exactly the reasons the call path already
+    # refuses anybody. Wiring simulated mood into an authorization decision would mean a
+    # patient record went unprocessed because an agent's friend died in a simulation,
+    # and there would be no audit entry that could explain it.
+    #
+    # It is here because an operator looking at a strange call pattern should be able to
+    # see that the agent has been on NIGHT shift for a week. That is context for a human,
+    # not an input to a rule.
+    #
+    # Degrades. A Village that is down must not take the agent page with it - every
+    # number above this line comes from The Office's own database and is still true.
+    village_state: dict[str, Any] | None = None
+    village_unreachable: str | None = None
+    if identity.get("village_agent_ref"):
+        try:
+            answer = await village.agent_state(str(identity["village_agent_ref"]))
+            village_state = {
+                **answer.data,
+                "fetched_at": answer.fetched_at.isoformat(),
+                "stale": answer.stale,
+            }
+        except village.VillageUnreachableError as exc:
+            village_unreachable = str(exc)
+
     return {
+        "as_of": datetime.now(UTC).isoformat(),
         "identity": dict(identity),
         "grants": grants,
         "forge_migration_status": forges,
+        "forge_access": forge_access,
+        "certifications": {"unit_a": unit_a, "unit_b": unit_b},
+        "recent_calls": calls,
+        "cost": cost,
         "recent_shifts": shifts_recent,
+        "village_state": village_state,
+        "village_unreachable": village_unreachable,
+        # Stated in the payload rather than only in a comment, because the console
+        # renders this section and the next person to read it should not have to infer
+        # that it is inert.
+        "village_state_gates": [],
     }
 
 
@@ -441,8 +695,14 @@ async def venture_capacity(venture_id: str, conn: DB, _me: ME) -> dict[str, Any]
 
 
 @app.get("/api/ventures/{venture_id}/forge-map")
-async def forge_map(venture_id: str, conn: DB, _me: ME) -> dict[str, Any]:
-    """Forge Map (Part 15): Declared, Required, In-Use, and the reconciliation diff."""
+async def venture_forge_map(venture_id: str, conn: DB, _me: ME) -> dict[str, Any]:
+    """Forge Map (Part 15): Declared, Required, In-Use, and the reconciliation diff.
+
+    The three states now come from the three places they actually live. They used to come
+    from one - a `venture_forge_manifest` row was both the declaration and the
+    requirement - so the diff the page promised could not exist, and with the manifest
+    empty the table rendered nothing while the Pack declared nine modules.
+    """
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
             """
@@ -470,8 +730,20 @@ async def forge_map(venture_id: str, conn: DB, _me: ME) -> dict[str, Any]:
         )
         dispositions = [dict(r) for r in await cur.fetchall()]
 
+    # The three-way reconciliation, from the three places the states actually live.
+    # `declared` above is the manifest, which is one of them; `forge_map.reconcile` reads
+    # the Pack and the ledger too, which is what makes the diff a diff rather than one
+    # table compared against itself.
+    reconciliation = await forge_map.reconcile(conn, venture_id)
+
     return {
+        "as_of": datetime.now(UTC).isoformat(),
+        **reconciliation,
         "venture_id": venture_id,
+        # Still `declared`, under its published name. Renaming it to `manifest_rows`
+        # to make room for the reconciliation broke `/ventures/{venture}` with a 500 -
+        # a field this route has always returned, read by a page that had no reason to
+        # change. The reconciliation's own keys sit beside it rather than over it.
         "declared": declared,
         "declared_not_used": [d for d in declared if d["calls_30d"] == 0],
         "dispositions": dispositions,
@@ -514,6 +786,43 @@ async def gates(venture_id: str, conn: DB, _me: ME) -> dict[str, Any]:
 
 # ================================================================ read: audit
 
+@app.get("/api/audit/entries")
+async def audit_entries(
+    conn: DB,
+    _me: ME,
+    event_type: Annotated[str | None, Query()] = None,
+    venture_id: Annotated[str | None, Query()] = None,
+    trace_id: Annotated[str | None, Query()] = None,
+    actor_id: Annotated[str | None, Query()] = None,
+    since: Annotated[str | None, Query()] = None,
+    until: Annotated[str | None, Query()] = None,
+    include_fixtures: bool = Query(default=False),
+    page: int = Query(default=1, ge=1),
+) -> dict[str, Any]:
+    """The log, with the person who acted and the fixtures marked.
+
+    Fixtures are filtered by default and counted, never removed: the store is append-only
+    and a filter changes the view rather than the record.
+    """
+    return {
+        "as_of": datetime.now(UTC).isoformat(),
+        **await audit_view.entries(
+            conn, event_type=event_type, venture_id=venture_id, trace_id=trace_id,
+            actor_id=actor_id, since=since, until=until,
+            include_fixtures=include_fixtures, page=page,
+        ),
+    }
+
+
+@app.get("/api/audit/{audit_id}")
+async def audit_entry_detail(audit_id: int, conn: DB, _me: ME) -> dict[str, Any]:
+    """One entry: its payload, its trace, and both hashes with the link checked."""
+    found = await audit_view.detail(conn, audit_id)
+    if found is None:
+        raise HTTPException(status_code=404, detail="no such audit entry")
+    return found
+
+
 @app.get("/api/audit")
 async def audit_explorer(
     conn: DB,
@@ -555,11 +864,38 @@ async def audit_explorer(
     )
 
 
+@app.get("/api/incidents/taxonomy")
+async def incident_taxonomy(_me: ME) -> dict[str, Any]:
+    """The published severities, kinds and response stages.
+
+    Served rather than duplicated in the console, because a taxonomy the screen keeps
+    its own copy of is one that disagrees with the database the first time a kind is
+    added.
+    """
+    return incident_taxonomy_module.published()
+
+
+@app.get("/api/incidents/overview")
+async def incidents_overview(conn: DB, _me: ME) -> dict[str, Any]:
+    """Control freshness, open counts, and the cross-venture pattern by kind.
+
+    The page told the reader to check control freshness elsewhere. It is computable
+    here, and a screen that knows the answer and points at another screen is deferring,
+    not reporting - especially when the answer is that the checks raising these have not
+    run.
+    """
+    return {"as_of": datetime.now(UTC).isoformat(), **await incidents.overview(conn)}
+
+
 @app.get("/api/incidents")
 async def list_incidents(
     conn: DB,
     _me: ME,
     severity: Annotated[str | None, Query()] = None,
+    kind: Annotated[str | None, Query()] = None,
+    venture_id: Annotated[str | None, Query()] = None,
+    state: Annotated[str | None, Query()] = None,
+    since: Annotated[str | None, Query()] = None,
     include_resolved: bool = Query(default=False),
     limit: LimitParam = 100,
     offset: OffsetParam = 0,
@@ -569,10 +905,27 @@ async def list_incidents(
     Resolution is a joined row rather than a column: `incident` is append-only by
     design, so an incident is never edited and "resolved" is the presence of an
     `incident_resolution` rather than a flag somebody set.
+
+    The filters exist because the empty state claimed them. "Nothing matches" implies
+    something was excluded, and with no filter to exclude anything it meant "there are
+    none" - two opposite readings of the same screen. The unfiltered total comes from
+    `/api/incidents/overview`, which the page already reads, so it can say which of the
+    two the reader is looking at without this route counting the same rows twice.
+
+    `state` supersedes `include_resolved`, which stays because it is a published
+    parameter and removing it would break a caller to tidy a signature.
     """
+    if state == "all":
+        include_resolved = True
+    resolved_only = state == "resolved"
+
     where = """
         WHERE (%(severity)s::text IS NULL OR i.severity = %(severity)s)
-          AND (%(include_resolved)s OR r.incident_id IS NULL)
+          AND (%(kind)s::text IS NULL OR i.kind = %(kind)s)
+          AND (%(venture_id)s::text IS NULL OR i.venture_id = %(venture_id)s)
+          AND (%(since)s::date IS NULL OR i.raised_at >= %(since)s::date)
+          AND (NOT %(resolved_only)s OR r.incident_id IS NOT NULL)
+          AND (%(include_resolved)s OR %(resolved_only)s OR r.incident_id IS NULL)
     """
     join = "FROM incident i LEFT JOIN incident_resolution r ON r.incident_id = i.incident_id"
     return await paginate(
@@ -581,6 +934,7 @@ async def list_incidents(
             SELECT i.incident_id::text AS incident_id, i.severity, i.kind, i.venture_id,
                    i.office_agent_id::text AS office_agent_id, i.forge_id, i.module_id,
                    i.trace_id::text AS trace_id, i.detail, i.raised_at,
+                   i.detection_source, i.reported_by::text AS reported_by,
                    r.resolution, r.resolved_at, r.resolved_by::text AS resolved_by
             {join} {where}
             ORDER BY
@@ -589,10 +943,31 @@ async def list_incidents(
               i.raised_at DESC
         """,
         count=f"SELECT count(*) {join} {where}",
-        params={"severity": severity, "include_resolved": include_resolved},
+        params={
+            "severity": severity, "kind": kind, "venture_id": venture_id,
+            "since": since, "resolved_only": resolved_only,
+            "include_resolved": include_resolved,
+        },
         limit=limit,
         offset=offset,
     )
+
+
+# Declared BEFORE `/api/proposals/{proposal_id}`-shaped routes.
+@app.get("/api/proposals/queue")
+async def proposal_queue(conn: DB, _me: ME) -> dict[str, Any]:
+    """Everything the approvals page needs, including why the queue is empty.
+
+    The old empty state gave one explanation - that trust tiers might be set to
+    `auto_execute` - which is a real cause and was not this cause. No agent held a grant
+    to any Forge and none had ever made a call, so the queue was empty because nothing
+    could act. The reason is derived here from what is actually true.
+    """
+    # Expire before reading, so the queue never shows an item whose deadline has passed
+    # as though a reviewer could still take it. Expiry fails the task; it never approves.
+    await proposals.expire_overdue(conn)
+    result = await proposals.queue(conn)
+    return {"as_of": datetime.now(UTC).isoformat(), **result}
 
 
 @app.get("/api/proposals")
@@ -623,6 +998,20 @@ async def list_dispositions(conn: DB, _me: ME) -> list[dict[str, Any]]:
         return [dict(r) for r in await cur.fetchall()]
 
 
+# Declared BEFORE `/api/instructions/{forge_id}/{module_id}`. FastAPI matches in
+# declaration order, so a literal segment registered after a parameterised one is
+# unreachable - it would be handed "directory" as a forge id.
+@app.get("/api/instructions/directory")
+async def instructions_directory(conn: DB, _me: ME) -> dict[str, Any]:
+    """Every instruction set, assessed by what it contains rather than by existing.
+
+    `authored` meant a row exists, which the live cre-forge set satisfies with
+    `"what_it_does": "Documented."` while 234 certifications rest on its hash.
+    """
+    result = await instructions.directory(conn)
+    return {"as_of": datetime.now(UTC).isoformat(), **result}
+
+
 @app.get("/api/instructions/{forge_id}/{module_id}")
 async def instruction_detail(
     forge_id: str, module_id: str, conn: DB, _me: ME
@@ -645,7 +1034,25 @@ async def instruction_detail(
         )
         cert_states = {r["state"]: int(r["count"]) for r in await cur.fetchall()}
 
+    # Assessed, and the agents named. "2 agents are certified against a stub" is a
+    # number; "Ada Sourcing and Bram Records are" is a list of people whose
+    # certifications have to be redone.
+    quality = curriculum_quality.assess(live.content if live else None)
+    bound = (
+        await instructions.certifications_on(
+            conn, forge_id, module_id, live.content_hash
+        )
+        if live is not None else []
+    )
+
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT human_id::text AS human_id, display_name FROM office_human"
+        )
+        authors = {r["human_id"]: r["display_name"] for r in await cur.fetchall()}
+
     return {
+        "as_of": datetime.now(UTC).isoformat(),
         "forge_id": forge_id,
         "module_id": module_id,
         "live": None if live is None else {
@@ -655,7 +1062,12 @@ async def instruction_detail(
             "content_hash": live.content_hash,
             "content": live.content,
         },
-        "versions": versions,
+        "quality": quality,
+        "certifications_bound": bound,
+        "versions": [
+            {**row, "author": authors.get(str(row.get("authored_by")))}
+            for row in versions
+        ],
         "certification_states": cert_states,
     }
 
@@ -773,6 +1185,10 @@ async def create_revocation(body: RevokeRequest, conn: DB, me: ME) -> dict[str, 
 
 class ReinstateRequest(BaseModel):
     reason: str = Field(min_length=1)
+    #: Required at `venture` and `forge` scope. The domain function refuses without it,
+    #: and so does a CHECK constraint - a ritual that lives only in a route is one the
+    #: next route can forget.
+    second_human: uuid.UUID | None = None
 
 
 @app.post("/api/revocations/{revocation_id}/reinstate")
@@ -799,6 +1215,7 @@ async def reinstate(
     await revocation.reinstate(
         conn, revocation_id=revocation_id, reinstated_by=me.human_id,
         reinstated_by_role=role, reason=body.reason,
+        second_human=body.second_human,
     )
     await _audit_human_action(
         me, "console_revocation_reinstated",
@@ -1005,6 +1422,57 @@ async def list_packs(conn: DB, _me: ME) -> list[dict[str, Any]]:
     return await packs.list_ventures(conn)
 
 
+# ======================================================= read: pack directory
+
+@app.get("/api/packs/templates")
+async def list_pack_templates(_me: ME) -> dict[str, Any]:
+    """The template catalogue, one entry per portfolio category."""
+    return {"categories": pack_templates.categories()}
+
+
+@app.get("/api/packs/template")
+async def pack_template(
+    category: str, _me: ME, venture_name: str | None = None,
+) -> dict[str, Any]:
+    """A starting document for `category`.
+
+    Deliberately fails validation. Every field it leaves at `REPLACE_ME` or zero is a
+    decision that depends on the venture, and a template that filled them in with
+    plausible values would produce a Pack that passes the validator on numbers nobody
+    chose.
+    """
+    known = {c["category"] for c in pack_templates.categories()}
+    if category not in known:
+        raise HTTPException(status_code=404, detail=f"no template for {category!r}")
+    return {
+        "category": category,
+        "yaml_source": pack_templates.skeleton(
+            category, venture_name=venture_name or pack_templates.PLACEHOLDER
+        ),
+        "note": (
+            "A template fails validation on purpose. The failing rules are the list of "
+            "what still needs a decision."
+        ),
+    }
+
+
+# Declared BEFORE `/api/packs/{venture_id}`, and it has to be. FastAPI matches routes in
+# declaration order, so a static segment registered after a parameterised one at the
+# same depth is unreachable - this returned the Pack detail for a venture named
+# "directory", with a 200 and a plausible-looking body.
+@app.get("/api/packs/directory")
+async def pack_directory(conn: DB, _me: ME) -> dict[str, Any]:
+    """Every Pack, and whether it can provision.
+
+    The old page showed that a Pack existed and gave its hash. It did not show whether
+    the Pack **works** - and a Pack failing any FAIL rule cannot provision, cannot
+    generate and cannot appoint, which makes "does it validate" the most important
+    thing on the page and the one thing it did not say.
+    """
+    result = await packs.directory(conn)
+    return {"as_of": datetime.now(UTC).isoformat(), **result}
+
+
 @app.get("/api/packs/{venture_id}")
 async def pack_detail(venture_id: str, conn: DB, _me: ME) -> dict[str, Any]:
     """Version history and the live source.
@@ -1013,13 +1481,113 @@ async def pack_detail(venture_id: str, conn: DB, _me: ME) -> dict[str, Any]:
     editor that only showed the current text would make that record unreadable.
     """
     live = await packs.live(conn, venture_id)
+    pending = await packs.draft(conn, venture_id)
+
+    # The editor needs the draft as much as the live version, and until now the route
+    # did not return it - so a draft saved from the directory was invisible on the one
+    # screen built to work on it, and the editor loaded the live Pack over the top.
+    report = None
+    editing = pending or live
+    if editing is not None:
+        result = await validate_pack(editing.pack, conn)
+        # Three states, never two. A rule that could not be evaluated has established
+        # nothing, and counting it as "checked" produces a badge claiming the document
+        # was examined more thoroughly than it was.
+        rows = []
+        for row in _rule_rows(result):
+            gate, why = LATER_GATE_REASONS.get(row["rule_id"], (None, None))
+            evaluable = row["verdict"] != "NOT_RUN"
+            rows.append({
+                **row,
+                # Which Pack blocks the rule reads, so the editor's sidebar can mark the
+                # block a failure lives in rather than only listing the failure.
+                "blocks": list(rule_blocks().get(row["rule_id"], ())),
+                "evaluable": evaluable,
+                # Which gate settles it, and why not here. A bare NOT_RUN tells a reader
+                # that something did not happen without telling them what would.
+                "settled_at_gate": gate,
+                "why_not_here": None if evaluable else why,
+                # Passes here, re-checked later against real output. Not a failure and
+                # not a clean bill either.
+                "rechecked_later": (
+                    row["rule_id"] in GATE_45_RECHECKS and evaluable
+                ),
+                "rechecked_reason": why if row["rule_id"] in GATE_45_RECHECKS else None,
+            })
+
+        passed = [r for r in rows if r["verdict"] == "PASS"]
+        failed = [r for r in rows if r["verdict"] in ("FAIL", "WARN")]
+        not_evaluable = [r for r in rows if not r["evaluable"]]
+
+        report = {
+            "state": packs.validation_state(result),
+            "rules": rows,
+            "passed": len(passed),
+            "failed": len(failed),
+            "not_evaluable": len(not_evaluable),
+            "rechecked_later": len([r for r in rows if r["rechecked_later"]]),
+            "rules_total": len(all_rule_ids()),
+        }
+
+    # What publishing would disturb, computed rather than described. The mechanism is
+    # not the obvious one: a certification binds to a Forge Operating Instruction's
+    # hash, not to the Pack, so publishing a Pack does not void certifications. What it
+    # voids is Gate 10 signatures, which bind to the *artifacts* hash - and the
+    # artifacts are generated from the Pack, so changing the Pack changes them and the
+    # signature stops matching. Nothing revokes it.
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT count(*) AS n FROM signoff_record "
+            "WHERE venture_id = %s AND gate = 'gate_10'",
+            (venture_id,),
+        )
+        counted = await cur.fetchone()
+        signatures = int((counted or {}).get("n", 0))
+
+        await cur.execute(
+            "SELECT run_id::text AS run_id, pack_version, status, current_gate "
+            "FROM provisioning_run "
+            "WHERE venture_id = %s AND status IN ('running','blocked','awaiting_human')",
+            (venture_id,),
+        )
+        open_runs = [dict(r) for r in await cur.fetchall()]
+
+    # The schema's own block list, in document order. Presence is *not* computed here:
+    # the editor's sidebar describes the buffer somebody is typing into, and a parsed
+    # model cannot answer that - an optional field with a default reads as present even
+    # when the document never mentions it. The client reads the text.
+    every_block, required_blocks = packs.schema_blocks()
+
     return {
+        "as_of": datetime.now(UTC).isoformat(),
         "venture_id": venture_id,
+        # In document order, with what is missing named. A block that is absent is
+        # information - the sidebar is where "this Pack has no kpi_targets" belongs, and
+        # it cannot say it from a list of the blocks that happen to exist.
+        "schema": {
+            "blocks": [
+                {"name": name, "required": name in required_blocks}
+                for name in every_block
+            ],
+            "total": len(every_block),
+        },
+        "bindings": {
+            "gate_10_signatures": signatures,
+            # Pinned to the version they started from, so publishing does not change
+            # what they provision. Worth saying, because the opposite is assumed.
+            "open_runs": open_runs,
+        },
         "live": None if live is None else {
             "pack_version": live.pack_version,
             "content_hash": live.content_hash,
             "yaml_source": live.yaml_source,
         },
+        "draft": None if pending is None else {
+            "pack_version": pending.pack_version,
+            "content_hash": pending.content_hash,
+            "yaml_source": pending.yaml_source,
+        },
+        "validation": report,
         "versions": await packs.list_versions(conn, venture_id),
     }
 
@@ -1041,9 +1609,61 @@ async def pack_version(
 
 @app.get("/api/provisioning/runs")
 async def list_provisioning_runs(
-    conn: DB, _me: ME, venture_id: str | None = Query(default=None)
-) -> list[dict[str, Any]]:
-    return await provisioning.list_runs(conn, venture_id=venture_id)
+    conn: DB,
+    _me: ME,
+    venture_id: str | None = Query(default=None),
+    include_fixtures: bool = Query(default=False),
+) -> dict[str, Any]:
+    """Runs, with smoke-test loops filtered out by default and counted.
+
+    104 of 108 runs here were started by `scripts/console-smoke.sh`, which drives one to
+    gate 4 and aborts it on every invocation. Listed alongside real runs they read as a
+    system that cannot get past gate 4. Nothing is deleted - the filter changes the view.
+    """
+    return await provisioning.list_runs(
+        conn, venture_id=venture_id, include_fixtures=include_fixtures
+    )
+
+
+@app.get("/api/me")
+async def whoami(me: ME) -> dict[str, Any]:
+    """The signed-in human.
+
+    Needed so a screen can say "awaiting you" rather than "awaiting_human". Which of
+    those a reader sees decides whether they realise the run is waiting on them.
+    """
+    return {
+        "human_id": str(me.human_id),
+        "display_name": me.display_name,
+        # (role, venture_id); the venture scope is not this route's business.
+        "roles": sorted({role for role, _venture in me.roles}),
+    }
+
+
+# Declared BEFORE `/api/provisioning/runs/{run_id}`. A literal segment registered
+# after a parameterised one at the same depth is unreachable - FastAPI hands it to the
+# path parameter and answers 200 with the wrong body. `/api/packs/directory` shipped
+# that way and nothing failed.
+@app.get("/api/provisioning/directory")
+async def provisioning_directory(conn: DB, _me: ME) -> dict[str, Any]:
+    """Every venture, and exactly how far it got.
+
+    The old index rendered `5 of 16` - a number with no map. A fraction cannot say which
+    gate stopped the run, what happened there, or what is still ahead.
+    """
+    result = await provisioning.directory(conn)
+    return {"as_of": datetime.now(UTC).isoformat(), **result}
+
+
+@app.get("/api/provisioning/history/{venture_id}")
+async def provisioning_history(
+    venture_id: str, conn: DB, _me: ME
+) -> dict[str, Any]:
+    """Every run for a venture. Provisioning is iterative and the pattern is the point."""
+    return {
+        "venture_id": venture_id,
+        "runs": await provisioning.venture_history(conn, venture_id),
+    }
 
 
 @app.get("/api/provisioning/runs/{run_id}")
@@ -1059,28 +1679,37 @@ async def provisioning_run(run_id: uuid.UUID, conn: DB, _me: ME) -> dict[str, An
         raise HTTPException(status_code=404, detail="no such run")
     results = await provisioning.gate_results(conn, run_id)
 
-    latest: dict[str, dict[str, Any]] = {}
-    for row in results:
-        latest[row["gate"]] = row
+    # The same builder the index uses. Gate 9.5 read `not run` here and `blocked -
+    # ceiling` there, because two screens each described the ladder in their own terms;
+    # one gate cannot mean two things depending on which page you opened.
+    ladder = provisioning.ladder_for(results, state.current_gate, state.status)
 
-    ladder = [
-        {
-            "gate": gate,
-            "title": provisioning.GATE_TITLES[gate],
-            "verdict": latest.get(gate, {}).get("verdict"),
-            "reason": latest.get(gate, {}).get("reason"),
-            "evidence": latest.get(gate, {}).get("evidence", {}),
-            "recorded_at": latest.get(gate, {}).get("recorded_at"),
-            "is_current": gate == state.current_gate,
-        }
-        for gate in provisioning.GATE_SEQUENCE
-    ]
+    blocking = next(
+        (
+            row for row in results
+            if row["gate"] == state.current_gate and row["verdict"] != "passed"
+        ),
+        None,
+    )
+    disposition = await provisioning.human_disposition(
+        conn, str(state.run_id), state.status
+    )
+
     return {
+        # Stamped by the server, like every other directory route. The page used to read
+        # its own render clock, which produces one value during SSR and a different one
+        # during hydration - the two renders then disagree about what time it is.
+        "as_of": datetime.now(UTC).isoformat(),
         "run_id": str(state.run_id),
         "venture_id": state.venture_id,
         "pack_version": state.pack_version,
         "status": state.status,
+        "display_status": provisioning.display_status(
+            state.status, state.current_gate, blocking
+        ),
+        "disposition": disposition,
         "current_gate": state.current_gate,
+        "current_gate_name": provisioning.GATE_NAMES[state.current_gate],
         "artifacts_hash": state.artifacts_hash,
         "ladder": ladder,
         "history": results,
@@ -1244,6 +1873,26 @@ async def review_provisioning_run(
     return {"status": "reviewed"}
 
 
+@app.post("/api/provisioning/runs/{run_id}/reject")
+async def reject_provisioning_run(
+    run_id: uuid.UUID, body: RunNoteRequest, conn: DB, me: ME
+) -> dict[str, str]:
+    """A named human declines at a gate awaiting their decision.
+
+    Not the same act as abandoning the run. Aborting says nothing about the artifacts;
+    this is a judgement about them, and the next person to provision this venture needs
+    to know which one happened.
+
+    Deliberately not an override in the other direction: there is no route that lets a
+    human pass a gate the system blocked.
+    """
+    try:
+        await provisioning.reject_run(conn, run_id=run_id, human=me, reason=body.note)
+    except provisioning.ProvisioningError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"status": "rejected"}
+
+
 @app.post("/api/provisioning/runs/{run_id}/abort")
 async def abort_provisioning_run(
     run_id: uuid.UUID, body: RunNoteRequest, conn: DB, me: ME
@@ -1399,6 +2048,19 @@ async def knowledge_coverage(conn: DB, _me: ME) -> dict[str, Any]:
     }
 
 
+# Declared BEFORE any parameterised `/api/knowledge/...` route.
+@app.get("/api/knowledge/overview")
+async def knowledge_overview(conn: DB, _me: ME) -> dict[str, Any]:
+    """The five knowledge bases, counted by substance rather than by row.
+
+    The page reported 60 personas. All sixty are `Smoke NNNNNN` written by console smoke
+    runs, standing in for the same broker — a library holding sixty copies of one fixture
+    has zero personas.
+    """
+    result = await knowledge.overview(conn)
+    return {"as_of": datetime.now(UTC).isoformat(), **result}
+
+
 @app.get("/api/knowledge/playbooks")
 async def list_playbooks(
     conn: DB, _me: ME, venture_id: str | None = Query(default=None)
@@ -1438,18 +2100,108 @@ async def list_compliance_entries(conn: DB, _me: ME) -> list[dict[str, Any]]:
 
 @app.get("/api/knowledge/personas")
 async def list_personas(
-    conn: DB, _me: ME, venture_id: str | None = Query(default=None)
-) -> list[dict[str, Any]]:
-    """Names, targets and hashes. Never bodies - the role cannot read them."""
-    return await knowledge.persona_index(conn, venture_id)
+    conn: DB,
+    _me: ME,
+    venture_id: str | None = Query(default=None),
+    search: str | None = Query(default=None),
+    origin: str | None = Query(default=None),
+    include_fixtures: bool = Query(default=False),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=25, ge=1, le=200),
+) -> dict[str, Any]:
+    """Names, targets and hashes. Never bodies - the role cannot read them.
+
+    Fixtures are excluded by default. Sixty of the sixty personas here are `Smoke
+    NNNNNN`, written by console smoke runs, and a page that lists them first buries the
+    real ones - of which there are none, which is the fact worth seeing.
+    """
+    rows = await knowledge.persona_index(conn, venture_id)
+    shaped = [
+        {**row, "origin": knowledge_origin.persona_origin(row)} for row in rows
+    ]
+    return _paged_knowledge(
+        shaped, search=search, origin=origin, include_fixtures=include_fixtures,
+        page=page, page_size=page_size,
+        matches=lambda row, term: term in str(row.get("persona_name", "")).lower()
+        or term in str(row.get("target_persona", "")).lower(),
+    )
 
 
 @app.get("/api/knowledge/history")
 async def list_history(
-    conn: DB, _me: ME, venture_id: str | None = Query(default=None),
-    limit: int = Query(default=100, le=500),
-) -> list[dict[str, Any]]:
-    return await knowledge.history(conn, venture_id=venture_id, limit=limit)
+    conn: DB,
+    _me: ME,
+    venture_id: str | None = Query(default=None),
+    search: str | None = Query(default=None),
+    origin: str | None = Query(default=None),
+    record_type: str | None = Query(default=None),
+    actor_type: str | None = Query(default=None),
+    include_fixtures: bool = Query(default=False),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=500),
+) -> dict[str, Any]:
+    """The record. Fixtures are filtered out, never removed.
+
+    This store is append-only by design - it refuses UPDATE and DELETE, and `office_app`
+    holds only INSERT and SELECT. A bad entry is answered with a compensating entry, so
+    excluding smoke fixtures from the default view is a reading decision rather than a
+    deletion, and the exclusion itself is recorded when an operator makes it.
+    """
+    rows = await knowledge.history(conn, venture_id=venture_id, limit=500)
+    shaped = [
+        {**row, "origin": knowledge_origin.record_origin(row)} for row in rows
+    ]
+    if record_type:
+        shaped = [row for row in shaped if row.get("record_type") == record_type]
+    if actor_type:
+        shaped = [row for row in shaped if row.get("actor_type") == actor_type]
+
+    return _paged_knowledge(
+        shaped, search=search, origin=origin, include_fixtures=include_fixtures,
+        page=page, page_size=page_size,
+        matches=lambda row, term: term in str(row.get("summary", "")).lower(),
+    )
+
+
+def _paged_knowledge(
+    rows: list[dict[str, Any]],
+    *,
+    search: str | None,
+    origin: str | None,
+    include_fixtures: bool,
+    page: int,
+    page_size: int,
+    matches: Any,
+) -> dict[str, Any]:
+    """Filter, then page, and say what was left out.
+
+    `excluded_fixtures` is returned even when they are hidden. A list that silently drops
+    120 of 132 rows and reports the remaining 12 as the total is the same failure as
+    counting the fixtures as content - the reader has to be able to see that a decision
+    was made.
+    """
+    total_before = len(rows)
+    fixtures = len([row for row in rows if row.get("origin") == "test_fixture"])
+
+    if not include_fixtures:
+        rows = [row for row in rows if row.get("origin") != "test_fixture"]
+    if origin:
+        rows = [row for row in rows if row.get("origin") == origin]
+    if search:
+        term = search.strip().lower()
+        rows = [row for row in rows if matches(row, term)]
+
+    total = len(rows)
+    start = (page - 1) * page_size
+    return {
+        "rows": rows[start:start + page_size],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "pages": max(1, (total + page_size - 1) // page_size),
+        "total_before_filters": total_before,
+        "excluded_fixtures": 0 if include_fixtures else fixtures,
+    }
 
 
 # ====================================================== write: knowledge bases
@@ -1606,13 +2358,24 @@ async def author_persona_route(
     except knowledge.KnowledgeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    # The hash, returned once. The body is beyond this console's reach the moment it
+    # lands, so this is the only thing the author can keep to verify against - and
+    # `body_hash` is a column the role *can* read, unlike the body it describes.
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT body_hash FROM persona WHERE persona_id = %s", (persona_id,)
+        )
+        hashed = await cur.fetchone()
+
     await _audit_human_action(
         me, "console_persona_authored",
-        {"persona_name": body.persona_name, "target_persona": body.target_persona},
+        {"persona_name": body.persona_name, "target_persona": body.target_persona,
+         "body_hash": (hashed or {}).get("body_hash")},
         body.venture_id,
     )
     return {
         "persona_id": str(persona_id),
+        "body_hash": (hashed or {}).get("body_hash", ""),
         "note": (
             "Written. This console cannot read the body back - Part 6.4 is SimForge "
             "only, enforced by a column privilege rather than by a missing route."
@@ -1642,7 +2405,87 @@ async def record_history_route(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"record_id": record_id}
 
+
+@app.post("/api/knowledge/fixtures/exclude", status_code=201)
+async def record_fixture_exclusion_route(conn: DB, me: ME) -> dict[str, int]:
+    """Write down that the smoke fixtures are being left out of the counts.
+
+    There is no purge route and there should not be. `persona` is write-only to this
+    role and `historical_record` is append-only to everyone, so the honest action is the
+    one the store allows: append a record saying what is being excluded and who decided
+    it. Filtering rows out of a count without that is the silent version of the same
+    act, and the silent version is what let sixty smoke personas read as a library.
+    """
+    humans.authorize(me, required_role="venture_operator")
+    summary = await knowledge.overview(conn)
+    fixtures = summary["fixtures"]
+    try:
+        record_id = await knowledge.record_fixture_exclusion(
+            conn,
+            recorded_by=me.human_id,
+            counts={
+                "personas": fixtures["personas"],
+                "records": fixtures["records"],
+            },
+        )
+    except knowledge.KnowledgeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"record_id": record_id}
+
 # ======================================================= read: humans and access
+
+@app.get("/api/access/overview")
+async def access_overview_route(conn: DB, me: ME) -> dict[str, Any]:
+    """What the Access page states before it lists anybody.
+
+    Requires `compliance_officer`, like the roster it summarises: how concentrated the
+    strongest role is, and who holds it, is the same map of whom to compromise.
+    """
+    humans.authorize(me, required_role="compliance_officer")
+    return {
+        "as_of": datetime.now(UTC).isoformat(),
+        **await access_overview.overview(conn),
+    }
+
+
+@app.post("/api/access/suspend-test-fixtures")
+async def suspend_test_fixtures_route(conn: DB, me: ME) -> dict[str, Any]:
+    """Suspend every account this project's own test paths created.
+
+    `ivan`, because this touches accounts holding `ivan`. Suspension only - there is no
+    delete route here or anywhere, because deleting an account destroys the record of who
+    held what and who granted it.
+    """
+    humans.authorize(me, required_role="ivan")
+    result = await humans.suspend_test_fixtures(conn, actor=me.human_id)
+    await _audit_human_action(
+        me, "console_test_fixtures_suspended",
+        {"suspended": result["suspended"]},
+    )
+    return result
+
+
+@app.get("/api/forge-map/estate")
+async def forge_estate_route(conn: DB, _me: ME) -> dict[str, Any]:
+    """Every Forge the portfolio names, bridged or not.
+
+    The map only ever showed the Forges one venture declared, so a Forge with no bridge
+    was indistinguishable from one that does not exist.
+    """
+    return {
+        "as_of": datetime.now(UTC).isoformat(),
+        "forges": await forge_map.estate(conn),
+    }
+
+
+@app.get("/api/forge-map/matrix")
+async def forge_matrix_route(conn: DB, _me: ME) -> dict[str, Any]:
+    """Ventures against Forges: which engagements halt if one goes down."""
+    return {
+        "as_of": datetime.now(UTC).isoformat(),
+        **await forge_map.matrix(conn),
+    }
+
 
 @app.get("/api/humans")
 async def list_humans(conn: DB, me: ME) -> list[dict[str, Any]]:
@@ -1654,6 +2497,52 @@ async def list_humans(conn: DB, me: ME) -> list[dict[str, Any]]:
     """
     humans.authorize(me, required_role="compliance_officer")
     return await humans.list_humans(conn)
+
+
+@app.get("/api/revocations/targets")
+async def revocation_targets(conn: DB, _me: ME) -> dict[str, Any]:
+    """What can be revoked, by name.
+
+    The form asked for four UUIDs as free text. This is the emergency control: nobody
+    recalls a UUID under pressure, and a typo either fails or stops the wrong thing.
+    """
+    return {"as_of": datetime.now(UTC).isoformat(), **await revocation.targets(conn)}
+
+
+@app.get("/api/revocations/blast-radius")
+async def revocation_blast_radius(
+    conn: DB,
+    _me: ME,
+    scope: Annotated[str, Query()],
+    office_agent_id: Annotated[uuid.UUID | None, Query()] = None,
+    forge_id: Annotated[str | None, Query()] = None,
+    module_id: Annotated[str | None, Query()] = None,
+    venture_id: Annotated[str | None, Query()] = None,
+) -> dict[str, Any]:
+    """What a revocation would stop, before it is issued.
+
+    A query against existing state, not an authorization decision - it says nothing
+    about whether the caller may act, and the console still does no authority
+    pre-checking. Showing somebody the size of what they are about to stop is not a
+    second opinion about their permission to stop it.
+    """
+    try:
+        return await revocation.blast_radius(
+            conn, scope=scope, office_agent_id=office_agent_id,
+            forge_id=forge_id, module_id=module_id, venture_id=venture_id,
+        )
+    except NotAuthorized as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/revocations/history")
+async def revocation_history(conn: DB, _me: ME) -> list[dict[str, Any]]:
+    """Every revocation ever issued, lifted or not, with what it stopped at the time.
+
+    Regulator-export material: the reason field was always specified to surface there,
+    and until now there was nowhere for it to surface from.
+    """
+    return await revocation.history(conn)
 
 
 @app.get("/api/revocations")
@@ -1850,6 +2739,105 @@ class ResolveIncidentRequest(BaseModel):
     resolution: str = Field(min_length=1)
 
 
+class RaiseIncidentRequest(BaseModel):
+    severity: str
+    kind: str
+    detection_source: str
+    summary: str = Field(min_length=1)
+    venture_id: str | None = None
+
+
+@app.post("/api/incidents", status_code=201)
+async def raise_incident_route(
+    body: RaiseIncidentRequest, conn: DB, me: ME
+) -> dict[str, str]:
+    """File an incident a person noticed.
+
+    The blueprint names three detection sources and only agent flag arrives on its own.
+    A regulator's question and a client's complaint had nowhere to go, so the list stayed
+    empty and the empty list read as quiet.
+
+    Hand-filed incidents carry the filer's id and a human detection source, so one is
+    never mistaken for something a control caught. Like every other incident it cannot be
+    edited afterwards - the response is appended.
+    """
+    humans.authorize(
+        me, required_role="compliance_officer", venture_id=body.venture_id
+    )
+    try:
+        incident_id = await incidents.file_by_hand(
+            conn,
+            severity=body.severity,
+            kind=body.kind,
+            detection_source=body.detection_source,
+            summary=body.summary,
+            reported_by=me.human_id,
+            venture_id=body.venture_id,
+        )
+    except incidents.IncidentError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await _audit_human_action(
+        me, "console_incident_raised",
+        {"incident_id": str(incident_id), "kind": body.kind,
+         "severity": body.severity, "detection_source": body.detection_source},
+        body.venture_id,
+    )
+    return {"incident_id": str(incident_id)}
+
+
+@app.get("/api/incidents/{incident_id}")
+async def incident_detail(incident_id: uuid.UUID, conn: DB, _me: ME) -> dict[str, Any]:
+    """One incident: the detection, and every account appended since."""
+    found = await incidents.detail(conn, incident_id)
+    if found is None:
+        raise HTTPException(status_code=404, detail="no such incident")
+    return {"as_of": datetime.now(UTC).isoformat(), **found}
+
+
+class AccountRequest(BaseModel):
+    stage: str
+    account: str = Field(min_length=1)
+
+
+@app.post("/api/incidents/{incident_id}/accounts", status_code=201)
+async def append_incident_account(
+    incident_id: uuid.UUID, body: AccountRequest, conn: DB, me: ME
+) -> dict[str, int]:
+    """Append one stage account to an incident's response.
+
+    The only write an incident detail page offers. There is no edit and no delete, here
+    or in the database: `incident_account` carries the same append-only trigger as the
+    other ledgers, because a response timeline that can be tidied afterwards is a draft
+    of what somebody wishes had happened.
+    """
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT venture_id FROM incident WHERE incident_id = %s", (incident_id,)
+        )
+        row = await cur.fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="no such incident")
+    humans.authorize(
+        me, required_role="venture_operator", venture_id=row["venture_id"]
+    )
+
+    try:
+        account_id = await incidents.append_account(
+            conn, incident_id=incident_id, stage=body.stage,
+            account=body.account, written_by=me.human_id,
+        )
+    except incidents.IncidentError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await _audit_human_action(
+        me, "console_incident_account_appended",
+        {"incident_id": str(incident_id), "stage": body.stage},
+        row["venture_id"],
+    )
+    return {"account_id": account_id}
+
+
 @app.post("/api/incidents/{incident_id}/resolve", status_code=201)
 async def resolve_incident(
     incident_id: uuid.UUID, body: ResolveIncidentRequest, conn: DB, me: ME
@@ -1967,9 +2955,9 @@ async def compliance_overview(conn: DB, _me: ME) -> dict[str, Any]:
     scorecard assembled from separate calls can show "0 of 5 ventures" beside a list of
     six, and the reader has no way to tell which is wrong.
 
-    **No denominator is hardcoded.** The master prompt describes a Village of 106 agents
+    **No denominator is hardcoded.** The Village currently has 186 agents
     and a portfolio of several ventures; The Office knows about the agents and ventures
-    that have actually reached it. Reporting "0 of 106" against a roster of seven would
+    that have actually reached it. Reporting "0 of 186" against a roster of seven would
     invent a denominator, on the page whose own copy insists on real ones - so the
     counts are what this database can support, and the roster gap is reported as its own
     fact.
@@ -2437,5 +3425,205 @@ async def set_venture_lifecycle(
         {"slug": slug, "state": body.state, "reason": body.reason}, slug,
     )
     return {"slug": slug, "state": body.state}
+
+# ====================================================== write: pack directory
+
+class DraftPackRequest(BaseModel):
+    yaml_source: str = Field(min_length=1)
+    pack_version: str = "0.1.0"
+
+
+@app.post("/api/packs/draft", status_code=201)
+async def save_draft(body: DraftPackRequest, conn: DB, me: ME) -> dict[str, Any]:
+    """Store a Pack as a draft. Drafts cannot provision.
+
+    Not by a check - by construction. `packs.live` never returns a draft, so Gate 1
+    cannot find one and nothing downstream can generate from it.
+
+    The response carries the validator report, because a draft that has not been
+    validated is the state this page exists to make impossible to mistake for a
+    working one.
+    """
+    try:
+        parsed = packs.parse_only(body.yaml_source)
+    except packs.PackStoreError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    humans.authorize(me, required_role="venture_operator", venture_id=parsed.venture_id)
+
+    live = await packs.live(conn, parsed.venture_id)
+    stored = await packs.store(
+        conn, yaml_source=body.yaml_source, pack_version=body.pack_version,
+        authored_by=me.human_id, publish=False,
+    )
+    report = await validate_pack(parsed, conn)
+
+    await _audit_human_action(
+        me, "console_pack_draft_saved",
+        {"pack_version": stored.pack_version, "content_hash": stored.content_hash,
+         "failing_rules": [r.rule_id for r in report.failures]},
+        stored.venture_id,
+    )
+    return {
+        "venture_id": stored.venture_id,
+        "pack_version": stored.pack_version,
+        "content_hash": stored.content_hash,
+        "has_live_pack": live is not None,
+        "validation": {
+            "failures": _rule_rows(report),
+            "failing": [r.rule_id for r in report.failures],
+            "rules_checked": len(report.results),
+        },
+        "note": (
+            "Saved as a draft. A draft cannot provision: `packs.live` does not return "
+            "it, so Gate 1 cannot find it."
+            + (
+                " This venture already has a live Pack; publishing this draft will "
+                "supersede it."
+                if live is not None else ""
+            )
+        ),
+    }
+
+
+@app.post("/api/packs/{venture_id}/publish")
+async def publish_pack_draft(
+    venture_id: str, conn: DB, me: ME
+) -> dict[str, Any]:
+    """Promote the draft to live.
+
+    Publishing does not start a run, and does not require a clean report - Gate 2
+    refuses a failing Pack in the run, where refusing means something. What it does do
+    is change what the next run provisions, and void every Gate 10 signature taken
+    against the artifacts the previous version generated.
+    """
+    humans.authorize(me, required_role="venture_operator", venture_id=venture_id)
+    try:
+        stored = await packs.publish_draft(
+            conn, venture_id, published_by=me.human_id
+        )
+    except packs.PackStoreError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await _audit_human_action(
+        me, "console_pack_published",
+        {"pack_version": stored.pack_version, "content_hash": stored.content_hash},
+        venture_id,
+    )
+    return {
+        "venture_id": stored.venture_id,
+        "pack_version": stored.pack_version,
+        "content_hash": stored.content_hash,
+        "note": (
+            "Live. Any Gate 10 signature taken against the previous version's artifacts "
+            "is now void by comparison - nothing revoked it, it stopped matching."
+        ),
+    }
+
+class RosterEntry(BaseModel):
+    village_agent_ref: str = Field(min_length=1)
+    agent_name: str = Field(min_length=1)
+    department: str = Field(min_length=1)
+
+
+class RosterRequest(BaseModel):
+    agents: list[RosterEntry]
+
+
+@app.post("/api/agents/roster/preview")
+async def preview_roster(
+    body: RosterRequest, conn: DB, _me: ME
+) -> dict[str, Any]:
+    """What importing this roster would change. **Writes nothing.**
+
+    Separate from applying it because an import can remove agents, and an agent that
+    leaves the Village holding grants is a revocation somebody has to perform rather
+    than a row that quietly disappears.
+    """
+    try:
+        parsed = roster.parse_roster(
+            [entry.model_dump() for entry in body.agents],
+            known_departments=await departments.names(),
+        )
+        return await roster.diff(conn, parsed)
+    except roster.RosterError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/agents/roster")
+async def import_roster(
+    body: RosterRequest, conn: DB, me: ME
+) -> dict[str, Any]:
+    """Apply a roster the operator has already seen a diff for."""
+    try:
+        parsed = roster.parse_roster(
+            [entry.model_dump() for entry in body.agents],
+            known_departments=await departments.names(),
+        )
+        return await roster.apply(conn, parsed, human=me)
+    except roster.RosterError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+class IdentityRequest(BaseModel):
+    village_agent_refs: list[str] = Field(min_length=1)
+
+
+@app.post("/api/agents/identities", status_code=201)
+async def issue_identities(
+    body: IdentityRequest, conn: DB, me: ME
+) -> dict[str, Any]:
+    """Make Village agents appointable.
+
+    Not a create. The agents already exist; this records that The Office recognises
+    them. Refused for an agent the roster has never reported - an identity for somebody
+    the Village has not mentioned is The Office inventing a colleague.
+    """
+    issued: list[dict[str, str]] = []
+    refused: list[dict[str, str]] = []
+
+    for ref in body.village_agent_refs:
+        try:
+            office_agent_id = await roster.issue_identity(conn, ref, human=me)
+            issued.append(
+                {"village_agent_ref": ref, "office_agent_id": str(office_agent_id)}
+            )
+        except roster.RosterError as exc:
+            # One refusal does not abandon the rest: a bulk issue over a department
+            # where one agent already has an identity should do the other eleven.
+            refused.append({"village_agent_ref": ref, "reason": str(exc)})
+
+    return {"issued": issued, "refused": refused}
+
+
+class RegisterAgentRequest(BaseModel):
+    village_agent_ref: str = Field(min_length=1)
+    agent_name: str = Field(min_length=1)
+    department: str = Field(min_length=1)
+
+
+@app.post("/api/agents/village", status_code=201)
+async def register_village_agent(
+    body: RegisterAgentRequest, conn: DB, me: ME
+) -> dict[str, str]:
+    """Record a Village agent an import cannot see.
+
+    Named for what it does. "Add agent" would imply The Office creates agents, which it
+    does not, and the control would become a second source of truth for who exists.
+    `village_agent_ref` is required: without it there is nothing for a later import to
+    reconcile against, and the row becomes an orphan no roster can confirm or retire.
+    """
+    try:
+        await roster.register_village_agent(
+            conn,
+            village_agent_ref=body.village_agent_ref,
+            agent_name=body.agent_name,
+            department=body.department,
+            human=me,
+        )
+    except roster.RosterError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"status": "registered", "village_agent_ref": body.village_agent_ref}
+
 
 __all__ = ["NotAuthorized", "app"]

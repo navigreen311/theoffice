@@ -4,6 +4,7 @@
 #   ./scripts/dev-up.sh                  # seed if needed, start both servers, print a token
 #   ./scripts/dev-up.sh --no-build       # reuse an existing .next
 #   ./scripts/dev-up.sh --stop           # stop what it started
+#   ./scripts/dev-up.sh --new-token      # reissue the operator token as well
 #
 # This exists because the test suite empties the database. Its fixtures delete
 # `office_human`, the Forge registry and every venture-scoped table, which is correct -
@@ -30,6 +31,7 @@ for arg in "$@"; do
   case "$arg" in
     --no-build) BUILD=0 ;;
     --stop)     STOP=1 ;;
+    --new-token) NEW_TOKEN=1 ;;
     *) echo "unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -137,17 +139,25 @@ asyncio.run(main())
 PY
 
 step "Operator"
-# Bootstrap when there is nobody, reissue when there is. Reissuing rather than failing
-# is the point: the token cannot be recovered, so "already exists" would otherwise mean
-# "you are locked out of your own dev instance".
-TOKEN="$("$VPY" - "$OPERATOR_NAME" "$OPERATOR_EMAIL" <<'PY' | tail -1
+# Bootstrap when there is nobody. **Do not** reissue when there is, unless asked.
+#
+# This used to reissue on every run, which made restarting the servers and revoking the
+# operator's token the same act. Restarting is something you do constantly - after a
+# rebuild, after a migration, in the middle of debugging something else - and every one
+# of those silently locked the person using the console out of it. The token survives a
+# restart perfectly well; nothing about bringing servers up requires a new one.
+#
+# `--new-token` still reissues, because the token cannot be recovered - it is stored as a
+# hash and returned exactly once - so "already exists" must not mean "you are locked out
+# of your own dev instance". That is a thing you ask for, not a side effect.
+TOKEN="$("$VPY" - "$OPERATOR_NAME" "$OPERATOR_EMAIL" "${NEW_TOKEN:-0}" <<'PY' | tail -1
 import asyncio, sys
 sys.path.insert(0, ".")
 import broker  # noqa: F401
 from broker import audit, humans
 from broker.db import close_pool, connection
 
-name, email = sys.argv[1], sys.argv[2]
+name, email, reissue = sys.argv[1], sys.argv[2], sys.argv[3] == "1"
 
 
 async def main() -> None:
@@ -157,6 +167,14 @@ async def main() -> None:
                 "SELECT human_id FROM office_human WHERE email = %s", (email,)
             )
             row = await cur.fetchone()
+
+        if row is not None and not reissue:
+            # The existing token still works. Saying so is the whole point of the
+            # change: a restart that silently rotated it looked identical to one that
+            # did not, right up until the login screen refused.
+            print("KEEP")
+            await close_pool()
+            return
 
         if row is None:
             human_id, token = await humans.create_human(
@@ -189,7 +207,11 @@ asyncio.run(main())
 PY
 )"
 [ -n "$TOKEN" ] || die "could not issue a token"
-say "${OPERATOR_EMAIL} — token reissued"
+if [ "$TOKEN" = "KEEP" ]; then
+  say "${OPERATOR_EMAIL} — existing token still valid, not reissued"
+else
+  say "${OPERATOR_EMAIL} — token issued"
+fi
 
 step "Servers"
 kill_port "$API_PORT"
@@ -234,7 +256,20 @@ say "console on $CONSOLE_PORT"
 
 step "Sign in"
 printf '  http://localhost:%s\n' "$CONSOLE_PORT"
-printf '  %s\n' "$TOKEN"
-printf '\n  Shown once. Re-run this script to get a new one.\n'
+if [ "$TOKEN" = "KEEP" ]; then
+  printf '  Your existing token still works - this run did not change it.
+'
+  printf '
+  Need a new one: ./scripts/dev-up.sh --new-token
+'
+else
+  printf '  %s
+' "$TOKEN"
+  printf '
+  Shown once, and not recoverable - it is stored as a hash.
+'
+  printf '  Restarting does not change it; --new-token does.
+'
+fi
 printf '  Use localhost, not 127.0.0.1: the cookie is scoped to the host you sign in on.\n'
 printf '  Stop with: ./scripts/dev-up.sh --stop\n'
