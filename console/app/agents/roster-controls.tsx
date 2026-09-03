@@ -306,7 +306,7 @@ export function IssueIdentities({
       <Submit
         label={
           department
-            ? `Issue identities for all ${eligible.length} in ${department.department}`
+            ? `Issue identities for all ${eligible.length} in ${department.label}`
             : `Issue ${eligible.length} identit${eligible.length === 1 ? "y" : "ies"}`
         }
         busy="Issuing…"

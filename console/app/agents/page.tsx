@@ -317,7 +317,7 @@ export default async function AgentsPage({
           <ul className="mt-3 grid gap-1 sm:grid-cols-2">
             {emptyDepartments.map((group) => (
               <li key={group.department} className="text-desc text-ink-secondary">
-                {group.department}
+                {group.label}
                 <span className="text-ink-muted">
                   {group.in_roster
                     ? ` — ${group.in_roster} in the Village roster, none appointed`
