@@ -250,6 +250,79 @@ async def test_a_certified_result_must_record_its_basis(registered_forge, seed_a
             )
 
 
+
+# ------------------------------------------------- a bootstrap says it is one
+
+async def test_a_bootstrap_certification_does_not_claim_simforge_ran(
+    registered_forge, seed_agent, admin
+):
+    """`simforge_verdict` means SimForge said so. Nothing else may write it.
+
+    Until 3 September 2026 a bootstrap had no way to record itself: `verdict` went
+    straight into that column, so both Phase 0.8 rows claimed `PASS` against no
+    scenario run. The column a reader trusts most was the one that lied.
+    """
+    forge_id, module_id = registered_forge
+    async with connection() as conn:
+        state = await certification.record_result(
+            conn, unit="A", forge_id=forge_id, module_id=module_id,
+            office_agent_id=seed_agent, verdict="PASS", rubric_version="bootstrap",
+            certified_tier="auto_execute",
+            instruction_content_hash="a" * 64, forge_api_version="1.0.0",
+            attested_by="bootstrap",
+            bootstrap_reason="proving the bridge before a scenario pack existed",
+        )
+
+    # The certification is real - it grants - and it does not claim to be earned.
+    assert state.state == certification.CERTIFIED
+
+    with admin.cursor() as cur:
+        cur.execute(
+            "SELECT simforge_verdict, scenario_pack_ref FROM certification "
+            "WHERE unit = 'A' AND forge_id = %s AND module_id = %s",
+            (forge_id, module_id),
+        )
+        verdict, pack_ref = cur.fetchone()
+
+    assert verdict is None, "a bootstrap must not claim SimForge returned a verdict"
+    assert pack_ref.startswith("NO SCENARIO RUN - ")
+    assert "proving the bridge" in pack_ref
+
+
+async def test_a_bootstrap_must_say_why_it_exists(registered_forge, seed_agent):
+    """The reason is the only thing a later reader has to judge it by."""
+    forge_id, module_id = registered_forge
+    async with connection() as conn:
+        with pytest.raises(CertificationError):
+            await certification.record_result(
+                conn, unit="A", forge_id=forge_id, module_id=module_id,
+                office_agent_id=seed_agent, verdict="PASS", rubric_version="bootstrap",
+                certified_tier="auto_execute",
+                instruction_content_hash="a" * 64, forge_api_version="1.0.0",
+                attested_by="bootstrap",
+            )
+
+
+async def test_a_real_verdict_still_records_one(registered_forge, seed_agent, admin):
+    """The default path is unchanged: SimForge's verdict lands in its column."""
+    forge_id, module_id = registered_forge
+    async with connection() as conn:
+        await certification.record_result(
+            conn, unit="A", forge_id=forge_id, module_id=module_id,
+            office_agent_id=seed_agent, verdict="PASS", rubric_version="1.0.0",
+            certified_tier="auto_execute",
+            instruction_content_hash="b" * 64, forge_api_version="1.0.0",
+            scenario_pack_ref="pack-7",
+        )
+
+    with admin.cursor() as cur:
+        cur.execute(
+            "SELECT simforge_verdict, scenario_pack_ref FROM certification "
+            "WHERE unit = 'A' AND forge_id = %s AND module_id = %s",
+            (forge_id, module_id),
+        )
+        assert cur.fetchone() == ("PASS", "pack-7")
+
 # ------------------------------------------------- assignability, end to end
 
 async def test_both_units_certified_makes_the_agent_assignable(

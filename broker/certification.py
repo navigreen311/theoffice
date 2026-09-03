@@ -169,13 +169,48 @@ async def record_result(
     score: float | None = None,
     threshold: float | None = None,
     scenario_pack_ref: str | None = None,
+    attested_by: str = "simforge",
+    bootstrap_reason: str | None = None,
 ) -> CertState:
     """Record a SimForge verdict as a certification state.
 
     Upserts on the unit's natural key, so a re-certification replaces the prior
     verdict rather than accumulating rows that a reader would have to order
     correctly to interpret.
+
+    `attested_by="bootstrap"` records a certification NO SIMFORGE RUN PRODUCED.
+
+    Until 3 September 2026 that was not expressible: `verdict` was written
+    straight into `simforge_verdict`, so a bootstrap had to claim SimForge passed
+    it. Both Phase 0.8 grants carried `simforge_verdict = 'PASS'` against no
+    scenario run at all - a false statement in the one column that exists to say
+    whether SimForge ran, which is the column a reader trusts most.
+
+    A bootstrap now writes `simforge_verdict = NULL` and must give a reason. That
+    makes the query structural rather than a naming convention:
+
+        SELECT * FROM certification WHERE simforge_verdict IS NULL
+
+    is every certification nobody earned, and it cannot be defeated by choosing a
+    different `rubric_version`. `state` is still derived from `verdict`, because a
+    bootstrap that could not say whether it was granting or withholding would be
+    unreadable - what changes is that the row no longer claims SimForge said so.
     """
+    if attested_by not in ("simforge", "bootstrap"):
+        raise CertificationError(
+            f"attested_by must be 'simforge' or 'bootstrap', not {attested_by!r}"
+        )
+    if attested_by == "bootstrap" and not bootstrap_reason:
+        raise CertificationError(
+            "a bootstrap certification must say why it exists. It is a grant issued "
+            "against no scenario run, and the reason is the only thing a later reader "
+            "has to judge whether it should still be standing."
+        )
+    if attested_by == "simforge" and bootstrap_reason:
+        raise CertificationError(
+            "bootstrap_reason is meaningless on a real SimForge verdict"
+        )
+
     state = state_for_verdict(verdict)
     rubric_kind = "operation" if unit == "A" else "domain"
 
@@ -233,8 +268,18 @@ async def record_result(
             (
                 uuid.uuid4(), unit, office_agent_id, department, forge_id, module_id,
                 state, certified_tier, instruction_content_hash, forge_api_version,
-                rubric_kind, rubric_version, score, threshold, scenario_pack_ref,
-                verdict,
+                rubric_kind, rubric_version, score, threshold,
+                # The reason travels in scenario_pack_ref, which is where a reader
+                # looks for what the verdict was earned against. On a bootstrap
+                # there is no pack, and saying so is more use than a null.
+                (
+                    f"NO SCENARIO RUN - {bootstrap_reason}"
+                    if attested_by == "bootstrap"
+                    else scenario_pack_ref
+                ),
+                # NULL on a bootstrap. See the docstring: this column means
+                # SimForge said so, and nothing else may write into it.
+                None if attested_by == "bootstrap" else verdict,
             ),
         )
         row = await cur.fetchone()

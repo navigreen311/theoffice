@@ -1,7 +1,8 @@
 # FORGE OPERATING INSTRUCTION
 
-**Forge:** CapitalForge  **Module:** `consent_grant`  **Endpoint:** `POST /api/businesses/:id/consent`
-**Version:** 1.1 — updated 1 September 2026, against CapitalForge `1d6c7c8`
+**Forge:** CapitalForge  **Module:** `record_consent`  **Endpoint:** `POST /api/businesses/:id/consent`
+**Version:** 1.2 — renamed 3 September 2026, against CapitalForge `1d6c7c8`
+**Renamed at 1.2:** the module id was `consent_grant` in 1.1. `record_consent` is what the Burkham Pack declares and what the adapter now dispatches. See Appendix B.
 **Status:** draft, pending Compliance Review Board
 
 > Authored by Ivan. Stored here as the source text; it becomes an enforced
@@ -220,3 +221,50 @@ dashboards (`dashboard-action-queue`, `dashboard-nav-counts`) *query* for expire
 consents, so there are two surfaces that will show an empty list forever. Not a
 defect in this module, and worth knowing before somebody reads that empty list as
 "no consent has expired" rather than "nothing can expire".
+
+## APPENDIX B — THE NAME, AND THE ENDPOINT THAT IS NOT IN THIS MODULE
+*3 September 2026*
+
+### The rename
+
+This manual was written at 1.1 as `consent_grant`. The Burkham Pack declares
+`record_consent`, and the CapitalForge adapter dispatches under that name, so
+this manual is what changed.
+
+The adapter's dispatch keys are the spelling of record for a Forge: the registry
+row, the Pack's `modules_expected` and the exclusion list all have to use them or
+they do not resolve. Renaming the module would therefore have edited three
+artifacts to fix nothing, since the Pack's name was already workable. A name
+changes when the name is the problem.
+
+**It is not always the manual that gives way.** `client_lookup` in the same Pack
+became `client_read`, `client_read_pii` and `client_read_credit` — there the name
+*was* the problem, because one id cannot address three grants carrying three
+different permission sets.
+
+### The re-consent email is not in this module, and is not a module
+
+`POST /api/clients/:clientId/consent/request` sends a client an email asking them
+to re-consent. **It exists, it works, and no agent can reach it.**
+
+It is a different act from what this module does. This module records that
+consent was given; that endpoint contacts a person. A single grant covering both
+would let an agent authorised to file a consent record send mail to a client
+instead — and the client would receive it believing a human at the firm decided
+to write.
+
+**It is deliberately not a separate module either**, which was the first answer
+and the wrong one. A module id exists so that something can be granted. Nobody
+has decided an agent may send this mail, so giving it an id would create a
+registry row, a manual and a grantable surface for an act with no decision behind
+it. The absence is the decision.
+
+**What keeps it out** is not the name but the binding: this module binds one
+operation and that operation is the write to the consent table. There is no view
+that reaches the email, and the adapter's test suite exercises every operation on
+every module and asserts that none of them builds that path.
+
+**If it is ever granted**, it gets its own id, its own manual, and its own
+decision recorded first — in that order. Until then an agent that needs a client
+re-contacted says so and a person does it.
+

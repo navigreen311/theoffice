@@ -1,23 +1,45 @@
-"""Every bound module has an operating instruction, and every instruction a module.
+"""Every bound module has an operating instruction. The manuals are the to-do list.
 
     .venv/Scripts/python scripts/check_module_manuals.py               # every Forge
     .venv/Scripts/python scripts/check_module_manuals.py capitalforge  # one
 
-Exits 1 on a mismatch. Two kinds, and they mean opposite things:
+Two mismatches, and only one of them is a failure. That asymmetry is the whole
+design, so it is stated before anything else.
 
-    BOUND WITHOUT A MANUAL
-        A Forge dispatches a module nobody has written down. An agent granted it has
+    BOUND WITHOUT A MANUAL          -> FAIL
+        The Forge dispatches a module nobody has written down. An agent granted it has
         no instruction to be certified against, and Unit A certification is earned
         against an instruction's content hash - so the grant is either unissuable or
         was issued against nothing.
 
-    A MANUAL WITHOUT A MODULE
-        An instruction describes something the Forge does not dispatch. Either the
-        module was never built, or it was renamed and the manual still names the old
-        spelling. Both produce the same failure at the far end: V11 resolves the
-        modules a Pack's curriculum teaches against the manifest, and a manual for a
-        name that does not resolve teaches an agent to call something that is not
-        there.
+    A MANUAL WITHOUT A MODULE       -> TODO, reported and not failed
+        An instruction exists for something the adapter does not dispatch yet. That is
+        a description of work outstanding, not a defect in the Forge.
+
+WHY THE SECOND ONE IS NOT A FAILURE
+===================================
+
+    Because of what happens if it is. A failing check pushes whoever hits it towards
+    the cheapest way to make it pass, and the cheapest way is to register the name -
+    a module id, a registry row, a manifest entry, all resolving, with nothing behind
+    them.
+
+    That is `lender_match`. The Burkham Pack declares it at criticality:hard and a
+    role's `forge_modules_operated` names it, and CapitalForge has no lender matching
+    - it matches to card issuers. A Pack, a role and a registry row all agreeing about
+    a capability that does not exist, because each one was made consistent with the
+    last.
+
+    `_modules` reports what the adapter dispatches. Nothing may enter it to satisfy a
+    check. So a manual with no module is information: the manual set is the to-do list
+    for the adapter, and this prints how much of it is done.
+
+    THIS ALREADY HAPPENED HERE. Two evidence manuals were reported unbound and both
+    were then bound - correctly, as it turned out, because both had real endpoints
+    behind them. But the check was what applied the pressure, and it would have applied
+    exactly the same pressure to a name with nothing behind it. Exercising all sixteen
+    operations against a running server is what established the difference, and this
+    check cannot do that.
 
 WHY IT ASKS THE FORGE RATHER THAN THE REGISTRY
 ==============================================
@@ -28,21 +50,22 @@ WHY IT ASKS THE FORGE RATHER THAN THE REGISTRY
     registry would compare two documents.
 
     It is a real conformance check for the same reason and with the same limit: it
-    proves a manual exists for a bound name. It does not read the manual, so it cannot
-    tell you the manual is accurate, current, or about the right endpoints. A manual
-    that describes thirteen endpoints for a module that now has six passes this.
+    proves a manual exists for a bound name. It does not read the manual and it does
+    not call the module, so it cannot tell you the manual is accurate, that the handler
+    works, or that it does what the name says. A manual describing thirteen endpoints
+    for a module that now has six passes this.
 
 WHAT `manual` IN THE MANIFEST IS, AND IS NOT
 ============================================
 
     An adapter may state a `manual` per module. That is a declaration - the adapter's
     word - and this checks it rather than trusting it: the named file must exist and
-    must declare that module id in its own header.
+    must declare that module id in its own header. A manual named by the manifest that
+    does not exist IS a failure, because that is the adapter making a false statement
+    about itself.
 
     Where an adapter states no manual, the check falls back to matching on the module
-    id declared inside each manual. That is weaker (a manual could name a module id it
-    is not really about) but it is the only thing available, and it still catches both
-    mismatch directions.
+    id declared inside each manual. Weaker, and still catches the failing direction.
 
 NOT_RUN IS NOT A PASS
 =====================
@@ -153,16 +176,27 @@ async def run(only: str | None) -> int:
                 )
                 exit_code = 1
 
-            for module_id in sorted(set(declared) - bound):
+            # Reported, never failed. See the module docstring: a failure here
+            # would be satisfied by registering the name, and a name registered to
+            # satisfy a check is what lender_match is.
+            outstanding = sorted(set(declared) - bound)
+            for module_id in outstanding:
                 print(
-                    f"  FAIL {module_id}: {declared[module_id]} describes it, "
-                    f"{forge_id} does not dispatch it. Either it was never built or "
-                    "the manual names a spelling the adapter no longer uses."
+                    f"  TODO {module_id}: {declared[module_id]} describes it, "
+                    f"{forge_id} does not dispatch it yet. Not a failure - do not "
+                    "register the name to clear this line."
                 )
-                exit_code = 1
 
-            if bound == set(declared) and not exit_code:
-                print("  OK  every bound module has a manual and every manual a module")
+            if outstanding:
+                done = len(bound & set(declared))
+                print(
+                    f"  {done} of {len(declared)} manual(s) bound. {len(outstanding)} outstanding."
+                )
+
+            if not exit_code and not outstanding:
+                print("  OK  every bound module has a manual, and every manual is bound")
+            elif not exit_code:
+                print("  OK  every bound module has a manual")
 
     if asked == 0:
         print("NOT_RUN: no Forge could be asked. This proves nothing.")

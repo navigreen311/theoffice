@@ -9,6 +9,80 @@ Phase 2 makes certification mean something.
 
 ---
 
+# ⚠ CAPITALFORGE IS CERTIFIED BY BOOTSTRAP, NOT BY SIMFORGE
+
+**Every CapitalForge certification in the database today was written by a script,
+not earned against a scenario run.** They exist for one reason: the bridge could
+not be proved to work without a grant, and a grant cannot be issued without a
+certification.
+
+They are marked structurally, not by convention: `simforge_verdict IS NULL`, and
+`scenario_pack_ref` begins `NO SCENARIO RUN -` followed by why.
+
+**That was not true until 3 September 2026, and the correction matters more than
+the constraint.** `record_result` wrote its `verdict` argument straight into
+`simforge_verdict`, so a bootstrap had no way to record itself except by claiming
+SimForge passed it. Both Phase 0.8 cre-forge rows carried `simforge_verdict =
+'PASS'` against no scenario run at all — a false statement in the single column
+that exists to say whether SimForge ran, which is the column a reader trusts
+most. `attested_by="bootstrap"` now writes NULL there and requires a reason, and
+a real verdict is the only thing that can put a value in that column.
+
+**This is at the top of this document rather than in "Known gaps" because a
+certification that was asserted looks exactly like one that was earned.** Both
+are rows with `verdict = 'PASS'`. Nothing downstream can tell them apart, and the
+gate ladder will not stop a call made under one.
+
+## The constraint
+
+**No agent serves a Burkham Wickmont client through CapitalForge until a real
+SimForge verdict exists for the module it is calling.**
+
+Not a preference and not a footnote. The whole point of Unit A is that an agent
+was tested against the instruction it is about to follow — that is what binds a
+certification to a `content_hash`, and it is the reason the gate is not a
+non-null check on a free-text column any more. A bootstrap certification restores
+exactly the property Phase 2 was built to remove.
+
+## Why it was done anyway
+
+Holding the bridge for SimForge means proving nothing while SimForge is built.
+The alternative to a bootstrapped grant was no call at all, and therefore no
+evidence that the adapter, the manifest, the credential, the tenant mapping or
+the ledger join work — five things that were all untested and are now all proved.
+
+Finding out that the trace header was read under the wrong name is worth more
+than a certification record that is honest about being absent.
+
+## What has to happen, and when
+
+**This is the next item after the bridge works, not something to schedule later.**
+
+1. SimForge runs a scenario pack against each bound CapitalForge module.
+2. `certification.record_result` writes Unit A and Unit B from those verdicts,
+   against the live instruction's real `content_hash`.
+3. The bootstrap certifications are superseded — not deleted, so the record shows
+   what was relied on and for how long.
+4. Only then does a Burkham agent touch a real client.
+
+## How to find them
+
+```sql
+SELECT forge_id, unit, module_id, state, scenario_pack_ref
+FROM certification
+WHERE simforge_verdict IS NULL;
+```
+
+Every certification nobody earned, across every Forge. Structural rather than a
+naming convention, so it cannot be defeated by choosing a different
+`rubric_version`.
+
+**If that query returns a row for a module a Burkham agent is calling against a
+real client, the constraint above has been broken.** It returns rows for
+cre-forge too — Phase 0.8's own bootstrap, now marked honestly.
+
+---
+
 ## Forge Operating Instructions (Part 6.1)
 
 Not documentation. This is the curriculum agents are educated on and the thing SimForge

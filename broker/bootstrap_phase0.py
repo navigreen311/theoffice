@@ -254,7 +254,16 @@ async def apply(
         verdict="PASS", rubric_version=BOOTSTRAP, certified_tier=TIER,
         instruction_content_hash=instruction_hash,
         forge_api_version=forge["api_version"],
-        scenario_pack_ref=f"{BOOTSTRAP}:bootstrap",
+        # Not a SimForge verdict, and it no longer says it is. These two rows
+        # carried `simforge_verdict = 'PASS'` against no scenario run until
+        # 3 September 2026, which was a false statement in the column that exists
+        # to record whether SimForge ran.
+        attested_by="bootstrap",
+        bootstrap_reason=(
+            "Phase 0.8. Issued outside the provisioning ladder so the first real "
+            "brokered call could be made. No SimForge scenario pack existed for "
+            "cre-forge when this was written."
+        ),
     )
 
     # 3. Unit A - this agent is certified for this module.
@@ -264,7 +273,16 @@ async def apply(
         verdict="PASS", rubric_version=BOOTSTRAP, certified_tier=TIER,
         instruction_content_hash=instruction_hash,
         forge_api_version=forge["api_version"],
-        scenario_pack_ref=f"{BOOTSTRAP}:bootstrap",
+        # Not a SimForge verdict, and it no longer says it is. These two rows
+        # carried `simforge_verdict = 'PASS'` against no scenario run until
+        # 3 September 2026, which was a false statement in the column that exists
+        # to record whether SimForge ran.
+        attested_by="bootstrap",
+        bootstrap_reason=(
+            "Phase 0.8. Issued outside the provisioning ladder so the first real "
+            "brokered call could be made. No SimForge scenario pack existed for "
+            "cre-forge when this was written."
+        ),
     )
 
     # 4. The grant, activated, carrying both certification ids. `is_assignable` is a
