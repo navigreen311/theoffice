@@ -1,7 +1,8 @@
 # FORGE OPERATING INSTRUCTION
 
 **Forge:** CapitalForge  **Module:** `record_consent`  **Endpoint:** `POST /api/businesses/:id/consent`
-**Version:** 1.2 — renamed 3 September 2026, against CapitalForge `1d6c7c8`
+**Version:** 1.3 — corrected 3 September 2026, against CapitalForge `1d6c7c8`
+**Corrected at 1.3:** the read-back prohibition moved from §5 to §7, where a prohibition belongs — see Appendix C.
 **Renamed at 1.2:** the module id was `consent_grant` in 1.1. `record_consent` is what the Burkham Pack declares and what the adapter now dispatches. See Appendix B.
 **Status:** draft, pending Compliance Review Board
 
@@ -93,7 +94,6 @@ A 404 is deliberately ambiguous. "Does not exist" and "belongs to another tenant
 
 A 201 means **recorded** and nothing else. Not that the consent is valid, not that the reference resolves, not that anyone may now be contacted. Report it in those words.
 
-**Do not read the record back to verify.** An agent that fetches the row has confirmed a row exists, which it already knew. There is nothing honest to verify against, and the check is theatre.
 
 ## 6. RETRY VS ESCALATE
 
@@ -124,6 +124,8 @@ A human checks whether the row exists and either records it or moves on. Five mi
 **Never re-record to refresh.** Consent that looks stale is a question for a human about whether new consent is needed, not a new row with today's date pointing at an old artifact.
 
 **Never retry a timeout.** Escalate.
+
+**Never read the record back to verify it.** An agent that fetches the row has confirmed a row exists, which it already knew. There is nothing honest to verify against, and the check is theatre.
 
 **Never treat a 201 as permission to contact.**
 
@@ -268,3 +270,17 @@ every module and asserts that none of them builds that path.
 decision recorded first — in that order. Until then an agent that needs a client
 re-contacted says so and a person does it.
 
+## APPENDIX C — §5 CORRECTED AT 1.3, 3 September 2026
+
+**What changed.** "Do not read the record back to verify" was in §5, WHAT FAILURE
+LOOKS LIKE. It is a prohibition, not a failure signature — nothing about it
+describes what a failure looks like — and it now sits in §7 with the other nevers.
+
+**Why it was found.** This module is being authored into
+`forge_operating_instruction`, where §5 becomes `failure_signatures` and §7 becomes
+`never_do`. Mapping the sections onto the eight fields is what surfaced a sentence
+sitting under the wrong heading — the value of a schema being that things have to
+go somewhere specific.
+
+**Nothing was added or reworded.** The sentence is unchanged and it is still in the
+manual. Only the section changed.

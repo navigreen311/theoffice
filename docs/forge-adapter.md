@@ -142,6 +142,27 @@ Fifteen of seventeen were correct. That ratio is the argument: an adapter writte
 carefully from the route definitions is *mostly* right, which is precisely what makes
 the remainder hard to find by reading.
 
+**A related one that calling does NOT catch: a registry value that resolves and is
+wrong.**
+
+`forge_module_registry.compliance_flags_implied` on `record_consent` was written as
+`per_connection_authorization_required`. That flag exists, resolves against the
+Pack, and passes every check there is. It is also GLBA — `compliance/glba-plaid-connection-v1`,
+a **bank account** connection. `record_consent` records consent to be contacted by
+email, SMS or voice. The value was chosen by matching on the word "connection", and
+it put a bank-data coupling on a communications-consent module.
+
+Calling the module does not find this: the module works. The verifier does not find
+it either — `verify_forge_modules.py` checks that a row resolves against the
+adapter, not that its *values* are the right ones, and a flag that exists is a flag
+that resolves.
+
+**Nothing in this system checks that a compliance flag is the correct flag.** It was
+found by reading the Pack's `compliance_surface` to see which framework each flag
+belongs to. That is the check, and it is a human one: for every flag on a module,
+name the framework it comes from and say why this module implies it. If the sentence
+does not come out true, the flag is wrong.
+
 ---
 
 ## A fifth: a module that answers without doing the work

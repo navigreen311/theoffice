@@ -4,8 +4,9 @@
 **Module:** `client_read`
 **Endpoints:** 6 GETs under `/api/clients/:clientId` and `/api/v1/clients/:clientId`
 **Permission:** `business:read`
-**Version:** 1.5 — corrected 3 September 2026, against CapitalForge `fcc46ab`
+**Version:** 1.6 — corrected 3 September 2026, against CapitalForge `fcc46ab`
 **Correction at 1.5:** see Appendix C. A brokered call now leaves an access record, which §2 said did not exist.
+**Rewritten at 1.6:** §4 said "there is none" and then described a sequence underneath. It now states the sequence it was describing — see Appendix D.
 **Status:** draft, pending Compliance Review Board
 
 Read `foi-shared-rules.md` first. Sections 1, 2 and 3 govern most of what this module returns, and they are not repeated here.
@@ -53,9 +54,13 @@ No other input. Nothing here takes a query parameter.
 
 ## 4. THE CORRECT SEQUENCE
 
-There is none. The six are independent reads with no ordering requirement and no state between them.
+The six calls have no ordering requirement between them and no state to carry — any one can be made without any other. What has an order is what surrounds a read:
 
-What matters is what happens after. A read gathering context for a placement, a submission or a recommendation feeds a decision — and shared rule 1 governs everything the read returns from that point on.
+1. **Read.** One call, or several in any order.
+2. **Check every empty result for a declared basis before reporting it.** `/documents` and `/acknowledgments` carry one — `no_documents_on_record`, `no_acknowledgments_on_record`. A `complianceScore` computed from no checks is not a passing score; read `checks` before reporting the number. Shared rules 2 and 3.
+3. **Where the read is gathering context rather than answering a question, apply shared rule 1 to everything it returned.** An absence is a fact about the records, not about the world, and context becomes an input to a decision. Report an absence and let a human decide what it means; never act on one.
+
+Step 3 is the one that carries. Answering is bounded — fetch, report, stop. A read feeding a placement, a submission or a recommendation puts everything it returned, including what it did not find, into a decision somebody else will own.
 
 ## 5. WHAT FAILURE LOOKS LIKE
 
@@ -153,3 +158,23 @@ would not do — it is a record kept by the caller about itself.
 disclosed to the client, or that reading is logged anywhere the client can see.
 It is an internal access record.
 
+## APPENDIX D — §4 REWRITTEN AT 1.6, 3 September 2026
+
+**What changed.** §4 opened "There is none" and then spent a paragraph on what
+happens after a read. Both halves were true and the section taught the second one
+badly, because a reader looking for a sequence stopped at the first sentence.
+
+It now states three steps: read, check an empty result for its declared basis
+before reporting it, and — where the read is gathering context rather than
+answering — apply shared rule 1 to everything returned.
+
+**Why not "no ordering" as a one-item list.** This module is being authored into
+`forge_operating_instruction`, where `correct_sequence` is a list and
+`validate_sections` rejects an empty one. Writing `["There is no required
+ordering"]` would have satisfied the constraint by turning a stated absence into a
+step — the same move this manual set warns about everywhere else. The section had
+a real sequence in it; it was in the second paragraph rather than the first.
+
+**Nothing about the six endpoints changed.** They remain independent, unordered
+and stateless with respect to each other. What is ordered is the discipline around
+a read, not the reads.
