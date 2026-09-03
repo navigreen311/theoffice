@@ -4,7 +4,8 @@
 **Module:** `client_read`
 **Endpoints:** 6 GETs under `/api/clients/:clientId` and `/api/v1/clients/:clientId`
 **Permission:** `business:read`
-**Version:** 1.4 — drafted 2 September 2026, against CapitalForge `fcc46ab`
+**Version:** 1.5 — corrected 3 September 2026, against CapitalForge `fcc46ab`
+**Correction at 1.5:** see Appendix C. A brokered call now leaves an access record, which §2 said did not exist.
 **Status:** draft, pending Compliance Review Board
 
 Read `foi-shared-rules.md` first. Sections 1, 2 and 3 govern most of what this module returns, and they are not repeated here.
@@ -125,3 +126,30 @@ This is a property of this module, not of the URL prefix. It does not extend to 
 **The 404 carries two meanings across the router.** On this module both mean "no such client", so the ambiguity does not bite here — it bites on `client_read_pii`, where `ACH_AUTHORIZATION_NOT_FOUND` shares the status. Recorded here so the three manuals agree.
 
 **`client_reassign` is defined and not built.** `advisorId` and `status` were removed from the update surface on 2 September and no endpoint replaces them yet. `status` in particular needs transition rules before an endpoint exists.
+
+## APPENDIX C — CORRECTION AT 1.5, 3 September 2026
+
+**§2 said this module leaves no record, "including no record that the read
+happened". That is no longer true on the brokered path, and this states the
+difference.**
+
+Since the CapitalForge Office adapter was built, a call arriving through The
+Office writes one `ledger_events` row per call — `office.module.called`, keyed by
+the trace id The Office also records — whatever the module does. Reads included.
+
+**The module still writes nothing of its own.** No row it reads changes, nothing
+is sent, and a human's call through the UI behaves exactly as §2 describes. What
+the adapter writes is an access record about the brokered call, not a business
+event about the client, and it is not visible to anything that reads this
+module's output.
+
+It is written for reads deliberately. §2's original claim is a reasonable
+property for an endpoint a person clicks; it is the wrong property for an
+autonomous agent reading a client's file, where the side holding the file needs
+to be able to say who read what and when. The Office's `agent_call_ledger` alone
+would not do — it is a record kept by the caller about itself.
+
+**What has not changed:** an agent may still not infer from this that a read is
+disclosed to the client, or that reading is logged anywhere the client can see.
+It is an internal access record.
+
