@@ -251,7 +251,7 @@ positions_required:
       - Open the client file and capture the engagement agreement
       - Collect per-application, per-pull and per-connection authorizations
       - Answer client questions from approved scripts only
-    forge_modules_operated: [client_lookup, record_consent]
+    forge_modules_operated: [client_read, client_read_pii, record_consent]
     source_department: operations       # Burkham calls this "Concierge Desk"
     compliance_flags_in_scope:
       [per_application_authorization_required, per_pull_authorization_required,
@@ -304,7 +304,8 @@ positions_required:
       - Scan outbound client communications before send
       - Record compliance state transitions
       - Assemble evidence bundles for review
-    forge_modules_operated: [scan_communication, assemble_evidence]
+    forge_modules_operated:
+      [scan_communication, compliance_manifest_assemble, regulator_dossier_export]
     source_department: administration   # Burkham calls this "Compliance & Evidence"
     compliance_flags_in_scope:
       [client_interest_standard_required, own_claims_discipline_required,
@@ -352,10 +353,28 @@ forge_dependencies:
       #                    caller supplies and stamps the businessId on the answer.
       # They were declared at criticality:hard, so the Pack asserted the workflow could
       # not run without two modules that will never exist.
+      # RECONCILED AGAINST THE ADAPTER 2026-09-03. The adapter's dispatch keys are
+      # the spelling of record; where a Pack name and an adapter name disagree, the
+      # Pack changes. Two names became five:
+      #
+      #   client_lookup     -> client_read, client_read_pii, client_read_credit
+      #                        Split on 2 September by the boundary "regulated data
+      #                        about a natural person". Three grants, three
+      #                        permission sets; one id cannot address them.
+      #   assemble_evidence -> compliance_manifest_assemble, regulator_dossier_export
+      #                        Same permission and same reader, opposite blast radius:
+      #                        one mints nothing and retries freely, the other mints an
+      #                        exportId per call and is at_most_once.
+      #
+      # record_consent, submit_application, scan_communication and restack_recommend
+      # keep their names - the adapter dispatches those spellings unchanged. Renaming
+      # a workable name edits three artifacts to fix nothing.
       modules_expected:
-        [client_lookup, record_consent, statement_pull,
+        [client_read, client_read_pii, client_read_credit,
+         record_consent, statement_pull,
          lender_match, build_packet, submit_application, scan_communication,
-         assemble_evidence, portfolio_health, restack_recommend]
+         compliance_manifest_assemble, regulator_dossier_export,
+         portfolio_health, restack_recommend]
       compliance_flags_propagated:
         [per_application_authorization_required, per_pull_authorization_required,
          per_connection_authorization_required, client_interest_standard_required]
