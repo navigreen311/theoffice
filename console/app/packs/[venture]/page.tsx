@@ -12,6 +12,7 @@ import {
 
 import { PackEditor } from "../editor";
 import { VersionHistory } from "./history";
+import { runsPath } from "@/lib/runs";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +40,7 @@ export default async function PackEditorPage({
     [detail, runList] = await Promise.all([
       api.get<PackDetail>(`/api/packs/${encodeURIComponent(venture)}`),
       api.get<{ runs: RunSummary[]; excluded_fixtures: number }>(
-        `/api/provisioning/runs?venture_id=${encodeURIComponent(venture)}`,
+        runsPath(venture),
       ),
     ]);
   } catch (error) {

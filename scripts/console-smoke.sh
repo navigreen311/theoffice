@@ -239,8 +239,15 @@ if [ "$BUILD" -eq 1 ]; then
     || { tail -40 "$WORK/console-build.log" >&2; die "next build failed"; }
   say "built into $NEXT_DIST_DIR"
 fi
+# OFFICE_CONSOLE_SHOW_FIXTURE_RUNS: this script signs in as
+# smoke-<suffix>@example.invalid, which the run listing classifies as a test fixture
+# and filters out - correctly, because 104 of these runs made the console read as a
+# system stuck at gate 4. Without the flag the gate ladder below has nothing to draw
+# and every check on it fails against a page that is working. Nothing sets this in
+# production.
 (cd console && OFFICE_API_URL="http://127.0.0.1:$API_PORT" \
   NEXT_DIST_DIR="$NEXT_DIST_DIR" \
+  OFFICE_CONSOLE_SHOW_FIXTURE_RUNS=1 \
   npx next start -p "$CONSOLE_PORT" >"$WORK/console.log" 2>&1 &)
 if ! wait_for "http://127.0.0.1:$CONSOLE_PORT/login" "the console" "$WORK/console.log" 60; then
   die "the console did not start"
@@ -450,8 +457,12 @@ def call(path, payload=None):
 # {"runs": [...], "total": n, "excluded_fixtures": n}, and this loop went on iterating
 # the response. Iterating a dict yields its keys, so `r["status"]` was indexing a string:
 # `TypeError: string indices must be integers`.
+# include_fixtures: this script's own runs are fixture runs by the same rule, so
+# without it the lookup never finds the open run it left last time and mints a new
+# one every invocation - most of the 104 it was filtered out for creating.
 listing = json.load(urllib.request.urlopen(urllib.request.Request(
-    f"{base}/api/provisioning/runs?venture_id={venture}", headers=head)))
+    f"{base}/api/provisioning/runs?venture_id={venture}&include_fixtures=true",
+    headers=head)))
 runs = listing["runs"]
 open_run = next(
     (r for r in runs if r["status"] in ("running", "blocked", "awaiting_human")), None
