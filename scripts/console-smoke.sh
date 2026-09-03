@@ -23,6 +23,7 @@ cd "$ROOT"
 
 API_PORT="${API_PORT:-8091}"
 CONSOLE_PORT="${CONSOLE_PORT:-3001}"
+VILLAGE_PORT="${VILLAGE_PORT:-8099}"
 BUILD=1
 [ "${1:-}" = "--no-build" ] && BUILD=0
 
@@ -155,6 +156,7 @@ wait_for() {
 cleanup() {
   kill_port "$API_PORT"
   kill_port "$CONSOLE_PORT"
+  kill_port "$VILLAGE_PORT"
   rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -187,6 +189,23 @@ kill_port "$API_PORT"; kill_port "$CONSOLE_PORT"
 say "cleared $API_PORT and $CONSOLE_PORT"
 
 step "Operations API"
+step "A Village to ask about departments"
+# V29 and V30 read the department list from the Village over HTTP, and
+# broker/departments keeps no fallback copy on purpose - unreachable means NOT_RUN,
+# which blocks Gate 2. Every run in this script stopped there, so the gate ladder
+# below had nothing past gate 2 to render and seven checks failed against a page
+# that was working.
+#
+# A stub rather than departments.seed(): seed() installs a list in this process and
+# the API runs in another, and the point of a smoke test is that the real fetch
+# path runs rather than being skipped.
+("$VPY" scripts/stub-village.py "$VILLAGE_PORT" >"$WORK/village.log" 2>&1 &)
+if ! wait_for "http://127.0.0.1:$VILLAGE_PORT/api/org/departments" "the stub Village" "$WORK/village.log" 30; then
+  die "the stub Village did not start"
+fi
+say "$(head -1 "$WORK/village.log")"
+export VILLAGE_BASE_URL="http://127.0.0.1:$VILLAGE_PORT"
+
 "$VPY" -m broker serve --port "$API_PORT" >"$WORK/api.log" 2>&1 &
 # /api/health requires a bearer token, so it answers 401 before a token exists. `curl
 # -f` treats that as a failure, and the readiness check must not depend on being
