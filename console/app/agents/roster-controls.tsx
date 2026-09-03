@@ -4,9 +4,10 @@ import { useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 
 import { AlertTriangle, Plus, Refresh } from "@/components/icons";
-import type { RosterAgent, RosterDepartment } from "@/lib/api";
+import type { DepartmentOption, RosterAgent, RosterDepartment } from "@/lib/api";
 
 import {
+
   importRosterAction,
   issueIdentitiesAction,
   previewRosterAction,
@@ -135,7 +136,7 @@ function Diff({ diff }: { diff: NonNullable<RosterState["diff"]> }) {
   );
 }
 
-export function RosterSync({ departments }: { departments: string[] }) {
+export function RosterSync({ departments }: { departments: DepartmentOption[] }) {
   const [open, setOpen] = useState<"none" | "sync" | "register">("none");
   const [preview, doPreview] = useFormState<RosterState | null, FormData>(
     previewRosterAction,
@@ -251,9 +252,9 @@ export function RosterSync({ departments }: { departments: string[] }) {
                 <option value="" disabled>
                   Choose one
                 </option>
-                {departments.map((department) => (
-                  <option key={department} value={department}>
-                    {department}
+                {departments.map((option) => (
+                  <option key={option.department} value={option.department}>
+                    {option.label}
                   </option>
                 ))}
               </select>
@@ -305,7 +306,7 @@ export function IssueIdentities({
       <Submit
         label={
           department
-            ? `Issue identities for all ${eligible.length} in ${department.department}`
+            ? `Issue identities for all ${eligible.length} in ${department.label}`
             : `Issue ${eligible.length} identit${eligible.length === 1 ? "y" : "ies"}`
         }
         busy="Issuing…"

@@ -1,0 +1,29 @@
+{
+  "_comment": [
+    "The Village's GET /api/org/departments response, verbatim.",
+    "",
+    "One copy, because there were nearly two. tests/world.py needs this list to seed",
+    "departments for V29 and V30, and scripts/console-smoke.sh needs to serve it from a",
+    "stub Village so the same two rules can evaluate in the smoke environment. A second",
+    "hand-kept copy of the twelve is exactly the shape this repository keeps closing -",
+    "The Office already carried its own department tuple once, nine of the twelve names",
+    "were wrong, and nothing failed because nothing checked.",
+    "",
+    "It is the response shape rather than a convenient one so that the stub can return",
+    "the file as-is and the fetch path is the real one."
+  ],
+  "departments": [
+    { "department": "administration",   "label": "Administration",   "seats": 11 },
+    { "department": "ai_data",          "label": "AI_Data",          "seats": 14 },
+    { "department": "banking",          "label": "Banking",          "seats": 14 },
+    { "department": "engineering",      "label": "Engineering",      "seats": 26 },
+    { "department": "executive",        "label": "Executive",        "seats": 8  },
+    { "department": "infrastructure",   "label": "Infrastructure",   "seats": 17 },
+    { "department": "marketing",        "label": "Marketing",        "seats": 14 },
+    { "department": "media_production", "label": "Media_Production", "seats": 20 },
+    { "department": "music_production", "label": "Music_Production", "seats": 20 },
+    { "department": "operations",       "label": "Operations",       "seats": 12 },
+    { "department": "publishing",       "label": "Publishing",       "seats": 16 },
+    { "department": "research",         "label": "Research",         "seats": 14 }
+  ]
+}

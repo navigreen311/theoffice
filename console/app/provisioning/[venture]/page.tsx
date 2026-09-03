@@ -33,6 +33,7 @@ import {
   StartRunForm,
 } from "../forms";
 import { RawEvidence, RunHistoryTable } from "./panels";
+import { runsPath } from "@/lib/runs";
 
 export const dynamic = "force-dynamic";
 
@@ -342,7 +343,7 @@ export default async function ProvisioningVenturePage({
   try {
     [runList, pack, me] = await Promise.all([
       api.get<{ runs: RunSummary[]; excluded_fixtures: number }>(
-        `/api/provisioning/runs?venture_id=${encodeURIComponent(venture)}`,
+        runsPath(venture),
       ),
       api.get<PackDetail>(`/api/packs/${encodeURIComponent(venture)}`),
       api.get<Me>("/api/me"),

@@ -141,7 +141,7 @@ function Department({ group }: { group: RosterDepartment }) {
   return (
     <section className="rounded-xl border border-line bg-surface px-5 py-4">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h3 className="text-section font-medium text-ink">{group.department}</h3>
+        <h3 className="text-section font-medium text-ink">{group.label}</h3>
         <span className="text-meta text-ink-muted">
           {group.with_identity} of {group.in_roster} with identity
         </span>
@@ -317,7 +317,7 @@ export default async function AgentsPage({
           <ul className="mt-3 grid gap-1 sm:grid-cols-2">
             {emptyDepartments.map((group) => (
               <li key={group.department} className="text-desc text-ink-secondary">
-                {group.department}
+                {group.label}
                 <span className="text-ink-muted">
                   {group.in_roster
                     ? ` — ${group.in_roster} in the Village roster, none appointed`

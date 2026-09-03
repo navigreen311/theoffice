@@ -118,16 +118,26 @@ CONDITION_MARKERS = (
 
 #: HONEST NOTE ON THIS HEURISTIC, kept next to it rather than in a commit message.
 #:
-#: It has now produced a false positive on BOTH real entries an author has written,
-#: and zero true positives on either. Its genuine catches so far have all come from
-#: the placeholder list and the citation check, not from here.
+#: INVERTED 1 September 2026, on the third false positive, which is what the previous
+#: version of this note said to do.
 #:
-#: It is kept because the failure it targets is real — "escalate as needed" is a
-#: shrug wearing the clothes of a rule — but the marker list is the weak half of the
-#: mechanism and `VAGUE_QUALIFIERS` is the strong half. Prose has unbounded ways to
-#: express a condition and a finite list will keep missing them. If it false-positives
-#: a third time, invert it: report `thin` only when a vague qualifier is present and
-#: nothing concrete survives stripping it, and stop requiring a marker at all.
+#: The three: two applicability rules that opened with noun phrases rather than
+#: "when", and an escalation trigger that listed eight conditions as declarative
+#: sentences — "A privacy request reaches anyone without routing to Compliance &
+#: Evidence" is a circumstance an agent can evaluate and contains no marker at all.
+#: Three false positives, zero true positives, across every entry a human has written.
+#: Every genuine catch this module has made came from the placeholder list, the
+#: citation check or the provenance rules.
+#:
+#: The diagnosis was in the note before the third one arrived: prose has unbounded
+#: ways to express a condition, a finite marker list will keep missing them, and
+#: `VAGUE_QUALIFIERS` was always the half doing real work. A rule that fires on good
+#: prose is worse than no rule, because an author who is told their best paragraph is
+#: thin stops reading the output.
+#:
+#: So the list is no longer a requirement. It survives only as a rescue: a field that
+#: is ALL vague qualifier is thin, and a marker surviving the strip is what rescues
+#: it. Absence of a marker now means nothing.
 
 #: Qualifiers that LOOK like conditions and name no circumstance. "Escalate where
 #: appropriate" contains "where" and describes nothing an agent can evaluate.
@@ -184,16 +194,33 @@ def _has_word(text: str, markers: tuple[str, ...]) -> bool:
 
 
 def _names_a_condition(text: str) -> bool:
-    """A condition marker that is not immediately swallowed by a vague qualifier."""
+    """Whether the field names a circumstance, judged by what SURVIVES the vague forms.
+
+    Inverted on 1 September 2026. The old version required a marker from
+    `CONDITION_MARKERS` and reported `thin` without one, which produced three false
+    positives on human-written prose and no true positives at all.
+
+    Now: a field is only thin when it is vague qualifier and nothing else. Strip every
+    vague form; if meaningful text remains, the field names something. Absence of a
+    marker proves nothing, because "A privacy request reaches anyone without routing to
+    Compliance & Evidence" is a condition and contains no marker.
+    """
     lowered = text.lower()
-    if not _has_word(lowered, CONDITION_MARKERS):
-        return False
-    # Strip the vague forms and re-ask. "Escalate where appropriate, and when the
-    # client declines" still names a condition; "escalate where appropriate" does not.
+
     stripped = lowered
     for vague in VAGUE_QUALIFIERS:
         stripped = stripped.replace(vague, " ")
-    return _has_word(stripped, CONDITION_MARKERS)
+
+    # A marker that survives the strip is a positive signal and settles it immediately -
+    # this is the old test, kept as a rescue rather than a requirement.
+    if _has_word(stripped, CONDITION_MARKERS):
+        return True
+
+    # Otherwise: is there anything left? A field whose entire content was "escalate as
+    # needed" strips to "escalate", which is a verb and no circumstance. A field with
+    # real prose in it survives with plenty.
+    remaining = " ".join(stripped.split())
+    return len(remaining) >= MIN_PROSE_CHARS
 
 
 def _ok(field: str) -> dict[str, Any]:
@@ -267,7 +294,8 @@ def assess_field(name: str, value: Any) -> dict[str, Any]:
     if name == "applicability_rule" and not _names_a_condition(lowered):
         return _bad(
             name, "thin",
-            "Names no condition. This field answers WHEN the rule binds, so it needs a "
+            "Names no condition beyond a vague qualifier. This field answers WHEN "
+            "the rule binds, so it needs a "
             "circumstance an agent can evaluate — 'when the client is a California "
             "business', not 'this rule applies to financing'.",
         )

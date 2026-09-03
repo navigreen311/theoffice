@@ -23,6 +23,7 @@ cd "$ROOT"
 
 API_PORT="${API_PORT:-8091}"
 CONSOLE_PORT="${CONSOLE_PORT:-3001}"
+VILLAGE_PORT="${VILLAGE_PORT:-8099}"
 BUILD=1
 [ "${1:-}" = "--no-build" ] && BUILD=0
 
@@ -155,6 +156,7 @@ wait_for() {
 cleanup() {
   kill_port "$API_PORT"
   kill_port "$CONSOLE_PORT"
+  kill_port "$VILLAGE_PORT"
   rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -187,6 +189,23 @@ kill_port "$API_PORT"; kill_port "$CONSOLE_PORT"
 say "cleared $API_PORT and $CONSOLE_PORT"
 
 step "Operations API"
+step "A Village to ask about departments"
+# V29 and V30 read the department list from the Village over HTTP, and
+# broker/departments keeps no fallback copy on purpose - unreachable means NOT_RUN,
+# which blocks Gate 2. Every run in this script stopped there, so the gate ladder
+# below had nothing past gate 2 to render and seven checks failed against a page
+# that was working.
+#
+# A stub rather than departments.seed(): seed() installs a list in this process and
+# the API runs in another, and the point of a smoke test is that the real fetch
+# path runs rather than being skipped.
+("$VPY" scripts/stub-village.py "$VILLAGE_PORT" >"$WORK/village.log" 2>&1 &)
+if ! wait_for "http://127.0.0.1:$VILLAGE_PORT/api/org/departments" "the stub Village" "$WORK/village.log" 30; then
+  die "the stub Village did not start"
+fi
+say "$(head -1 "$WORK/village.log")"
+export VILLAGE_BASE_URL="http://127.0.0.1:$VILLAGE_PORT"
+
 "$VPY" -m broker serve --port "$API_PORT" >"$WORK/api.log" 2>&1 &
 # /api/health requires a bearer token, so it answers 401 before a token exists. `curl
 # -f` treats that as a failure, and the readiness check must not depend on being
@@ -223,6 +242,47 @@ PY
 API_AUTH="Authorization: Bearer $TOKEN"
 say "issued ${TOKEN:0:8}..."
 
+step "One real person, so Access has a row"
+# The Access page separates real accounts from the fixtures this script creates, and
+# every account here was a fixture: smoke-<hex>@example.invalid is classified
+# test_fixture by broker/account_origin, correctly, and the page hides fixtures by
+# default. So it rendered no rows at all, and the check guarding the row-actions
+# overflow menu - the fix for 179 rows of inline forms - reported FAIL for an empty
+# table rather than for inline forms. It was failing on the absence of data.
+#
+# One account the classifier calls a person, which needs only an address outside
+# .invalid. It is a smoke artifact and is named as one; what makes it a person to
+# the classifier is the property the check needs, and it is created deliberately
+# rather than by loosening the operator token's address, because the operator SHOULD
+# be a fixture - this script creates it.
+#
+# Idempotent: a re-run finds it and adds nothing.
+"$VPY" - <<'PY' >/dev/null
+import asyncio, sys
+sys.path.insert(0, ".")
+import broker  # noqa: F401 - event-loop policy
+from broker import humans
+from broker.db import connection
+
+async def main():
+    async with connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "SELECT count(*) FROM office_human WHERE origin = 'human'"
+            )
+            row = await cur.fetchone()
+        if row and row[0]:
+            return
+        await humans.create_human(
+            conn,
+            display_name="Console Operator",
+            email="console.operator@office.smoke",
+        )
+
+asyncio.run(main())
+PY
+say "the Access page has at least one non-fixture account"
+
 step "Console"
 # Its own build directory, so running this script does not break a console the
 # developer already has running. `next build` used to replace `console/.next` while a
@@ -239,8 +299,15 @@ if [ "$BUILD" -eq 1 ]; then
     || { tail -40 "$WORK/console-build.log" >&2; die "next build failed"; }
   say "built into $NEXT_DIST_DIR"
 fi
+# OFFICE_CONSOLE_SHOW_FIXTURE_RUNS: this script signs in as
+# smoke-<suffix>@example.invalid, which the run listing classifies as a test fixture
+# and filters out - correctly, because 104 of these runs made the console read as a
+# system stuck at gate 4. Without the flag the gate ladder below has nothing to draw
+# and every check on it fails against a page that is working. Nothing sets this in
+# production.
 (cd console && OFFICE_API_URL="http://127.0.0.1:$API_PORT" \
   NEXT_DIST_DIR="$NEXT_DIST_DIR" \
+  OFFICE_CONSOLE_SHOW_FIXTURE_RUNS=1 \
   npx next start -p "$CONSOLE_PORT" >"$WORK/console.log" 2>&1 &)
 if ! wait_for "http://127.0.0.1:$CONSOLE_PORT/login" "the console" "$WORK/console.log" 60; then
   die "the console did not start"
@@ -443,19 +510,46 @@ def call(path, payload=None):
     with urllib.request.urlopen(req) as response:
         return json.load(response)
 
-runs = json.load(urllib.request.urlopen(urllib.request.Request(
-    f"{base}/api/provisioning/runs?venture_id={venture}", headers=head)))
+# `.["runs"]`, not the response. This endpoint returned a bare list until the fixture
+# filter was added in this same branch - 104 of 108 runs here were started by this very
+# script, and listed alongside real ones they read as a system that cannot pass gate 4.
+# The filter needed somewhere to report what it excluded, so the response became
+# {"runs": [...], "total": n, "excluded_fixtures": n}, and this loop went on iterating
+# the response. Iterating a dict yields its keys, so `r["status"]` was indexing a string:
+# `TypeError: string indices must be integers`.
+# include_fixtures: this script's own runs are fixture runs by the same rule, so
+# without it the lookup never finds the open run it left last time and mints a new
+# one every invocation - most of the 104 it was filtered out for creating.
+listing = json.load(urllib.request.urlopen(urllib.request.Request(
+    f"{base}/api/provisioning/runs?venture_id={venture}&include_fixtures=true",
+    headers=head)))
+runs = listing["runs"]
 open_run = next(
     (r for r in runs if r["status"] in ("running", "blocked", "awaiting_human")), None
 )
 run_id = open_run["run_id"] if open_run else call(
     "/api/provisioning/runs", {"venture_id": venture})["run_id"]
-call(f"/api/provisioning/runs/{run_id}/advance")
-print(run_id)
+# Say where it stopped. Seven checks below assume this run reaches gate 4 and the
+# review form renders; when they failed, the gate the run actually stopped at was not
+# in the output and had to be inferred. One line, so it does not have to be again.
+result = call(f"/api/provisioning/runs/{run_id}/advance")
+last = (result.get("outcomes") or [{}])[-1]
+print("|".join(str(x) for x in (
+    run_id,
+    result.get("current_gate", "?"),
+    result.get("status", "?"),
+    last.get("gate", "?"),
+    last.get("verdict", "?"),
+    (last.get("reason") or "")[:200],
+)))
 PY
 )"
 if [ -n "$RUN_ID" ]; then
-  say "run ${RUN_ID:0:8} advanced to its first stop"
+  IFS='|' read -r run_uuid stop_gate stop_status last_gate last_verdict last_reason     <<<"$RUN_ID"
+  RUN_ID="$run_uuid"
+  say "run ${RUN_ID:0:8} stopped at gate $stop_gate ($stop_status)"
+  say "  last gate evaluated: $last_gate -> $last_verdict"
+  if [ -n "$last_reason" ]; then say "  $last_reason"; fi
   curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT/provisioning/$PACK_VENTURE"     > "$WORK"/ladder.html
   code="$(curl -s -b "$COOKIE_JAR" -o /dev/null -w '%{http_code}'     "http://127.0.0.1:$CONSOLE_PORT/provisioning/$PACK_VENTURE")"
   [ "$code" = "200" ] || fail "the gate ladder returned $code"
@@ -1514,7 +1608,7 @@ if [ -n "$AGENT_ID" ]; then
     grep -qF "$phrase" "$WORK"/agent-text.html || fail "agent detail lost: ${phrase:0:60}"
   done <<'PHRASES'
 A grant with either certification unit missing is not assignable
-One venture per agent per shift. A failed PHI flush blocks the next assignment.
+One venture per agent per Village quarter. A failed PHI flush blocks the next assignment.
 PHRASES
   say "the preserved copy is present verbatim"
 

@@ -143,19 +143,18 @@ INSTRUCTION_CONTENT = {
 #: needs a second application running to validate a Pack fails for reasons unrelated to
 #: the code under test. Seats are the live figures, so the headcount rule is exercised
 #: against real numbers - research really does have 14.
-VILLAGE_DEPARTMENTS = (
-    ("administration", "Administration", 11),
-    ("ai_data", "AI_Data", 14),
-    ("banking", "Banking", 14),
-    ("engineering", "Engineering", 26),
-    ("executive", "Executive", 8),
-    ("infrastructure", "Infrastructure", 17),
-    ("marketing", "Marketing", 14),
-    ("media_production", "Media_Production", 20),
-    ("music_production", "Music_Production", 20),
-    ("operations", "Operations", 12),
-    ("publishing", "Publishing", 16),
-    ("research", "Research", 14),
+#: The twelve, read from the file the smoke script's stub Village also serves.
+#:
+#: One copy. The Office carried its own tuple of department names once and nine of the
+#: twelve were wrong, with nothing failing because nothing checked - and a second copy
+#: here, kept in step with a stub by hand, is the same bet with a shorter fuse.
+VILLAGE_DEPARTMENTS = tuple(
+    (d["department"], d["label"], d["seats"])
+    for d in json.loads(
+        (ROOT / "scripts" / "fixtures" / "village-departments.json").read_text(
+            encoding="utf-8"
+        )
+    )["departments"]
 )
 
 

@@ -360,7 +360,7 @@ async def directory(
     department: str | None = None,
     identity: str | None = None,
     grants: str | None = None,
-    all_department_names: Sequence[str] | None = None,
+    all_departments: Sequence[tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
     """The whole roster, grouped by department, with every denominator real.
 
@@ -375,13 +375,21 @@ async def directory(
     hardcoded agent count.
     """
 
-    # The Village's list when it can be reached; otherwise whatever the roster itself
-    # contains. The second case is narrower than the first and the console says so - it
-    # cannot show a department that nobody has reached and that the Village never named.
-    if all_department_names is None:
+    # (department, label) pairs. Both, because they do different jobs: `department` is
+    # normalized - `media_production` - and is what a row is grouped and filtered by,
+    # and `label` is what the Village UI shows - `Media_Production` - and is the word an
+    # operator reads. The page was rendering the first where the second belongs, which
+    # `broker/departments` warns about in the docstring on the two accessors and which
+    # nothing caught until the smoke script had a Village to ask.
+    #
+    # When the Village cannot be reached this is empty and the page renders no
+    # departments at all. That is narrower than it sounds and the console says so
+    # rather than implying the list is complete.
+    if all_departments is None:
         from broker import departments as depts
 
-        all_department_names = await depts.names() or ()
+        loaded = await depts.load()
+        all_departments = tuple((d.department, d.label) for d in (loaded or ()))
 
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
@@ -511,15 +519,15 @@ async def directory(
 
     # Every department the Village reports, whether or not anybody in it has reached The
     # Office - a page rendering only the departments it found cannot say that nine of
-    # them are empty. `all_department_names` is passed in by the caller, which got it
-    # from the Village; when the Village is unreachable it is whatever the roster itself
-    # contains, and the console says so rather than implying the list is complete.
+    # them are empty. The pairs come from the Village; the label is what is rendered
+    # and the name is what a row is grouped and filtered by.
     departments: list[dict[str, Any]] = []
-    for name in all_department_names:
+    for name, label in all_departments:
         members = [a for a in agents if a["department"] == name]
         with_identity = [a for a in members if a["has_identity"]]
         departments.append({
             "department": name,
+            "label": label,
             "in_roster": len(members),
             "with_identity": len(with_identity),
             "without_identity": len(members) - len(with_identity),
@@ -530,7 +538,7 @@ async def directory(
     return {
         "agents": visible,
         "departments": departments,
-        "departments_total": len(all_department_names),
+        "departments_total": len(all_departments),
         "departments_represented": len(
             [d for d in departments if d["with_identity"]]
         ),
@@ -551,7 +559,10 @@ async def directory(
             ),
             "no_identity": len([a for a in agents if not a["has_identity"]]),
         },
-        "all_departments": list(all_department_names),
+        "all_departments": [
+            {"department": name, "label": label}
+            for name, label in all_departments
+        ],
     }
 
 

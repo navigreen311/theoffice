@@ -40,6 +40,7 @@ from broker import humans, roster
 from broker.app import app
 from broker.db import connection
 from tests.conftest import requires_db
+from tests.world import VILLAGE_DEPARTMENTS
 
 pytestmark = [requires_db, pytest.mark.db]
 
@@ -49,14 +50,11 @@ SEED = uuid.UUID("00000000-0000-5000-8000-00000000dddd")
 # a test indexing that tuple was asserting against the same stale copy the code was.
 DEPARTMENT = "research"
 
-# What the directory is told the full list is. Passed in explicitly here rather than
-# fetched, so this test exercises the roster's own grouping without depending on the
-# Village being up - the rules that ask the Village have their own tests.
-ALL_DEPARTMENTS = (
-    "administration", "ai_data", "banking", "engineering", "executive",
-    "infrastructure", "marketing", "media_production", "music_production",
-    "operations", "publishing", "research",
-)
+# What the directory is told the full list is. Read from the same fixture the stub
+# Village serves and tests/world.py seeds, rather than typed again here - this was a
+# fourth copy of the twelve, and The Office has already had a department list go wrong
+# by being kept in more than one place.
+ALL_DEPARTMENTS = tuple(name for name, _label, _seats in VILLAGE_DEPARTMENTS)
 
 
 def auth(token: str) -> dict[str, str]:
@@ -142,6 +140,33 @@ async def test_every_department_is_listed_whether_or_not_anybody_is_in_it(api, w
         "the page lists only the departments that have somebody in them"
     )
     assert all(d["with_identity"] == 0 for d in body["departments"])
+
+
+async def test_every_department_carries_the_word_an_operator_reads(api, world):
+    """The label, not the normalized name.
+
+    `broker/departments` keeps both and says why on the two accessors: `department` is
+    normalized - `media_production` - and is what a row is grouped and filtered by,
+    while `label` is what the Village UI shows - `Media_Production` - and is the word an
+    operator read before they typed it. The Agents page rendered the first where the
+    second belongs, so it showed `ai_data`, `media_production` and `music_production` as
+    headings and eleven of the twelve labels appeared nowhere on it.
+
+    Nothing caught that until the smoke script had a Village to ask, because until then
+    the department list was empty and both checks passed over nothing. This asserts it
+    at the API, where it costs milliseconds rather than a browser.
+    """
+    body = (await api.get("/api/agents/roster", headers=auth(world.token))).json()
+
+
+    expected = {name: label for name, label, _seats in VILLAGE_DEPARTMENTS}
+
+    for group in body["departments"]:
+        assert group["label"] == expected[group["department"]]
+
+    # And the two option lists the console builds from this.
+    assert [d["label"] for d in body["all_departments"]] == list(expected.values())
+    assert [d["department"] for d in body["all_departments"]] == list(expected)
 
 
 # ==================================== A3-A5 - The Office does not create agents

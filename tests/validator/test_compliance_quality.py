@@ -17,11 +17,12 @@ import yaml
 
 from broker.compliance_quality import (
     REQUIRED_BY_TAG,
+    _names_a_condition,
     assess,
     assess_citation_form,
-    assess_pack_references,
     assess_claim,
     assess_field,
+    assess_pack_references,
     assess_provenance,
 )
 
@@ -106,13 +107,32 @@ def test_an_implication_that_restates_the_law_is_thin() -> None:
     assert "WHAT THE AGENT DOES DIFFERENTLY" in field["reason"]
 
 
-def test_an_applicability_rule_naming_no_condition_is_thin() -> None:
-    result = assess(
-        entry(applicability_rule="This framework governs the handling of consumer financial data.")
-    )
+def test_an_applicability_rule_that_is_only_a_vague_qualifier_is_thin() -> None:
+    result = assess(entry(applicability_rule="Applies as appropriate, where necessary."))
     assert result["state"] == "thin"
     field = next(f for f in result["fields"] if f["field"] == "applicability_rule")
     assert "Names no condition" in field["reason"]
+
+
+def test_the_inversion_costs_this_case_and_the_cost_is_recorded() -> None:
+    """What the heuristic no longer catches, asserted so the trade is visible.
+
+    "This framework governs the handling of consumer financial data" states a SUBJECT and
+    not a circumstance. The old marker-requiring version reported it thin, correctly.
+
+    The inverted version passes it: no vague qualifier, and real prose survives the strip.
+    That is the price of eliminating three false positives on human-written entries, and it
+    was judged worth paying - a checker that calls an author's best paragraph thin is one
+    they stop reading, and this module's genuine catches have all come from the placeholder,
+    citation and provenance rules rather than from here.
+
+    Asserted rather than deleted so that a future attempt to tighten it starts from the
+    knowledge that this case was given up on purpose.
+    """
+    result = assess(
+        entry(applicability_rule="This framework governs the handling of consumer financial data.")
+    )
+    assert result["state"] == "complete"
 
 
 def test_an_escalation_trigger_naming_no_condition_is_thin() -> None:
@@ -509,12 +529,16 @@ def test_a_ref_to_an_entry_that_does_not_exist_is_refused():
     assert "set `library_gap: true`" in problems[0]["reason"]
 
 
-def test_a_ref_to_a_TEMPLATE_is_refused():
+def test_a_ref_to_a_template_entry_is_refused():
     """The half V28 cannot catch.
 
     V28 queries the database for the entry_ref and is satisfied when a row comes back. A
     template entry produces a row. It resolves, it constrains nothing, and the Pack's
     `library_gap: false` then asserts a gap is closed by a file with a placeholder in it.
+
+    The marker is the literal string `TEMPLATE` in the entry, asserted below - it used to
+    be in this function's name in capitals, which ruff reads as a naming violation rather
+    than as the quotation it was.
     """
     pack = _pack(
         {"runtime_flag": "unwritten_required", "library_entry_ref": "compliance/unwritten-v1"}
@@ -566,3 +590,54 @@ def test_the_real_pack_and_library_agree():
         library = yaml.safe_load(fh)
 
     assert assess_pack_references(pack, library) == []
+
+
+# ---------------------------------------------------------------------------
+# The condition heuristic, inverted
+#
+# It required a marker word and reported `thin` without one. Three false positives on
+# human prose, zero true positives, so absence of a marker now proves nothing and only
+# the vague-qualifier half decides.
+# ---------------------------------------------------------------------------
+
+
+def test_a_pure_shrug_is_still_thin():
+    """The failure the rule exists for, and the one it has never actually caught."""
+    assert not _names_a_condition("escalate as needed")
+    assert not _names_a_condition("Escalate where appropriate.")
+    assert not _names_a_condition("as necessary")
+
+
+def test_a_condition_with_no_marker_word_passes():
+    """False positive number three, which triggered the inversion.
+
+    Eight escalation triggers written as declarative sentences. "A privacy request
+    reaches anyone without routing" is a circumstance an agent can evaluate and contains
+    no marker from the list.
+    """
+    assert _names_a_condition(
+        "A privacy request reaches anyone - agent, Concierge, founder - without routing "
+        "to Compliance and Evidence with a response timeline. Never handled informally."
+    )
+
+
+def test_a_noun_phrase_condition_passes():
+    """False positives one and two, which widened the list twice before this."""
+    assert _names_a_condition(
+        "Any client-facing output containing a number about a lender product."
+    )
+    assert _names_a_condition("A returned report carrying a fraud alert or a freeze.")
+
+
+def test_a_marker_still_rescues_a_short_field():
+    """The old test survives as a rescue rather than a requirement.
+
+    A field too short to pass on length alone is still fine if a marker survives the
+    vague-qualifier strip.
+    """
+    assert _names_a_condition("When the client declines, stop.")
+
+
+def test_a_marker_swallowed_by_a_vague_qualifier_does_not_rescue():
+    """`where` inside "where appropriate" is not a condition, and stripping is what tells."""
+    assert not _names_a_condition("Escalate where appropriate")

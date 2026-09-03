@@ -38,7 +38,6 @@ DECISION_MODULES = (
     "broker/revocation.py",
     "broker/shifts.py",
     "broker/certification.py",
-    "broker/call_path.py",
     "broker/budget.py",
     "broker/grants.py",
     "broker/escalation.py",
