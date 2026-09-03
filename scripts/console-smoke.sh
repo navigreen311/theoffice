@@ -443,8 +443,16 @@ def call(path, payload=None):
     with urllib.request.urlopen(req) as response:
         return json.load(response)
 
-runs = json.load(urllib.request.urlopen(urllib.request.Request(
+# `.["runs"]`, not the response. This endpoint returned a bare list until the fixture
+# filter was added in this same branch - 104 of 108 runs here were started by this very
+# script, and listed alongside real ones they read as a system that cannot pass gate 4.
+# The filter needed somewhere to report what it excluded, so the response became
+# {"runs": [...], "total": n, "excluded_fixtures": n}, and this loop went on iterating
+# the response. Iterating a dict yields its keys, so `r["status"]` was indexing a string:
+# `TypeError: string indices must be integers`.
+listing = json.load(urllib.request.urlopen(urllib.request.Request(
     f"{base}/api/provisioning/runs?venture_id={venture}", headers=head)))
+runs = listing["runs"]
 open_run = next(
     (r for r in runs if r["status"] in ("running", "blocked", "awaiting_human")), None
 )
