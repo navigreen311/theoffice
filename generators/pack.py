@@ -80,7 +80,7 @@ ComplianceFramework = Literal[
     # declaring Reg Z is saying something about how it advertises.
     "REG_Z_ADVERTISING",
 
-    # CFPB Section 1071 — small-business lending data collection, phasing in 2026–2027
+    # CFPB Section 1071 - small-business lending data collection, phasing in 2026-2027
     # at the issuer level. Declarable now because the phase-in is inside the horizon
     # this venture launches in.
     "CFPB_1071",

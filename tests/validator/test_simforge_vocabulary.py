@@ -126,7 +126,7 @@ def test_certified_is_the_only_assignable_state(contract: dict) -> None:
         if not name.startswith("_") and spec["assignable"]
     }
     assert assignable_in_contract == {"certified"}
-    assert certification.ASSIGNABLE_STATES == frozenset({"certified"})
+    assert frozenset({"certified"}) == certification.ASSIGNABLE_STATES
 
 
 # ------------------------------------------------------------------- the verdicts
@@ -145,7 +145,7 @@ def test_every_declared_verdict_maps_to_a_declared_state(
 
 def test_the_verdict_table_matches_the_contract(contract: dict) -> None:
     declared = {k: v for k, v in contract["gate_verdicts"].items() if not k.startswith("_")}
-    assert certification.VERDICT_TO_STATE == declared, (
+    assert declared == certification.VERDICT_TO_STATE, (
         "broker/certification.VERDICT_TO_STATE and simforge_contract.json disagree "
         "about verdict handling. This is mismatch #2 recurring."
     )

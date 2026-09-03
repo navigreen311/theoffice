@@ -35,7 +35,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from broker.compliance_quality import (  # noqa: E402
+from broker.compliance_quality import (
     assess,
     assess_citation_form,
     assess_pack_references,
