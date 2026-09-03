@@ -886,6 +886,17 @@ async def _v31_unattended_writes(
     grants over it is survivable — a module can resolve perfectly and still be wrong to
     run with nobody watching.
 
+    **WHAT IT DOES NOT REACH: a mutating module whose idempotency is `natural`.**
+    `record_consent` is one - calling it twice records consent twice against the
+    same business, and this rule permits `auto_execute` over it because a natural
+    key means a retry is not a second act. That is the right reading of
+    `natural` and it leaves one module unguarded by tier.
+
+    Deliberately not closed. A `min_trust_tier` column on `forge_module_registry`
+    plus a check in `resolve_grant` is machinery built for a single case, and the
+    Burkham Pack grants nothing at `auto_execute` anyway. Recorded here rather
+    than fixed, so the next reader knows the gap is known and sized.
+
     The shape it refuses is the one `regulator_dossier_export` is written around:
     every call mints a new `exportId`, writes a row and emits an event, so a retry
     after a timeout produces a second export of the same inquiry and the audit trail
