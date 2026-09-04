@@ -69,6 +69,35 @@ THIS IS DECLARATION, NOT DERIVATION
 
     What this buys is that the reading is written down beside the value, so the next
     author corrects a sentence rather than guessing at a list.
+
+THE EXPOSURE TEST
+=================
+
+    Both wrong flags were a plausible inference standing in for a reading, so the
+    question worth asking before writing a module's row is: **what wrong inference is
+    this module's subject matter exposed to?**
+
+    Not a general worry. Specific, and different per module:
+
+      client_read_credit   credit -> FCRA -> pull authorization. It reads a profile
+                           somebody already pulled and pulls nothing. This inference
+                           produced one of the two wrong flags.
+      client_read_pii      NONE AVAILABLE. There is no pull-shaped inference from
+                           "natural-person identifiers", which is why the sibling was
+                           never at risk. One error, one module - not one error twice.
+      record_consent       "connection" -> GLBA. Produced the other wrong flag.
+      restack_recommend    restack -> placement -> advance_placement_prohibited. It
+                           recommends and does not place.
+      compliance_manifest  the broadest of the nine: it indexes eight record
+                           collections, each with its own entry, and is named
+                           "compliance". INDEXING A RECORD IS NOT IMPLYING ITS
+                           FRAMEWORK.
+      regulator_dossier    it leaves the building, and goes to somebody who regulates
+                           Burkham. A module implies the frameworks governing what it
+                           DOES, not those its recipient administers.
+
+    Each is written into that module's `excluded` tuple below, because a flag
+    correctly left off and a flag forgotten look identical in a list.
 """
 
 from __future__ import annotations
@@ -265,6 +294,22 @@ CAPITALFORGE: dict[str, ModuleCouplings] = {
                 "capital, so the disparate-impact discipline applies.",
             ),
         ),
+        excluded=(
+            Excluded(
+                "advance_placement_prohibited",
+                "The module RECOMMENDS and does not place - section 2 is explicit that "
+                "an eligible verdict is an assessment, not an instruction, and "
+                "placement is a separate act. The word restack invites the inference; "
+                "the module does not make the placement the entry governs.",
+            ),
+            Excluded(
+                "per_pull_authorization_required",
+                "readinessScore embeds a credit band and currentUtilization is read "
+                "from a credit profile, which invites exactly the inference that put "
+                "this flag wrongly on client_read_credit. This module reads a profile "
+                "somebody already pulled and pulls nothing.",
+            ),
+        ),
     ),
     "scan_communication": ModuleCouplings(
         couplings=(
@@ -338,6 +383,40 @@ CAPITALFORGE: dict[str, ModuleCouplings] = {
                 "manifest states about an application must match what was submitted.",
             ),
         ),
+        excluded=(
+            # THE BROADEST EXPOSURE OF THE NINE. This module indexes eight record
+            # collections, each governed by its own entry, and it is named
+            # "compliance". Both invite the same wrong inference: that assembling an
+            # index of a record implies that record's framework.
+            #
+            # INDEXING A RECORD IS NOT IMPLYING ITS FRAMEWORK. Section 8 makes exactly
+            # three claims and stops, and each is about what a manifest DOES.
+            Excluded(
+                "recording_consent_required",
+                "Consent records are indexed. The entry governs a recording made when "
+                "consent was captured; a manifest carries a reference to the record, "
+                "not the recording, and indexing it neither creates nor discloses one.",
+            ),
+            Excluded(
+                "estimate_not_offer_required",
+                "Fee schedules are indexed. That entry governs how a figure is "
+                "presented to a client as an estimate rather than an offer. A manifest "
+                "is internal and presents nothing to a client.",
+            ),
+            Excluded(
+                "per_connection_authorization_required",
+                "ACH authorisations are indexed. GLBA governs obtaining a bank-account "
+                "connection; indexing the record of one is not obtaining it.",
+            ),
+            Excluded(
+                "client_interest_standard_required",
+                "Suitability checks are indexed. The entry governs a placement "
+                "decision and a manifest makes none. Its sibling "
+                "regulator_dossier_export DOES carry this flag, because a dossier "
+                "assembled in response to a complaint is evidence about how a client "
+                "was treated - the same records, a different act.",
+            ),
+        ),
     ),
     "regulator_dossier_export": ModuleCouplings(
         couplings=(
@@ -354,6 +433,22 @@ CAPITALFORGE: dict[str, ModuleCouplings] = {
                 "client_interest_standard_required",
                 "A dossier assembled in response to a complaint is evidence about how "
                 "a client was treated, and what it omits is part of what it says.",
+            ),
+        ),
+        excluded=(
+            Excluded(
+                "outbound_contact_boundary_required",
+                "This artefact LEAVES THE BUILDING, which invites the inference that "
+                "an outbound-contact entry applies. FTC_TSR governs telemarketing "
+                "contact with a consumer. Sending an artefact to a regulator is not "
+                "that, and section 8 does not make the claim.",
+            ),
+            Excluded(
+                "own_claims_discipline_required",
+                "A dossier goes to somebody who regulates Burkham, which invites the "
+                "inference that every framework a regulator enforces is implied. A "
+                "module implies the frameworks governing WHAT IT DOES, not those its "
+                "recipient happens to administer.",
             ),
         ),
     ),

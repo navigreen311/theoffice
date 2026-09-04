@@ -4,7 +4,7 @@
 **Module:** `client_read_credit`
 **Endpoints:** 4 GETs under `/api/clients/:clientId` and `/api/v1/clients/:clientId`
 **Permission:** `business:read` **and** `business:read:credit`
-**Version:** 1.4 — drafted 2 September 2026, against CapitalForge `fcc46ab`
+**Version:** 1.5 — corrected 3 September 2026, against CapitalForge `fcc46ab`
 **Status:** draft, pending Compliance Review Board
 
 Read `foi-shared-rules.md` first. Sections 1, 2 and 3 govern most of what this module returns, and they are not repeated here.
@@ -30,6 +30,8 @@ The rest of the client file is `client_read`. Owners, timeline and the ACH autho
 
 It does not write. No row changes, nothing is sent, nothing is recorded — including no record that the read happened. **Reading a credit file leaves no trace.**
 
+**A brokered call is the exception, and it is not this module's doing.** A call arriving through The Office writes one `ledger_events` row per call — `office.module.called`, keyed by the trace id The Office also records — whatever the module does, reads included. That is an access record about the brokered call, not a business event about the client, and it is not visible to anything reading this module's output. A human's call through the UI behaves exactly as the sentence above describes.
+
 It does not pull credit. Everything here is a profile somebody already pulled. **An empty result is not a low score; it is no pull on record.**
 
 It does not prove anything about the client's situation. It reports what Burkham has on file. See shared rule 1.
@@ -53,9 +55,14 @@ A call without it fails with 400. **That is the control working**, not a fault t
 
 ## 4. THE CORRECT SEQUENCE
 
-There is none. The four are independent reads with no ordering requirement and no state between them.
+The four calls have no ordering requirement between them and no state to carry — any one can be made without any other. What has an order is what surrounds a read:
 
-What matters is what happens after. A read gathering context for a placement, a submission or a recommendation feeds a decision — and shared rule 1 governs everything the read returns from that point on. For this module `compliance/fair-treatment-in-routing-v1` governs it too.
+1. **Read.** One call, or several in any order. `/credit/history` requires `profileType`; a 400 there is the control working, not a fault to route around.
+2. **Distinguish a 403 from an absence before reporting anything.** A 403 means this grant does not reach the credit file. It says nothing about whether a profile exists. Shared rule 1a, and it is the failure this module produces most often.
+3. **Check every empty result for a declared basis before reporting it.** `no_credit_profile_on_record`, `no_business_credit_profile_on_record`, `no_personal_credit_profile_on_record`. Shared rules 2 and 3.
+4. **Where the read is gathering context rather than answering a question, apply shared rule 1 to everything it returned — and `compliance/fair-treatment-in-routing-v1` as well.** An absence in a credit file is a fact about the records, and it does not stay neutral once it enters a placement decision.
+
+Step 4 is the one that carries, and it carries further here than anywhere else in the family. An absence entering a placement decision as a negative fact is a client refused for a record that was never created.
 
 ## 5. WHAT FAILURE LOOKS LIKE
 
@@ -136,3 +143,24 @@ This is a property of this module, not of the URL prefix. It does not extend to 
 **Nothing records that a credit file was read.** §2 states it as a fact about the module. Whether reading bureau data should leave an audit trail is a policy question nobody has answered, and `compliance/bureau-report-handling-v1` may already require one.
 
 **A profile's age is not surfaced.** `pulledAt` is on the record, but nothing marks a pull as stale, and an eighteen-month-old score reads exactly like one from this morning. Whether there is a staleness threshold is a product decision.
+
+## APPENDIX — CORRECTED AT 1.5, 3 September 2026
+
+Two corrections, both made while authoring this module into
+`forge_operating_instruction`, and both the same corrections its sibling
+`client_read` took at 1.5 and 1.6.
+
+**§2 said the read leaves no record.** True of a human's call through the UI, and no
+longer true of a brokered one: the CapitalForge Office adapter writes one access
+record per call, reads included. The module still writes nothing of its own. §2 now
+states the difference — the property is right for a person clicking and wrong for an
+autonomous agent reading a client's file.
+
+**§4 said "there is none" and then described a sequence.** A reader looking for a
+sequence stopped at the first sentence. It now states the steps it was describing.
+The endpoints remain independent, unordered and stateless with respect to each
+other; what is ordered is the discipline around a read.
+
+Writing "no required ordering" as a one-item list would have satisfied the
+curriculum's `validate_sections` by turning a stated absence into a step — the move
+this manual set warns about everywhere else.
