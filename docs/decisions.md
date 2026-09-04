@@ -173,17 +173,50 @@ was in, and it was mistaken for progress.
 
 ### What retires this entry
 
-**A Forge address CI can reach.** That is the open item, and this entry is what it
-closes.
+**Corrected 2026-09-04. It said "a Forge address CI can reach." That is wrong, and
+wrong in a specific way worth naming.**
 
-Concretely: a deployed CapitalForge instance or a container the Smoke job starts, a
-reachable `base_url` in the smoke environment's `forge_registry`, a credential CI
-can resolve, and enough seeded tenant data for the modules to answer. Entry 1 records
-that this is **unscoped work with no owner**, not waiting.
+**TWO Forge addresses CI can reach, and one of them exists only as a placeholder.**
 
-When it exists, V11 and V32 run in CI for the first time and this entry becomes
-history. Until then it is the standing explanation for why two rules on `main` have
-never been exercised there.
+The Burkham Pack binds two Forges at `criticality: hard`, and V32 resolves every
+module of every binding. CapitalForge now answers — eleven modules, all bound, all
+called. **SimForge cannot be asked at all:**
+
+| | |
+|---|---|
+| `forge_registry.base_url` | `https://example.invalid` — a deliberate placeholder |
+| `forge_tenant_credential.credential_ref` | `env://SIMFORGE_TOKEN` |
+| `SIMFORGE_TOKEN` in `.env` | **absent** — not unset in a shell, missing from the file |
+
+So V32 reports NOT_RUN with `simforge: tenant credential unavailable`, and it would
+report that with CapitalForge fully deployed and reachable. **Fixing the
+CapitalForge half does not turn this check green.** SimForge has no adapter, and
+building one is a second piece of unscoped work that nobody has costed either.
+
+Concretely, what retires this: a reachable CapitalForge **and** a reachable SimForge
+— a deployed instance or a container the Smoke job starts, a `base_url` that is not
+`example.invalid`, a credential CI can resolve, and enough seeded data for the
+modules to answer. Entry 1 records the first as **unscoped work with no owner**; the
+second is not even that, because it has not been described until now.
+
+### The same error, twice, on the same check
+
+**This is the second time this check has had its blocker described one layer too
+shallow.**
+
+Entry 1 said the blocker was *no adapter*. It was *no adapter CI can reach* — the
+adapter arrived and nothing moved.
+
+This entry said the blocker was *a Forge address CI can reach*. It is *two Forge
+addresses* — CapitalForge arrived, was reachable locally, and V32 still cannot run.
+
+Both errors have the same shape: **a real blocker was identified, fixed, and the
+check stayed red, because what was named was one layer inside what was true.** Both
+were found the same way — by fixing the named thing and watching nothing happen.
+
+Worth stating as a pattern rather than as two mistakes: when a check reports
+NOT_RUN, the named cause is a hypothesis until the named cause is removed. V32 has
+now falsified two.
 
 ### What this does not license
 
