@@ -163,7 +163,9 @@ docs/
 - `docs/ledger.md` — how append-only and the hash chain actually work
 - `docs/call-path.md` — the broker, the client library, and why the order matters
 - `docs/governance.md` — revocation scopes, manifest, trust tiers, limits, budget
-- `docs/forge-adapter.md` — onboarding a Forge, and three defects that returned 200 while being wrong
+- `docs/forge-adapter.md` — onboarding a Forge, and eight defects that looked like success.
+  **Read trap #8 before any recon on this machine:** a localhost probe proves that something
+  answered, not that the right thing did, and it has cost a week and a false note already
 - `docs/certification.md` — instructions, the two units, staleness, and the no-read-path check
 - `docs/pack-validator.md` — the Business Pack, the 27 rules, and why three of them read the world
 - `docs/generators.md` — the seven generators, determinism, and two findings they surfaced

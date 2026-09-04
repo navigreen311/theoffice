@@ -411,6 +411,75 @@ check that exists for it, and they are a different mechanism from this one.
 
 ---
 
+## An eighth: a port is not an identity, and a localhost probe proves nothing on its own
+
+The seven above are defects in code. This one is a defect in **how a person checks**, and it
+is the only one on this page that has already bitten twice in a single day.
+
+**On a machine running many projects, a service answering at the address you expected is not
+evidence that it is the service you expected.**
+
+### Both instances, 4 September 2026
+
+    the Village      `127.0.0.1:8002` answered 401. Read as "the Village refuses our
+                     credential", left for somebody with the credential, and V29/V30 sat
+                     NOT_RUN for a week. The Village was not running at all: an unrelated
+                     project's container held the port and was refusing a request it had
+                     never heard of.
+
+    FunnelForge      `localhost:3001` and `:3002` answered during recon. Both are
+                     visionaudioforge frontends. FunnelForge's own fifteen containers were
+                     running and publishing nothing.
+
+Same shape, six hours apart, in opposite directions: one made a system look present and
+hostile, the other made a system look present at all.
+
+### Why the identity probe does not cover this
+
+`broker/village.py` now refuses a responder that does not identify as the Village, and
+`scripts/verify_forge_modules.py` resolves a manifest rather than trusting a row. **Both of
+those protect The Office. Neither protects a person at a terminal**, and both of today's
+instances came from a person at a terminal — one reading a CI report, one running `curl`.
+
+A tool that checks its own assumptions does not check yours.
+
+### The check, and it is one command
+
+```
+docker ps --format '{{.Names}}	{{.Ports}}'
+```
+
+Read the name beside the port before believing anything a probe told you.
+
+**And read the port format, because two things look alike and are not:**
+
+    0.0.0.0:8011->8000/tcp     PUBLISHED. Reachable from the host. This is a real address.
+    3001/tcp                   EXPOSED only. Reachable from inside the compose network and
+                               from nowhere else. `docker ps` lists it, which is exactly why
+                               it reads as "this service is up and listening on 3001".
+
+FunnelForge's containers all show the second form. Every one of them is running; none of
+them can be reached by anything The Office would do. A recon note that said "FunnelForge is
+up on 3001" would have been wrong twice over — wrong about reachability, and pointing at
+another project's container.
+
+### What this means for onboarding a Forge
+
+The checklist below says to call every module against a running Forge. That instruction
+assumes you know which Forge answered. Before the first call, and before writing a
+`forge_registry.base_url`:
+
+1. `docker ps` and identify the container by **name**, not by port.
+2. Confirm the port is **published**, not merely exposed.
+3. Ask the service something only it would answer correctly — `GET /_modules` with the tenant
+   credential is exactly that, and it is the reason the manifest is authenticated.
+
+Step 3 is the one that generalises. A base URL written from a probe that skipped it is a
+registry row pointing at whatever holds a port today, and `forge_registry` is not re-checked
+on a schedule.
+
+---
+
 ## What an adapter is, and is not
 
 The Office posts to `{forge_registry.base_url}/{module_id}` with a JSON body. The
@@ -561,6 +630,10 @@ than verified. All twelve of the Burkham Pack's modules are in that state today.
 
 ## Checklist for Forge number two
 
+- [ ] **Confirmed by `docker ps` which container owns the port, and that the port is
+      PUBLISHED (`0.0.0.0:X->Y`) rather than merely exposed (`Y/tcp`)** — before writing a
+      `base_url`. A localhost probe on a busy machine proves that something answered, not
+      that the right thing did. See trap #8; it has cost a week and a false recon note
 - [ ] `forge_registry` row: `base_url` pointing at the adapter, correct `api_version`,
       `auth_model`, `credential_mode`
 - [ ] `forge_tenant_credential` row with a `credential_ref`, and the value resolvable
