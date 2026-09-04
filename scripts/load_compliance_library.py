@@ -36,6 +36,26 @@ IT ADDS. IT DOES NOT REPLACE.
     row.** Loading a file that redefines an entry another venture relies on overwrites
     it for both, so `--check` reports what a load would change before it changes it.
 
+    **NOTHING STRUCTURAL PREVENTS THIS. IT IS A KNOWN PROPERTY, NOT AN OVERSIGHT.**
+
+    `compliance_library_entry` is keyed on `entry_ref` and has no venture column, so
+    the table cannot tell whose entry a row is. Burkham can change what Greenstone's
+    agents read, and the only thing standing in the way is that this loader upserts
+    and never deletes.
+
+    That is a convention living in one file. **If you add a `--force`, a `--replace`
+    or a truncate, you are removing the only protection there is** - and the failure
+    will not look like a failure: another venture's Pack keeps citing a ref that still
+    resolves, to text somebody else wrote for a different jurisdiction. V28 stays
+    green throughout, because V28 asks whether the ref resolves and not whose entry
+    answered.
+
+    The structural fix, if it is ever wanted, is a venture column and a composite key.
+    That is a migration and a decision about whether shared entries are a feature -
+    two ventures under one compliance regime arguably should share one row - and
+    neither has been made. Recorded here so it is inherited as a decision rather than
+    discovered as a bug.
+
 WHAT IT DOES NOT DO
 ===================
 

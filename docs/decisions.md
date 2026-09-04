@@ -218,6 +218,24 @@ Worth stating as a pattern rather than as two mistakes: when a check reports
 NOT_RUN, the named cause is a hypothesis until the named cause is removed. V32 has
 now falsified two.
 
+**A third reading, offered as a hypothesis and labelled as one.** V32's resolution
+path was read on 2026-09-04 rather than inferred: it needs a `forge_registry` row, a
+`forge_tenant_credential` row, a credential that resolves, and a reachable
+`{base_url}/_modules` answering with a parseable list. It touches no certification,
+no instruction, no scenario pack and no grant - those are V11's and V22's business.
+So two reachable addresses should clear it, with one condition that is the same
+check working rather than a new layer: SimForge's manifest must contain
+`run_scenario_pack` and `gate_result` under those exact spellings, because the
+adapter's dispatch keys are the spelling of record. A different spelling turns V32
+from NOT_RUN into FAIL.
+
+**CLEARING V32 IS NOT CLEARING GATE 2, and the two must not be read as one.** Gate 2
+requires no failures and no unrun rules other than V24. As of 2026-09-04, with
+CapitalForge reachable locally, V29 and V30 are also NOT_RUN because the Village is
+not running - and **whether CI's stub Village satisfies them has not been tested.**
+That is a separate unknown from the Forge addresses, it has not been checked, and
+nobody should read "V32 clears" as "Gate 2 clears" on the strength of this entry.
+
 ### What this does not license
 
 **It is not a precedent for merging a failing check.** V11 and V32 do not fail in
