@@ -4,9 +4,10 @@
 **Module:** `client_read`
 **Endpoints:** 6 GETs under `/api/clients/:clientId` and `/api/v1/clients/:clientId`
 **Permission:** `business:read`
-**Version:** 1.6 — corrected 3 September 2026, against CapitalForge `fcc46ab`
+**Version:** 1.7 — corrected 3 September 2026, against CapitalForge `fcc46ab`
 **Correction at 1.5:** see Appendix C. A brokered call now leaves an access record, which §2 said did not exist.
 **Rewritten at 1.6:** §4 said "there is none" and then described a sequence underneath. It now states the sequence it was describing — see Appendix D.
+**Corrected at 1.7:** §5 said to read the code not the status and then said both 404 codes mean the same thing. The distinction now pays off — see Appendix E.
 **Status:** draft, pending Compliance Review Board
 
 Read `foi-shared-rules.md` first. Sections 1, 2 and 3 govern most of what this module returns, and they are not repeated here.
@@ -68,10 +69,16 @@ Step 3 is the one that carries. Answering is bounded — fetch, report, stop. A 
 
 | Code | Meaning |
 |---|---|
-| `NOT_FOUND` | No such client, or not yours. From the mount guard, before any handler runs |
-| `CLIENT_NOT_FOUND` | Same, from `GET /` — a delete racing the guard |
+| `NOT_FOUND` | From the mount guard, before any handler runs. No such client, or not this tenant's |
+| `CLIENT_NOT_FOUND` | From `GET /`, **after the guard passed** — a delete racing the guard |
 
-Both mean the same thing here: **stop.** There is nothing to report about. Neither is an absence in the sense of shared rule 1 — an absent client is a fact about the world, not about the records.
+**Both mean stop. Only one means something happened, and that is why the rule exists.**
+
+`NOT_FOUND` is the ordinary case: a wrong id, or an id belonging to another tenant. Report that the client could not be reached.
+
+`CLIENT_NOT_FOUND` is not that. The guard resolved the client and the handler then did not find it — so the client existed moments ago and something changed mid-read. **Escalate this one.** Reporting it as a wrong id hides a record disappearing underneath a read.
+
+Neither is an absence in the sense of shared rule 1 — an absent client is a fact about the world, not about the records.
 
 | Response | Meaning |
 |---|---|
@@ -178,3 +185,25 @@ a real sequence in it; it was in the second paragraph rather than the first.
 **Nothing about the six endpoints changed.** They remain independent, unordered
 and stateless with respect to each other. What is ordered is the discipline around
 a read, not the reads.
+
+## APPENDIX E — §5 CORRECTED AT 1.7, 3 September 2026
+
+**What changed.** §5 opened *"Read the error code, never the status alone"* and then
+said of the two 404 codes: *"Both mean the same thing here: stop."* An agent reads
+the second line and ignores the first, correctly — if the codes mean the same thing
+there is no reason to read them.
+
+They do not mean the same thing. `NOT_FOUND` comes from the mount guard before any
+handler runs: a wrong id, or another tenant's. `CLIENT_NOT_FOUND` comes from
+`GET /` **after the guard passed**, which means the client resolved and then did not
+— it existed moments ago and something changed mid-read.
+
+The action is the same and the report is not. The second is worth escalating, and
+reporting it as a wrong id hides a record disappearing underneath a read.
+
+**Why it was found.** Authoring this module into `forge_operating_instruction`.
+`failure_signatures` is prose, so nothing forced the change — what forced it was
+reading the section as something an agent would follow rather than as something a
+person would skim.
+
+**Nothing about the endpoints changed.** Both codes still mean stop.

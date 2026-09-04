@@ -188,6 +188,64 @@ longer current, and which direction the version moved is not the point.
 Declaring it decertifies every agent on that module at every patch release — sometimes
 right, always expensive, never accidental.
 
+### The three version fields, and which one decides what
+
+A module carries three version-ish values and they answer different questions. Two
+of them decertify; the third computes nothing at all.
+
+| field | what it is | decertifies? |
+|---|---|---|
+| `content_hash` | sha256 of the instruction JSON, computed by a trigger | **Yes.** Any change to any of the eight sections. No dial, no threshold |
+| `forge_api_version` + `version_sensitivity` | which Forge release the cert was earned against | **Yes**, at the sensitivity declared — see the table above |
+| `instruction_version` | the label on this generation of the text | **No.** Nothing computes on it |
+
+**`version_sensitivity` is about the FORGE's releases, not about edits to the
+instruction.** It reads `forge_registry.api_version` — CapitalForge shipping 1.0.1 —
+and has nothing to do with a typo fix in the manual. That distinction is easy to
+lose, and losing it makes `major.minor` look like a decision about how carelessly
+one may edit a curriculum. It is not: **every edit to an instruction decertifies,
+whatever the sensitivity**, because the hash moves.
+
+So the argument for `major.minor` is narrow and worth stating in its own terms: a
+Forge patch release is not evidence that a module's behaviour changed, and
+decertifying every agent on it would be expensive and uninformative. A Forge minor
+release might be. That is the whole of it.
+
+### `instruction_version` tracks the manual's version
+
+`instruction_version` is free text — nothing parses it, nothing compares it,
+nothing decertifies on it. Because it is mechanically inert, it is free to carry a
+convention, and the useful one is this:
+
+**A CapitalForge curriculum's `instruction_version` is the version in its manual's
+header.** `record_consent` manual 1.3 is authored as `1.3`. Not a coincidence and
+not its own counter.
+
+The alternative — an independent counter, which is what cre-forge, simforge and
+voiceforge use, all at `1.0.0` — means one module has two version numbers with no
+stated relationship, and no way to tell by looking which generation of the manual a
+curriculum was derived from. That is the ambiguity worth avoiding, and it costs
+nothing to avoid.
+
+**What this buys is a drift check nobody has to remember.** Manual header vs
+`instruction_version` answers *was this curriculum derived from the manual as it now
+reads?* If the manual is 1.7 and the curriculum says 1.6, someone edited the manual
+and did not re-author. The `content_hash` cannot answer that question — it hashes
+the JSON, not the markdown, so it can only tell you the curriculum changed, never
+that the manual did.
+
+Two artifacts, one number, and the mismatch is visible in a directory listing.
+
+**Not enforced.** `check_module_manuals.py` already parses each manual's header for
+its module id and could compare the version too. It does not yet, so this is a
+convention, and a convention is the weaker thing — recorded here so the next author
+follows it rather than infers it.
+
+**The older Forges do not follow it.** cre-forge, simforge and voiceforge curricula
+are all `1.0.0`, authored before the manuals carried version headers. They are not
+retro-fitted: renumbering a live instruction changes nothing mechanically and would
+make the audit trail say a text was revised when it was not.
+
 **A `failed` cert does not become stale.** A cert that was never fresh cannot go out of
 date, and collapsing the two erases the difference between "was good, text changed" and
 "was never good".
