@@ -70,6 +70,28 @@ THIS IS DECLARATION, NOT DERIVATION
     What this buys is that the reading is written down beside the value, so the next
     author corrects a sentence rather than guessing at a list.
 
+TWO RULES THAT ARE NOT ABOUT ANY ONE MODULE
+===========================================
+
+    Both were found while reasoning about a specific module and neither belongs to
+    it. They are here, before the map, because the next author needs them BEFORE
+    reaching a module they apply to.
+
+    **INDEXING A RECORD IS NOT IMPLYING ITS FRAMEWORK.** A module that carries a
+    reference to a consent record does not thereby imply the recording-consent
+    entry; one that indexes a fee schedule does not imply the estimate-not-offer
+    entry. The framework governs an act - capturing consent, presenting a figure to
+    a client - and holding a pointer to the record of that act is not the act.
+
+    **A MODULE IMPLIES THE FRAMEWORKS GOVERNING WHAT IT DOES, NOT THOSE ITS
+    RECIPIENT ADMINISTERS.** An artefact addressed to a regulator does not take on
+    every framework that regulator enforces. Who receives the output is not what
+    the output does.
+
+    Both cut the same way: they narrow. Every wrong flag found so far has been a
+    flag added, never one left off, and both rules exist to stop an association
+    becoming a claim.
+
 THE EXPOSURE TEST
 =================
 
@@ -234,10 +256,13 @@ CAPITALFORGE: dict[str, ModuleCouplings] = {
         excluded=(
             Excluded(
                 "per_pull_authorization_required",
-                "FCRA authorisation for a bureau PULL. This module reads scores "
-                "already on file and pulls nothing; section 8 does not cite the entry. "
-                "It was on this row until 3 September 2026, matched from the idea of "
-                "credit rather than from what the module does.",
+                "THIS MODULE CONSUMES BUREAU-DERIVED DATA; IT DOES NOT OBTAIN IT - the "
+                "same split the library draws, where bureau-report-handling-v1 fires "
+                "on a returned report and scopes authorization out to "
+                "fcra-pull-authorization-v1. Reading a stored profile is consuming. It "
+                "was on this row until 3 September 2026, matched from the idea of "
+                "credit rather than from what the module does, and its presence is "
+                "what made the consumes/obtains line worth drawing explicitly.",
             ),
         ),
     ),
@@ -285,8 +310,14 @@ CAPITALFORGE: dict[str, ModuleCouplings] = {
             ),
             Coupling(
                 "bureau_report_handling_required",
-                "currentUtilization is read straight from a credit profile and "
-                "readinessScore embeds a credit band. Both are bureau-derived.",
+                "DECIDED, not inherited from the neighbouring exclusion. The entry "
+                "governs handling a RETURNED report and names this exact use: 'the "
+                "agent may use the report as input to the Funding Readiness Score with "
+                "provenance preserved', and 'a Funding Readiness Score incorporating "
+                "bureau data as one component among several is a deliverable'. "
+                "readinessScore is that score. currentUtilization is read straight "
+                "from a credit profile. A consumer of bureau-derived data is squarely "
+                "inside this entry.",
             ),
             Coupling(
                 "fair_treatment_required",
@@ -304,10 +335,17 @@ CAPITALFORGE: dict[str, ModuleCouplings] = {
             ),
             Excluded(
                 "per_pull_authorization_required",
-                "readinessScore embeds a credit band and currentUtilization is read "
-                "from a credit profile, which invites exactly the inference that put "
-                "this flag wrongly on client_read_credit. This module reads a profile "
-                "somebody already pulled and pulls nothing.",
+                "THIS MODULE CONSUMES BUREAU-DERIVED DATA; IT DOES NOT OBTAIN IT. The "
+                "library splits the two explicitly - bureau-report-handling-v1 'fires "
+                "when a report has been returned by the Integration Layer, not when a "
+                "pull is requested. Authorization is upstream and belongs to the "
+                "Consent & Authorization Center', and it scopes itself out of "
+                "authorization on the understanding that fcra-pull-authorization-v1 "
+                "exists to carry it. So consuming is governed by the neighbouring flag "
+                "and obtaining is governed by this one, and this module never obtains. "
+                "Stated as consumes-not-obtains rather than 'pulls nothing', because "
+                "the shorter form made bureau_report_handling_required look wrong by "
+                "association when it is firmly right.",
             ),
         ),
     ),
