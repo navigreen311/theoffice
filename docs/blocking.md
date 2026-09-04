@@ -87,6 +87,66 @@ looks identical to an earned one everywhere except that column.
 
 ---
 
+## B4. SimForge's own certification was issued by nothing, and could not have been otherwise
+
+On 4 September 2026 The Office made its first brokered call to SimForge. It required a
+Unit A and a Unit B certification, and both are bootstraps:
+
+    unit A   agent x simforge x gate_result    attested_by = 'bootstrap'
+    unit B   engineering x simforge            attested_by = 'bootstrap'
+             rubric_version = 'phase0.9-simforge'
+             simforge_verdict IS NULL
+
+Same shape as B3, and one degree worse in a way worth stating plainly.
+
+### The circularity
+
+A Unit A certification answers *"may this agent operate this module?"*, and the thing that
+answers it is a SimForge scenario run. **The module here is SimForge's own.** So the
+certification that permits the first call to SimForge would have to come from SimForge,
+which cannot be called until the certification exists.
+
+There is no ordering of those two events that is not a bootstrap. This is not a corner
+that was cut; it is the base case of a recursive definition, and the only honest thing to
+do with it is write it down where somebody will find it.
+
+### Why that circularity is the argument FOR scenarios, not against them
+
+The tempting reading is that a certification which cannot be earned proves the requirement
+is ceremonial. It proves the opposite.
+
+Every other certification in this system is supposed to mean *an agent was put through
+scenarios it could fail and did not*. This one means **a human decided**. Those two things
+are indistinguishable in the `certification` table except for one column — which is exactly
+why `attested_by` was added on 3 September, and exactly why B3 exists. If the distinction
+did not matter, there would be nothing to record here.
+
+The moment SimForge can run a scenario pack against its own `gate_result` module, this row
+should be replaced by one that column can vouch for. Until then, an agent holds
+`auto_execute` on a Forge because somebody said so.
+
+### What retires it
+
+**A SimForge scenario pack for `simforge/gate_result`, run by a DIFFERENT SimForge
+instance than the one being certified.** That is the part that is not obvious: running the
+pack on the same instance certifies the thing against itself, which is where this entry
+started. A second instance — a staging deployment, or a container the CI job starts — is
+what makes the verdict mean something, because the certifier and the certified are then
+two systems that can disagree.
+
+That is also the strongest argument yet for SimForge having a deployment. It has never had
+one (`simforge/docs/adr/ADR-0045`), and this is the first requirement that a compose file
+on a developer's laptop cannot satisfy.
+
+**Until then:** the row says `bootstrap` and carries its reason. A reader who filters
+`attested_by = 'simforge'` will not find it, which is the whole point of that column.
+
+**Blocks:** nothing today — the bridge is proved, and a bootstrap was the right call to
+prove plumbing, exactly as B3 says. It blocks **any claim that SimForge is certified**, and
+it will block a real client for the same reason B3 does.
+
+---
+
 ## What is NOT on this page
 
 **`lender_match` and `build_packet`.** They have no implementation under any
