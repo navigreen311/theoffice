@@ -117,3 +117,69 @@ invisible to anyone who only opened the list.
 `docs/decisions/deferred.md` in that repository, which explains why the ten were
 left as a group and what would change each answer. Deferred is not dropped: it is
 written down so it is not raised again as new.
+
+---
+
+## 3. #16 merged with a check that has never run in CI
+
+**Decided 2026-09-03**, reversing entry 1 the same day it was corrected. Recorded as
+an entry rather than a note in the pull request, because it is a precedent: it is
+the first time this repository has merged a control that is green nowhere.
+
+### What is being accepted
+
+**V11 and V32 have never run in CI.**
+
+They pass locally against a dev-checkout Forge on `127.0.0.1:4000`. CI has no such
+host, so they report NOT_RUN rather than fail — and the Smoke job says so in those
+words:
+
+```
+run b786295c stopped at gate 2 (blocked)
+  rule(s) ['V11', 'V32'] did not run. NOT_RUN is not a pass - this Pack has not
+  been validated.
+FAIL unevaluable rules with no gate named: ['V11', 'V32']
+```
+
+**The conformance guards are on `main` and unverified there.** Six of seven jobs are
+green; the seventh is these two rules correctly reporting that they could not run.
+
+This is not a caveat to read past. The rule that resolves a Pack against a Forge's
+own dispatch map, and the rule that resolves its curriculum against the same, are
+now merged on the strength of a laptop.
+
+### Why
+
+**A check that structurally cannot run in the environment it runs in does not gate
+anything.** It is not protecting `main` — it is reporting its own absence, every
+time, to nobody who can act on it. Holding twenty-three commits behind it proves
+nothing about those commits and nothing about the rules.
+
+The alternative was to keep everything downstream unmerged until the environment
+changed, and the environment is not scheduled to change. That is the shape entry 1
+was in, and it was mistaken for progress.
+
+### What retires this entry
+
+**A Forge address CI can reach.** That is the open item, and this entry is what it
+closes.
+
+Concretely: a deployed CapitalForge instance or a container the Smoke job starts, a
+reachable `base_url` in the smoke environment's `forge_registry`, a credential CI
+can resolve, and enough seeded tenant data for the modules to answer. Entry 1 records
+that this is **unscoped work with no owner**, not waiting.
+
+When it exists, V11 and V32 run in CI for the first time and this entry becomes
+history. Until then it is the standing explanation for why two rules on `main` have
+never been exercised there.
+
+### What this does not license
+
+**It is not a precedent for merging a failing check.** V11 and V32 do not fail in
+CI; they decline to answer, and they decline for a reason that is a fact about the
+runner rather than about the code. A check that *fails* in CI is a check that ran.
+
+The distinction is the one these rules exist to enforce, and it would be a poor
+irony to lose it here: **NOT_RUN is not a pass**, and merging past NOT_RUN is a
+decision that has to be written down every time. This is that writing.
+
