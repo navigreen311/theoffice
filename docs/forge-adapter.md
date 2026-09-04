@@ -403,7 +403,8 @@ assurance makes it confident and wrong**, and a curriculum built from an assuran
 certifies the confidence.
 
 Three claims found in ten manuals. Two false, one true, and the true one is the one
-that carries.
+that carries. What this audit does **not** cover is recorded at the end of this
+section.
 
 ### Confirmed true — the mount guard, verified at line level
 
@@ -447,3 +448,34 @@ describe absent capability rather than asserted protection.
 
 **Run it again whenever a §2 is written.** The two false claims were both written by
 somebody who believed them, and neither was found by review.
+
+### What the §2 audit does not cover — the reverse direction
+
+**Recorded, not built.**
+
+The audit reads claims that are *made*. It says nothing about **a control that
+exists and goes unmentioned**, and that gap has already produced a defect:
+`record_consent` §2 said an SMS passes four gates when five run. Nobody was misled
+into thinking a protection existed — the manual under-claimed — but the manual was
+wrong, and **only the section-to-curriculum mapping caught it**, not the audit.
+
+The two directions fail differently:
+
+| | | |
+|---|---|---|
+| **over-claim** | names a control that does not run | agent is confident and wrong |
+| **under-claim** | omits a control that does | agent is uncertain, and the manual is still wrong |
+
+Over-claiming is worse and is what the audit targets. Under-claiming is not
+harmless: it understates what the system does, which is how a real protection gets
+built twice or argued away as absent.
+
+**Why it is not built.** The reverse check has no natural starting point. The
+over-claim audit starts from a sentence in a manual and asks whether the thing it
+names exists — a finite list, ten manuals, one read. The reverse starts from every
+guard, middleware and gate in the codebase and asks whether the relevant manual
+mentions it, which is an open-ended sweep against a moving target, and most of what
+it turned up would be correctly unmentioned.
+
+Written down so the asymmetry is deliberate rather than an oversight, and so the
+next author knows the audit's coverage rather than assuming it.
