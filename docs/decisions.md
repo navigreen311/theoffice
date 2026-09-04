@@ -183,3 +183,70 @@ The distinction is the one these rules exist to enforce, and it would be a poor
 irony to lose it here: **NOT_RUN is not a pass**, and merging past NOT_RUN is a
 decision that has to be written down every time. This is that writing.
 
+---
+
+## 4. `lender_match` and `build_packet` come off the Pack — they do not exist
+
+**Decided 2026-09-04.**
+
+Both were on Burkham's `modules_expected`, and both were on V11's and V32's failure
+lists as unauthored modules. **They are not unauthored. They are absent.**
+
+### What was searched
+
+No route, no service, no handler, nothing under any spelling: `lender_match`,
+`lenderMatch`, `matchLender`, `build_packet`, `buildPacket`, `fundingPacket`,
+`packetBuild` — zero matches across the whole CapitalForge backend. The nearest
+things are card-**issuer** optimizers (`stacking-optimizer.service.ts`,
+`issuer-rules-engine.ts`), which are a different act: CapitalForge matches clients
+to card issuers, not to lenders, and there is no packet builder anywhere.
+
+They held no `forge_module_registry` row and no `venture_forge_manifest` row. The
+Pack was the only place they appeared.
+
+### Why this is not the same removal as `bureau_pull` and `readiness_score`
+
+Those two came off on 1 September and they **exist**. `readiness_score` is in
+`forge_module_exclusion` because it scores a business from query parameters it never
+reads; `bureau_pull` was removed because CapitalForge has no path to a bureau score
+and its own specification says so. Both are capabilities that may not be granted.
+
+These two are capabilities that are not there. **Different fact, different record.**
+
+### Why leaving them was worse than removing them
+
+`_modules` reports what the adapter dispatches. A module with no dispatch behind it
+is not work somebody has not got to — it is a module that does not exist, and
+sitting on V11's list misrepresented it as something somebody forgot to write.
+
+The failure that invites is the one this whole exercise keeps finding: the cheapest
+way to clear a name from V11 is to register it. A registered name with nothing
+behind it would then resolve everywhere and be true nowhere — which is precisely
+what `check_module_manuals.py` refuses to fail on, for the same reason.
+
+### The role is left mismatched on purpose
+
+The Placement Strategist's `forge_modules_operated` was
+`[lender_match, build_packet, submit_application]` and is now `[submit_application]`.
+Its duties still read *"Match a ready client to approved providers using sourced
+issuer rules"* and *"Assemble the lender packet."*
+
+**Those duties are not edited.** They describe work Burkham wants done and no module
+performs. Editing them to match the code would make the Pack self-consistent and
+hide the gap; leaving them makes a role whose first two duties have no module the
+visible form of the question. That question is a product decision — build these, or
+change what the role does — and it is not answered here.
+
+### What returns them
+
+**Something that dispatches them.** The day a CapitalForge adapter answers
+`lender_match` or `build_packet` in its `_modules` manifest, the name goes back on
+`modules_expected`, a registry row is written from the manifest, and the role
+regains it. Not before: the adapter's dispatch keys are the spelling of record, and
+a Pack naming a module the Forge does not dispatch is exactly what V32 exists to
+refuse.
+
+**Recorded because a removal with no record comes back next quarter as a mystery.**
+Somebody reading the Pack in December will find a Placement Strategist who operates
+one module and duties describing three, and this entry is the answer to why.
+

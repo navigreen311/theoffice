@@ -288,7 +288,12 @@ positions_required:
       - Match a ready client to approved providers using sourced issuer rules
       - Assemble the lender packet
       - Submit applications under written client authorization
-    forge_modules_operated: [lender_match, build_packet, submit_application]
+    # lender_match and build_packet removed 2026-09-04. Neither exists in
+    # CapitalForge under any spelling - see docs/decisions.md entry 4. This role's
+    # first two duties above describe work no module performs, and they are left
+    # standing on purpose: the duties are what Burkham wants done, and removing
+    # them to match the code would hide the gap rather than record it.
+    forge_modules_operated: [submit_application]
     source_department: banking          # Burkham calls this "Funding Strategy"
     compliance_flags_in_scope:
       [per_application_authorization_required, application_truthfulness_required,
@@ -369,10 +374,17 @@ forge_dependencies:
       # record_consent, submit_application, scan_communication and restack_recommend
       # keep their names - the adapter dispatches those spellings unchanged. Renaming
       # a workable name edits three artifacts to fix nothing.
+      # lender_match and build_packet removed 2026-09-04, and this is a different
+      # removal from the two above. bureau_pull and readiness_score were excluded -
+      # they exist and may not be granted. These two DO NOT EXIST: no route, no
+      # service, no handler, nothing under any spelling searched for. A name on this
+      # list with nothing behind it reads as unauthored work rather than as absent
+      # capability, and V11 and V32 were reporting them as gaps somebody forgot to
+      # close. See docs/decisions.md entry 4 for what returns them.
       modules_expected:
         [client_read, client_read_pii, client_read_credit,
          record_consent, statement_pull,
-         lender_match, build_packet, submit_application, scan_communication,
+         submit_application, scan_communication,
          compliance_manifest_assemble, regulator_dossier_export,
          portfolio_health, restack_recommend]
       compliance_flags_propagated:
