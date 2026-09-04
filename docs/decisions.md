@@ -414,3 +414,86 @@ the record of what happened?) and about concurrency against SimForge's own rate 
 
 **Not built here, and not costed.** Recording it so that the next person to see V32 fail
 on this name finds the reason rather than re-deriving it.
+
+---
+
+## 6. `place_call` names a capability VoiceForge was never built to have
+
+**Recorded 2026-09-04. Nothing built, nothing removed.**
+
+Both Packs bind VoiceForge at `criticality: soft` with
+`modules_expected: [place_call, transcribe_call]`. Reconnaissance on 4 September, read in
+`C:\Users\ivann\Projects\voice-forge-ai` rather than inferred:
+
+| | |
+|---|---|
+| Running? | **Yes** — `voice-forge-app` on `:3300`, `/health` → 200 |
+| Answers `/_modules`? | **No.** Live probe returns 404. No adapter, no dispatch map |
+| `place_call` in the codebase | **zero occurrences** |
+| `transcribe_call` in the codebase | **zero occurrences** |
+| Telephony of any kind | **none.** Zero Twilio references outside `node_modules` |
+| `VOICEFORGE_TOKEN` | absent from `.env` **and** `.env.example`, while `forge_tenant_credential.credential_ref` is `env://VOICEFORGE_TOKEN` |
+
+The two greps that looked like telephony were `dialogueState`, matched on `dial`. The
+README describes the product plainly: *"speech in, a dialogue engine in the middle, speech
+out, and a web console to design, test and watch the whole thing."* Its real surface is
+`transcribe`, `synthesize`, `sessions`, `engines`, `evals`, `tenants`, `presets`, `designs`,
+`ab-tests`, `metrics`.
+
+### Why this is worse than `run_scenario_pack`
+
+Entry 5 left a name on the Pack for a capability SimForge does not have **as a unit of
+execution** — it runs scenarios one at a time and does not aggregate them into a pack run.
+The ability is there; the assembly is not. That is a day of work with a clear shape.
+
+`place_call` is not that. **VoiceForge has no phone.** There is no telephony provider, no
+outbound path, and nothing in the product's description that suggests there was ever meant
+to be. `transcribe_call` at least sits beside a real capability — `transcribeRoutes` is
+registered at `/transcribe` behind auth, and it is genuine ASR — though "call" still
+presupposes calls that this system does not place.
+
+So the Pack declares one module adjacent to something real and one that describes a
+different product.
+
+### The part that is not merely documentation
+
+`forge_module_registry` holds rows for both:
+
+    voiceforge/place_call        is_mutating=t  idempotency_support=key  verification_method=hand
+    voiceforge/transcribe_call   is_mutating=t  idempotency_support=key  verification_method=hand
+
+`hand` means somebody typed them. Nothing has ever verified them against a Forge, because
+there is no `_modules` endpoint to verify against.
+
+**A grant issued over the `place_call` row would authorize an agent to place telephone
+calls through a system with no phone**, and every piece of machinery downstream would
+report that grant as valid: the row exists, so V6 resolves it; the manifest row and the
+grant would satisfy the call path; the ledger would record the attempt. The only thing that
+would say otherwise is the Forge itself, at the moment of a call that cannot be made.
+
+V31 currently declines to rule on it — `nothing verified is known about the shape of
+Acquisition Analyst: voiceforge/place_call (hand-written row, never verified against the
+Forge)` — which is the rule working, and is a NOT_RUN rather than a refusal. **V31 stops an
+unattended grant here. It does not stop a grant.**
+
+### What is decided
+
+Nothing is built and nothing is removed. This waits with entry 5.
+
+**Three declared modules now have nothing behind them, and all three are recorded rather
+than assumed:**
+
+    lender_match, build_packet   entry 4 — removed from the Pack, gap moved to the role's duties
+    run_scenario_pack            entry 5 — left on the Pack, V32 FAILs on it by design
+    place_call                   here — left, and its registry row named as the live hazard
+
+Which of the three treatments is right for `place_call` is a product decision — VoiceForge
+gains telephony, or the Pack stops asking for it — and it is not answered here. What is
+answered is that nobody should discover this from a 200 that never dialled.
+
+### What retires it
+
+A VoiceForge Office adapter whose `_modules` manifest answers `place_call`, backed by a
+real telephony path. Until then the registry rows stay `hand` and V31 keeps declining. If
+the decision goes the other way, the rows come off the way `bureau_pull` and
+`readiness_score` did on 1 September.

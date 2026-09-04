@@ -766,6 +766,17 @@ async def _v29_departments_exist(
 
     known = await depts.names()
     if known is None:
+        # Two different facts, and they send a reader to different places: "start the
+        # Village" versus "find out what is holding that port". Reporting the first when
+        # the second was true left V29 and V30 NOT_RUN for a week while everyone assumed
+        # a missing credential.
+        if depts.was_misidentified():
+            return (
+                None,
+                "no position's department has been checked, and NOT because the Village "
+                f"refused: {depts.unreachable_reason()} NOT_RUN is not a pass, and this "
+                "one is not a credential problem.",
+            )
         return (
             None,
             "the department list could not be read from the Village "
@@ -803,10 +814,17 @@ async def _v30_department_has_seats(
 
     seats = await depts.seats()
     if seats is None:
+        if depts.was_misidentified():
+            return (
+                None,
+                "no position has been checked against the size of its department, and "
+                f"NOT because the Village refused: {depts.unreachable_reason()}",
+            )
         return (
             None,
-            "department headcount could not be read from the Village, so no position has "
-            "been checked against the size of its department.",
+            "department headcount could not be read from the Village "
+            f"({depts.unreachable_reason() or 'no answer'}), so no position has been "
+            "checked against the size of its department.",
         )
 
     wanted: dict[str, int] = {}

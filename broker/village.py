@@ -49,6 +49,45 @@ class VillageUnreachableError(Exception):
     """The Village did not answer, and no cached answer was available."""
 
 
+class VillageIdentityError(VillageUnreachableError):
+    """Something answered at the Village's address, and it is not the Village.
+
+    THE WEEK THIS COST
+    ==================
+
+        On 4 September 2026 The Office had been reporting V29 and V30 as NOT_RUN for a
+        week with `401 Unauthorized` from `http://127.0.0.1:8002/api/org/departments`.
+        That reads as a credential problem, so it was left for somebody with the
+        credential.
+
+        There is no credential. **The Village was not running**, and a container from an
+        unrelated project happened to hold port 8002. Its 401 was a different system
+        confidently refusing a request it had never heard of, and The Office reported it
+        as the Village refusing The Office.
+
+        Not a wrong value. The wrong system, answering, for a week.
+
+    HOW THIS IS TOLD FROM A REAL REFUSAL
+    ====================================
+
+        **The Village serves `/api/org/*` unauthenticated.** `app/blueprints/api/org.py`
+        carries no auth decorator and the blueprint has no `before_request`, and the
+        client below sends no credential — deliberately, because there is none to send.
+
+        So a `401` or `403` on these paths is not the Village being strict. It is
+        positive evidence that whatever answered is not the Village, and it is derived
+        rather than guessed.
+
+        A 2xx is checked a second way: the body must be Village-shaped. Something that
+        answers 200 with JSON of its own is the same class of problem one status code
+        over, and the shape check is what catches it.
+
+    A subclass of `VillageUnreachableError` on purpose: every existing caller that
+    degrades to a cached answer keeps doing so, because a misidentified responder is at
+    least as bad as no answer. What changes is that the reason now says which.
+    """
+
+
 @dataclass(frozen=True, slots=True)
 class Answer:
     """A Village response, with how old it is.
@@ -88,6 +127,58 @@ def base_url() -> str:
     return os.environ.get("VILLAGE_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
 
 
+#: Keys the Village's `/api/org/*` endpoints always carry. `success` alone is too common
+#: a word to identify anything; paired with a roster field it is specific to this surface.
+_VILLAGE_MARKERS = ("departments", "agents", "department_count", "agent_count")
+
+
+def _not_the_village(response: httpx.Response) -> str | None:
+    """Why this responder is not the Village, or None if nothing says it isn't.
+
+    Deliberately one-directional. It does not prove the Village answered — a
+    sufficiently similar service would pass — it establishes that a *particular*
+    responder did not. That is the check that was missing, and it is the one that is
+    derivable rather than a guess.
+    """
+    # The Village serves these paths open. `app/blueprints/api/org.py` has no auth
+    # decorator, the blueprint has no before_request, and this client sends no
+    # credential. So a credential challenge here is not the Village being strict.
+    if response.status_code in (401, 403):
+        server = response.headers.get("server", "unknown")
+        challenge = response.headers.get("www-authenticate")
+        detail = f"HTTP {response.status_code} from a server identifying as {server!r}"
+        if challenge:
+            detail += f", challenging with {challenge!r}"
+        return (
+            f"nothing at this address identified itself as the Village - {detail}. "
+            "The Village serves /api/org/* with no authentication, so a credential "
+            "challenge means something else holds this port. This is NOT the Village "
+            "refusing a credential: check what is listening before looking for one."
+        )
+
+    if response.status_code >= 400:
+        return None  # a 5xx or a 404 is not evidence either way; let it degrade normally
+
+    try:
+        body = response.json()
+    except ValueError:
+        return (
+            "nothing at this address identified itself as the Village - the response "
+            f"was not JSON (content-type "
+            f"{response.headers.get('content-type', 'unknown')!r})."
+        )
+
+    if not isinstance(body, dict) or not any(k in body for k in _VILLAGE_MARKERS):
+        keys = sorted(body)[:6] if isinstance(body, dict) else type(body).__name__
+        return (
+            "nothing at this address identified itself as the Village - it answered "
+            f"{response.status_code} with {keys!r}, which carries none of "
+            f"{list(_VILLAGE_MARKERS)}. Something is listening and it is not the "
+            "Village."
+        )
+    return None
+
+
 async def _get(path: str, *, degrade: bool = True) -> Answer:
     """One GET, with the last good answer as the fallback.
 
@@ -96,12 +187,25 @@ async def _get(path: str, *, degrade: bool = True) -> Answer:
     did not happen.
     """
     url = f"{base_url()}{path}"
+    identity_failure: str | None = None
     try:
         async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
             response = await client.get(url)
+            identity_failure = _not_the_village(response)
+            if identity_failure is not None:
+                raise VillageIdentityError(f"{url}: {identity_failure}")
             response.raise_for_status()
             data = response.json()
-    except Exception as exc:  # every failure mode degrades the same way
+    except VillageIdentityError as exc:
+        # Degrades like any other failure — a misidentified responder is at least as bad
+        # as no answer — but the reason says which, so a reader is not told the Village
+        # refused when nothing at that address is the Village.
+        cached = _cache.get(path)
+        if cached is None or not degrade:
+            raise
+        data, fetched_at = cached
+        return Answer(data=data, fetched_at=fetched_at, stale=True, reason=str(exc))
+    except Exception as exc:  # every other failure mode degrades the same way
         cached = _cache.get(path)
         if cached is None or not degrade:
             raise VillageUnreachableError(f"{url}: {exc}") from exc

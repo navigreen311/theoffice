@@ -54,6 +54,12 @@ class _State:
     departments: tuple[Department, ...] | None = None
     fetched_at: datetime | None = None
     last_error: str | None = None
+    #: True when something answered at the Village's address and was not the Village.
+    #: A different fact from "the Village did not answer", and the two need different
+    #: next actions: one is "start the Village", the other is "find out what is on that
+    #: port". They were indistinguishable until 4 September 2026, and the wrong one was
+    #: assumed for a week.
+    misidentified: bool = False
 
 
 _state = _State()
@@ -81,6 +87,7 @@ async def load(*, force: bool = False) -> tuple[Department, ...] | None:
         answer = await village.departments(degrade=True)
     except village.VillageUnreachableError as exc:
         _state.last_error = str(exc)
+        _state.misidentified = isinstance(exc, village.VillageIdentityError)
         return _state.departments  # last known, or None
 
     rows = answer.data.get("departments") or []
@@ -94,6 +101,9 @@ async def load(*, force: bool = False) -> tuple[Department, ...] | None:
     )
     _state.fetched_at = answer.fetched_at
     _state.last_error = None if not answer.stale else answer.reason
+    _state.misidentified = bool(
+        answer.stale and answer.reason and "identified itself as the Village" in answer.reason
+    )
     return _state.departments
 
 
@@ -127,6 +137,16 @@ def unreachable_reason() -> str | None:
     return _state.last_error
 
 
+def was_misidentified() -> bool:
+    """True when the last attempt reached something that is not the Village.
+
+    Callers use this to phrase a NOT_RUN correctly. "The Village could not be read" and
+    "nothing at the Village's address is the Village" send a reader to different places,
+    and reporting the first when the second is true cost a week.
+    """
+    return _state.misidentified
+
+
 def state() -> dict[str, Any]:
     """For the console, which has to show whether these numbers are current."""
     return {
@@ -135,6 +155,7 @@ def state() -> dict[str, Any]:
         "fetched_at": _state.fetched_at.isoformat() if _state.fetched_at else None,
         "stale": not _fresh(),
         "error": _state.last_error,
+        "misidentified": _state.misidentified,
     }
 
 
