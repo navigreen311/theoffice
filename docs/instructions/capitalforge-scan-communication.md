@@ -6,7 +6,7 @@
 **Permission:** `COMPLIANCE_WRITE`
 **Trust tier:** `propose`
 **Idempotency:** `at_most_once`
-**Version:** 1.0 — drafted 3 September 2026
+**Version:** 1.1 — drafted 3 September 2026
 **Status:** draft, pending Compliance Review Board
 
 Read foi-shared-rules.md first. Rules 1, 2, 5 and 6 govern most of this.
@@ -29,11 +29,26 @@ It does not send anything. It returns text and files a record.
 
 It does not inspect a video. video_script is the text a video is generated from, scanned before render. Named video_script rather than video because nothing here has inspected a video.
 
-It does not stop at a threshold. There is no hard stop at 70 — see §4.
+It does not stop at a threshold. There is no hard stop at 70 — see §5.
 
 It does not review. A scan is automation. humanReviewedAt stays null until a person looks.
 
-## 3. SIX CHANNELS, AND TWO ARE NOT CONSENT CHANNELS
+## 3. WHAT EACH INPUT MEANS
+
+| Input | Meaning |
+|---|---|
+| `advisorId` | The advisor whose text this is. A UUID **that must name a real advisor in this tenant** |
+| `channel` | Which channel the text is for. One of the six in §4 |
+| `content` | The text to scan. 1–100,000 characters |
+| tenant | **Not caller-supplied.** Read from the token |
+
+**`advisorId` is validated against the tenant, and that is not a formality.** It was once validated as a UUID and nothing else, so a scan could be filed against an id belonging to nobody — and the QA scores endpoint would then report over it faithfully. It refuses rather than defaulting to the caller: a scan filed against the person who ran it, when they named somebody else, is a different wrong answer rather than a fix.
+
+A non-existent id and another tenant's id get the same answer, deliberately.
+
+**All three fields are required.** There is no partial scan.
+
+## 4. SIX CHANNELS, AND TWO ARE NOT CONSENT CHANNELS
 
 SCAN_CHANNELS is CONSENT_CHANNELS plus chat and video_script — a superset by construction, so the overlap cannot drift again. Four lists had grown up around this and none matched.
 
@@ -43,13 +58,13 @@ video_script    Text a video is generated from. A marketing script relates to no
 
 The consent channels are shared with record_consent, which is the module that owns that vocabulary. The superset relationship is the fact worth carrying: everything consentable is scannable, and two scannable things are not consentable.
 
-## 4. WHAT COMES BACK
+## 5. WHAT COMES BACK
 
 contentWithDisclosures
 
 The rewritten body. Where a disclosure answers a specific banned claim it is placed immediately after the sentence containing it — not at the end.
 
-A disclosure triggered by a keyword rather than a claim has no position to attach to and is appended. Except on voice — see §5.
+A disclosure triggered by a keyword rather than a claim has no position to attach to and is appended. Except on voice — see §6.
 
 riskScore — there is no hard stop
 
@@ -71,7 +86,7 @@ The field was once named for review and set when the automation ran, so a compli
 
 humanReviewedAt and reviewedByUserId stay null until somebody actually does. This is the module's unverifiable third state: scanned and reviewed are different facts.
 
-## 5. VOICE REFUSES RATHER THAN APPENDING
+## 6. VOICE REFUSES RATHER THAN APPENDING
 
 On a written message an appended disclosure is imperfect — bottom of the message, the reader may not reach it.
 
@@ -81,7 +96,7 @@ So a voice scan whose disclosure has no anchor refuses — 400, with details.dis
 
 The fix is to rewrite the script so the disclosure has somewhere to sit. Not to move the channel.
 
-## 6. WHAT FAILURE LOOKS LIKE
+## 7. WHAT FAILURE LOOKS LIKE
 
 Response    Meaning
 400 unknown advisor    advisorId names nobody in this tenant
@@ -94,7 +109,7 @@ It refuses rather than defaulting to the caller. A scan filed against the person
 
 A non-existent id and another tenant's id get the same answer, deliberately.
 
-## 7. RETRY VS ESCALATE
+## 8. RETRY VS ESCALATE
 
 Never retry. Escalate.
 
@@ -110,7 +125,7 @@ That is arguably correct — an event stream of things that happened, and nothin
 
 The records exist. Query the records, not the ledger, when the question is coverage.
 
-## 8. NEVER
+## 9. NEVER
 
 Never send the original text after a scan. contentWithDisclosures is the output that matters. Sending what you scanned discards the disclosures the scan inserted.
 
@@ -124,11 +139,11 @@ Never treat riskScore under 70 as approved. approved is zero, and there is no th
 
 Never supply an advisorId other than the advisor whose text this is — and never substitute your own when the named one is refused.
 
-Never read a silent ledger as an unscanned message. §7.
+Never read a silent ledger as an unscanned message. §8.
 
 Never retry.
 
-## 9. WHICH LAWS THIS TOUCHES
+## 10. WHICH LAWS THIS TOUCHES
 
 compliance/own-claims-and-pricing-v1 — the FTC entry, and the source of what counts as a banned claim. The classification rule lives there: a firm-scale factual claim is permitted, a claim that shifts a prospective client's expectation about their own outcome is not, including when it is true.
 
@@ -138,7 +153,7 @@ compliance/estimate-not-offer-v1 — where scanned text carries a lender product
 
 compliance/call-recording-consent-v1 — where the text is a transcript of a recorded call, that entry governs the recording it came from.
 
-These records are excluded from the compliance manifest, deliberately. CommComplianceRecord carries tenantId and advisorId and no business — a scan is attributed to the advisor who ran it, and a marketing script relates to no client. Communication monitoring is a programme, answered by a tenant-level report rather than a per-client index. That report does not exist. See compliance_manifest_assemble §8.
+These records are excluded from the compliance manifest, deliberately. CommComplianceRecord carries tenantId and advisorId and no business — a scan is attributed to the advisor who ran it, and a marketing script relates to no client. Communication monitoring is a programme, answered by a tenant-level report rather than a per-client index. That report does not exist. See compliance_manifest_assemble §9.
 
 ## PROVENANCE
 
@@ -152,4 +167,16 @@ riskLevel is computed and unused. Nothing acts on it. approved is the only gate 
 
 The tenant-level monitoring report does not exist. It is the honest home for the coverage question the manifest excludes and the ledger cannot answer.
 
-A clean scan writes no ledger event. §7. Correct as an event stream, and it leaves the ledger unable to answer what was checked.
+A clean scan writes no ledger event. §8. Correct as an event stream, and it leaves the ledger unable to answer what was checked.
+
+## APPENDIX A — §3 WHAT EACH INPUT MEANS ADDED AT 1.1, 3 September 2026
+
+**Why.** This manual's §3 was SIX CHANNELS, AND TWO ARE NOT CONSENT CHANNELS — a
+fact about the channel enum, not a statement of what a caller supplies. So the
+curriculum's `inputs` field would have been written from the route code rather than
+lifted, making this one of three modules where the manual was not the source.
+
+**Nothing here is new.** `advisorId`, `channel` and `content` were read from
+`ScanBodySchema` and reviewed before authoring; the advisor-validation paragraph is
+lifted from what was §6. Sections renumbered: the old §§3–9 are now §§4–10, and the
+internal cross-references moved with them.

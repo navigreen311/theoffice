@@ -3,7 +3,7 @@
 **Forge:** CapitalForge
 **Module:** `restack_recommend`
 **Endpoints:** 3 GETs — two on `/api/restack`, one on `/api/v1/dashboard`
-**Version:** 1.1 — drafted 2 September 2026, against CapitalForge `f20a81b`
+**Version:** 1.2 — drafted 2 September 2026, against CapitalForge `f20a81b`
 **Status:** draft, pending Compliance Review Board
 
 Read `foi-shared-rules.md` first. Rules 1, 1a and 2 govern most of what this module returns and are not repeated here.
@@ -30,11 +30,22 @@ It does not write. All three are pure reads. Nothing is recorded, including no r
 
 **It does not forecast.** There is no estimated additional credit and no pipeline value. Both existed until 1 September and were deleted with nothing in their place — the figure was the previous round's *target* multiplied by 0.75, a number derived from nothing. Nothing in this system predicts what a client will be approved for.
 
-It does not measure recovery. See §4.
+It does not measure recovery. See §5.
 
 It does not decide. An eligible verdict is an assessment, not an instruction. Placement is a separate act with its own gates.
 
-## 3. WHAT COMES BACK
+## 3. WHAT EACH INPUT MEANS
+
+| Input | Meaning |
+|---|---|
+| `businessId` (path) | **`check` only.** The business to assess |
+| tenant | **Not caller-supplied.** Read from the token. The only input `eligible` and `restack-opportunities` have |
+
+**Two of the three endpoints take no parameters at all** — no path segment, no query string, no body. They answer for the calling tenant's whole active population, and the tenant comes from the token.
+
+That is the single most important thing to know about this module's inputs: **an agent cannot narrow, filter or scope these two calls.** What comes back is everything the tenant has, and a caller that wants a subset filters the answer rather than the request.
+
+## 4. WHAT COMES BACK
 
 ### `check/:businessId` — one client
 
@@ -78,7 +89,7 @@ The same scan with renamed keys, plus the three counts. It carries **no `reasons
 
 It is a list to act on, not a basis to report from. An agent asked to justify an opportunity calls `check/:businessId` per client.
 
-## 4. THE READINESS SCORE IS A FUNDABILITY FLOOR, NOT A RECOVERY MEASURE
+## 5. THE READINESS SCORE IS A FUNDABILITY FLOOR, NOT A RECOVERY MEASURE
 
 `fundingReadinessScore` is computed at onboarding and measures **fundability** — revenue, business age, industry risk, credit, leverage. This module asks whether a client has **recovered enough to stack again**.
 
@@ -96,7 +107,7 @@ Its debt component is worth 10 points and no caller has ever supplied either inp
 
 **Four** different thresholds are read off this one column: 70 here, 70 and 40 in the scorer's own track selection, 75 and 55 on the client detail card, 75 to start Round 2. A client scoring 72 clears this engine's readiness floor and cannot start Round 2 according to the button that would act on it.
 
-## 5. WHAT FAILURE LOOKS LIKE
+## 6. WHAT FAILURE LOOKS LIKE
 
 | Response | Where | Meaning |
 |---|---|---|
@@ -114,13 +125,13 @@ The dashboard's 500 is reachable for the first time. A failed query used to answ
 
 An empty `opportunities` array now means what it says.
 
-## 6. RETRY VS ESCALATE
+## 7. RETRY VS ESCALATE
 
 **Retry freely.** All three are pure reads.
 
 This does not extend to the document. `restack_opportunity_summary` in `document-gen` calls the same engine and produces a client-facing letter. That is a different blast radius and is not part of this grant.
 
-## 7. NEVER
+## 8. NEVER
 
 **Never generalise "null blocks."** Two of the three nulls block and one passes. The rule is shared rule 1, not the null.
 
@@ -128,7 +139,7 @@ This does not extend to the document. `restack_opportunity_summary` in `document
 
 **Never report a count from `eligible` without `notAssessedCount`.** Shared rule 7. An unassessed client is invisible in that scan by construction.
 
-**Never report a readiness score as a recovery assessment.** §4.
+**Never report a readiness score as a recovery assessment.** §5.
 
 **Never report `readinessScore: null` as a low score, a zero, or a weak profile.** It means nobody has assessed this client — most often because nobody has pulled their credit.
 
@@ -140,7 +151,7 @@ Until 2 September the engine said "Readiness score 53 is below threshold of 70" 
 
 **Never treat a 404 as a refusal.** There is no client to refuse.
 
-## 8. WHICH LAWS THIS TOUCHES
+## 9. WHICH LAWS THIS TOUCHES
 
 `compliance/client-interest-standard-v1` — the UDAAP entry. This module answers *can this client raise more capital*, and that entry is explicit that it is not the same question as *should they*. An eligible verdict is not a recommendation to place. Recommended scope is distinct from eligible scope, and this module reports the second.
 
@@ -175,3 +186,19 @@ Until 2 September the engine said "Readiness score 53 is below threshold of 70" 
 `scripts/migrate-data.ts` wrote `fundingReadinessScore ?? 0` into the migrated payload, and the import wrote that zero to the column, so a migrated business with no score landed as a score of zero — the state this module tells agents cannot exist. It now carries an absent score through as null; a *genuine* zero is still preserved as zero.
 
 Retained here rather than deleted because the defect is reachable in any database migrated before `f77e3fb`. An agent encountering `readinessScore: 0` on a client with no credit profile should treat the number as suspect rather than as an assessment, and say so.
+
+## APPENDIX A — §3 WHAT EACH INPUT MEANS ADDED AT 1.2, 3 September 2026
+
+**Why.** This manual's §3 was WHAT COMES BACK — the response, not the request. The
+curriculum's `inputs` field would have been written from the route code, which is
+the exception the manual-is-the-source principle cannot afford.
+
+**The finding it makes visible.** Two of the three endpoints take no parameters at
+all. That is easy to write as an empty row and easy to read as an omission, and it
+is neither: an agent cannot narrow, filter or scope `eligible` or
+`restack-opportunities`, and a caller wanting a subset filters the answer rather
+than the request.
+
+**Nothing here is new.** Sections renumbered: the old §§3–8 are now §§4–9. The two
+`docs/gaps.md` references (§3m, §3n) point into another document and were left
+alone.
