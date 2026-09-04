@@ -1,7 +1,10 @@
 # FORGE OPERATING INSTRUCTION
 
-**Forge:** CapitalForge  **Module:** `consent_grant`  **Endpoint:** `POST /api/businesses/:id/consent`
-**Version:** 1.1 — updated 1 September 2026, against CapitalForge `1d6c7c8`
+**Forge:** CapitalForge  **Module:** `record_consent`  **Endpoint:** `POST /api/businesses/:id/consent`
+**Version:** 1.4 — corrected 3 September 2026, against CapitalForge `1d6c7c8`
+**Corrected at 1.4:** §2 named six submission gates and four SMS gates. Five are enforced and five run. See Appendix D.
+**Corrected at 1.3:** the read-back prohibition moved from §5 to §7, where a prohibition belongs — see Appendix C.
+**Renamed at 1.2:** the module id was `consent_grant` in 1.1. `record_consent` is what the Burkham Pack declares and what the adapter now dispatches. See Appendix B.
 **Status:** draft, pending Compliance Review Board
 
 > Authored by Ivan. Stored here as the source text; it becomes an enforced
@@ -30,9 +33,11 @@ So the agent's job is narrow and it is a filing job: **do not file a record with
 
 **It does not make the consent valid.** Recording that consent exists and the consent being legally sufficient are different facts. The module records a claim.
 
-**It does not permit contact.** Sending an SMS passes four gates in order — phone on record, Do Not Call list, TCPA consent, quiet hours. This module writes gate 3. The other three still stand.
+**It does not permit contact.** Sending an SMS passes **five** gates in order — phone on record, Do Not Call list, TCPA consent, resolvable timezone, quiet hours. This module writes gate 3. The other four still stand.
 
-**It does not unblock a submission.** `submit_application` runs its own chain of six gates — product reality, consent captured, suitability, KYB/KYC, maker-checker, and credit-union membership disclosure. These are two unrelated chains for two different acts. The four above govern sending a message; the six govern submitting an application. A record written here satisfies neither on its own.
+**It does not unblock a submission.** `submit_application` runs its own chain of **five enforced gates** — product reality, consent captured, suitability, KYB/KYC and maker-checker. A sixth, credit-union membership disclosure, is declared and **cannot fire**: it runs only when `issuerType === 'credit_union'` and `CardApplication` carries an issuer name with no issuer type column, so nothing anywhere can produce that value. See `capitalforge-submit-application.md` §4, and the open question recorded in `docs/decisions/submit-application.md` entry 5 — this is not a tidy gap.
+
+These are two unrelated chains for two different acts. The five above govern sending a message; the five here govern submitting an application. A record written here satisfies neither on its own.
 
 **It does not check the channel against what is on record.** SMS consent records cleanly for a business with no phone number, and the gate then answers contactable. The mismatch surfaces only at dispatch, as a `no_phone` block. A successful call is not a statement that the business is reachable on that channel.
 
@@ -92,7 +97,6 @@ A 404 is deliberately ambiguous. "Does not exist" and "belongs to another tenant
 
 A 201 means **recorded** and nothing else. Not that the consent is valid, not that the reference resolves, not that anyone may now be contacted. Report it in those words.
 
-**Do not read the record back to verify.** An agent that fetches the row has confirmed a row exists, which it already knew. There is nothing honest to verify against, and the check is theatre.
 
 ## 6. RETRY VS ESCALATE
 
@@ -123,6 +127,8 @@ A human checks whether the row exists and either records it or moves on. Five mi
 **Never re-record to refresh.** Consent that looks stale is a question for a human about whether new consent is needed, not a new row with today's date pointing at an old artifact.
 
 **Never retry a timeout.** Escalate.
+
+**Never read the record back to verify it.** An agent that fetches the row has confirmed a row exists, which it already knew. There is nothing honest to verify against, and the check is theatre.
 
 **Never treat a 201 as permission to contact.**
 
@@ -220,3 +226,90 @@ dashboards (`dashboard-action-queue`, `dashboard-nav-counts`) *query* for expire
 consents, so there are two surfaces that will show an empty list forever. Not a
 defect in this module, and worth knowing before somebody reads that empty list as
 "no consent has expired" rather than "nothing can expire".
+
+## APPENDIX B — THE NAME, AND THE ENDPOINT THAT IS NOT IN THIS MODULE
+*3 September 2026*
+
+### The rename
+
+This manual was written at 1.1 as `consent_grant`. The Burkham Pack declares
+`record_consent`, and the CapitalForge adapter dispatches under that name, so
+this manual is what changed.
+
+The adapter's dispatch keys are the spelling of record for a Forge: the registry
+row, the Pack's `modules_expected` and the exclusion list all have to use them or
+they do not resolve. Renaming the module would therefore have edited three
+artifacts to fix nothing, since the Pack's name was already workable. A name
+changes when the name is the problem.
+
+**It is not always the manual that gives way.** `client_lookup` in the same Pack
+became `client_read`, `client_read_pii` and `client_read_credit` — there the name
+*was* the problem, because one id cannot address three grants carrying three
+different permission sets.
+
+### The re-consent email is not in this module, and is not a module
+
+`POST /api/clients/:clientId/consent/request` sends a client an email asking them
+to re-consent. **It exists, it works, and no agent can reach it.**
+
+It is a different act from what this module does. This module records that
+consent was given; that endpoint contacts a person. A single grant covering both
+would let an agent authorised to file a consent record send mail to a client
+instead — and the client would receive it believing a human at the firm decided
+to write.
+
+**It is deliberately not a separate module either**, which was the first answer
+and the wrong one. A module id exists so that something can be granted. Nobody
+has decided an agent may send this mail, so giving it an id would create a
+registry row, a manual and a grantable surface for an act with no decision behind
+it. The absence is the decision.
+
+**What keeps it out** is not the name but the binding: this module binds one
+operation and that operation is the write to the consent table. There is no view
+that reaches the email, and the adapter's test suite exercises every operation on
+every module and asserts that none of them builds that path.
+
+**If it is ever granted**, it gets its own id, its own manual, and its own
+decision recorded first — in that order. Until then an agent that needs a client
+re-contacted says so and a person does it.
+
+## APPENDIX C — §5 CORRECTED AT 1.3, 3 September 2026
+
+**What changed.** "Do not read the record back to verify" was in §5, WHAT FAILURE
+LOOKS LIKE. It is a prohibition, not a failure signature — nothing about it
+describes what a failure looks like — and it now sits in §7 with the other nevers.
+
+**Why it was found.** This module is being authored into
+`forge_operating_instruction`, where §5 becomes `failure_signatures` and §7 becomes
+`never_do`. Mapping the sections onto the eight fields is what surfaced a sentence
+sitting under the wrong heading — the value of a schema being that things have to
+go somewhere specific.
+
+**Nothing was added or reworded.** The sentence is unchanged and it is still in the
+manual. Only the section changed.
+
+## APPENDIX D — §2 CORRECTED AT 1.4, 3 September 2026
+
+Found by a targeted audit of every manual's §2 for asserted protections, run after
+`submit-application.md` was found claiming a middleware that does not exist.
+
+**§2 said `submit_application` runs six gates.** It named credit-union membership
+disclosure among them. That gate **cannot fire** — `submit-application.md` §4 has
+said so since it was written, and this manual asserted the opposite.
+
+The direction is what makes it serious. An omission leaves an agent uncertain; an
+assurance makes it confident and wrong. And an agent reading *this* manual has no
+path to the correction: the contradicting statement is in a different manual it may
+hold no grant for.
+
+**§2 said an SMS passes four gates.** It passes five — `no_phone`, `dnc`,
+`no_consent`, `unknown_timezone`, `quiet_hours`. The four named were right and in
+the right order; an unnamed fifth sits between consent and quiet hours. Wrong in the
+safe direction, and wrong the same way.
+
+**The gate that cannot fire is not closed by this edit.** A dead branch where a
+required control should be is a question about the product, not about a manual —
+six credit unions are on file as active placement targets offering business cards,
+and the disclosure is declared `required: true`. Raised in
+`docs/decisions/submit-application.md` entry 5. Until that is answered, this manual
+states the gap rather than implying it was decided.

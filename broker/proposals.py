@@ -111,7 +111,23 @@ async def decide(
     `review_seconds` is computed from `created_at` in the database rather than
     passed in, so a caller cannot report a review time it did not take.
     """
+    # APPROVING DOES NOT EXECUTE, and the record says so.
+    #
+    # `mark_executed` exists and has no production caller: nothing reads an
+    # approved proposal and makes the call it describes. Approval therefore sets a
+    # status and stops, which is indistinguishable from a queue that has not got to
+    # it yet - so the decision reason carries the fact.
+    #
+    # Recorded here rather than refused, because rejecting IS complete and an
+    # approval is still a real decision worth having on the record. What is missing
+    # is the execution, and the reason column is where a reader looks.
     status = "approved" if approve else "rejected"
+    if approve:
+        note = (
+            "APPROVAL DOES NOT EXECUTE - no path exists from an approved proposal "
+            "to a Forge call. The act must be carried out by a person."
+        )
+        reason = f"{reason} [{note}]" if reason else note
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
             """

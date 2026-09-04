@@ -4,7 +4,7 @@
 **Module:** `client_read_pii`
 **Endpoints:** 3 GETs under `/api/clients/:clientId` and `/api/v1/clients/:clientId`
 **Permission:** `business:read` **and** `business:read:pii`
-**Version:** 1.4 — drafted 2 September 2026, against CapitalForge `fcc46ab`
+**Version:** 1.5 — corrected 3 September 2026, against CapitalForge `fcc46ab`
 **Status:** draft, pending Compliance Review Board
 
 Read `foi-shared-rules.md` first. Sections 1, 2 and 3 govern most of what this module returns, and they are not repeated here.
@@ -31,6 +31,8 @@ The rest of the client file is `client_read`. Credit is `client_read_credit`. A 
 
 It does not write. No row changes, nothing is sent, nothing is recorded — including no record that the read happened. **Reading a date of birth leaves no trace.**
 
+**A brokered call is the exception, and it is not this module's doing.** A call arriving through The Office writes one `ledger_events` row per call — `office.module.called`, keyed by the trace id The Office also records — whatever the module does, reads included. That is an access record about the brokered call, not a business event about the client, and it is not visible to anything reading this module's output. A human's call through the UI behaves exactly as the sentence above describes.
+
 It does not prove anything about the client's situation. It reports what Burkham has on file. See shared rule 1.
 
 It does not verify the client exists. That already happened. The mount guard runs before any handler here, so by the time a handler executes the client is known to exist and to belong to the caller's tenant.
@@ -49,9 +51,15 @@ No other input. Nothing here takes a query parameter.
 
 ## 4. THE CORRECT SEQUENCE
 
-There is none. The three are independent reads with no ordering requirement and no state between them.
+The three calls have no ordering requirement between them and no state to carry — any one can be made without any other. What has an order is what surrounds a read:
 
-What matters is what happens after. A read gathering context for a placement, a submission or a recommendation feeds a decision — and shared rule 1 governs everything the read returns from that point on.
+1. **Read.** One call, or several in any order.
+2. **Read the code before the status on any 404.** `NOT_FOUND` and `ACH_AUTHORIZATION_NOT_FOUND` share a status and mean opposite things — see §5. This step is before reporting anything, not after.
+3. **Check every empty result for a declared basis before reporting it.** `no_owners_on_record`, `no_timeline_events_on_record`. Every empty result in this module carries one. Shared rules 2 and 3.
+4. **Where the read is gathering context rather than answering a question, apply shared rule 1 to everything it returned.** An absence is a fact about the records, not about the world.
+5. **Carry it no further than the answer requires.** A date of birth read to answer one question does not become context for the next. This step has no equivalent in the sibling modules and it is the one this grant exists to enforce.
+
+Step 5 is the one that carries. The other four are discipline about accuracy; that one is discipline about disclosure, and a natural-person identifier that travels further than it was read for is the harm this module was split out to prevent.
 
 ## 5. WHAT FAILURE LOOKS LIKE
 
@@ -142,3 +150,24 @@ Eight handlers on this router were cross-tenant readable until 1 September 2026 
 **The 404 carries two meanings and only the error code separates them.** A 200 with an explicit empty state and a basis — matching what `client_read_credit`'s `/credit/recommendations` already does — would make them distinguishable by shape rather than by reading a code correctly. Raised for CapitalForge; this manual documents current behaviour.
 
 **Nothing records that this data was read.** §2 states it as a fact about the module. Whether a read of dates of birth and IP addresses should leave an audit trail is a policy question nobody has answered, and the absence is invisible from the response.
+
+## APPENDIX — CORRECTED AT 1.5, 3 September 2026
+
+Two corrections, both made while authoring this module into
+`forge_operating_instruction`, and both the same corrections its sibling
+`client_read` took at 1.5 and 1.6.
+
+**§2 said the read leaves no record.** True of a human's call through the UI, and no
+longer true of a brokered one: the CapitalForge Office adapter writes one access
+record per call, reads included. The module still writes nothing of its own. §2 now
+states the difference — the property is right for a person clicking and wrong for an
+autonomous agent reading a client's file.
+
+**§4 said "there is none" and then described a sequence.** A reader looking for a
+sequence stopped at the first sentence. It now states the steps it was describing.
+The endpoints remain independent, unordered and stateless with respect to each
+other; what is ordered is the discipline around a read.
+
+Writing "no required ordering" as a one-item list would have satisfied the
+curriculum's `validate_sections` by turning a stated absence into a step — the move
+this manual set warns about everywhere else.

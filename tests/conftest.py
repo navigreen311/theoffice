@@ -279,6 +279,12 @@ def seed_agent(admin: psycopg.Connection) -> Iterator[uuid.UUID]:
             "DELETE FROM agent_working_memory WHERE office_agent_id = %s", (agent_id,)
         )
         cur.execute("DELETE FROM shift_assignment WHERE office_agent_id = %s", (agent_id,))
+        # certification was missing from this list until 3 September 2026. The
+        # comment above claimed the list was complete and it was not - no test had
+        # written a Unit A row against this agent and left it standing, so the
+        # foreign key was never exercised. The first test that did failed in
+        # teardown, which reads as a broken test rather than a broken fixture.
+        cur.execute("DELETE FROM certification WHERE office_agent_id = %s", (agent_id,))
         for table in ("revocation", "proposal"):
             cur.execute(
                 f"DELETE FROM {table} WHERE office_agent_id = %s",

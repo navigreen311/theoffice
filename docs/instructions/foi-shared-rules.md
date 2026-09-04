@@ -93,3 +93,49 @@ Where the manual says escalate, escalate. Do not check-then-retry — between th
 - Never report a count without its denominator where one is offered. "3 eligible" and "3 eligible of 40, 12 never assessed" are different answers.
 - Never report a refusal, a timeout or an error as a finding about the subject. Rule 1a.
 - Never reason toward data this grant does not reach. Rule 1b.
+
+---
+
+## WRITING A MANUAL — TWO SECTIONS THAT GET WRITTEN AS SOMETHING ELSE
+
+A manual becomes a curriculum: its sections are mapped onto the eight fields of
+`forge_operating_instruction`, and that is what an agent is certified against. Two
+of the eight are reliably written as something adjacent, and **seven of the seven
+manuals authored so far needed one or both fixed before they could be authored.**
+
+**§ THE CORRECT SEQUENCE — the ordered steps an agent takes.** Not context, not what
+comes back, not what the section is about.
+
+If the calls have no ordering between them, say so in the first line and then write
+the steps of what *surrounds* a call: check an empty result for its basis before
+reporting it, apply shared rule 1 where the read feeds a decision, carry it no
+further than the answer requires. Six manuals opened with "There is none" and then
+described exactly that in the paragraph below. The steps were there; they were in
+the wrong shape.
+
+Do not write "no required ordering" as a one-item list to satisfy the schema. That
+turns a stated absence into a step, which is the move these rules warn about
+everywhere else.
+
+**The test: a step belongs here only if doing it later would be worse than doing it
+earlier.** If the order does not matter, it is not a step.
+
+**A module with two real steps gets two.** A thin section is a fact about the
+module, not a gap to fill — and padding it is what produces the next failure rather
+than avoiding one.
+
+**If a step is a `never` in different words, it belongs in § NEVER only.** The first
+manual written against this guidance produced five steps, three of which were its
+own nevers restated as imperatives. A curriculum where two sections say the same
+thing in opposite polarity teaches an agent that the sections are not distinct,
+which is the opposite of what the eight fields are for.
+
+**§ WHAT EACH INPUT MEANS — the parameters a caller supplies.** Not what comes back.
+
+Three manuals had a §3 that was WHAT COMES BACK, a channel enum, or a gate ladder.
+Each is worth writing; none is an input section, and a module without one has a
+curriculum field written from route code rather than from its manual.
+
+Include what the caller does **not** supply and where it comes from instead. The
+tenant is read from the token on every module in this set, and it decides what the
+call can reach — an agent that thinks it can set one is wrong about the module.

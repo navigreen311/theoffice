@@ -6,12 +6,12 @@
 **Permission:** `COMPLIANCE_READ`
 **Trust tier:** `propose`
 **Idempotency:** `at_most_once`
-**Version:** 1.1 — drafted 2 September 2026, against CapitalForge `2b36895`
+**Version:** 1.2 — corrected 3 September 2026, against CapitalForge `2b36895`
 **Status:** draft, pending Compliance Review Board
 
 Read `foi-shared-rules.md` first. Rules 1, 2, 5 and 6 govern most of this.
 
-**This module writes.** Two rows and a ledger event per call. Its sibling `compliance_manifest_assemble` writes nothing and retries freely. Do not carry that habit here. See §6.
+**This module writes.** Two rows and a ledger event per call. Its sibling `compliance_manifest_assemble` writes nothing and retries freely. Do not carry that habit here. See §7.
 
 ## 1. WHAT IT DOES
 
@@ -31,7 +31,19 @@ Sections: inquiry details, documents, complaints, consent records, compliance ch
 
 `excludedRecordTypes` names them. This matters more here than anywhere else in the system — this is the artefact that actually goes to a regulator, and until 2 September a reader could not tell any of those omissions from "this business has none."
 
-## 3. WHAT COMES BACK
+## 3. WHAT EACH INPUT MEANS
+
+| Input | Meaning |
+|---|---|
+| `:id` (path) | The regulator inquiry. **Must have a business attached** — see §5 |
+| tenant | **Not caller-supplied.** Read from the token |
+| requester | **Not caller-supplied.** Read from the token, and resolved before anything is assembled or written |
+
+**The inquiry is the input, not the business.** Unlike its sibling, this module is addressed by an inquiry id and the business is reached through it. An inquiry with no business attached assembles nothing — that is a 422, not an empty dossier.
+
+**There is no date range.** `since` and `until` exist on `compliance_manifest_assemble` and not here. A dossier covers what the inquiry reaches, and an agent cannot narrow it.
+
+## 4. WHAT COMES BACK
 
 ### `legalHoldSummary` — read this before reporting anything about preservation
 
@@ -61,13 +73,17 @@ One concept, two vocabularies. Do not carry the sibling's field names across.
 
 `contents` states that this is references rather than bytes.
 
-## 4. THE CORRECT SEQUENCE
+## 5. THE CORRECT SEQUENCE
 
-The requester is resolved before anything is assembled or written. A bad id costs no queries and no row.
+1. **The requester is resolved before anything is assembled or written.** A bad id costs no queries and no row.
+2. **The inquiry must have a business attached.** If it does not, nothing is assembled — a 422, see §5. That is not an empty dossier and must not be reported as one.
+3. **Call it once.** This module is `at_most_once`. Every call mints a new `exportId`, writes a row and emits an event, so a second call is a second export of the same inquiry and the audit trail then shows two. There is no idempotency key and nothing de-duplicates.
+4. **On a timeout, do not retry — look for the existing export.** The state machine does not refuse a second call the way `submit_application` does, so the protection here is the runbook rather than the code.
+5. **Read `excludedRecordTypes` and report what is missing.** Five record types are omitted that the sibling module carries. This is the artefact that goes to a regulator; what it omits is part of what it says.
 
-The inquiry must have a business attached. If it does not, nothing is assembled — see the 422 in §5.
+Steps 3 and 4 are what separate this module from `compliance_manifest_assemble`, which retries freely. Same permission, same reader, opposite handling — and an agent holding both grants must not carry the sibling's retry habit across.
 
-## 5. WHAT FAILURE LOOKS LIKE
+## 6. WHAT FAILURE LOOKS LIKE
 
 | Response | Meaning |
 |---|---|
@@ -81,11 +97,11 @@ The 422 is shared rule 1 in its sharpest form. It is deliberately **not a 404**,
 
 Until 2 September this assembled five empty arrays and returned them as a complete dossier. A dossier of empty sections reads as "this business has no records" when the fact is that no business was attached.
 
-**On a 500: an export may exist.** Look for an `exportId` before doing anything else.
+**On a 500: an export may exist.** Look for an `exportId` before doing anything else. That is the live rule and it stands on its own.
 
-Until `2b36895` the event was published first, so a failed write left `regulator.dossier.exported` in the ledger carrying an `exportId` that resolved to nothing. For any incident before that commit, the ledger event is not evidence the export exists. Check for the row.
+**Only when investigating an incident that predates `2b36895`:** the event was published before the write, so a failed write left `regulator.dossier.exported` in the ledger carrying an `exportId` that resolved to nothing. For those incidents only, the ledger event is not evidence the export exists — check for the row. An agent cannot tell whether an incident predates a commit, so this applies when a human hands it that context and never otherwise. See the appendix.
 
-## 6. RETRY VS ESCALATE
+## 7. RETRY VS ESCALATE
 
 **Never retry. Escalate.**
 
@@ -95,9 +111,9 @@ On a timeout the export may or may not have completed. The correct next step is 
 
 The sibling module is the opposite and the difference is not cosmetic. `compliance_manifest_assemble` mints nothing and creates no artefact, so a retry there is harmless and merely adds a true assembly event. An agent holding both grants must keep the two apart.
 
-## 7. NEVER
+## 8. NEVER
 
-**Never retry.** §6. This is the module that rule exists for.
+**Never retry.** §7. This is the module that rule exists for.
 
 **Never present the dossier as containing documents.** It lists them.
 
@@ -111,7 +127,7 @@ The sibling module is the opposite and the difference is not cosmetic. `complian
 
 **Never assemble a second export to "make sure."** Look for the first.
 
-## 8. WHICH LAWS THIS TOUCHES
+## 9. WHICH LAWS THIS TOUCHES
 
 This module produces an artefact for a regulator. Everything in `foi-shared-rules.md` about basis, absence and provenance applies with the consequence at its highest.
 
@@ -137,4 +153,33 @@ This module produces an artefact for a regulator. Everything in `foi-shared-rule
 
 A packet does not exist, and this is the module where the legal-hold transfer question would first be exercised. One ruling covers both evidence modules. Not started.
 
-Pre-`a2968d7` exports carry the old legal hold claim. They are persisted rows and cannot be corrected retroactively. Anyone reading one needs §3.
+Pre-`a2968d7` exports carry the old legal hold claim. They are persisted rows and cannot be corrected retroactively. Anyone reading one needs §4.
+
+## APPENDIX — CORRECTED AT 1.2, 3 September 2026
+
+Both corrections were made before authoring rather than during it. Six of the six
+manuals authored before this pair needed an edit first, so this one was checked on
+that assumption.
+
+**§3 WHAT EACH INPUT MEANS is new.** This manual's §3 was WHAT COMES BACK — the
+response, not the request — so the curriculum's `inputs` field would have been
+written from route code rather than lifted, which is the exception the
+manual-is-the-source principle cannot afford.
+
+**§5 THE CORRECT SEQUENCE was a statement, not a sequence.** It described what the
+module does before it reads anything, which is true and is not a list of steps an
+agent follows. It now states the steps, and what was there is preserved as the
+first of them.
+
+Sections renumbered: the old §§3–8 are now §§4–9, and internal cross-references
+moved with them.
+
+**Added at 1.2 — the ordering history, scoped.** §6 carried the pre-`2b36895`
+publish-before-write ordering as an unqualified paragraph. It is a fact about
+history sitting in a document an agent reads for what to do now: an agent cannot
+tell whether an incident predates a commit hash, and once the last such incident
+closes the sentence reads as live guidance and is not.
+
+It is now scoped to the case it applies to and nothing else. The live rule — on a
+500 an export may exist, look for an `exportId` first — needs no qualifier and
+carries the whole weight for every incident after that commit.

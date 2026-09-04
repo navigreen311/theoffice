@@ -4,7 +4,10 @@
 **Module:** `client_read`
 **Endpoints:** 6 GETs under `/api/clients/:clientId` and `/api/v1/clients/:clientId`
 **Permission:** `business:read`
-**Version:** 1.4 — drafted 2 September 2026, against CapitalForge `fcc46ab`
+**Version:** 1.7 — corrected 3 September 2026, against CapitalForge `fcc46ab`
+**Correction at 1.5:** see Appendix C. A brokered call now leaves an access record, which §2 said did not exist.
+**Rewritten at 1.6:** §4 said "there is none" and then described a sequence underneath. It now states the sequence it was describing — see Appendix D.
+**Corrected at 1.7:** §5 said to read the code not the status and then said both 404 codes mean the same thing. The distinction now pays off — see Appendix E.
 **Status:** draft, pending Compliance Review Board
 
 Read `foi-shared-rules.md` first. Sections 1, 2 and 3 govern most of what this module returns, and they are not repeated here.
@@ -52,9 +55,13 @@ No other input. Nothing here takes a query parameter.
 
 ## 4. THE CORRECT SEQUENCE
 
-There is none. The six are independent reads with no ordering requirement and no state between them.
+The six calls have no ordering requirement between them and no state to carry — any one can be made without any other. What has an order is what surrounds a read:
 
-What matters is what happens after. A read gathering context for a placement, a submission or a recommendation feeds a decision — and shared rule 1 governs everything the read returns from that point on.
+1. **Read.** One call, or several in any order.
+2. **Check every empty result for a declared basis before reporting it.** `/documents` and `/acknowledgments` carry one — `no_documents_on_record`, `no_acknowledgments_on_record`. A `complianceScore` computed from no checks is not a passing score; read `checks` before reporting the number. Shared rules 2 and 3.
+3. **Where the read is gathering context rather than answering a question, apply shared rule 1 to everything it returned.** An absence is a fact about the records, not about the world, and context becomes an input to a decision. Report an absence and let a human decide what it means; never act on one.
+
+Step 3 is the one that carries. Answering is bounded — fetch, report, stop. A read feeding a placement, a submission or a recommendation puts everything it returned, including what it did not find, into a decision somebody else will own.
 
 ## 5. WHAT FAILURE LOOKS LIKE
 
@@ -62,10 +69,16 @@ What matters is what happens after. A read gathering context for a placement, a 
 
 | Code | Meaning |
 |---|---|
-| `NOT_FOUND` | No such client, or not yours. From the mount guard, before any handler runs |
-| `CLIENT_NOT_FOUND` | Same, from `GET /` — a delete racing the guard |
+| `NOT_FOUND` | From the mount guard, before any handler runs. No such client, or not this tenant's |
+| `CLIENT_NOT_FOUND` | From `GET /`, **after the guard passed** — a delete racing the guard |
 
-Both mean the same thing here: **stop.** There is nothing to report about. Neither is an absence in the sense of shared rule 1 — an absent client is a fact about the world, not about the records.
+**Both mean stop. Only one means something happened, and that is why the rule exists.**
+
+`NOT_FOUND` is the ordinary case: a wrong id, or an id belonging to another tenant. Report that the client could not be reached.
+
+`CLIENT_NOT_FOUND` is not that. The guard resolved the client and the handler then did not find it — so the client existed moments ago and something changed mid-read. **Escalate this one.** Reporting it as a wrong id hides a record disappearing underneath a read.
+
+Neither is an absence in the sense of shared rule 1 — an absent client is a fact about the world, not about the records.
 
 | Response | Meaning |
 |---|---|
@@ -125,3 +138,72 @@ This is a property of this module, not of the URL prefix. It does not extend to 
 **The 404 carries two meanings across the router.** On this module both mean "no such client", so the ambiguity does not bite here — it bites on `client_read_pii`, where `ACH_AUTHORIZATION_NOT_FOUND` shares the status. Recorded here so the three manuals agree.
 
 **`client_reassign` is defined and not built.** `advisorId` and `status` were removed from the update surface on 2 September and no endpoint replaces them yet. `status` in particular needs transition rules before an endpoint exists.
+
+## APPENDIX C — CORRECTION AT 1.5, 3 September 2026
+
+**§2 said this module leaves no record, "including no record that the read
+happened". That is no longer true on the brokered path, and this states the
+difference.**
+
+Since the CapitalForge Office adapter was built, a call arriving through The
+Office writes one `ledger_events` row per call — `office.module.called`, keyed by
+the trace id The Office also records — whatever the module does. Reads included.
+
+**The module still writes nothing of its own.** No row it reads changes, nothing
+is sent, and a human's call through the UI behaves exactly as §2 describes. What
+the adapter writes is an access record about the brokered call, not a business
+event about the client, and it is not visible to anything that reads this
+module's output.
+
+It is written for reads deliberately. §2's original claim is a reasonable
+property for an endpoint a person clicks; it is the wrong property for an
+autonomous agent reading a client's file, where the side holding the file needs
+to be able to say who read what and when. The Office's `agent_call_ledger` alone
+would not do — it is a record kept by the caller about itself.
+
+**What has not changed:** an agent may still not infer from this that a read is
+disclosed to the client, or that reading is logged anywhere the client can see.
+It is an internal access record.
+
+## APPENDIX D — §4 REWRITTEN AT 1.6, 3 September 2026
+
+**What changed.** §4 opened "There is none" and then spent a paragraph on what
+happens after a read. Both halves were true and the section taught the second one
+badly, because a reader looking for a sequence stopped at the first sentence.
+
+It now states three steps: read, check an empty result for its declared basis
+before reporting it, and — where the read is gathering context rather than
+answering — apply shared rule 1 to everything returned.
+
+**Why not "no ordering" as a one-item list.** This module is being authored into
+`forge_operating_instruction`, where `correct_sequence` is a list and
+`validate_sections` rejects an empty one. Writing `["There is no required
+ordering"]` would have satisfied the constraint by turning a stated absence into a
+step — the same move this manual set warns about everywhere else. The section had
+a real sequence in it; it was in the second paragraph rather than the first.
+
+**Nothing about the six endpoints changed.** They remain independent, unordered
+and stateless with respect to each other. What is ordered is the discipline around
+a read, not the reads.
+
+## APPENDIX E — §5 CORRECTED AT 1.7, 3 September 2026
+
+**What changed.** §5 opened *"Read the error code, never the status alone"* and then
+said of the two 404 codes: *"Both mean the same thing here: stop."* An agent reads
+the second line and ignores the first, correctly — if the codes mean the same thing
+there is no reason to read them.
+
+They do not mean the same thing. `NOT_FOUND` comes from the mount guard before any
+handler runs: a wrong id, or another tenant's. `CLIENT_NOT_FOUND` comes from
+`GET /` **after the guard passed**, which means the client resolved and then did not
+— it existed moments ago and something changed mid-read.
+
+The action is the same and the report is not. The second is worth escalating, and
+reporting it as a wrong id hides a record disappearing underneath a read.
+
+**Why it was found.** Authoring this module into `forge_operating_instruction`.
+`failure_signatures` is prose, so nothing forced the change — what forced it was
+reading the section as something an agent would follow rather than as something a
+person would skim.
+
+**Nothing about the endpoints changed.** Both codes still mean stop.

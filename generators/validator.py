@@ -34,6 +34,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from psycopg import AsyncConnection
@@ -700,14 +701,56 @@ async def _v28_library_refs_resolve(
         found = {r[0] for r in await cur.fetchall()}
 
     missing = sorted(set(refs) - found)
-    return (
-        not missing,
-        f"[COMPLIANCE LIBRARY GAP] {len(missing)} of {len(refs)} ref(s) resolve to "
-        f"nothing: {_join(missing)}. Write the entry, or set library_gap so the Pack "
-        "stops claiming coverage it does not have."
-        if missing
-        else f"{len(found)} of {len(refs)} library ref(s) resolve",
+    if not missing:
+        return True, f"{len(found)} of {len(refs)} library ref(s) resolve"
+
+    # UNWRITTEN AND UNLOADED ARE DIFFERENT FACTS, and saying "resolve to nothing" for
+    # both is what let nineteen fully-written entries sit behind this rule reading as
+    # a documentation gap. They were complete on disk the whole time; nothing had
+    # ingested them, and "write the entry" is the wrong instruction for an entry
+    # somebody had already written.
+    on_disk = _refs_on_disk()
+    unloaded = [r for r in missing if r in on_disk]
+    unwritten = [r for r in missing if r not in on_disk]
+
+    parts: list[str] = []
+    if unloaded:
+        parts.append(
+            f"{len(unloaded)} WRITTEN BUT NOT LOADED - present in "
+            f"packs/compliance-library/ and absent from compliance_library_entry: "
+            f"{_join(unloaded)}. Run scripts/load_compliance_library.py; do not "
+            "rewrite these."
+        )
+    if unwritten:
+        parts.append(
+            f"{len(unwritten)} NOT WRITTEN ANYWHERE - no entry in "
+            f"packs/compliance-library/ either: {_join(unwritten)}. Write the entry, "
+            "or set library_gap so the Pack stops claiming coverage it does not have."
+        )
+    return False, (
+        f"[COMPLIANCE LIBRARY GAP] {len(missing)} of {len(refs)} ref(s) do not "
+        f"resolve. " + " ".join(parts)
     )
+
+
+def _refs_on_disk() -> set[str]:
+    """Every `entry_ref` written in packs/compliance-library/, loaded or not.
+
+    Read from the files rather than from the database on purpose: the whole point of
+    this call is to tell an entry nobody wrote from one nobody ingested, and the
+    database cannot answer that question about itself.
+    """
+    library = Path(__file__).resolve().parents[1] / "packs" / "compliance-library"
+    if not library.is_dir():
+        return set()
+    refs: set[str] = set()
+    for path in sorted(library.glob("*.yaml")):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        refs.update(re.findall(r"^\s*-?\s*entry_ref:\s*(\S+)", text, re.M))
+    return refs
 
 
 async def _v29_departments_exist(
@@ -885,6 +928,17 @@ async def _v31_unattended_writes(
     whether a module resolves to a registry row. This asks whether the tier the Pack
     grants over it is survivable — a module can resolve perfectly and still be wrong to
     run with nobody watching.
+
+    **WHAT IT DOES NOT REACH: a mutating module whose idempotency is `natural`.**
+    `record_consent` is one - calling it twice records consent twice against the
+    same business, and this rule permits `auto_execute` over it because a natural
+    key means a retry is not a second act. That is the right reading of
+    `natural` and it leaves one module unguarded by tier.
+
+    Deliberately not closed. A `min_trust_tier` column on `forge_module_registry`
+    plus a check in `resolve_grant` is machinery built for a single case, and the
+    Burkham Pack grants nothing at `auto_execute` anyway. Recorded here rather
+    than fixed, so the next reader knows the gap is known and sized.
 
     The shape it refuses is the one `regulator_dossier_export` is written around:
     every call mints a new `exportId`, writes a row and emits an event, so a retry

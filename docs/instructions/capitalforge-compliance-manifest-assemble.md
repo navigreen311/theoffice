@@ -4,12 +4,12 @@
 **Module:** `compliance_manifest_assemble`
 **Endpoint:** `GET /api/documents/export/:businessId`
 **Permission:** `COMPLIANCE_READ`
-**Version:** 1.1 — drafted 2 September 2026, against CapitalForge `2b36895`
+**Version:** 1.2 — corrected 3 September 2026, against CapitalForge `2b36895`
 **Status:** draft, pending Compliance Review Board
 
 Read `foi-shared-rules.md` first. Rules 1, 2 and 5 govern most of this.
 
-**Sibling module:** `regulator_dossier_export`. Same permission, same reader, different blast radius. See §6 — the difference is the most important thing an agent holding both grants needs to know.
+**Sibling module:** `regulator_dossier_export`. Same permission, same reader, different blast radius. See §7 — the difference is the most important thing an agent holding both grants needs to know.
 
 ## 1. WHAT IT DOES
 
@@ -27,7 +27,21 @@ The route sets `Content-Disposition: attachment`, so a browser saves a file that
 
 **It does not cover everything.** `excludedRecordTypes` names four record types it omits, each with a reason.
 
-## 3. WHAT COMES BACK
+## 3. WHAT EACH INPUT MEANS
+
+| Input | Meaning |
+|---|---|
+| `businessId` (path) | The business to assemble a manifest for |
+| `since` (query) | Optional. Narrows to a date range |
+| `until` (query) | Optional. Narrows to a date range |
+| tenant | **Not caller-supplied.** Read from the token |
+| requester | **Not caller-supplied.** Read from the token, and verified before anything is assembled |
+
+**`businessId` is not covered by the mount guard, and the ownership check here is the one that matters.** The guard installed in `api/routes/index.ts` covers path segments named `:id` and `:clientId`; this route's segment is `:businessId` and sits under `/documents`, so it is outside that guard's reach. The service does its own check — see §5 — and it is a gate rather than a filter.
+
+**Omitting `since` and `until` is not the same as a wide range.** With neither, the manifest covers everything on record. An agent that wants "recent" must say what recent means; there is no default window.
+
+## 4. WHAT COMES BACK
 
 Five fields exist so a reader can tell an omission from an emptiness. They are the subject of this manual.
 
@@ -71,13 +85,18 @@ Four types, each with a reason. An excluded type is not an empty one.
 
 The same value. Two names, one clock. Not assembly-versus-generation.
 
-## 4. THE CORRECT SEQUENCE
+## 5. THE CORRECT SEQUENCE
 
-None. One call, one manifest.
+One call, one manifest — the calls have no ordering between them. What has an order is what the module does before it reads anything, and what an agent must do with the result:
 
-The ownership check runs before any record query, so nothing is read for a business that is not the caller's.
+1. **The ownership check runs before any record query.** Nothing is read for a business that is not the caller's. This was not always true: the check once sat after an `await`, so five collections were fetched for another tenant's business and discarded by the throw. Nothing leaked — the throw preceded any return — but it was safe by ordering rather than by construction. It is a gate now, and the five are scoped through `business: { tenantId }` as well.
+2. **Read `excludedRecordTypes` before reading the counts.** Four record types are omitted, each with a reason. A count of zero for something excluded is not a count of zero.
+3. **Report the manifest as an index, not as documents.** `contents: 'references'` says so. Nothing here fetched a byte.
+4. **Retry freely if you need to.** It mints no id and creates no artefact — but see §7: each assembly emits a ledger event, and a second assembly is a second event rather than an error.
 
-## 5. WHAT FAILURE LOOKS LIKE
+Step 2 is the one that carries. A manifest that omits four record types and a manifest whose business has none of them produce the same shape of answer, and only `excludedRecordTypes` tells them apart.
+
+## 6. WHAT FAILURE LOOKS LIKE
 
 | Response | Meaning |
 |---|---|
@@ -93,7 +112,7 @@ The date refusal is the control working, not a fault to route around: a manifest
 
 The requester refusal is the same discipline on provenance — `assembledBy` on a document read by counsel cannot name nobody.
 
-## 6. RETRY VS ESCALATE
+## 7. RETRY VS ESCALATE
 
 **Retry freely.** It mints no id and creates no artefact.
 
@@ -101,7 +120,7 @@ But it is not trace-free. Each assembly emits `compliance.manifest.assembled` to
 
 This is the sentence that separates this module from `regulator_dossier_export`. That one is `at_most_once`: a retry there produces a second export of the same inquiry and the audit trail shows two. An agent holding both grants must not carry this module's retry habit across.
 
-## 7. NEVER
+## 8. NEVER
 
 **Never present a manifest as a packet.** It lists documents; it does not contain them. The attachment header does not change that.
 
@@ -115,7 +134,7 @@ This is the sentence that separates this module from `regulator_dossier_export`.
 
 **Never route around a 400 on the date range.** The refusal exists because the alternative is a manifest that covers nothing and looks complete.
 
-## 8. WHICH LAWS THIS TOUCHES
+## 9. WHICH LAWS THIS TOUCHES
 
 `compliance/consumer-privacy-rights-v1` — a manifest indexes nine systems of personal data about a person. Assembling one is a read of all of them.
 
@@ -138,3 +157,22 @@ This is the sentence that separates this module from `regulator_dossier_export`.
 A packet does not exist. Whether one should — and who may receive a document under legal hold — is one ruling covering this module and `regulator_dossier_export`. Not started.
 
 The tenant-level communication monitoring report does not exist. It is the honest home for the scans this manifest excludes.
+
+## APPENDIX — CORRECTED AT 1.2, 3 September 2026
+
+Both corrections were made before authoring rather than during it. Six of the six
+manuals authored before this pair needed an edit first, so this one was checked on
+that assumption.
+
+**§3 WHAT EACH INPUT MEANS is new.** This manual's §3 was WHAT COMES BACK — the
+response, not the request — so the curriculum's `inputs` field would have been
+written from route code rather than lifted, which is the exception the
+manual-is-the-source principle cannot afford.
+
+**§5 THE CORRECT SEQUENCE was a statement, not a sequence.** It described what the
+module does before it reads anything, which is true and is not a list of steps an
+agent follows. It now states the steps, and what was there is preserved as the
+first of them.
+
+Sections renumbered: the old §§3–8 are now §§4–9, and internal cross-references
+moved with them.

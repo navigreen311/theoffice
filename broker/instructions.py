@@ -20,6 +20,43 @@ from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+#: Part 6.1's eight, enforced by a CHECK constraint on the table.
+#:
+#: TWO OF THESE ARE ROUTINELY WRITTEN AS SOMETHING ELSE, and every CapitalForge
+#: manual authored so far - seven of seven - needed one or both fixed first. That is
+#: a section title reading as an invitation to write something adjacent, not seven
+#: authors making seven mistakes. See docs/certification.md.
+#:
+#:   correct_sequence  THE ORDERED STEPS AN AGENT TAKES. Not context, not what comes
+#:                     back, not what the section is about. Six manuals opened it
+#:                     with "there is none" and then described a sequence in the
+#:                     paragraph underneath.
+#:
+#:                     THE TEST: a step belongs here only if doing it later would be
+#:                     worse than doing it earlier. If the order does not matter, it
+#:                     is not a step.
+#:
+#:                     A MODULE WITH TWO REAL STEPS GETS TWO. A thin section is a
+#:                     fact about the module, not a gap to fill.
+#:
+#:                     IF A STEP IS A `never` IN DIFFERENT WORDS it belongs in
+#:                     never_do only. Two sections saying the same thing in opposite
+#:                     polarity teach an agent that the sections are not distinct.
+#:
+#:   compliance_coupling  OPEN: there is no way to write "no framework applies".
+#:                     validate_sections rejects an empty list, and where the true
+#:                     value IS empty the only way to satisfy it is to write a flag
+#:                     that is not true. That is how Greenstone's
+#:                     tsr_disclosure_required ended up on both SimForge modules.
+#:                     broker/compliance_couplings.py has the fix this needs -
+#:                     NoFramework(why) beside Coupling(flag, why). See
+#:                     docs/certification.md.
+#:
+#:   inputs            THE PARAMETERS A CALLER SUPPLIES AND WHAT EACH MEANS. Not
+#:                     what comes back. Include what the caller does NOT supply and
+#:                     where it comes from instead - a tenant read from the token
+#:                     decides what the call can reach, and an agent that thinks it
+#:                     can set one is wrong about the module.
 REQUIRED_SECTIONS = (
     "what_it_does",
     "what_it_does_not_do",

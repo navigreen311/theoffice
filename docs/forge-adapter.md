@@ -1,4 +1,4 @@
-# Onboarding a Forge — the adapter, and three things that fail silently
+# Onboarding a Forge — the adapter, and four things that fail silently
 
 CRE Forge is the first Forge The Office can actually call. Seven more follow, and
 `medlink-wholesale/backend/app/api/forge.py` is the template they will be copied from.
@@ -9,11 +9,15 @@ were found only by making a real call. **Every one of them returned a plausible 
 — no exception, no error log, a 200 in the response — which is why reading did not catch
 them and why they are worth writing down.
 
+The fourth was added after CapitalForge, and it is the one this document did not warn
+about. The first three were all caught here by a reader who had this page open. The
+fourth was not, and it was found the same way the first three were.
+
 If you are onboarding Forge number two, read this section before you write code.
 
 ---
 
-## The three that fail silently
+## The four that fail silently
 
 ### 1. A grant below `auto_execute` never reaches the Forge
 
@@ -83,12 +87,89 @@ The Forge answers with `X-Forge-Request-Id`, which The Office stores as
 `agent_call_ledger.forge_side_ref`. That pair is what makes a call traceable from either
 end; assert on it in whatever check you write, because both sides return 200 without it.
 
+### 4. A manifest can be consistent with everything and still wrong about upstream
+
+Two verifiers stand behind the module list, and **neither of them calls anything.**
+
+    verify_forge_modules.py    forge_module_registry rows  vs  GET /_modules
+    check_module_manuals.py    docs/instructions/*.md      vs  GET /_modules
+
+Both read the manifest. The manifest is derived from the dispatch map, so it is honest
+about *which names are bound* — that is the property the whole design rests on, and it
+holds. What neither verifier can see is **what the bound handler does when it is
+called**, because neither one calls it.
+
+So a binding can be green on every axis and broken on every request:
+
+| axis | says |
+|---|---|
+| `_modules` | the name is bound — **true** |
+| `forge_module_registry` | a row exists and matches — **true** |
+| the operating instruction | a manual describes it — **true** |
+| the actual call | 400 on every attempt |
+
+**Two of CapitalForge's seventeen operations were exactly this.**
+
+    client_read_credit / history    `profileType` is a REQUIRED query parameter on the
+                                    upstream route, not an optional filter. The binding
+                                    omitted it. Every call answered
+                                    PROFILE_TYPE_REQUIRED.
+
+    record_consent / grant          The binding invented `method` and `notes` and omitted
+                                    `consentType`, which GrantConsentBodySchema requires.
+                                    Every call answered VALIDATION_ERROR.
+
+Both had passed design review, `tsc`, `eslint`, a 4,000-test suite, and both verifiers.
+
+**Why the unit tests did not catch it.** The adapter's tests inject a fake inner caller
+and assert the request the adapter *built* — the path, the method, the body. That is the
+adapter's own belief about what upstream wants, checked against itself. A test written
+that way can only ever confirm the assumption it was written from. It will tell you the
+binding is stable; it cannot tell you the binding is right.
+
+**Why it does not look like a defect when it happens.** These do not fail silently
+per-call — they fail loudly, with a clear code and a sensible message. They fail silently
+at the *conformance* level: nothing that watches the Forge is watching answers, so the
+signal never reaches anyone, and the first human to see one reads
+`PROFILE_TYPE_REQUIRED` as bad test data rather than as a wrong binding.
+
+**The rule.** Call every operation of every module against a running Forge before you
+register a single row. Not one per module — every operation, because the two that were
+wrong sat beside fifteen that were right. `_modules` tells you a handler is bound;
+only a real call tells you the binding reaches the thing the manual describes.
+
+Fifteen of seventeen were correct. That ratio is the argument: an adapter written
+carefully from the route definitions is *mostly* right, which is precisely what makes
+the remainder hard to find by reading.
+
+**A related one that calling does NOT catch: a registry value that resolves and is
+wrong.**
+
+`forge_module_registry.compliance_flags_implied` on `record_consent` was written as
+`per_connection_authorization_required`. That flag exists, resolves against the
+Pack, and passes every check there is. It is also GLBA — `compliance/glba-plaid-connection-v1`,
+a **bank account** connection. `record_consent` records consent to be contacted by
+email, SMS or voice. The value was chosen by matching on the word "connection", and
+it put a bank-data coupling on a communications-consent module.
+
+Calling the module does not find this: the module works. The verifier does not find
+it either — `verify_forge_modules.py` checks that a row resolves against the
+adapter, not that its *values* are the right ones, and a flag that exists is a flag
+that resolves.
+
+**Nothing in this system checks that a compliance flag is the correct flag.** It was
+found by reading the Pack's `compliance_surface` to see which framework each flag
+belongs to. That is the check, and it is a human one: for every flag on a module,
+name the framework it comes from and say why this module implies it. If the sentence
+does not come out true, the flag is wrong.
+
 ---
 
-## A fourth: a module that answers without doing the work
+## A fifth: a module that answers without doing the work
 
-The three above are defects in the adapter. This one is a property of the Forge, and it
-is worse, because nothing about the call looks wrong at either end.
+The four above are defects in the adapter or its bindings. This one is a property of
+the Forge, and it is worse, because nothing about the call looks wrong at either end -
+not even a real call, which is what separates it from #4.
 
 CapitalForge has three shapes of endpoint that return a plausible success for work that
 never happens:
@@ -277,8 +358,16 @@ than verified. All twelve of the Burkham Pack's modules are in that state today.
       writes is refused and rolled back, not returned as a 200
 - [ ] `forge_module_registry` rows for each module, spelled **exactly** as the adapter's
       dispatch keys, with honest `is_mutating` and `idempotency_support`
+- [ ] **Every operation of every module called against a running Forge, and the answer
+      read** — before any registry row is written. Not one call per module: the two
+      CapitalForge bindings that were wrong sat beside fifteen that were right. See
+      trap #4; the verifiers below cannot see this, because neither of them calls
+      anything
 - [ ] `scripts/verify_forge_modules.py --check` exits 0 — every row resolves against the
       adapter, and the adapter dispatches nothing the registry has not heard of
+- [ ] `scripts/check_module_manuals.py` exits 0 — every bound module has an operating
+      instruction. A manual with no module is reported, not failed: registering a name
+      to clear that line is how `lender_match` happens
 - [ ] `venture_forge_manifest` row per venture × module — **or every call is UNDECLARED**
 - [ ] Grant at `auto_execute`, with Unit A and Unit B certifications at the same tier —
       **or no call is made at all**
@@ -299,3 +388,128 @@ than verified. All twelve of the Burkham Pack's modules are in that state today.
 manifest row that Phase 0.8 needed. The bootstrap exists because grants are otherwise
 only written at the end of the sixteen-gate provisioning ladder; it is not a pattern to
 copy for a production Forge, which should be onboarded through a Pack.
+
+---
+
+## The §2 audit, 3 September 2026
+
+After `submit-application.md` §2 was found asserting a middleware that does not
+exist, every manual was read for the same shape: a sentence naming a middleware,
+guard, permission or gate.
+
+**§2 is where most of this lives, because §2 is written by naming what stops you** —
+but the audit follows the claim, not the section number. It began as a §2 sweep and
+was corrected: the third confirmed claim was in a §4, and a protection claim is a
+protection claim wherever it sits.
+
+The direction matters more than the count. An omission leaves an agent uncertain;
+**an assurance makes it confident and wrong**, and a curriculum built from an
+assurance certifies the confidence.
+
+Four claims found across ten manuals. Two false, two true, and the true ones are
+load-bearing. What this audit does **not** cover is recorded at the end of this
+section.
+
+### Confirmed true — the mount guard, verified at line level
+
+Three manuals say it, and it is the load-bearing claim in three curricula:
+
+> *"The mount guard runs before any handler here, so by the time a handler executes
+> the client is known to exist and to belong to the caller's tenant."*
+
+- `api/routes/index.ts:162-163` installs `requireOwnedBusiness('clientId')` on both
+  `/clients/:clientId` and `/v1/clients/:clientId`
+- the router mounts at `170-171`, **after** the guard
+- `businessBelongsToTenant` runs `findFirst({where: {id, tenantId}})` — existence and
+  tenancy in one query
+
+It is what makes `client_read`, `client_read_pii` and `client_read_credit` able to
+say `clientId` is guaranteed to exist and be the caller's. **Accurate as written**,
+and worth recording as confirmed rather than merely not-flagged: the audit that
+found two false claims also checked the one everything rests on.
+
+**Re-checked against the first known exception, and it holds.** The guard covers path
+segments named `:id` and `:clientId`; `/api/documents/export/:businessId` is outside
+it. The three manuals do not overreach, because each says the guard runs "before any
+handler **here**" — and every handler in `client-detail.routes.ts` inherits
+`:clientId` from the mount, with none declaring a parameter of its own. The claim is
+scoped to the module making it.
+
+No qualifier was added. The exception is recorded in the manual of the module it
+applies to, which is where an agent holding that grant will read it.
+
+### False — `record_consent` §2 named six submission gates
+
+It listed credit-union membership disclosure among gates that run.
+`submit-application.md` had said since it was written that the gate cannot fire.
+
+**Cross-manual, which is what makes it the worst instance.** An agent reading
+`record_consent` has no path to the correction — the contradicting statement is in a
+manual it may hold no grant for.
+
+### False — `record_consent` §2 named four SMS gates
+
+Five run: `no_phone`, `dnc`, `no_consent`, `unknown_timezone`, `quiet_hours`. The
+four named were right and in the right order, with an unnamed fifth between consent
+and quiet hours. Wrong in the safe direction and wrong the same way.
+
+### Confirmed true — the ownership check on the manifest, and it was in §4
+
+`compliance_manifest_assemble` said, in its **§4** rather than its §2:
+
+> *"The ownership check runs before any record query, so nothing is read for a
+> business that is not the caller's."*
+
+**True, and the service's own comment records that it was made true.** The check once
+sat *after* an `await`, so five collections were fetched for another tenant's
+business and discarded by the throw. Nothing leaked — the throw preceded any return
+— but it was safe by ordering rather than by construction, and it is a gate now.
+
+This one matters twice over. `/api/documents/export/:businessId` is **outside the
+mount guard**: the guard in `api/routes/index.ts` covers path segments named `:id`
+and `:clientId`, and this segment is `:businessId` under `/documents`. The service's
+own check is the only one there is.
+
+**It is also why this section no longer says "the §2 audit".** Finding it required
+reading a §4.
+
+### What the audit does not do
+
+It checks claims that are *made*. A manual that never mentions a protection is not
+audited by this, and two manuals had nothing to check — `regulator_dossier_export`
+and `scan_communication` describe absent capability rather than asserted
+protection.
+
+**Run it again whenever a §2 is written.** The two false claims were both written by
+somebody who believed them, and neither was found by review.
+
+### What the §2 audit does not cover — the reverse direction
+
+**Recorded, not built.**
+
+The audit reads claims that are *made*. It says nothing about **a control that
+exists and goes unmentioned**, and that gap has already produced a defect:
+`record_consent` §2 said an SMS passes four gates when five run. Nobody was misled
+into thinking a protection existed — the manual under-claimed — but the manual was
+wrong, and **only the section-to-curriculum mapping caught it**, not the audit.
+
+The two directions fail differently:
+
+| | | |
+|---|---|---|
+| **over-claim** | names a control that does not run | agent is confident and wrong |
+| **under-claim** | omits a control that does | agent is uncertain, and the manual is still wrong |
+
+Over-claiming is worse and is what the audit targets. Under-claiming is not
+harmless: it understates what the system does, which is how a real protection gets
+built twice or argued away as absent.
+
+**Why it is not built.** The reverse check has no natural starting point. The
+over-claim audit starts from a sentence in a manual and asks whether the thing it
+names exists — a finite list, ten manuals, one read. The reverse starts from every
+guard, middleware and gate in the codebase and asks whether the relevant manual
+mentions it, which is an open-ended sweep against a moving target, and most of what
+it turned up would be correctly unmentioned.
+
+Written down so the asymmetry is deliberate rather than an oversight, and so the
+next author knows the audit's coverage rather than assuming it.

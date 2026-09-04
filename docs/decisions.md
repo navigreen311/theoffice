@@ -141,6 +141,18 @@ run b786295c stopped at gate 2 (blocked)
 FAIL unevaluable rules with no gate named: ['V11', 'V32']
 ```
 
+**And the smoke test says the blocker is not the manuals.** On #19, which authored
+nine operating instructions, the same job prints:
+
+```
+==> V11 refuses a Pack whose instructions teach nothing
+  instructions are real and V11 says NOT_RUN
+```
+
+The instructions exist and are real, and V11 still cannot answer — because what it
+resolves them against is a Forge address CI does not have. Nothing about authoring
+changes this, which is worth having in the entry rather than discovering twice.
+
 **The conformance guards are on `main` and unverified there.** Six of seven jobs are
 green; the seventh is these two rules correctly reporting that they could not run.
 
@@ -161,17 +173,68 @@ was in, and it was mistaken for progress.
 
 ### What retires this entry
 
-**A Forge address CI can reach.** That is the open item, and this entry is what it
-closes.
+**Corrected 2026-09-04. It said "a Forge address CI can reach." That is wrong, and
+wrong in a specific way worth naming.**
 
-Concretely: a deployed CapitalForge instance or a container the Smoke job starts, a
-reachable `base_url` in the smoke environment's `forge_registry`, a credential CI
-can resolve, and enough seeded tenant data for the modules to answer. Entry 1 records
-that this is **unscoped work with no owner**, not waiting.
+**TWO Forge addresses CI can reach, and one of them exists only as a placeholder.**
 
-When it exists, V11 and V32 run in CI for the first time and this entry becomes
-history. Until then it is the standing explanation for why two rules on `main` have
-never been exercised there.
+The Burkham Pack binds two Forges at `criticality: hard`, and V32 resolves every
+module of every binding. CapitalForge now answers — eleven modules, all bound, all
+called. **SimForge cannot be asked at all:**
+
+| | |
+|---|---|
+| `forge_registry.base_url` | `https://example.invalid` — a deliberate placeholder |
+| `forge_tenant_credential.credential_ref` | `env://SIMFORGE_TOKEN` |
+| `SIMFORGE_TOKEN` in `.env` | **absent** — not unset in a shell, missing from the file |
+
+So V32 reports NOT_RUN with `simforge: tenant credential unavailable`, and it would
+report that with CapitalForge fully deployed and reachable. **Fixing the
+CapitalForge half does not turn this check green.** SimForge has no adapter, and
+building one is a second piece of unscoped work that nobody has costed either.
+
+Concretely, what retires this: a reachable CapitalForge **and** a reachable SimForge
+— a deployed instance or a container the Smoke job starts, a `base_url` that is not
+`example.invalid`, a credential CI can resolve, and enough seeded data for the
+modules to answer. Entry 1 records the first as **unscoped work with no owner**; the
+second is not even that, because it has not been described until now.
+
+### The same error, twice, on the same check
+
+**This is the second time this check has had its blocker described one layer too
+shallow.**
+
+Entry 1 said the blocker was *no adapter*. It was *no adapter CI can reach* — the
+adapter arrived and nothing moved.
+
+This entry said the blocker was *a Forge address CI can reach*. It is *two Forge
+addresses* — CapitalForge arrived, was reachable locally, and V32 still cannot run.
+
+Both errors have the same shape: **a real blocker was identified, fixed, and the
+check stayed red, because what was named was one layer inside what was true.** Both
+were found the same way — by fixing the named thing and watching nothing happen.
+
+Worth stating as a pattern rather than as two mistakes: when a check reports
+NOT_RUN, the named cause is a hypothesis until the named cause is removed. V32 has
+now falsified two.
+
+**A third reading, offered as a hypothesis and labelled as one.** V32's resolution
+path was read on 2026-09-04 rather than inferred: it needs a `forge_registry` row, a
+`forge_tenant_credential` row, a credential that resolves, and a reachable
+`{base_url}/_modules` answering with a parseable list. It touches no certification,
+no instruction, no scenario pack and no grant - those are V11's and V22's business.
+So two reachable addresses should clear it, with one condition that is the same
+check working rather than a new layer: SimForge's manifest must contain
+`run_scenario_pack` and `gate_result` under those exact spellings, because the
+adapter's dispatch keys are the spelling of record. A different spelling turns V32
+from NOT_RUN into FAIL.
+
+**CLEARING V32 IS NOT CLEARING GATE 2, and the two must not be read as one.** Gate 2
+requires no failures and no unrun rules other than V24. As of 2026-09-04, with
+CapitalForge reachable locally, V29 and V30 are also NOT_RUN because the Village is
+not running - and **whether CI's stub Village satisfies them has not been tested.**
+That is a separate unknown from the Forge addresses, it has not been checked, and
+nobody should read "V32 clears" as "Gate 2 clears" on the strength of this entry.
 
 ### What this does not license
 
@@ -182,4 +245,71 @@ runner rather than about the code. A check that *fails* in CI is a check that ra
 The distinction is the one these rules exist to enforce, and it would be a poor
 irony to lose it here: **NOT_RUN is not a pass**, and merging past NOT_RUN is a
 decision that has to be written down every time. This is that writing.
+
+---
+
+## 4. `lender_match` and `build_packet` come off the Pack — they do not exist
+
+**Decided 2026-09-04.**
+
+Both were on Burkham's `modules_expected`, and both were on V11's and V32's failure
+lists as unauthored modules. **They are not unauthored. They are absent.**
+
+### What was searched
+
+No route, no service, no handler, nothing under any spelling: `lender_match`,
+`lenderMatch`, `matchLender`, `build_packet`, `buildPacket`, `fundingPacket`,
+`packetBuild` — zero matches across the whole CapitalForge backend. The nearest
+things are card-**issuer** optimizers (`stacking-optimizer.service.ts`,
+`issuer-rules-engine.ts`), which are a different act: CapitalForge matches clients
+to card issuers, not to lenders, and there is no packet builder anywhere.
+
+They held no `forge_module_registry` row and no `venture_forge_manifest` row. The
+Pack was the only place they appeared.
+
+### Why this is not the same removal as `bureau_pull` and `readiness_score`
+
+Those two came off on 1 September and they **exist**. `readiness_score` is in
+`forge_module_exclusion` because it scores a business from query parameters it never
+reads; `bureau_pull` was removed because CapitalForge has no path to a bureau score
+and its own specification says so. Both are capabilities that may not be granted.
+
+These two are capabilities that are not there. **Different fact, different record.**
+
+### Why leaving them was worse than removing them
+
+`_modules` reports what the adapter dispatches. A module with no dispatch behind it
+is not work somebody has not got to — it is a module that does not exist, and
+sitting on V11's list misrepresented it as something somebody forgot to write.
+
+The failure that invites is the one this whole exercise keeps finding: the cheapest
+way to clear a name from V11 is to register it. A registered name with nothing
+behind it would then resolve everywhere and be true nowhere — which is precisely
+what `check_module_manuals.py` refuses to fail on, for the same reason.
+
+### The role is left mismatched on purpose
+
+The Placement Strategist's `forge_modules_operated` was
+`[lender_match, build_packet, submit_application]` and is now `[submit_application]`.
+Its duties still read *"Match a ready client to approved providers using sourced
+issuer rules"* and *"Assemble the lender packet."*
+
+**Those duties are not edited.** They describe work Burkham wants done and no module
+performs. Editing them to match the code would make the Pack self-consistent and
+hide the gap; leaving them makes a role whose first two duties have no module the
+visible form of the question. That question is a product decision — build these, or
+change what the role does — and it is not answered here.
+
+### What returns them
+
+**Something that dispatches them.** The day a CapitalForge adapter answers
+`lender_match` or `build_packet` in its `_modules` manifest, the name goes back on
+`modules_expected`, a registry row is written from the manifest, and the role
+regains it. Not before: the adapter's dispatch keys are the spelling of record, and
+a Pack naming a module the Forge does not dispatch is exactly what V32 exists to
+refuse.
+
+**Recorded because a removal with no record comes back next quarter as a mystery.**
+Somebody reading the Pack in December will find a Placement Strategist who operates
+one module and duties describing three, and this entry is the answer to why.
 

@@ -301,8 +301,30 @@ class OfficeClient:
                     ),
                     trace_id=trace_id,
                 )
+                # THE REFUSAL NAMES THE GAP RATHER THAN IMPLYING A WORKFLOW.
+                #
+                # It used to say "a proposal was created", which is true and
+                # misleading. A proposal is created, a human can approve it through
+                # POST /api/proposals/{id}/decide, and then nothing happens:
+                # `proposals.mark_executed` - the function that links an approved
+                # proposal to the call that carried it out - has no production
+                # caller. Only its tests call it.
+                #
+                # So an approved proposal is a dead letter. The old message let an
+                # operator approve one and reasonably believe the act had been
+                # authorised and would follow, and the silence afterwards looks
+                # like a queue rather than a missing implementation.
+                #
+                # The call is still refused exactly as before and the proposal row
+                # is still written - the intent, the payload and the trace are
+                # worth keeping either way, and an operator who wants to act can
+                # read the payload and do it by hand. What changes is that the
+                # refusal says what will and will not happen next.
                 raise RequiresApproval(
-                    f"trust tier {tier!r} requires human approval; a proposal was created",
+                    f"trust tier {tier!r} requires human approval, and APPROVAL DOES "
+                    "NOT EXECUTE: no path exists from an approved proposal to a Forge "
+                    "call. The proposal records the intent and a human must carry the "
+                    "act out themselves. Nothing below auto_execute reaches a Forge.",
                     proposal_id,
                     forge_id=grant.forge_id,
                     module_id=grant.module_id,

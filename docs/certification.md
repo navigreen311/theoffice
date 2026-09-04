@@ -9,6 +9,80 @@ Phase 2 makes certification mean something.
 
 ---
 
+# ⚠ CAPITALFORGE IS CERTIFIED BY BOOTSTRAP, NOT BY SIMFORGE
+
+**Every CapitalForge certification in the database today was written by a script,
+not earned against a scenario run.** They exist for one reason: the bridge could
+not be proved to work without a grant, and a grant cannot be issued without a
+certification.
+
+They are marked structurally, not by convention: `simforge_verdict IS NULL`, and
+`scenario_pack_ref` begins `NO SCENARIO RUN -` followed by why.
+
+**That was not true until 3 September 2026, and the correction matters more than
+the constraint.** `record_result` wrote its `verdict` argument straight into
+`simforge_verdict`, so a bootstrap had no way to record itself except by claiming
+SimForge passed it. Both Phase 0.8 cre-forge rows carried `simforge_verdict =
+'PASS'` against no scenario run at all — a false statement in the single column
+that exists to say whether SimForge ran, which is the column a reader trusts
+most. `attested_by="bootstrap"` now writes NULL there and requires a reason, and
+a real verdict is the only thing that can put a value in that column.
+
+**This is at the top of this document rather than in "Known gaps" because a
+certification that was asserted looks exactly like one that was earned.** Both
+are rows with `verdict = 'PASS'`. Nothing downstream can tell them apart, and the
+gate ladder will not stop a call made under one.
+
+## The constraint
+
+**No agent serves a Burkham Wickmont client through CapitalForge until a real
+SimForge verdict exists for the module it is calling.**
+
+Not a preference and not a footnote. The whole point of Unit A is that an agent
+was tested against the instruction it is about to follow — that is what binds a
+certification to a `content_hash`, and it is the reason the gate is not a
+non-null check on a free-text column any more. A bootstrap certification restores
+exactly the property Phase 2 was built to remove.
+
+## Why it was done anyway
+
+Holding the bridge for SimForge means proving nothing while SimForge is built.
+The alternative to a bootstrapped grant was no call at all, and therefore no
+evidence that the adapter, the manifest, the credential, the tenant mapping or
+the ledger join work — five things that were all untested and are now all proved.
+
+Finding out that the trace header was read under the wrong name is worth more
+than a certification record that is honest about being absent.
+
+## What has to happen, and when
+
+**This is the next item after the bridge works, not something to schedule later.**
+
+1. SimForge runs a scenario pack against each bound CapitalForge module.
+2. `certification.record_result` writes Unit A and Unit B from those verdicts,
+   against the live instruction's real `content_hash`.
+3. The bootstrap certifications are superseded — not deleted, so the record shows
+   what was relied on and for how long.
+4. Only then does a Burkham agent touch a real client.
+
+## How to find them
+
+```sql
+SELECT forge_id, unit, module_id, state, scenario_pack_ref
+FROM certification
+WHERE simforge_verdict IS NULL;
+```
+
+Every certification nobody earned, across every Forge. Structural rather than a
+naming convention, so it cannot be defeated by choosing a different
+`rubric_version`.
+
+**If that query returns a row for a module a Burkham agent is calling against a
+real client, the constraint above has been broken.** It returns rows for
+cre-forge too — Phase 0.8's own bootstrap, now marked honestly.
+
+---
+
 ## Forge Operating Instructions (Part 6.1)
 
 Not documentation. This is the curriculum agents are educated on and the thing SimForge
@@ -24,6 +98,89 @@ filing cabinet to curriculum" — and a curriculum missing its failure signature
 document that reads fine and teaches nothing about the case that matters. The
 application layer rejects the same thing earlier so it can name *which* section is
 missing; "violates constraint instruction_has_all_sections" tells an author nothing.
+
+### Two of the eight are routinely written as something else
+
+**Every CapitalForge manual authored so far — seven of seven — needed one or both of
+these fixed before it could be authored.** That is not seven authors making seven
+mistakes; it is a section title that reads as an invitation to write something
+adjacent. Both definitions are here so the next author has them before writing
+rather than during mapping.
+
+**`correct_sequence` — the ordered steps an agent takes.** Not context. Not what
+comes back. Not what the section is about.
+
+> Six manuals opened this section with "There is none" or "None. One call, one X"
+> and then spent a paragraph describing a sequence anyway. The steps were always
+> there; they were in the prose underneath. Writing "no required ordering" as a
+> one-item list satisfies `validate_sections` by turning a stated absence into a
+> step, which is the move these manuals warn about everywhere else.
+>
+> If the calls genuinely have no ordering between them, say so in the first line and
+> then write the ordered steps of what surrounds a call — check the basis before
+> reporting, apply shared rule 1 where the read feeds a decision, carry it no
+> further than the answer requires. That is a sequence.
+>
+> **The test: a step belongs here only if doing it later would be worse than doing
+> it earlier.** If the order does not matter, it is not a step.
+>
+> **A module with two real steps gets two.** A thin section is a fact about the
+> module, not a gap to fill. Padding it is what produces the next failure.
+>
+> **If a step is a `never` in different words, it belongs in `never_do` only.** A
+> curriculum where two sections say the same thing in opposite polarity teaches an
+> agent that the sections are not distinct, and the schema's whole claim is that
+> things go somewhere specific.
+
+**`inputs` — the parameters a caller supplies and what each means.** Not what comes
+back.
+
+> Three manuals had a §3 that was WHAT COMES BACK, a channel enum, or a gate ladder.
+> Each is worth writing and none is an input. Where a manual has no inputs section,
+> the curriculum's `inputs` gets written from route code instead — and then one
+> field of that module's curriculum is not derived from its manual, which is the
+> exception the whole arrangement cannot afford.
+>
+> Include what the caller does **not** supply and where it comes from instead. A
+> tenant read from the token is an input in the sense that matters: it decides what
+> the call can reach, and an agent that thinks it can set one is wrong about the
+> module.
+
+### OPEN — the schema has no way to say "no framework applies"
+
+**And the absence of that has already put a false flag in a live curriculum.**
+
+The chain, because the conclusion is easy to state and the mechanism is what makes
+it worth fixing:
+
+1. `validate_sections` rejects an empty `compliance_coupling` as *"present but
+   empty"* — correct in general, since an empty `failure_signatures` teaches nothing
+   about the case that matters.
+2. Both Packs that bind SimForge declare `compliance_flags_propagated: []`. SimForge
+   evaluates agents against scenario packs; it touches no client, no consumer report
+   and no outbound contact. **The true value is empty.**
+3. So the only way to satisfy the validator is to write a flag that is not true.
+4. Somebody did. `run_scenario_pack` and `gate_result` carried
+   `tsr_disclosure_required` — **Greenstone's outbound-calling flag**, on a Forge
+   both Packs declare empty — until 4 September 2026.
+
+That is not carelessness. **The schema required a value and the honest value was
+unwritable**, so the field was filled with the nearest thing to hand.
+
+**The interim fix is prose in the list**, which both SimForge instructions now
+carry: a sentence saying no framework applies and why. It satisfies the constraint
+and is true, and it is a stopgap — **the field now says in words what the schema
+believes is a list of flags.** Nothing reads it as a flag today; something might.
+
+**The fix is the one `broker/compliance_couplings.py` already has.** That module
+distinguishes `Coupling(flag, why)` from `NoFramework(why)`, refuses a module
+declaring neither, and makes `flags_for()` raise rather than default to `[]`. The
+instruction schema needs the same distinction and has no equivalent.
+
+Not built here because it is a schema change with a CHECK constraint behind it and
+a migration under that, and because every instruction currently in the table would
+need revisiting. Recorded with the chain intact so the next author reads a cause
+rather than a rule.
 
 Present-but-empty is rejected too. It is the failure a `?` key check misses.
 
@@ -113,6 +270,92 @@ longer current, and which direction the version moved is not the point.
 `major.minor.patch` requires a written `sensitivity_rationale`, enforced by CHECK.
 Declaring it decertifies every agent on that module at every patch release — sometimes
 right, always expensive, never accidental.
+
+### The three version fields, and which one decides what
+
+A module carries three version-ish values and they answer different questions. Two
+of them decertify; the third computes nothing at all.
+
+| field | what it is | decertifies? |
+|---|---|---|
+| `content_hash` | sha256 of the instruction JSON, computed by a trigger | **Yes.** Any change to any of the eight sections. No dial, no threshold |
+| `forge_api_version` + `version_sensitivity` | which Forge release the cert was earned against | **Yes**, at the sensitivity declared — see the table above |
+| `instruction_version` | the label on this generation of the text | **No.** Nothing computes on it |
+
+**`version_sensitivity` is about the FORGE's releases, not about edits to the
+instruction.** It reads `forge_registry.api_version` — CapitalForge shipping 1.0.1 —
+and has nothing to do with a typo fix in the manual. That distinction is easy to
+lose, and losing it makes `major.minor` look like a decision about how carelessly
+one may edit a curriculum. It is not: **every edit to an instruction decertifies,
+whatever the sensitivity**, because the hash moves.
+
+So the argument for `major.minor` is narrow and worth stating in its own terms: a
+Forge patch release is not evidence that a module's behaviour changed, and
+decertifying every agent on it would be expensive and uninformative. A Forge minor
+release might be. That is the whole of it.
+
+### `instruction_version` tracks the manual's version
+
+`instruction_version` is free text — nothing parses it, nothing compares it,
+nothing decertifies on it. Because it is mechanically inert, it is free to carry a
+convention, and the useful one is this:
+
+**A CapitalForge curriculum's `instruction_version` is the version in its manual's
+header.** `record_consent` manual 1.3 is authored as `1.3`. Not a coincidence and
+not its own counter.
+
+The alternative — an independent counter, which is what cre-forge, simforge and
+voiceforge use, all at `1.0.0` — means one module has two version numbers with no
+stated relationship, and no way to tell by looking which generation of the manual a
+curriculum was derived from. That is the ambiguity worth avoiding, and it costs
+nothing to avoid.
+
+**What this buys is a drift check nobody has to remember.** Manual header vs
+`instruction_version` answers *was this curriculum derived from the manual as it now
+reads?* If the manual is 1.7 and the curriculum says 1.6, someone edited the manual
+and did not re-author. The `content_hash` cannot answer that question — it hashes
+the JSON, not the markdown, so it can only tell you the curriculum changed, never
+that the manual did.
+
+Two artifacts, one number, and the mismatch is visible in a directory listing.
+
+**Not enforced.** `check_module_manuals.py` already parses each manual's header for
+its module id and could compare the version too. It does not yet, so this is a
+convention, and a convention is the weaker thing — recorded here so the next author
+follows it rather than infers it.
+
+**The older Forges do not follow it.** cre-forge, simforge and voiceforge curricula
+are all `1.0.0`, authored before the manuals carried version headers. They are not
+retro-fitted: renumbering a live instruction changes nothing mechanically and would
+make the audit trail say a text was revised when it was not.
+
+### Settle the manual, then author
+
+The convention above only holds if the authoring happens **after** the manual is
+final. Author first and the row claims to derive from a version of the text that
+never existed.
+
+That is not hypothetical. `client_read` was authored at v1.6 carrying a corrected
+§5, then the manual was corrected and it was re-authored at v1.7. The table now
+holds:
+
+```
+client_read  v1.6  51e070a3...  superseded
+client_read  v1.7  51e070a3...  live
+```
+
+**Identical hashes, different versions.** The v1.6 row says it derives from manual
+1.6 and its content is manual 1.7's. Nothing reads it — it is superseded — but the
+audit trail carries a row whose source claim is wrong.
+
+**It is left in place.** A superseded row with a wrong source claim is a smaller
+problem than an audit trail somebody deletes from: the moment a row can be removed
+because it is inconvenient, no row in the table means anything. It stays, and this
+paragraph is what it is worth.
+
+**The rule: settle the manual, then author.** If a correction is found while
+mapping sections onto the eight fields — which is when several have been found —
+fix the manual, bump its version, and author once from the settled text.
 
 **A `failed` cert does not become stale.** A cert that was never fresh cannot go out of
 date, and collapsing the two erases the difference between "was good, text changed" and

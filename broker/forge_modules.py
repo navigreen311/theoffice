@@ -118,6 +118,19 @@ class ForgeModules:
     method: Method
     api_version: str
     observed_at: datetime
+    entries: tuple[dict[str, Any], ...] | None = None
+    """The manifest's own entries, verbatim, where it answered with objects.
+
+    `modules` and `shapes` carry the three fields `forge_module_registry` has
+    columns for. An adapter may state more - `capitalforge` states which
+    operating instruction describes each module - and a reader that needs one of
+    those should not have to fetch the manifest a second time to get it.
+
+    `None` when the manifest answered with a list of names, or when the answer
+    came from the probe. Not an empty tuple: nothing was stated, which is
+    different from stating nothing.
+    """
+
     shapes: dict[str, DispatchShape] | None = None
     """`is_mutating` and `idempotency_support` per module, where the adapter says.
 
@@ -165,9 +178,7 @@ def forget(forge_id: str | None = None) -> None:
         _cache.pop(forge_id.lower(), None)
 
 
-async def _registration(
-    conn: AsyncConnection, forge_id: str
-) -> dict[str, Any] | None:
+async def _registration(conn: AsyncConnection, forge_id: str) -> dict[str, Any] | None:
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
             """
@@ -250,18 +261,14 @@ async def _via_manifest(
     row: dict[str, Any],
 ) -> ForgeModules | Unread:
     try:
-        res = await client.get(
-            f"{base}/{MANIFEST_PATH}", headers=headers, timeout=timeout
-        )
+        res = await client.get(f"{base}/{MANIFEST_PATH}", headers=headers, timeout=timeout)
     except httpx.HTTPError as exc:
         return Unread(row["forge_id"], f"unreachable: {exc.__class__.__name__}")
 
     if res.status_code in (404, 405):
         return Unread(row["forge_id"], "adapter serves no /_modules manifest")
     if res.status_code != 200:
-        return Unread(
-            row["forge_id"], f"manifest answered {res.status_code}"
-        )
+        return Unread(row["forge_id"], f"manifest answered {res.status_code}")
 
     try:
         modules = res.json()["modules"]
@@ -276,6 +283,11 @@ async def _via_manifest(
     # error would make an older Forge unverifiable for a reason that has nothing
     # to do with whether its modules exist.
     names, shapes = _parse_modules(modules)
+    entries = (
+        tuple(m for m in modules if isinstance(m, dict))
+        if any(isinstance(m, dict) for m in modules)
+        else None
+    )
     if names is None:
         return Unread(
             row["forge_id"],
@@ -289,6 +301,7 @@ async def _via_manifest(
         method="adapter_manifest",
         api_version=row["api_version"],
         observed_at=datetime.now(UTC),
+        entries=entries,
         shapes=shapes,
     )
 
@@ -332,9 +345,7 @@ async def _via_probe(
     """
     sentinel = f"_probe_{uuid.uuid4().hex}"
     try:
-        calibration = await client.options(
-            f"{base}/{sentinel}", headers=headers, timeout=timeout
-        )
+        calibration = await client.options(f"{base}/{sentinel}", headers=headers, timeout=timeout)
     except httpx.HTTPError as exc:
         return Unread(row["forge_id"], f"unreachable: {exc.__class__.__name__}")
 
@@ -350,9 +361,7 @@ async def _via_probe(
     found: set[str] = set()
     for module_id in sorted(candidates):
         try:
-            res = await client.options(
-                f"{base}/{module_id}", headers=headers, timeout=timeout
-            )
+            res = await client.options(f"{base}/{module_id}", headers=headers, timeout=timeout)
         except httpx.HTTPError as exc:
             return Unread(row["forge_id"], f"unreachable: {exc.__class__.__name__}")
         if res.status_code != 404:
