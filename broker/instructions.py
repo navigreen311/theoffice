@@ -20,6 +20,23 @@ from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+#: Part 6.1's eight, enforced by a CHECK constraint on the table.
+#:
+#: TWO OF THESE ARE ROUTINELY WRITTEN AS SOMETHING ELSE, and every CapitalForge
+#: manual authored so far - seven of seven - needed one or both fixed first. That is
+#: a section title reading as an invitation to write something adjacent, not seven
+#: authors making seven mistakes. See docs/certification.md.
+#:
+#:   correct_sequence  THE ORDERED STEPS AN AGENT TAKES. Not context, not what comes
+#:                     back, not what the section is about. Six manuals opened it
+#:                     with "there is none" and then described a sequence in the
+#:                     paragraph underneath.
+#:
+#:   inputs            THE PARAMETERS A CALLER SUPPLIES AND WHAT EACH MEANS. Not
+#:                     what comes back. Include what the caller does NOT supply and
+#:                     where it comes from instead - a tenant read from the token
+#:                     decides what the call can reach, and an agent that thinks it
+#:                     can set one is wrong about the module.
 REQUIRED_SECTIONS = (
     "what_it_does",
     "what_it_does_not_do",

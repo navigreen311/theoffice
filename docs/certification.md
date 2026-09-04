@@ -99,6 +99,42 @@ document that reads fine and teaches nothing about the case that matters. The
 application layer rejects the same thing earlier so it can name *which* section is
 missing; "violates constraint instruction_has_all_sections" tells an author nothing.
 
+### Two of the eight are routinely written as something else
+
+**Every CapitalForge manual authored so far — seven of seven — needed one or both of
+these fixed before it could be authored.** That is not seven authors making seven
+mistakes; it is a section title that reads as an invitation to write something
+adjacent. Both definitions are here so the next author has them before writing
+rather than during mapping.
+
+**`correct_sequence` — the ordered steps an agent takes.** Not context. Not what
+comes back. Not what the section is about.
+
+> Six manuals opened this section with "There is none" or "None. One call, one X"
+> and then spent a paragraph describing a sequence anyway. The steps were always
+> there; they were in the prose underneath. Writing "no required ordering" as a
+> one-item list satisfies `validate_sections` by turning a stated absence into a
+> step, which is the move these manuals warn about everywhere else.
+>
+> If the calls genuinely have no ordering between them, say so in the first line and
+> then write the ordered steps of what surrounds a call — check the basis before
+> reporting, apply shared rule 1 where the read feeds a decision, carry it no
+> further than the answer requires. That is a sequence.
+
+**`inputs` — the parameters a caller supplies and what each means.** Not what comes
+back.
+
+> Three manuals had a §3 that was WHAT COMES BACK, a channel enum, or a gate ladder.
+> Each is worth writing and none is an input. Where a manual has no inputs section,
+> the curriculum's `inputs` gets written from route code instead — and then one
+> field of that module's curriculum is not derived from its manual, which is the
+> exception the whole arrangement cannot afford.
+>
+> Include what the caller does **not** supply and where it comes from instead. A
+> tenant read from the token is an input in the sense that matters: it decides what
+> the call can reach, and an agent that thinks it can set one is wrong about the
+> module.
+
 Present-but-empty is rejected too. It is the failure a `?` key check misses.
 
 **`content_hash` is computed in the database**, by a BEFORE trigger, from canonical

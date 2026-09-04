@@ -3,7 +3,7 @@
 **Forge:** CapitalForge
 **Module:** `restack_recommend`
 **Endpoints:** 3 GETs — two on `/api/restack`, one on `/api/v1/dashboard`
-**Version:** 1.3 — corrected 3 September 2026, against CapitalForge `f20a81b`
+**Version:** 1.4 — corrected 3 September 2026, against CapitalForge `f20a81b`
 **Status:** draft, pending Compliance Review Board
 
 Read `foi-shared-rules.md` first. Rules 1, 1a and 2 govern most of what this module returns and are not repeated here.
@@ -30,7 +30,7 @@ It does not write. All three are pure reads. Nothing is recorded, including no r
 
 **It does not forecast.** There is no estimated additional credit and no pipeline value. Both existed until 1 September and were deleted with nothing in their place — the figure was the previous round's *target* multiplied by 0.75, a number derived from nothing. Nothing in this system predicts what a client will be approved for.
 
-It does not measure recovery. See §5.
+It does not measure recovery. See §6.
 
 It does not decide. An eligible verdict is an assessment, not an instruction. Placement is a separate act with its own gates.
 
@@ -91,7 +91,19 @@ The same scan with renamed keys, plus the three counts. It carries **no `reasons
 
 It is a list to act on, not a basis to report from. An agent asked to justify an opportunity calls `check/:businessId` per client.
 
-## 5. THE READINESS SCORE IS A FUNDABILITY FLOOR, NOT A RECOVERY MEASURE
+## 5. THE CORRECT SEQUENCE
+
+The three calls have no ordering between them — any one can be made without any other. What has an order is how a verdict is read and what may be said from it:
+
+1. **Pick the endpoint that carries a basis.** `check/:businessId` returns `reasons`; the dashboard surface does not. An opportunity seen on the dashboard is not justified until `check` has been called for it.
+2. **Read `reasons` on both verdicts, not only on a refusal.** It is always populated, five entries, phrased as findings either way. An agent that reads it only when `eligible` is false reports a pass with no basis.
+3. **Read each null for what it is, and never generalise "null blocks."** `readinessScore: null` means never assessed and blocks. `currentUtilization: null` means no credit profile on record and blocks. `daysSinceLastApp: null` means no prior applications and **passes**. Two block, one passes, and the difference is shared rule 1: never having applied is a fact about the client; an unpulled credit file is a fact about Burkham's records.
+4. **On a scan, read `notAssessedCount` before reporting `total`.** `eligible` returns only eligible clients, so `total` is not a denominator, and an unassessed client is invisible in that scan by construction. Shared rule 7.
+5. **Report the verdict as an assessment, never as an instruction.** An eligible verdict is not a recommendation to place. Placement is a separate act with its own gates, and the readiness score is a fundability floor rather than a recovery measure — see §6.
+
+Step 3 is the trap this module is built around, and step 5 is the one that carries furthest: everything here feeds a decision somebody else owns.
+
+## 6. THE READINESS SCORE IS A FUNDABILITY FLOOR, NOT A RECOVERY MEASURE
 
 `fundingReadinessScore` is computed at onboarding and measures **fundability** — revenue, business age, industry risk, credit, leverage. This module asks whether a client has **recovered enough to stack again**.
 
@@ -109,7 +121,7 @@ Its debt component is worth 10 points and no caller has ever supplied either inp
 
 **Four** different thresholds are read off this one column: 70 here, 70 and 40 in the scorer's own track selection, 75 and 55 on the client detail card, 75 to start Round 2. A client scoring 72 clears this engine's readiness floor and cannot start Round 2 according to the button that would act on it.
 
-## 6. WHAT FAILURE LOOKS LIKE
+## 7. WHAT FAILURE LOOKS LIKE
 
 | Response | Where | Meaning |
 |---|---|---|
@@ -127,13 +139,13 @@ The dashboard's 500 is reachable for the first time. A failed query used to answ
 
 An empty `opportunities` array now means what it says.
 
-## 7. RETRY VS ESCALATE
+## 8. RETRY VS ESCALATE
 
 **Retry freely.** All three are pure reads.
 
 This does not extend to the document. `restack_opportunity_summary` in `document-gen` calls the same engine and produces a client-facing letter. That is a different blast radius and is not part of this grant.
 
-## 8. NEVER
+## 9. NEVER
 
 **Never generalise "null blocks."** Two of the three nulls block and one passes. The rule is shared rule 1, not the null.
 
@@ -141,7 +153,7 @@ This does not extend to the document. `restack_opportunity_summary` in `document
 
 **Never report a count from `eligible` without `notAssessedCount`.** Shared rule 7. An unassessed client is invisible in that scan by construction.
 
-**Never report a readiness score as a recovery assessment.** §5.
+**Never report a readiness score as a recovery assessment.** §6.
 
 **Never report `readinessScore: null` as a low score, a zero, or a weak profile.** It means nobody has assessed this client — most often because nobody has pulled their credit.
 
@@ -153,7 +165,7 @@ Until 2 September the engine said "Readiness score 53 is below threshold of 70" 
 
 **Never treat a 404 as a refusal.** There is no client to refuse.
 
-## 9. WHICH LAWS THIS TOUCHES
+## 10. WHICH LAWS THIS TOUCHES
 
 `compliance/client-interest-standard-v1` — the UDAAP entry. This module answers *can this client raise more capital*, and that entry is explicit that it is not the same question as *should they*. An eligible verdict is not a recommendation to place. Recommended scope is distinct from eligible scope, and this module reports the second.
 
@@ -208,3 +220,11 @@ alone.
 **Added at 1.3.** The no-parameters fact is now in §2 as well as §3. It is a
 capability limit, and §2 is where an agent looks for those — §3 says what the inputs
 mean, which is not the same as saying there are none to give.
+
+**Added at 1.4 — §5 THE CORRECT SEQUENCE.** This manual had no sequence section; its
+§5 was the readiness-score explanation, which is context rather than steps. It was
+the seventh of seven manuals to need this before authoring, and the template in
+`foi-shared-rules.md` now says what the section is for so an eighth does not.
+
+Nothing here is new. Every step is lifted from §§2, 4, 5 and 9. Sections
+renumbered: the old §§5–9 are now §§6–10.
