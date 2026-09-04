@@ -40,6 +40,56 @@ optional.
 
 ---
 
+### Corrected 2026-09-03 — the blocker was never "no adapter"
+
+**The CapitalForge adapter now exists, and #16 is still blocked.** Anyone reading
+the entry above will expect the opposite, so the reasoning is corrected here rather
+than left to mislead.
+
+What the entry said reverses it: *"A CapitalForge Office adapter. That is the same
+item that unblocks the Burkham Pack…"* That was wrong by one word. The blocker was
+never **no adapter** — it was **no adapter CI can reach**.
+
+The adapter is real, serves `_modules`, dispatches nine modules and has carried
+brokered calls end to end. It runs on `127.0.0.1:4000` from a dev checkout. The
+Smoke job runs on a GitHub runner with no such host, so V32 and V11 still report
+NOT_RUN there, Gate 2 still blocks, and the gate-ladder checks still fail against a
+run that stopped at gate 2. **Nothing about the Smoke failure has changed.**
+
+The entry's other claim did hold: one build unblocked Gate 0, the Pack's module
+reconciliation and every registry row. It unblocked everything except the thing this
+entry is about.
+
+**The decision stands, for its original reason.** #16 stays unmerged. A stub Forge
+is still the same work as the real one, and the real one existing does not make a
+stub in CI any less of a fixture.
+
+### The three options, and what each actually costs
+
+**Merge #16 with Smoke red.** Still rejected, unchanged.
+
+**Merge #16 first, then the branch stacked on it.** The same rejection, one step
+later.
+
+**Wait until the adapter has somewhere CI can reach.** This reads as waiting and it
+is not — **it is unscoped work with no owner**, and calling it waiting is how it
+stays unscoped. Reaching the adapter from CI means at minimum a deployed
+CapitalForge instance or a container the Smoke job can start, a reachable
+`base_url` in the smoke environment's `forge_registry`, and a credential CI can
+resolve — plus whatever seeded tenant data the modules need in order to answer.
+None of that is estimated and none of it is assigned.
+
+**So it is deferred indefinitely with the reason attached**, not pending. It becomes
+real work the day somebody wants it, and it needs an estimate before it is
+scheduled.
+
+**What that leaves #16 as:** a branch whose rules are correct, whose failure is
+those rules working, and which cannot be green in CI until the bridge has an address
+in CI. It is not close to merging and should not be described as close.
+
+
+---
+
 ## 2. `/agents/<id>` renders identifiers where labels belong — queued, not dropped
 
 **Decided 2026-09-03.**
