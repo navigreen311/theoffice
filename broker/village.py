@@ -85,6 +85,15 @@ class VillageIdentityError(VillageUnreachableError):
     A subclass of `VillageUnreachableError` on purpose: every existing caller that
     degrades to a cached answer keeps doing so, because a misidentified responder is at
     least as bad as no answer. What changes is that the reason now says which.
+
+    THIS PROTECTS THE OFFICE AND NOBODY ELSE
+    ========================================
+
+        A person at a terminal gets no help from this class. Both instances of the
+        mistake on 4 September came from a person at a terminal — one reading a CI
+        report, one running `curl` — and the second one was six hours after this was
+        written. `docs/forge-adapter.md` trap #8 is the version for humans: on a machine
+        running many projects, `docker ps` before believing a probe.
     """
 
 
