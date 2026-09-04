@@ -3,8 +3,9 @@
 **Forge:** CapitalForge
 **Module:** `statement_pull`
 **Endpoints:** 5 GETs across `/api/businesses/:id/statements` and `/api/statements`
-**Version:** 1.0 — drafted 4 September 2026, against CapitalForge `master`
+**Version:** 1.1 — drafted 4 September 2026, against CapitalForge `master`
 **Status:** draft, pending Compliance Review Board
+**Not yet a curriculum.** This manual cannot be authored into `forge_operating_instruction` until the CapitalForge adapter dispatches `statement_pull` — see the appendix.
 
 Read `foi-shared-rules.md` first. Rules 1, 1a, 2 and 3 govern most of what this module returns and are not repeated here.
 
@@ -40,7 +41,9 @@ It does not write. No row changes, nothing is sent, nothing is recorded by the m
 
 **It does not parse a statement into transactions.** `/line-items` answers with what the record holds, and the record holds `normalizedData` as imported. **No transaction table exists and nothing parses a statement into one.** Until 2 September 2026 this returned five invented transactions — Office Depot $347.89, Delta Air Lines $1,245.00, AWS $2,890.42 — a payment, two fees and a reconciliation difference of $11.59 with "possible causes", identical for every statement id **including ids that do not exist**. An advisor reconciling against that was reconciling against fiction.
 
-**It does not check that the caller may read statements.** This router carries **no `requirePermission` of any kind** — zero permission guards across all eleven of its routes. What scopes a read is tenancy, and on two of the five it is the mount guard; on the other three it is a `tenantId` filter inside the service query. Role is not consulted anywhere.
+**It does not check that you may read these statements.** No permission guard runs on any of the eleven routes on this router — no `requirePermission` of any kind. Three of the five reads are scoped only by a tenant filter inside the service query.
+
+Role is not consulted anywhere. Tenancy holds and these are reads, so the stakes are lower than on `submit_application`, where the same absence sits on a route that moves money — but an agent looking for what stops it should find the answer here rather than infer a guard from the fact that the other reads have one.
 
 **It does not reconcile.** `reconciledAt` and its state are read here and set elsewhere.
 
@@ -89,7 +92,15 @@ The five calls have no ordering requirement between them and no state to carry. 
 
 **A 404 does not distinguish "does not exist" from "not yours."** `BusinessNotFoundError` and `StatementNotFoundError` both map to it, and a statement belonging to another tenant is simply not found by a tenant-scoped query. Read it as **not a record you can reach** and report exactly that.
 
-**An unrecognised `severity` is ignored, not refused.** The handler checks the value against four names and falls back to no filter. So `severity=hgih` returns an unfiltered anomaly count with no indication that the filter did nothing — the one silent failure in this module. **Check the value you sent before reporting a count.**
+### The silent one: a 200 that answered a different question
+
+**An unrecognised `severity` is ignored, not refused.** The handler checks the value against four names and falls back to no filter, so `severity=hgih` returns **an unfiltered anomaly count with nothing in the response saying the filter did nothing.**
+
+This is this module's version of the shapes the other manuals warn about — `record_consent`'s 201 that means only *recorded*, `client_read`'s empty result that carries a basis, `scan_communication`'s `violations` read without `contentWithDisclosures`. **A 200 here can be an honest answer to a question nobody asked.**
+
+The count is real. It is a real count of all anomalies, returned to a caller who asked for critical ones and will report it as a count of critical ones. Nothing downstream can tell the difference, and no later call reveals it — the same request returns the same wrong-shaped answer every time.
+
+**Check the value you sent before reporting any count from this endpoint.** That is the only defence; the response does not carry the filter it applied.
 
 **`tenantId()` falls back to the string `'unknown'`** when `req.tenant` is absent. Every route on this router is behind the API authentication gate, so that fallback should be unreachable; if it is ever reached the queries scope to a tenant that does not exist and the answer is an empty list rather than an error. **An empty list from a caller with no tenant context is indistinguishable from a client with no statements.**
 
@@ -162,3 +173,38 @@ three steps under them:**
 Recorded here rather than only in the template, because the next author will read a
 manual before reading a guidance document, and this one shows the failure it is
 warning about.
+
+## APPENDIX B — WHY THIS MANUAL IS NOT YET A CURRICULUM
+
+**4 September 2026.** Authoring was attempted and refused:
+
+```
+insert or update on table "forge_operating_instruction" violates foreign key
+constraint "forge_operating_instruction_forge_id_module_id_fkey"
+DETAIL:  Key (forge_id, module_id)=(capitalforge, statement_pull) is not present
+         in table "forge_module_registry".
+```
+
+**That is the constraint working, and the ordering it enforces is worth stating.**
+
+    adapter binds it  →  `_modules` reports it  →  a registry row exists
+                      →  an instruction can be authored
+
+`statement_pull` is not bound in the CapitalForge adapter. The routes exist and are
+real — five reads, described above, read from the code — but nothing dispatches
+them under that name, so there is no registry row and a curriculum cannot point at
+one.
+
+**The workaround is the thing the Pack decision forbids.** Writing a registry row by
+hand to satisfy the foreign key would register a name with nothing behind it, which
+is exactly what `docs/decisions.md` entry 4 removed `lender_match` and
+`build_packet` for. The constraint is stopping the same mistake one layer down.
+
+**So the manual is complete and the curriculum waits on a binding.** That is a
+CapitalForge change — an entry in the adapter's dispatch map, and the operations
+that reach these five routes — and it is not made here.
+
+**Nine of the ten CapitalForge manuals are curricula. This one and
+`portfolio_health` are not, and both wait on the same thing.** V11 will keep naming
+them until they are bound, which is V11 reporting the true state rather than a gap
+in the manuals.

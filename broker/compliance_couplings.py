@@ -117,6 +117,11 @@ THE EXPOSURE TEST
       regulator_dossier    it leaves the building, and goes to somebody who regulates
                            Burkham. A module implies the frameworks governing what it
                            DOES, not those its recipient administers.
+      statement_pull       statements -> financial data -> FCRA. A card statement is
+                           ISSUER-BILLING DATA, NOT A CONSUMER REPORT, and no bureau
+                           returned it. This names what the data IS rather than only
+                           what the module does not do, which is the same form as
+                           consumes-not-obtains.
 
     Each is written into that module's `excluded` tuple below, because a flag
     correctly left off and a flag forgotten look identical in a list.
@@ -400,6 +405,34 @@ CAPITALFORGE: dict[str, ModuleCouplings] = {
                 "the truthfulness of what is submitted, which "
                 "application_truthfulness_required already carries; per-application "
                 "authorization is a different claim and section 9 does not make it.",
+            ),
+        ),
+    ),
+    "statement_pull": ModuleCouplings(
+        couplings=(
+            Coupling(
+                "privacy_request_handling",
+                "Statement records are personal data about a person's business "
+                "account, subject to access and deletion requests.",
+            ),
+            Coupling(
+                "fair_treatment_required",
+                "Where a statement read feeds a routing or recommendation decision, "
+                "everything that entry says about inputs applies to what this module "
+                "returns, including to absences.",
+            ),
+        ),
+        excluded=(
+            Excluded(
+                "bureau_report_handling_required",
+                "A CARD STATEMENT IS ISSUER-BILLING DATA, NOT A CONSUMER REPORT, AND "
+                "NO BUREAU RETURNED IT. Section 9 excludes the entry outright. The "
+                "entry fires when a report has been returned by the Integration "
+                "Layer; nothing in this module came from a bureau at all, so it is "
+                "not the consumes/obtains distinction that separates "
+                "client_read_credit from per_pull_authorization_required - it is a "
+                "step before that, where the data is not bureau-derived in the first "
+                "place.",
             ),
         ),
     ),
