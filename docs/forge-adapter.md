@@ -388,3 +388,62 @@ than verified. All twelve of the Burkham Pack's modules are in that state today.
 manifest row that Phase 0.8 needed. The bootstrap exists because grants are otherwise
 only written at the end of the sixteen-gate provisioning ladder; it is not a pattern to
 copy for a production Forge, which should be onboarded through a Pack.
+
+---
+
+## The §2 audit, 3 September 2026
+
+After `submit-application.md` §2 was found asserting a middleware that does not
+exist, every manual's §2 was read for the same shape: a sentence naming a
+middleware, guard, permission or gate.
+
+**§2 is where this lives, because §2 is written by naming what stops you.** And the
+direction matters more than the count. An omission leaves an agent uncertain; **an
+assurance makes it confident and wrong**, and a curriculum built from an assurance
+certifies the confidence.
+
+Three claims found in ten manuals. Two false, one true, and the true one is the one
+that carries.
+
+### Confirmed true — the mount guard, verified at line level
+
+Three manuals say it, and it is the load-bearing claim in three curricula:
+
+> *"The mount guard runs before any handler here, so by the time a handler executes
+> the client is known to exist and to belong to the caller's tenant."*
+
+- `api/routes/index.ts:162-163` installs `requireOwnedBusiness('clientId')` on both
+  `/clients/:clientId` and `/v1/clients/:clientId`
+- the router mounts at `170-171`, **after** the guard
+- `businessBelongsToTenant` runs `findFirst({where: {id, tenantId}})` — existence and
+  tenancy in one query
+
+It is what makes `client_read`, `client_read_pii` and `client_read_credit` able to
+say `clientId` is guaranteed to exist and be the caller's. **Accurate as written**,
+and worth recording as confirmed rather than merely not-flagged: the audit that
+found two false claims also checked the one everything rests on.
+
+### False — `record_consent` §2 named six submission gates
+
+It listed credit-union membership disclosure among gates that run.
+`submit-application.md` had said since it was written that the gate cannot fire.
+
+**Cross-manual, which is what makes it the worst instance.** An agent reading
+`record_consent` has no path to the correction — the contradicting statement is in a
+manual it may hold no grant for.
+
+### False — `record_consent` §2 named four SMS gates
+
+Five run: `no_phone`, `dnc`, `no_consent`, `unknown_timezone`, `quiet_hours`. The
+four named were right and in the right order, with an unnamed fifth between consent
+and quiet hours. Wrong in the safe direction and wrong the same way.
+
+### What the audit does not do
+
+It checks claims that are *made*. A manual that never mentions a protection is not
+audited by this, and three manuals had nothing to check —
+`compliance_manifest_assemble`, `regulator_dossier_export` and `scan_communication`
+describe absent capability rather than asserted protection.
+
+**Run it again whenever a §2 is written.** The two false claims were both written by
+somebody who believed them, and neither was found by review.

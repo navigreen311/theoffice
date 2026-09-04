@@ -1,7 +1,8 @@
 # FORGE OPERATING INSTRUCTION
 
 **Forge:** CapitalForge  **Module:** `record_consent`  **Endpoint:** `POST /api/businesses/:id/consent`
-**Version:** 1.3 — corrected 3 September 2026, against CapitalForge `1d6c7c8`
+**Version:** 1.4 — corrected 3 September 2026, against CapitalForge `1d6c7c8`
+**Corrected at 1.4:** §2 named six submission gates and four SMS gates. Five are enforced and five run. See Appendix D.
 **Corrected at 1.3:** the read-back prohibition moved from §5 to §7, where a prohibition belongs — see Appendix C.
 **Renamed at 1.2:** the module id was `consent_grant` in 1.1. `record_consent` is what the Burkham Pack declares and what the adapter now dispatches. See Appendix B.
 **Status:** draft, pending Compliance Review Board
@@ -32,9 +33,11 @@ So the agent's job is narrow and it is a filing job: **do not file a record with
 
 **It does not make the consent valid.** Recording that consent exists and the consent being legally sufficient are different facts. The module records a claim.
 
-**It does not permit contact.** Sending an SMS passes four gates in order — phone on record, Do Not Call list, TCPA consent, quiet hours. This module writes gate 3. The other three still stand.
+**It does not permit contact.** Sending an SMS passes **five** gates in order — phone on record, Do Not Call list, TCPA consent, resolvable timezone, quiet hours. This module writes gate 3. The other four still stand.
 
-**It does not unblock a submission.** `submit_application` runs its own chain of six gates — product reality, consent captured, suitability, KYB/KYC, maker-checker, and credit-union membership disclosure. These are two unrelated chains for two different acts. The four above govern sending a message; the six govern submitting an application. A record written here satisfies neither on its own.
+**It does not unblock a submission.** `submit_application` runs its own chain of **five enforced gates** — product reality, consent captured, suitability, KYB/KYC and maker-checker. A sixth, credit-union membership disclosure, is declared and **cannot fire**: it runs only when `issuerType === 'credit_union'` and `CardApplication` carries an issuer name with no issuer type column, so nothing anywhere can produce that value. See `capitalforge-submit-application.md` §4, and the open question recorded in `docs/decisions/submit-application.md` entry 5 — this is not a tidy gap.
+
+These are two unrelated chains for two different acts. The five above govern sending a message; the five here govern submitting an application. A record written here satisfies neither on its own.
 
 **It does not check the channel against what is on record.** SMS consent records cleanly for a business with no phone number, and the gate then answers contactable. The mismatch surfaces only at dispatch, as a `no_phone` block. A successful call is not a statement that the business is reachable on that channel.
 
@@ -284,3 +287,29 @@ go somewhere specific.
 
 **Nothing was added or reworded.** The sentence is unchanged and it is still in the
 manual. Only the section changed.
+
+## APPENDIX D — §2 CORRECTED AT 1.4, 3 September 2026
+
+Found by a targeted audit of every manual's §2 for asserted protections, run after
+`submit-application.md` was found claiming a middleware that does not exist.
+
+**§2 said `submit_application` runs six gates.** It named credit-union membership
+disclosure among them. That gate **cannot fire** — `submit-application.md` §4 has
+said so since it was written, and this manual asserted the opposite.
+
+The direction is what makes it serious. An omission leaves an agent uncertain; an
+assurance makes it confident and wrong. And an agent reading *this* manual has no
+path to the correction: the contradicting statement is in a different manual it may
+hold no grant for.
+
+**§2 said an SMS passes four gates.** It passes five — `no_phone`, `dnc`,
+`no_consent`, `unknown_timezone`, `quiet_hours`. The four named were right and in
+the right order; an unnamed fifth sits between consent and quiet hours. Wrong in the
+safe direction, and wrong the same way.
+
+**The gate that cannot fire is not closed by this edit.** A dead branch where a
+required control should be is a question about the product, not about a manual —
+six credit unions are on file as active placement targets offering business cards,
+and the disclosure is declared `required: true`. Raised in
+`docs/decisions/submit-application.md` entry 5. Until that is answered, this manual
+states the gap rather than implying it was decided.

@@ -3,7 +3,7 @@
 **Forge:** CapitalForge
 **Module:** `restack_recommend`
 **Endpoints:** 3 GETs — two on `/api/restack`, one on `/api/v1/dashboard`
-**Version:** 1.2 — drafted 2 September 2026, against CapitalForge `f20a81b`
+**Version:** 1.3 — corrected 3 September 2026, against CapitalForge `f20a81b`
 **Status:** draft, pending Compliance Review Board
 
 Read `foi-shared-rules.md` first. Rules 1, 1a and 2 govern most of what this module returns and are not repeated here.
@@ -33,6 +33,8 @@ It does not write. All three are pure reads. Nothing is recorded, including no r
 It does not measure recovery. See §5.
 
 It does not decide. An eligible verdict is an assessment, not an instruction. Placement is a separate act with its own gates.
+
+**It does not narrow, filter or scope.** `eligible` and `restack-opportunities` take no parameters at all — no path segment, no query string, no body. They answer for the calling tenant's whole active population, and an agent that wants a subset filters the answer rather than the request. See §3.
 
 ## 3. WHAT EACH INPUT MEANS
 
@@ -187,7 +189,7 @@ Until 2 September the engine said "Readiness score 53 is below threshold of 70" 
 
 Retained here rather than deleted because the defect is reachable in any database migrated before `f77e3fb`. An agent encountering `readinessScore: 0` on a client with no credit profile should treat the number as suspect rather than as an assessment, and say so.
 
-## APPENDIX A — §3 WHAT EACH INPUT MEANS ADDED AT 1.2, 3 September 2026
+## APPENDIX A — §3 ADDED AT 1.2, §2 AT 1.3, 3 September 2026
 
 **Why.** This manual's §3 was WHAT COMES BACK — the response, not the request. The
 curriculum's `inputs` field would have been written from the route code, which is
@@ -202,3 +204,7 @@ than the request.
 **Nothing here is new.** Sections renumbered: the old §§3–8 are now §§4–9. The two
 `docs/gaps.md` references (§3m, §3n) point into another document and were left
 alone.
+
+**Added at 1.3.** The no-parameters fact is now in §2 as well as §3. It is a
+capability limit, and §2 is where an agent looks for those — §3 says what the inputs
+mean, which is not the same as saying there are none to give.
