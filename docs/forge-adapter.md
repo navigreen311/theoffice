@@ -301,6 +301,98 @@ one.
 
 ---
 
+## A seventh: the registry copy is the one that is read, and nothing compared it
+
+The worst of them, and the reason is structural rather than a matter of degree.
+
+**The other three of this class were controls that did not run.** The CU tripwire was
+narrower than it read. V32's message dropped a Forge it could not ask. The `is_mutating`
+guard missed a handler that flushed. Each one failed to *detect* something. A control
+that does not run leaves you where you would have been without it.
+
+**This one runs, reads the wrong value, and grants on it.**
+
+### The two copies, and which one is spent
+
+`is_mutating` and `idempotency_support` exist in two places:
+
+| | derived? | read by |
+|---|---|---|
+| the adapter's `GET /_modules` | **yes** — stated at the binding site, beside the handler, and the adapter refuses at runtime a `is_mutating=False` module that writes | nothing, until somebody asks |
+| `forge_module_registry` | **no** — somebody typed it | `broker/grants.py`, on every call |
+
+`resolve_grant`'s query selects `m.is_mutating` and `m.idempotency_support` from
+`forge_module_registry`. **V31 refuses `auto_execute` over a mutating `at_most_once`
+module using the registry row, not the manifest.** So the field that decides whether an
+agent runs unattended is read from the copy nobody derived — and until 4 September 2026,
+from the copy nothing compared.
+
+### What "nothing compared it" actually means, because it is subtler than it sounds
+
+The comparison **existed**. `scripts/verify_forge_modules.py:_corrections` compared both
+fields and had done since it was written, with a docstring citing `property_lookup`.
+
+It ran on one branch only:
+
+```python
+if confirmed and not check:
+    ...
+    corrected = await _corrections(...)      # write path: repairs, prints, moves on
+else:
+    print(f"{forge_id}: {len(confirmed)} row(s) resolve")   # --check: never compares
+```
+
+So there were two states and neither produced a finding:
+
+- **Nobody runs the write path.** The wrong value sits there indefinitely. `--check` —
+  the CI form, the one anything automated runs — exits 0.
+- **Somebody runs the write path.** The row is silently repaired and a line goes to
+  stdout. No audit entry, no incident, no record that a governance field was ever wrong.
+
+A check that repairs what it finds cannot fail twice, and the second failure is the one
+that tells you the first was not an accident.
+
+### Both known instances
+
+    property_lookup        recorded `is_mutating: TRUE` on a read. Months. The only
+                           module anybody had ever called. Found by reading.
+    simforge/gate_result   recorded `is_mutating: TRUE, idempotency_support: 'key'`
+                           against a manifest saying `false` / `natural`. Found on
+                           4 September 2026 by diffing the rows against the manifest
+                           by hand, while onboarding the Forge. `--check` had just
+                           been run and exited 0.
+
+Two for two on the modules anyone has looked at.
+
+### The fix
+
+`--check` now compares the shape fields and reports **MISMATCH**, which is deliberately
+not DRIFT:
+
+    DRIFT      the row and the dispatch map disagree about whether a module EXISTS
+    MISMATCH   they agree it exists and disagree about WHAT IT DOES
+
+Reporting the second under the first's name would put the more serious finding inside
+the name of the less serious one. `--check` exits 1 on either, writes nothing on both —
+`test_reporting_a_mismatch_writes_nothing` is what keeps the CI form from repairing what
+it is checking. The write path still corrects, and now says in its output that the row it
+just changed was what V31 had been deciding on.
+
+Tests: `tests/validator/test_module_shape_conformance.py`.
+
+### What this does not fix
+
+**`is_mutating` is still somebody's word on both sides.** The manifest's copy is declared
+at the binding site rather than derived like the module list, and the adapter's runtime
+guard only catches a handler that contradicts it *while being called*. What changed is
+that the two copies can no longer silently disagree — not that either is proven.
+
+**Nothing checks `compliance_flags_implied` the same way.** The registry pass that wrote
+those got eight of nine rows wrong; `broker/compliance_couplings.py` and its tests are the
+check that exists for it, and they are a different mechanism from this one.
+
+---
+
 ## What an adapter is, and is not
 
 The Office posts to `{forge_registry.base_url}/{module_id}` with a JSON body. The
@@ -463,6 +555,9 @@ than verified. All twelve of the Burkham Pack's modules are in that state today.
 - [ ] The guard itself catches a handler that **flushed**, not only one that `add`ed —
       `db.new/dirty/deleted` are empty after a flush, so the obvious check reads clean on
       a write already in the database. See trap #6; take the `after_flush` version
+- [ ] `scripts/verify_forge_modules.py --check` reports **no MISMATCH** — the registry's
+      `is_mutating` and `idempotency_support` agree with the manifest. That row, not the
+      manifest, is what `broker/grants.py` reads and what V31 spends. See trap #7
 - [ ] `forge_module_registry` rows for each module, spelled **exactly** as the adapter's
       dispatch keys, with honest `is_mutating` and `idempotency_support`
 - [ ] **Every operation of every module called against a running Forge, and the answer
