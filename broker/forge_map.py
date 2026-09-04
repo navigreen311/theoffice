@@ -58,6 +58,22 @@ MISMATCH = {
 # What is NOT hardcoded is the status of any of them: bridged, instructed and healthy are
 # all computed against what exists, so this cannot go on claiming a Forge is unbridged
 # after somebody bridges it.
+#: The Forges that exist. **This list has no upstream.**
+#:
+#: Every other list in this system resolves against something - `forge_module_registry`
+#: against the adapter's `_modules`, the manifest against the dispatch map, a Pack's
+#: `modules_expected` against the manifest. This one resolves against nothing, because
+#: nothing holds the set of Forges that exist in the world. It is somebody's memory.
+#:
+#: AnimaForge was missing from it until 4 September 2026 and therefore appeared in no
+#: state report at all - not as unbound, not as deferred, absent. It was not behind
+#: schedule; it was absent from the schedule. Found by accident, in a recon report asked
+#: for to size something else. See `docs/decisions.md` entry 7.
+#:
+#: So: when a Forge is named anywhere - a plan, a Pack draft, a repository that appears
+#: on disk - check this list at that moment. A Forge's absence from it is unproven, not
+#: evidence. Adding a second hand-written list to compare against would compare two
+#: claims, which is the shape V6 already warns about.
 ESTATE = [
     {"forge_id": "cre-forge", "display_name": "CRE Forge",
      "note": "Greenstone's operating Forge. Bridged first under blueprint J4."},
@@ -75,6 +91,12 @@ ESTATE = [
              "of every mistake, so it is bridged last."},
     {"forge_id": "funnelforge", "display_name": "FunnelForge",
      "note": "No bridge and no operating instructions yet."},
+    {"forge_id": "animaforge", "display_name": "AnimaForge",
+     "note": "Video-making software. Named in the first group to be linked to The "
+             "Office alongside CapitalForge and FunnelForge, and missing from this "
+             "list until 4 September 2026 - so it appeared in no state report at all, "
+             "not as unbound and not as deferred. No bridge and no operating "
+             "instructions yet. See docs/decisions.md entry 7."},
     {"forge_id": "visionaudioforge", "display_name": "VisionAudioForge",
      "note": "No bridge and no operating instructions yet."},
 ]

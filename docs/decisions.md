@@ -497,3 +497,72 @@ A VoiceForge Office adapter whose `_modules` manifest answers `place_call`, back
 real telephony path. Until then the registry rows stay `hand` and V31 keeps declining. If
 the decision goes the other way, the rows come off the way `bureau_pull` and
 `readiness_score` did on 1 September.
+
+---
+
+## 7. The estate list is the one list with no upstream, and AnimaForge fell out of it
+
+**Recorded 2026-09-04. AnimaForge added to `ESTATE` the same day.**
+
+AnimaForge is a Forge — `navigreen311/animaforge`, video-making software, named in the
+first group to be linked to The Office alongside CapitalForge and FunnelForge. It was not
+in `broker/forge_map.py:ESTATE`, and had not been for as long as that list has existed.
+
+### What that cost, stated plainly
+
+**AnimaForge appeared in no state report at all.** Not as unbound, not as deferred, not as
+blocked, not as a row with an empty status. Absent.
+
+Every report The Office produces about Forge coverage — the estate view, the reconcile
+diff, the gap tables — starts from `ESTATE` and adds whatever the registry knows.
+AnimaForge was in neither, so every one of those reports was complete and correct on its
+own terms and silent about a Forge that exists.
+
+**It was not behind schedule. It was absent from the schedule.** Those look identical from
+a distance and are not the same thing: the first is visible and gets prioritised, the
+second cannot be prioritised because nobody is looking at it.
+
+### Why nothing caught it, and why nothing was going to
+
+Every other list in this system resolves against something upstream:
+
+    forge_module_registry     resolves against the adapter's GET /_modules
+    the adapter's manifest    is derived from the dispatch map - the name is there iff
+                              a handler is bound to it
+    a Pack's modules_expected resolves against the manifest
+    the compliance library    resolves against library_entry_ref
+    a certification           binds to an instruction_content_hash
+
+`ESTATE` resolves against nothing. **There is nothing to resolve it against.** No system
+holds the list of Forges that exist in the world; the repositories on disk are a claim, the
+GitHub organisation is a claim, and a human's memory is the claim we are actually using.
+
+This is not a control that failed. It is a place where there was never a control, and
+saying so is more useful than inventing one — a check that compared `ESTATE` to a second
+hand-written list would compare two claims, which is the shape entry 4 and V6 already
+warn about.
+
+### How it was found
+
+**By accident.** A recon report on FunnelForge and AnimaForge was requested to size the
+remaining wave of Forges to bridge. The FunnelForge half was routine. The AnimaForge half
+opened with "it is not in ESTATE at all", which nobody had asked about, because nobody knew
+to ask.
+
+A list that stays correct only by somebody noticing was corrected by somebody noticing —
+and it is worth being clear that this is the mechanism, not a lucky exception to it.
+
+### What this changes, and what it does not
+
+`ESTATE` now has nine entries. `test_the_estate_is_declared_but_its_status_never_is` still
+holds: the entry names the Forge and says it has no bridge, and claims no status, because a
+hardcoded status is a page that goes on claiming a Forge is unbridged after somebody
+bridges it.
+
+**No new check is added, because there is no upstream to check against.** What is added is
+this entry, so the next person reading `ESTATE` knows it is somebody's memory rather than a
+derived fact — and treats a Forge's absence from it as unproven rather than as evidence.
+
+**The practical instruction:** when a Forge is named anywhere — a plan, a Pack draft, a
+conversation, a repository that appears on disk — check `ESTATE` at that moment. That is the
+only mechanism there is.
