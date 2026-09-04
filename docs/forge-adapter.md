@@ -197,6 +197,110 @@ reaction, and one written before is a prevention.
 
 ---
 
+## A sixth: the `is_mutating` check is narrower than it reads
+
+The five above are traps in what an adapter *does*. This one is a trap in the check
+that is supposed to catch traps — a control described as total, narrower than it read,
+and found by testing rather than by reading. **It is in the template, so the next three
+adapters inherit it unless you take the fixed version.**
+
+### What `is_mutating` buys
+
+It is a declaration at the binding site, and The Office spends it: **V31 refuses
+`auto_execute` over a mutating `at_most_once` module.** A module that says it is a read
+and is not walks straight through that rule and lands, unattended, on a writer. The
+whole reason the declaration lives beside the handler rather than in a registry row is
+that a declaration nothing checks is exactly the row it replaced — `property_lookup` sat
+in `forge_module_registry` recorded `is_mutating: TRUE` for months, and it is a search.
+
+So the adapter checks it at runtime, at the only moment its truth is observable: after
+the handler has run.
+
+### The obvious check, and what it misses
+
+```python
+# What the first version did:
+if not spec.is_mutating and (db.new or db.dirty or db.deleted):
+    await db.rollback()
+    raise HTTPException(500, ...)
+```
+
+Read that and it looks total. It is not. **Those three collections hold work that has
+not been flushed yet.**
+
+A handler that called `session.flush()` — or called any service function that flushed —
+empties all three. The check then reads *clean* on a write that has already reached the
+database inside the transaction and is one `commit()` away from permanent. The module
+keeps its `is_mutating=False` declaration, V31 keeps granting unattended `auto_execute`
+over it, and nothing anywhere reports a problem.
+
+### It was latent in CRE Forge, and that is a fact about four functions
+
+Not a mitigation, and worth stating precisely because the distinction is the whole
+lesson.
+
+The check passed in CRE Forge because **no read-declared handler in `MODULES` flushes
+today**. `_property_lookup`, `_comp_analysis` and `_buyer_match` query and return;
+`_underwrite_deal` writes, says so, and is declared `is_mutating=True`, so the check does
+not apply to it.
+
+That is a statement about what four functions happened to do at one moment. It is not a
+property of the check. Any read handler that later grew a `flush()`, or that called a
+service method which flushed internally, would have walked straight through — and **most
+service layers flush.** The gap was one refactor away from live, in the control that
+gates unattended write access.
+
+### The fix
+
+Add an `after_flush` listener for the duration of a read-declared handler, and keep the
+collection check as well:
+
+```python
+flushed = False
+
+def _on_flush(*_): 
+    nonlocal flushed
+    flushed = True          # SQLAlchemy skips the flush entirely when there is
+                            # nothing to write, so firing at all is the signal.
+
+listening = not spec.is_mutating
+if listening:
+    event.listen(db.sync_session, "after_flush", _on_flush)
+try:
+    result = await spec.handler(db, payload)
+finally:
+    if listening:
+        event.remove(db.sync_session, "after_flush", _on_flush)
+
+if not spec.is_mutating and (flushed or db.new or db.dirty or db.deleted):
+    ...rollback and 500, naming `flushed` in the message
+```
+
+Both conditions, not one: the collections catch an unflushed `add`, the listener catches
+a flushed one. Name `flushed` in the error, because a reader who sees `pending=0` needs
+to know what tripped it.
+
+`test_a_read_declared_module_that_flushes_is_refused` is the test, and
+`test_a_declared_writer_may_flush` is its other half — without that one, a fix that
+simply refused every flush would look identical and would 500 on `underwrite_deal`.
+
+### How it was found, which is the reusable part
+
+By **porting this file to a second Forge and writing the test against the port.**
+SimForge's service functions flush; the copied check passed a handler that wrote. The
+test failed against the template's version and passed against the fixed one.
+
+Reading this check did not find it — not during the design of the original, and not
+during the §2 audit that read the adapter line by line looking for exactly this class.
+**A control's scope is found by testing its edge, not by reading its body**, and the
+cheapest way to test the edge turned out to be writing the same control twice.
+
+If you are onboarding Forge number three: take the fixed check, and when you copy a
+control, write the test that the *original* would have failed. That is what caught this
+one.
+
+---
+
 ## What an adapter is, and is not
 
 The Office posts to `{forge_registry.base_url}/{module_id}` with a JSON body. The
@@ -356,6 +460,9 @@ than verified. All twelve of the Burkham Pack's modules are in that state today.
       `idempotency_support` stated at each binding
 - [ ] Every `is_mutating=False` handler verified against the runtime guard: a read that
       writes is refused and rolled back, not returned as a 200
+- [ ] The guard itself catches a handler that **flushed**, not only one that `add`ed —
+      `db.new/dirty/deleted` are empty after a flush, so the obvious check reads clean on
+      a write already in the database. See trap #6; take the `after_flush` version
 - [ ] `forge_module_registry` rows for each module, spelled **exactly** as the adapter's
       dispatch keys, with honest `is_mutating` and `idempotency_support`
 - [ ] **Every operation of every module called against a running Forge, and the answer
