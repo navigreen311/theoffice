@@ -117,6 +117,13 @@ THE EXPOSURE TEST
       regulator_dossier    it leaves the building, and goes to somebody who regulates
                            Burkham. A module implies the frameworks governing what it
                            DOES, not those its recipient administers.
+      portfolio_health     THE BROADEST AFTER THE MANIFEST, and for a second reason
+                           on top of the name: it reads seven tables, each carrying
+                           its own entry. AGGREGATING A RECORD INTO A STATISTIC IS
+                           FURTHER FROM THE ACT THAN INDEXING IT. It is also the only
+                           module in the set that returns nothing about an
+                           identifiable person, which REMOVES a coupling every other
+                           read module carries - see its fair_treatment exclusion.
       statement_pull       statements -> financial data -> FCRA. A card statement is
                            ISSUER-BILLING DATA, NOT A CONSUMER REPORT, and no bureau
                            returned it. This names what the data IS rather than only
@@ -433,6 +440,47 @@ CAPITALFORGE: dict[str, ModuleCouplings] = {
                 "client_read_credit from per_pull_authorization_required - it is a "
                 "step before that, where the data is not bureau-derived in the first "
                 "place.",
+            ),
+        ),
+    ),
+    "portfolio_health": ModuleCouplings(
+        couplings=(
+            Coupling(
+                "privacy_request_handling",
+                "THE ENTRY APPLIES TO WHAT THIS MODULE READS, NOT TO WHAT IT RETURNS. "
+                "It aggregates seven tables of personal data about named individuals, "
+                "and reading personal data is a processing activity whatever the "
+                "output shape. The score is not subject to an access request; the "
+                "records it was computed from are.",
+            ),
+        ),
+        excluded=(
+            Excluded(
+                "fair_treatment_required",
+                "THIS MODULE RETURNS NO CLIENT, SO NOTHING IT RETURNS CAN ROUTE ONE. "
+                "The entry governs inputs to a routing or recommendation decision "
+                "about a client; every other read module carries it because each "
+                "returns something that feeds such a decision, and this one cannot - "
+                "there is no business id, no name and no client identifier anywhere "
+                "in the result, including in its action items. The Approval Rate "
+                "component is why this was checked rather than assumed: an "
+                "approval-rate statistic across a population is the shape a "
+                "disparate-impact analysis uses, and this is not one - a single "
+                "tenant-wide percentage with no protected characteristic, no "
+                "per-client breakdown and no comparison group.",
+            ),
+            Excluded(
+                "bureau_report_handling_required",
+                "Nothing here is bureau-derived. It reads applications, consents, "
+                "acknowledgments, compliance checks, funding rounds and payment "
+                "schedules, and none of those is a consumer report.",
+            ),
+            Excluded(
+                "recording_consent_required",
+                "Consent records are COUNTED, not read for content. The entry governs "
+                "a recording made when consent was captured; a completion percentage "
+                "is two steps from a recording, and aggregating a record into a "
+                "statistic is further from the act than indexing it.",
             ),
         ),
     ),

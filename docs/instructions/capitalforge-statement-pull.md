@@ -3,7 +3,7 @@
 **Forge:** CapitalForge
 **Module:** `statement_pull`
 **Endpoints:** 5 GETs across `/api/businesses/:id/statements` and `/api/statements`
-**Version:** 1.1 — drafted 4 September 2026, against CapitalForge `master`
+**Version:** 1.2 — drafted 4 September 2026, against CapitalForge `master`
 **Status:** draft, pending Compliance Review Board
 **Not yet a curriculum.** This manual cannot be authored into `forge_operating_instruction` until the CapitalForge adapter dispatches `statement_pull` — see the appendix.
 
@@ -54,7 +54,7 @@ Role is not consulted anywhere. Tenancy holds and these are reads, so the stakes
 | `:id` (path, business-scoped reads) | The business. Behind the mount guard — guaranteed to exist and be the caller's by the time a handler runs |
 | `client_id` (query, `/api/statements`) | The same business, addressed differently. **Required** — its absence is `400 MISSING_PARAM`, not an unfiltered list |
 | `:statementId` / `:id` (path, statement-scoped reads) | One statement. **Not** behind the mount guard; scoped by tenant inside the query |
-| `severity` (query, anomalies) | Optional filter: `low`, `medium`, `high`, `critical`. **An unrecognised value is silently ignored** rather than refused — see §6 |
+| `severity` (query, anomalies) | Optional filter: `low`, `medium`, `high`, `critical`. **An unrecognised value falls back to no filter** rather than being refused — the response's `severityFilter` reports which was applied. See §6 |
 | tenant | **Not caller-supplied.** Read from the token, and it is the only thing scoping three of the five reads |
 
 **Two of the five reads are behind the mount guard and three are not.** `/api/businesses/:id/...` sits under `requireOwnedBusiness('id')`, installed in `api/routes/index.ts` before this router mounts. `/api/statements/...` does not — those are scoped only by the `tenantId` the service passes into its own query. The scoping is real in both cases; **the mechanism is different, and only one of them refuses before a handler runs.**
@@ -66,7 +66,7 @@ Role is not consulted anywhere. Tenancy holds and these are reads, so the stakes
 The five calls have no ordering requirement between them and no state to carry. Three steps surround a read, and each one is worse done later than earlier:
 
 1. **Pick the endpoint that carries what you need, before reading anything.** `/statements` and `/businesses/:id/statements` return the same records by different addresses; the anomaly report and `/line-items` return different things, and `/line-items` returns less than its name suggests. Choosing after reading means reading twice and reporting from whichever came back first.
-2. **Read the query you sent before reporting the count it produced.** An unrecognised `severity` is ignored rather than refused, so an unfiltered anomaly total comes back looking filtered. This has to happen before the number is reported, because nothing in the response says the filter did nothing.
+2. **Compare `severityFilter` in the answer to the severity you sent, before reporting the count.** An unrecognised value falls back to no filter, so an unfiltered total comes back to a caller who asked for critical ones. The response reports the filter it applied; this step is reading it. Before the number is reported, because afterwards the count has already been attributed to the wrong question.
 3. **Where the read is gathering context rather than answering a question, apply shared rule 1 to everything it returned — including what it did not find.** Last, because it applies to the whole result and cannot be done until there is one.
 
 **Three, and no more.** The prohibitions that govern what may be said about statements are in §8, and they are not steps: a rule that applies whenever a shape comes back is not a rule about when to do something.
@@ -79,7 +79,7 @@ The five calls have no ordering requirement between them and no state to carry. 
 
 **`feesCharged` and `interestCharged` are nullable and the null is not zero.** Null means the ingest did not record that figure. Reporting it as zero states that no fee was charged, which is a claim about the client's account that nothing here supports.
 
-**The anomaly report** carries per-statement reports and a summed `totalAnomalies`, computed across whatever the severity filter left.
+**The anomaly report** carries per-statement reports, a `statementCount`, a summed `totalAnomalies`, and **`severityFilter` — the filter actually applied, or `null` for none.** That last field is the one that makes the count interpretable; a total without it is a number with no question attached.
 
 ## 6. WHAT FAILURE LOOKS LIKE
 
@@ -92,15 +92,21 @@ The five calls have no ordering requirement between them and no state to carry. 
 
 **A 404 does not distinguish "does not exist" from "not yours."** `BusinessNotFoundError` and `StatementNotFoundError` both map to it, and a statement belonging to another tenant is simply not found by a tenant-scoped query. Read it as **not a record you can reach** and report exactly that.
 
-### The silent one: a 200 that answered a different question
+### An unrecognised `severity` is ignored — and the response says so
 
-**An unrecognised `severity` is ignored, not refused.** The handler checks the value against four names and falls back to no filter, so `severity=hgih` returns **an unfiltered anomaly count with nothing in the response saying the filter did nothing.**
+**The handler checks the value against four names and falls back to no filter.** So `severity=hgih` returns an unfiltered anomaly count to a caller who asked for critical ones.
 
-This is this module's version of the shapes the other manuals warn about — `record_consent`'s 201 that means only *recorded*, `client_read`'s empty result that carries a basis, `scan_communication`'s `violations` read without `contentWithDisclosures`. **A 200 here can be an honest answer to a question nobody asked.**
+**But the answer carries `severityFilter`, and it is the filter that was actually applied.** `severityFilter: null` on a response to a request that named a severity is the fallback, visible in the body:
 
-The count is real. It is a real count of all anomalies, returned to a caller who asked for critical ones and will report it as a count of critical ones. Nothing downstream can tell the difference, and no later call reveals it — the same request returns the same wrong-shaped answer every time.
+```
+{"reports":[], "statementCount":0, "totalAnomalies":0, "severityFilter":null}
+```
 
-**Check the value you sent before reporting any count from this endpoint.** That is the only defence; the response does not carry the filter it applied.
+So this is a **silent fallback with a visible answer**, not an undetectable one. The same shape as an empty result carrying a basis: the information is there and has to be read.
+
+**Compare `severityFilter` to the value you sent before reporting any count.** If they disagree, the count is over everything.
+
+The count itself is real — a real count of all anomalies — which is why it does not look wrong. What makes it wrong is the question it answers, and `severityFilter` is what tells you which question that was.
 
 **`tenantId()` falls back to the string `'unknown'`** when `req.tenant` is absent. Every route on this router is behind the API authentication gate, so that fallback should be unreachable; if it is ever reached the queries scope to a tenant that does not exist and the answer is an empty list rather than an error. **An empty list from a caller with no tenant context is indistinguishable from a client with no statements.**
 
@@ -118,7 +124,7 @@ This is a property of these five, not of the router. It does not extend to inges
 
 **Never report `feesCharged: null` or `interestCharged: null` as zero.** Null is not recorded; zero is a claim about the account.
 
-**Never report an anomaly count without the severity filter that produced it**, and never report one at all without checking that the severity value you sent was one of the four recognised names.
+**Never report an anomaly count without the `severityFilter` the answer carries**, and never assume the filter you sent is the filter that was applied. An unrecognised value falls back to no filter and `severityFilter` says so.
 
 **Never treat a 404 as "this statement does not exist."** It also means another tenant's.
 
@@ -208,3 +214,29 @@ that reach these five routes — and it is not made here.
 `portfolio_health` are not, and both wait on the same thing.** V11 will keep naming
 them until they are bound, which is V11 reporting the true state rather than a gap
 in the manuals.
+
+## APPENDIX C — CORRECTED AT 1.2, 4 September 2026
+
+**§6 overstated the severity defect, and the correction matters more than the
+defect.**
+
+1.1 said an unrecognised `severity` returns an unfiltered count with *"nothing in
+the response saying the filter did nothing"*, that *"nothing downstream can tell the
+difference"*, and that the response *"does not carry the filter it applied."*
+
+**All three are false.** The response carries `severityFilter`, set to the filter
+actually applied or `null` for none. A caller who sends `hgih` gets
+`severityFilter: null` and can tell immediately.
+
+Found by calling the endpoint while binding the module — the answer had the field
+in it.
+
+**The defect is real and smaller than described:** a silent fallback whose answer is
+visible if one field is read. That is the same shape as an empty result carrying a
+basis, and this manual set has a rule for it already — read the basis. It is not the
+undetectable trap 1.1 made it.
+
+**This was written into a manual whose whole subject is claims that overstate what a
+system does**, by an author who spent the preceding week cataloguing exactly that
+error in other manuals. Recorded rather than quietly fixed, because a correction
+that removes the evidence of the mistake teaches nothing.
