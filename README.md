@@ -166,6 +166,8 @@ docs/
 - `docs/forge-adapter.md` — onboarding a Forge, and eight defects that looked like success.
   **Read trap #8 before any recon on this machine:** a localhost probe proves that something
   answered, not that the right thing did, and it has cost a week and a false note already
+- `docs/port-allocation.md` — which host port belongs to what, and what is squatting.
+  A snapshot, not an authority: `docker ps` is what tells you who owns a port now
 - `docs/certification.md` — instructions, the two units, staleness, and the no-read-path check
 - `docs/pack-validator.md` — the Business Pack, the 27 rules, and why three of them read the world
 - `docs/generators.md` — the seven generators, determinism, and two findings they surfaced

@@ -443,6 +443,15 @@ instances came from a person at a terminal — one reading a CI report, one runn
 
 A tool that checks its own assumptions does not check yours.
 
+### Which ports are spoken for
+
+`docs/port-allocation.md` records what has been allocated across The Office, the Village and
+every Forge, and what is currently squatting. It is a snapshot and says so on its face —
+`docker ps` is still what tells you who owns a port right now.
+
+Read it before writing a compose file or a `forge_registry.base_url`. Three Forges solved the
+same collision separately without it.
+
 ### The check, and it is one command
 
 ```
