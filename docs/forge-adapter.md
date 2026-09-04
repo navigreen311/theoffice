@@ -380,6 +380,24 @@ just changed was what V31 had been deciding on.
 
 Tests: `tests/validator/test_module_shape_conformance.py`.
 
+### The sharpest form of it, found in live data afterwards
+
+V31 already knows a registry row can be untrustworthy. `_v31_unattended_writes` reports
+NOT_RUN rather than PASS on a row whose `verification_method` is `hand`, with the reasoning
+written out: *"a refusal stands on any row, and a pass needs evidence."* Running the
+validator against the live world on 4 September produced exactly that —
+`voiceforge/place_call (hand-written row, never verified against the Forge)`.
+
+So the whole design turns on **verification being what promotes a row from somebody's word
+to evidence.** And until this change, verification checked that the module's *name*
+resolved and then stamped `verified_at` and `verification_method = adapter_manifest`.
+
+**A row could be marked verified — and thereby become evidence V31 passes on — while
+`is_mutating` stayed whatever a human had typed.** The promotion was granted on the half of
+the row that was checked, and spent on the half that was not.
+
+That is the finding at its sharpest, and it is why this is not simply a missing comparison.
+
 ### What this does not fix
 
 **`is_mutating` is still somebody's word on both sides.** The manifest's copy is declared
