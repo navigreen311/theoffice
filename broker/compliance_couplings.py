@@ -27,6 +27,53 @@ WHAT THIS EXISTS TO PREVENT
     Neither is a typo. Both are a plausible inference standing in for a reading, and
     both produce a row that looks considered.
 
+A THIRD CLASS, AND NOT THE SAME ERROR
+=====================================
+
+    Found 4 September 2026 on SimForge, outside the nine modules audited above.
+
+      tsr_disclosure_required on run_scenario_pack and gate_result
+          Not a plausible inference from what those modules do - they evaluate
+          agents against scenario packs. It is A FLAG FROM A DIFFERENT VENTURE'S
+          PACK: tsr_disclosure_required is Greenstone's, declared in
+          packs/greenstone.yaml, on a Forge that BOTH Packs declare
+          compliance_flags_propagated: [] for.
+
+    The first two errors were a wrong reading. This one is a flag that was never
+    about this Forge at all, carried over because the instructions were authored
+    generically for another venture and never revisited.
+
+    EVERY CHECK PASSED IT, and each for a good reason of its own:
+
+      V28                    confirms the ref resolves - and it does, because
+                             Greenstone wrote the entry.
+      validate_sections      confirms the field is non-empty - and it is.
+      the nine-module audit  never covered SimForge. It was a CapitalForge audit,
+                             and its scope was the thing that made it tractable.
+
+    No check is wrong. The gap is between them, and it is the shape a value takes
+    when it is true somewhere and asserted here.
+
+A REF THAT RESOLVES TELLS YOU NOTHING ABOUT WHOSE IT IS
+=======================================================
+
+    This is now true in two places and worth stating once.
+
+      A FLAG resolves because SOME Pack declares it. tsr_disclosure_required
+      resolves against greenstone.yaml, which is why it survived on a SimForge
+      instruction that no Burkham Pack would justify.
+
+      A LIBRARY ENTRY resolves because SOME venture loaded it.
+      compliance_library_entry is keyed on entry_ref with no venture column, so
+      Burkham can overwrite what Greenstone's agents read and V28 stays green
+      throughout - it asks whether the ref resolves, not whose entry answered. See
+      scripts/load_compliance_library.py.
+
+    In both cases resolution is a real check that answers a narrower question than
+    it appears to. The question it answers is "does this name exist somewhere". The
+    question a reader hears is "is this the right value here", and those come apart
+    exactly when more than one venture shares a table.
+
 THE TEST, AND WHY IT IS A SENTENCE
 ==================================
 

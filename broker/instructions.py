@@ -43,6 +43,15 @@ from psycopg.types.json import Jsonb
 #:                     never_do only. Two sections saying the same thing in opposite
 #:                     polarity teach an agent that the sections are not distinct.
 #:
+#:   compliance_coupling  OPEN: there is no way to write "no framework applies".
+#:                     validate_sections rejects an empty list, and where the true
+#:                     value IS empty the only way to satisfy it is to write a flag
+#:                     that is not true. That is how Greenstone's
+#:                     tsr_disclosure_required ended up on both SimForge modules.
+#:                     broker/compliance_couplings.py has the fix this needs -
+#:                     NoFramework(why) beside Coupling(flag, why). See
+#:                     docs/certification.md.
+#:
 #:   inputs            THE PARAMETERS A CALLER SUPPLIES AND WHAT EACH MEANS. Not
 #:                     what comes back. Include what the caller does NOT supply and
 #:                     where it comes from instead - a tenant read from the token

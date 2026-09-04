@@ -50,6 +50,11 @@ IT ADDS. IT DOES NOT REPLACE.
     green throughout, because V28 asks whether the ref resolves and not whose entry
     answered.
 
+    The general form of this is recorded in broker/compliance_couplings.py under
+    A REF THAT RESOLVES TELLS YOU NOTHING ABOUT WHOSE IT IS, because it is now true
+    of compliance flags as well as of library entries: resolution answers "does this
+    name exist somewhere", and a reader hears "is this the right value here".
+
     The structural fix, if it is ever wanted, is a venture column and a composite key.
     That is a migration and a decision about whether shared entries are a feature -
     two ventures under one compliance regime arguably should share one row - and

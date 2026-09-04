@@ -146,6 +146,42 @@ back.
 > the call can reach, and an agent that thinks it can set one is wrong about the
 > module.
 
+### OPEN — the schema has no way to say "no framework applies"
+
+**And the absence of that has already put a false flag in a live curriculum.**
+
+The chain, because the conclusion is easy to state and the mechanism is what makes
+it worth fixing:
+
+1. `validate_sections` rejects an empty `compliance_coupling` as *"present but
+   empty"* — correct in general, since an empty `failure_signatures` teaches nothing
+   about the case that matters.
+2. Both Packs that bind SimForge declare `compliance_flags_propagated: []`. SimForge
+   evaluates agents against scenario packs; it touches no client, no consumer report
+   and no outbound contact. **The true value is empty.**
+3. So the only way to satisfy the validator is to write a flag that is not true.
+4. Somebody did. `run_scenario_pack` and `gate_result` carried
+   `tsr_disclosure_required` — **Greenstone's outbound-calling flag**, on a Forge
+   both Packs declare empty — until 4 September 2026.
+
+That is not carelessness. **The schema required a value and the honest value was
+unwritable**, so the field was filled with the nearest thing to hand.
+
+**The interim fix is prose in the list**, which both SimForge instructions now
+carry: a sentence saying no framework applies and why. It satisfies the constraint
+and is true, and it is a stopgap — **the field now says in words what the schema
+believes is a list of flags.** Nothing reads it as a flag today; something might.
+
+**The fix is the one `broker/compliance_couplings.py` already has.** That module
+distinguishes `Coupling(flag, why)` from `NoFramework(why)`, refuses a module
+declaring neither, and makes `flags_for()` raise rather than default to `[]`. The
+instruction schema needs the same distinction and has no equivalent.
+
+Not built here because it is a schema change with a CHECK constraint behind it and
+a migration under that, and because every instruction currently in the table would
+need revisiting. Recorded with the chain intact so the next author reads a cause
+rather than a rule.
+
 Present-but-empty is rejected too. It is the failure a `?` key check misses.
 
 **`content_hash` is computed in the database**, by a BEFORE trigger, from canonical
