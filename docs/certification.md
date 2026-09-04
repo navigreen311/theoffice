@@ -120,6 +120,17 @@ comes back. Not what the section is about.
 > then write the ordered steps of what surrounds a call — check the basis before
 > reporting, apply shared rule 1 where the read feeds a decision, carry it no
 > further than the answer requires. That is a sequence.
+>
+> **The test: a step belongs here only if doing it later would be worse than doing
+> it earlier.** If the order does not matter, it is not a step.
+>
+> **A module with two real steps gets two.** A thin section is a fact about the
+> module, not a gap to fill. Padding it is what produces the next failure.
+>
+> **If a step is a `never` in different words, it belongs in `never_do` only.** A
+> curriculum where two sections say the same thing in opposite polarity teaches an
+> agent that the sections are not distinct, and the schema's whole claim is that
+> things go somewhere specific.
 
 **`inputs` — the parameters a caller supplies and what each means.** Not what comes
 back.

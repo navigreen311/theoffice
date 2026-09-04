@@ -117,6 +117,19 @@ Do not write "no required ordering" as a one-item list to satisfy the schema. Th
 turns a stated absence into a step, which is the move these rules warn about
 everywhere else.
 
+**The test: a step belongs here only if doing it later would be worse than doing it
+earlier.** If the order does not matter, it is not a step.
+
+**A module with two real steps gets two.** A thin section is a fact about the
+module, not a gap to fill — and padding it is what produces the next failure rather
+than avoiding one.
+
+**If a step is a `never` in different words, it belongs in § NEVER only.** The first
+manual written against this guidance produced five steps, three of which were its
+own nevers restated as imperatives. A curriculum where two sections say the same
+thing in opposite polarity teaches an agent that the sections are not distinct,
+which is the opposite of what the eight fields are for.
+
 **§ WHAT EACH INPUT MEANS — the parameters a caller supplies.** Not what comes back.
 
 Three manuals had a §3 that was WHAT COMES BACK, a channel enum, or a gate ladder.

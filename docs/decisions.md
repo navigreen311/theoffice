@@ -141,6 +141,18 @@ run b786295c stopped at gate 2 (blocked)
 FAIL unevaluable rules with no gate named: ['V11', 'V32']
 ```
 
+**And the smoke test says the blocker is not the manuals.** On #19, which authored
+nine operating instructions, the same job prints:
+
+```
+==> V11 refuses a Pack whose instructions teach nothing
+  instructions are real and V11 says NOT_RUN
+```
+
+The instructions exist and are real, and V11 still cannot answer — because what it
+resolves them against is a Forge address CI does not have. Nothing about authoring
+changes this, which is worth having in the entry rather than discovering twice.
+
 **The conformance guards are on `main` and unverified there.** Six of seven jobs are
 green; the seventh is these two rules correctly reporting that they could not run.
 
