@@ -434,6 +434,38 @@ evidence that it is the service you expected.**
 Same shape, six hours apart, in opposite directions: one made a system look present and
 hostile, the other made a system look present at all.
 
+### A fourth instance, and it is not an observer being misled
+
+The three above are a **probe** reading the wrong system — somebody looking at the wrong
+thing. This one is **the bridge itself, working**, one URL-spelling away from a different
+service.
+
+SimForge was registered at `http://127.0.0.1:8100/office`. `voice-forge-asr` publishes
+`0.0.0.0:8100->8000/tcp`. Both were listening:
+
+    0.0.0.0:8100      Docker proxy -> voice-forge-asr
+    127.0.0.1:8100    SimForge's uvicorn (started with --host 127.0.0.1)
+
+They do not conflict at bind time, because a specific bind and a wildcard bind coexist. So
+every result the bridge produced — the manifest resolving, the brokered call, the ledger
+joining on both sides, the TIMEOUT path — rested on **the registry row happening to be
+spelled `127.0.0.1` rather than `localhost` or the machine's LAN address.** Nobody chose
+that. It was the default in a shell command.
+
+Demonstrated on the way out: stopping SimForge and re-requesting its own registered
+`base_url` returned **404, not a connection refusal** — `voice-forge-asr` answering at The
+Office's registered address for SimForge.
+
+**So the trap has a second half.** A port is not an identity; **an address is not one
+either**, and a working call is not evidence that the port is yours. A green end-to-end
+result proves that *something* correct answered *this* spelling *today*.
+
+The fix is not a better probe — it is not sharing the port. SimForge moved to 8110,
+verified free four ways before binding (`netstat` any state, `docker ps -a` for published
+**or** exposed, and a live probe on both spellings). On an uncontested port the failure mode
+becomes a connection error instead of a wrong service, which is the only version of this
+that fails loudly. `docs/port-allocation.md` is where it is written down.
+
 ### Why the identity probe does not cover this
 
 `broker/village.py` now refuses a responder that does not identify as the Village, and

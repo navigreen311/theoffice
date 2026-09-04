@@ -6,7 +6,7 @@ Three Forges have now solved the same problem separately and none of the three f
 written down, so the fourth discovers it again:
 
     CRE Forge     docker-compose.override.yml remaps 5432 -> 55432, 8000 -> 8011, 8080 -> 8081
-    SimForge      runs on 8100 because somebody picked a port they believed was free
+    SimForge      ran on 8100, which was NOT free; moved to 8110 on 4 September
     AnimaForge    needs the same override and does not have one - its compose wants 4000,
                   3001, 3002, 5432, 8001, all but one of which are taken
 
@@ -64,7 +64,7 @@ re-derive it.** And per trap #8, an override must not reach CI — the job passe
 |---|---|---|
 | 4000 | CapitalForge | `http://127.0.0.1:4000/api/office` |
 | 8011 | CRE Forge | `http://127.0.0.1:8011/forge` — remapped from 8000 by its override |
-| 8100 | SimForge | `http://127.0.0.1:8100/office` — **contested, see below** |
+| **8110** | **SimForge** | `http://127.0.0.1:8110/office` — moved here 4 Sep; verified free by `docker ps -a`, `netstat` and a live probe on both address spellings before binding |
 | — | VoiceForge | `https://example.invalid` — never deployed |
 
 ### Currently squatting
@@ -76,6 +76,7 @@ Not allocations. Containers from other projects that hold ports something else e
 | 3001 | `visonaudioforge-frontend-1` | AnimaForge `platform-api`; misread as FunnelForge during recon |
 | 3002 | `vaf-ws-k-container-runtime-frontend-1` | AnimaForge `realtime`; misread as FunnelForge |
 | 8000 | `visonaudioforge-api-1` | CRE Forge's committed compose (hence its override) |
+| 8100 | `voice-forge-asr` | **SimForge, until 4 Sep** — it never owned the port; see below |
 | 8001 | `vaf-ws-k-container-runtime-api-1` | AnimaForge `ai-api` |
 | **8002** | `vaf-ws-j-pipeline-persistence-api-1` | **the Village** — its 401 was read as the Village refusing a credential for a week |
 
@@ -87,7 +88,10 @@ VoiceForge, VisionAudioForge and the VAF workstream stacks.
 
 ---
 
-## SimForge's 8100 was not free, and this is the correction
+## SimForge's 8100 was not free — the correction, and the move
+
+**Resolved 4 September 2026. SimForge is on 8110.** What follows is why, kept because the
+mechanism is the lesson.
 
 It was chosen on 4 September after checking that 8000 was taken. **8100 was not checked, and
 it was not free:** `voice-forge-asr` publishes `0.0.0.0:8100->8000/tcp`.
@@ -112,8 +116,29 @@ CRE Forge's override header already warned about the general case in different w
 free and was not."* The variant here is narrower and worse — the port was checked while the
 daemon was up, and the check was simply not run for the port that was chosen.
 
-**SimForge should move to an uncontested port.** Not done tonight; recorded so it is a
-decision rather than a discovery.
+### What the move proved on the way out
+
+Stopping SimForge's uvicorn and re-requesting its own registered `base_url`:
+
+    GET http://127.0.0.1:8100/office/_modules   ->  404
+
+**Not a connection refusal — a 404 from `voice-forge-asr`.** The Office's registry row,
+unchanged, pointing at a speech-recognition service that answered. Every result the bridge
+had produced rested on a specific bind winning over a wildcard one, which nobody chose.
+
+### After the move
+
+`8110` was checked four ways before anything bound to it: `netstat -ano` in any state,
+`docker ps -a` for published **or** exposed, and a live probe on `127.0.0.1` and on
+`localhost`. All four said nothing was there.
+
+Both address spellings now reach SimForge, and that is the substantive change — **on an
+uncontested port the failure mode becomes a connection error rather than a wrong service.**
+The bridge was re-verified end to end afterwards: `run/start` 200, brokered call 200,
+`manifest_match: required`, and the ledger's `forge_side_ref` present as `forge_request_id`
+in SimForge's own log with `office_trace` matching the ledger's `trace_id`.
+
+**8100 is back to `voice-forge-asr` alone.**
 
 ---
 
