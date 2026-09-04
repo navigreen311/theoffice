@@ -5,8 +5,9 @@
 **Endpoint:** `POST /api/applications/:id/submit`
 **Trust tier:** `propose`
 **Idempotency:** `at_most_once`
-**Version:** 1.0 — drafted 3 September 2026, against CapitalForge #88
+**Version:** 1.1 — corrected 3 September 2026, against CapitalForge #88 (merged)
 **Status:** draft, pending Compliance Review Board
+**Corrected at 1.1:** §2 claimed the middleware refuses an unauthorised submit. It does not. §4 THE CORRECT SEQUENCE added. See Appendix B.
 
 > **No `Permission:` line, and that is the finding rather than an omission.**
 > `POST /api/applications/:id/submit` carries `tenantMiddleware` and nothing else —
@@ -38,7 +39,13 @@ PUT /api/applications/:id/status is the same chain by a different name.
 
 ## 2. WHAT IT DOES NOT DO
 
-No agent presses this button. Preparation is Level 1; submission is Level 3. The middleware refuses a Level 1 agent's attempt to submit directly, and maker_checker is the gate that enforces it — see §3.
+No agent presses this button. Preparation is Level 1; submission is Level 3, and `maker_checker` is the gate that enforces it — see §3.
+
+**It does not check that the caller may submit, and this is the correction at 1.1.** §2 previously said "the middleware refuses a Level 1 agent's attempt to submit directly." **It does not.** `POST /api/applications/:id/submit` carries `tenantMiddleware` and nothing else — no `requirePermission` on the route, and no authority check anywhere in the handler. The permission named for this act, `application:submit`, is checked in a different file on a different route (`application.routes.ts:115`) which **creates** an application; its own refusal message says "permission to create applications."
+
+So any authenticated member of the tenant can reach this route — `readonly` and `client` included. What stands between a caller and a submitted application is the five enforced gates, tenancy, and `maker_checker` requiring a second named user. **Not role.**
+
+Every other section of this manual teaches the ladder, and a reader who takes them together concludes the route is defended. On the module where money moves, that is the wrong belief to hold. See Appendix B.
 
 It does not prepare the application. Everything on the form arrived before this call, under compliance/application-truthfulness-v1.
 
@@ -75,7 +82,15 @@ It is one of two entries in PRE_SUBMISSION_REQUIRED and no gate reads it. It now
 
 Either it becomes a gate or the constant stops calling it required. Both cannot stand. docs/decisions/submit-application.md entry 2.
 
-## 4. THE SUITABILITY GATE — CITED, NOT RESTATED
+## 4. THE CORRECT SEQUENCE
+
+1. **Check that a real approver is named, and that it is not the maker.** Do this first. `approvedByUserId` is not schema-required, so omitting it produces no validation error — it becomes an empty string and `maker_checker` refuses at the gate. An agent that reads "gate refused" and goes looking for a compliance problem will not find one.
+2. **Confirm the four declarations are actually true before attesting to them.** `consent_verified`, `product_reality_signed`, `no_misrepresentation`, `business_purpose_legitimate`. Each is an attestation, not a checkbox — confirming one that was not verified is the falsification this module exists to prevent.
+3. **Submit once.**
+4. **On refusal, read `failedGates` and report which gate refused.** Never retry. A gate refusal is the control working, not a transient failure, and there is no different route.
+5. **On 200, stop.** Never re-submit. The application is submitted and the status machine continues without this module.
+
+## 5. THE SUITABILITY GATE — CITED, NOT RESTATED
 
 Three facts belong to suitability_check and are recorded in docs/decisions/suitability.md. Read them there:
 
@@ -86,7 +101,7 @@ The override is resolved through the business and the tenant    entry 4
 
 The consequence here: an unassessable gate blocks nothing at submission. Nothing records an advisor's debt-service confirmation, and blocking on it would refuse every client for a reason no client can cure.
 
-## 5. WHAT FAILURE LOOKS LIKE
+## 6. WHAT FAILURE LOOKS LIKE
 
 Response    Meaning
 422 with failedGates    One or more gates refused. The names are in details
@@ -98,7 +113,7 @@ A refusal names the gates. failedGates tells a caller which controls refused, no
 
 A gate refusal is the control working. It is not a transient failure and it is not a reason to try a different route. There is no different route.
 
-## 6. RETRY VS ESCALATE
+## 7. RETRY VS ESCALATE
 
 Never retry. Escalate.
 
@@ -108,7 +123,7 @@ A second call is refused by the state machine — 422 INVALID_TRANSITION, "Canno
 
 So a timeout leaves a question a retry cannot answer. Read the application's status. If it is submitted, the call landed.
 
-## 7. NEVER
+## 8. NEVER
 
 Never submit. An agent prepares and stages; a human presses the button. §3.
 
@@ -124,7 +139,9 @@ Never read "five gates passed" as "six gates passed." The sixth cannot fire, and
 
 Never create an application already submitted. The API refuses, and the refusal is the point.
 
-## 8. WHICH LAWS THIS TOUCHES
+**Never submit an application you were not explicitly asked to submit.** No permission check stands between this grant and a submitted application — see §2. Where nothing in the system checks submit authority, this instruction and the trust tier on the grant are the only controls there are, and the constraint falls on the agent.
+
+## 9. WHICH LAWS THIS TOUCHES
 
 compliance/application-truthfulness-v1 — the entry this module exists under. Every never in it applies at the moment of submission: no estimated values, no characterisation the client did not confirm, no signature on the client's behalf, and the conflict-surfacing rule where sources disagree. maker_checker is the mechanism behind its central claim.
 
@@ -176,3 +193,48 @@ an agent submitting applications with no role check anywhere in the path.
 CapitalForge's behaviour, not to the bridge, and it would refuse callers who can submit
 today. Recorded so the decision is made deliberately.
 
+## APPENDIX B — CORRECTED AT 1.1, 3 September 2026
+
+Three changes, made while authoring this module into `forge_operating_instruction`.
+
+### §2 said something untrue
+
+It read: *"The middleware refuses a Level 1 agent's attempt to submit directly."*
+**There is no middleware that does this.** `POST /api/applications/:id/submit` carries
+`tenantMiddleware` and no `requirePermission`, and the handler contains no authority
+check of any kind — verified by reading the route and the whole handler body.
+
+This is the finding Appendix A records, and until now it lived only in an appendix.
+That was the wrong place for it. **Appendices are not out of scope for the
+curriculum**: the manual is the source, the eight sections are the schema, and any
+part of the manual can feed a section. An appendix is not where a finding goes to be
+excluded from what an agent is taught.
+
+The finding is now in §2, which is where an agent reads what this module does not do,
+and it has a counterpart in §8 — because if nothing checks submit authority, the
+constraint falls on the agent and this instruction is the only control there is.
+
+### §4 THE CORRECT SEQUENCE is new
+
+This manual had no sequence section. Its §3 is the gate ladder and its §5 cites the
+suitability gate; neither is a sequence of agent steps, and composing one from §3 and
+§8 into a JSON field would have made this the one module whose curriculum was not
+derived from its manual.
+
+It leads with the approver deliberately. `maker_checker` is the gate that refuses
+without a validation error, so an agent that has not checked `approvedByUserId` first
+meets a compliance-shaped refusal for a missing-field problem.
+
+### Sections renumbered
+
+The old §§4–8 are now §§5–9. Only §3 was cross-referenced internally and it did not
+move.
+
+### Still open — this manual has no INPUTS section
+
+Every other manual in this set has one at §3; here §3 is the gate ladder. The
+curriculum's `inputs` field is therefore written from the route code rather than
+lifted, which leaves `inputs` in exactly the position §4 was in before this
+correction: present in the curriculum, absent from the manual. Raised rather than
+fixed, because adding a §3 would renumber the sections a second time and the same
+question applies to the other two modules whose §3 is not inputs.

@@ -246,6 +246,34 @@ are all `1.0.0`, authored before the manuals carried version headers. They are n
 retro-fitted: renumbering a live instruction changes nothing mechanically and would
 make the audit trail say a text was revised when it was not.
 
+### Settle the manual, then author
+
+The convention above only holds if the authoring happens **after** the manual is
+final. Author first and the row claims to derive from a version of the text that
+never existed.
+
+That is not hypothetical. `client_read` was authored at v1.6 carrying a corrected
+§5, then the manual was corrected and it was re-authored at v1.7. The table now
+holds:
+
+```
+client_read  v1.6  51e070a3...  superseded
+client_read  v1.7  51e070a3...  live
+```
+
+**Identical hashes, different versions.** The v1.6 row says it derives from manual
+1.6 and its content is manual 1.7's. Nothing reads it — it is superseded — but the
+audit trail carries a row whose source claim is wrong.
+
+**It is left in place.** A superseded row with a wrong source claim is a smaller
+problem than an audit trail somebody deletes from: the moment a row can be removed
+because it is inconvenient, no row in the table means anything. It stays, and this
+paragraph is what it is worth.
+
+**The rule: settle the manual, then author.** If a correction is found while
+mapping sections onto the eight fields — which is when several have been found —
+fix the manual, bump its version, and author once from the settled text.
+
 **A `failed` cert does not become stale.** A cert that was never fresh cannot go out of
 date, and collapsing the two erases the difference between "was good, text changed" and
 "was never good".
