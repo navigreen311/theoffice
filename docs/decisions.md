@@ -309,6 +309,23 @@ regains it. Not before: the adapter's dispatch keys are the spelling of record, 
 a Pack naming a module the Forge does not dispatch is exactly what V32 exists to
 refuse.
 
+### Amended 2026-09-04 — this rule has one exception, and it is entry 5
+
+**Read literally, the paragraph above removes `run_scenario_pack` from the SimForge
+binding too, and entry 5 decides not to.** The cross-reference ran one way — entry 5
+cites this one — so a reader arriving here first would apply the rule and be wrong.
+
+The difference is what is behind the name. `lender_match` and `build_packet` had **no
+implementation and no description of one**; removal moved the gap to the Placement
+Strategist's duties, where a human reads it. `run_scenario_pack` names a capability
+that is **known, bounded and described** — SimForge runs scenarios one at a time and
+does not aggregate them into a pack run — so leaving it on the Pack points V32 at it
+on every run, which is louder and more durable than a duty line.
+
+The exception is narrow and does not reopen this entry: it applies where the missing
+capability is described and intended, and it does not license leaving speculative
+module names on a Pack in the hope somebody builds them.
+
 **Recorded because a removal with no record comes back next quarter as a mystery.**
 Somebody reading the Pack in December will find a Placement Strategist who operates
 one module and duties describing three, and this entry is the answer to why.
