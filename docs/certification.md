@@ -9,7 +9,7 @@ Phase 2 makes certification mean something.
 
 ---
 
-# ⚠ CAPITALFORGE IS CERTIFIED BY BOOTSTRAP, NOT BY SIMFORGE
+# ⚠ CAPITALFORGE — AND NOW SIMFORGE ITSELF — IS CERTIFIED BY BOOTSTRAP
 
 **Every CapitalForge certification in the database today was written by a script,
 not earned against a scenario run.** They exist for one reason: the bridge could
@@ -32,6 +32,25 @@ a real verdict is the only thing that can put a value in that column.
 certification that was asserted looks exactly like one that was earned.** Both
 are rows with `verdict = 'PASS'`. Nothing downstream can tell them apart, and the
 gate ladder will not stop a call made under one.
+
+### And SimForge's own certification is the same, unavoidably
+
+On 4 September 2026 the SimForge bridge was proved, and it needed a certification pair for
+`simforge/gate_result`. Both rows are `attested_by = 'bootstrap'`,
+`rubric_version = 'phase0.9-simforge'`.
+
+**This one could not have been anything else.** A Unit A certification answers "may this
+agent operate this module?", and what answers it is a SimForge scenario run — but the
+module *is* SimForge's. The certification that permits the first call to SimForge would
+have to be produced by SimForge, which cannot be called until it exists.
+
+That is the base case of a recursive definition, not a shortcut, and it is the sharpest
+illustration of why the `attested_by` column had to exist: **a certification nothing could
+have earned is indistinguishable from one that was earned, except in that column.**
+
+Retiring it needs a scenario pack run by a *different SimForge instance* than the one being
+certified — otherwise the thing certifies itself, which is where the problem started. See
+`blocking.md` B4.
 
 ## The constraint
 

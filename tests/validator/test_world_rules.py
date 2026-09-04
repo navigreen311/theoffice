@@ -569,6 +569,103 @@ async def test_v32_fails_on_a_module_the_forge_does_not_dispatch(
     assert "not that it works" in v32.message, "a verdict must carry its own scope"
 
 
+async def test_a_fail_still_names_the_forge_that_could_not_be_asked(
+    greenstone, bridged_world, monkeypatch
+):
+    """One verdict, two facts, and the message must carry both.
+
+    "Nobody can ask this Forge" and "this Forge was asked and does not dispatch that"
+    are different facts with different fixes, and V32 has one verdict line for a Pack
+    that binds three Forges. The rule used to check `absent` first and return, so a
+    binding that could not be reached at all was dropped from the report entirely —
+    a red V32 read as "asked and does not dispatch" when half of it was neither.
+
+    FAIL is still the right verdict: something is known to be wrong, and that outranks
+    not having asked. What was wrong was the message.
+    """
+    from datetime import UTC, datetime
+
+    from broker import forge_modules
+
+    bindings = {b.forge.lower(): b for b in greenstone.forge_dependencies.forge_bindings}
+    absent = bindings["cre-forge"].modules_expected[0]
+
+    async def _answer(_conn, forge_id, **_kw):
+        if forge_id.lower() == "simforge":
+            return forge_modules.Unread(
+                forge_id=forge_id, reason="tenant credential unavailable"
+            )
+        declared = set(bindings[forge_id.lower()].modules_expected)
+        return forge_modules.ForgeModules(
+            forge_id=forge_id,
+            modules=frozenset(declared - {absent}),
+            method="adapter_manifest",
+            api_version="1.4.0",
+            observed_at=datetime.now(UTC),
+        )
+
+    monkeypatch.setattr(forge_modules, "read", _answer)
+    forge_modules.forget()
+
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+
+    v32 = report.get("V32")
+    assert v32.verdict is Verdict.FAIL
+
+    # The failure, named.
+    assert absent in v32.message
+    # And the fact the failure does not cover, which used to vanish.
+    assert "simforge" in v32.message
+    assert "tenant credential unavailable" in v32.message
+    assert "will not resolve them" in v32.message, (
+        "a reader fixing the named modules must be told that doing so leaves the "
+        "unreachable binding exactly as unverified as it was"
+    )
+
+
+async def test_a_not_run_says_which_bindings_were_clean(
+    greenstone, bridged_world, monkeypatch
+):
+    """The other direction: NOT_RUN over a partially-answered Pack.
+
+    Two of three Forges answered and were clean; one could not be asked. The verdict is
+    NOT_RUN because the Pack is not resolved, and the message says what *was* resolved
+    so the remaining work is the difference rather than the whole.
+    """
+    from datetime import UTC, datetime
+
+    from broker import forge_modules
+
+    bindings = {b.forge.lower(): b for b in greenstone.forge_dependencies.forge_bindings}
+
+    async def _answer(_conn, forge_id, **_kw):
+        if forge_id.lower() == "simforge":
+            return forge_modules.Unread(
+                forge_id=forge_id, reason="tenant credential unavailable"
+            )
+        return forge_modules.ForgeModules(
+            forge_id=forge_id,
+            modules=frozenset(bindings[forge_id.lower()].modules_expected),
+            method="adapter_manifest",
+            api_version="1.4.0",
+            observed_at=datetime.now(UTC),
+        )
+
+    monkeypatch.setattr(forge_modules, "read", _answer)
+    forge_modules.forget()
+
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+
+    v32 = report.get("V32")
+    assert v32.verdict is Verdict.NOT_RUN
+    assert "simforge" in v32.message
+    assert "Asked and clean" in v32.message
+    assert "cre-forge" in v32.message
+    assert "NOT_RUN is not a pass" in v32.message
+
+
 async def test_the_report_header_states_what_conformance_proved(
     greenstone, bridged_world, monkeypatch
 ):

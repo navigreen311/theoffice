@@ -1046,16 +1046,31 @@ async def _v32_modules_conform(
         absent.extend(f"{forge_id}/{m}" for m in answer.missing(modules))
 
     if absent:
-        return False, (
+        # A FAIL is the right verdict when any module is absent — something is known to
+        # be wrong, and that outranks not having asked. But the two facts are DIFFERENT
+        # facts, and this rule used to report only the first: with several bindings, a
+        # Forge that could not be asked at all was dropped from the message entirely, so
+        # a red V32 read as "asked and does not dispatch" when half of it was "nobody
+        # could ask". Both now travel, because a summary line that means two things is
+        # how a blocker gets described one layer too shallow — twice, on this rule.
+        message = (
             f"{len(absent)} declared module(s) the Forge does not dispatch: "
             f"{_join(absent)}. A grant over one of these is a grant on a capability "
-            f"that is not there. ({forge_modules.SCOPE}.)"
+            f"that is not there."
         )
+        if unread:
+            message += (
+                f" SEPARATELY, and not covered by this failure: could not ask "
+                f"{_join(unread)} — those bindings are unverified rather than verified, "
+                "and fixing the modules named above will not resolve them."
+            )
+        return False, f"{message} ({forge_modules.SCOPE}.)"
     if unread:
+        asked = f" Asked and clean: {_join(methods)}." if methods else ""
         return None, (
-            f"could not ask: {_join(unread)}. Nothing has been resolved against what "
-            "the Forge dispatches, so the Pack's modules are unverified rather than "
-            "verified. NOT_RUN is not a pass."
+            f"could not ask: {_join(unread)}.{asked} Those bindings are unverified "
+            "rather than verified, so the Pack's modules are not resolved against what "
+            "the Forge dispatches. NOT_RUN is not a pass."
         )
 
     total = sum(len(m) for m in wanted.values())
