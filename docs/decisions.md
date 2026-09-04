@@ -309,7 +309,108 @@ regains it. Not before: the adapter's dispatch keys are the spelling of record, 
 a Pack naming a module the Forge does not dispatch is exactly what V32 exists to
 refuse.
 
+### Amended 2026-09-04 — this rule has one exception, and it is entry 5
+
+**Read literally, the paragraph above removes `run_scenario_pack` from the SimForge
+binding too, and entry 5 decides not to.** The cross-reference ran one way — entry 5
+cites this one — so a reader arriving here first would apply the rule and be wrong.
+
+The difference is what is behind the name. `lender_match` and `build_packet` had **no
+implementation and no description of one**; removal moved the gap to the Placement
+Strategist's duties, where a human reads it. `run_scenario_pack` names a capability
+that is **known, bounded and described** — SimForge runs scenarios one at a time and
+does not aggregate them into a pack run — so leaving it on the Pack points V32 at it
+on every run, which is louder and more durable than a duty line.
+
+The exception is narrow and does not reopen this entry: it applies where the missing
+capability is described and intended, and it does not license leaving speculative
+module names on a Pack in the hope somebody builds them.
+
 **Recorded because a removal with no record comes back next quarter as a mystery.**
 Somebody reading the Pack in December will find a Placement Strategist who operates
 one module and duties describing three, and this entry is the answer to why.
 
+
+---
+
+## 5. `run_scenario_pack` stays on the Pack, unbound — SimForge has no pack-level unit of execution
+
+**Decided 2026-09-04.**
+
+The Burkham Pack binds SimForge at `criticality: hard` with
+`modules_expected: [run_scenario_pack, gate_result]`. A SimForge Office adapter is
+being built. **Only `gate_result` is bound. `run_scenario_pack` is left on the Pack
+with nothing behind it, and V32 will FAIL on it.**
+
+### What is known, and how
+
+Read on 2026-09-04, in SimForge's source rather than inferred from its docs:
+
+| | |
+|---|---|
+| What runs | `POST /api/scenarios/{scenario_id}/run` → `services/runner/execute.py:run_scenario(session, scenario_id, ...)` |
+| Its argument | **one** `scenario_id` |
+| What a Pack is, in the run path | a **filter** (`routers/runs.py:111`, `Run.packId.in_(...)`) or a scenario's **parent** (`execute.py:170`, `select(Pack).where(Pack.id == scenario.packId)`) |
+| Anything that iterates a Pack's scenarios into runs | **nothing**, in `routers/` or `services/runner/` |
+
+So a Pack in SimForge is a grouping that runs are *labelled with*. It is not a thing
+that executes. `run_scenario_pack` names a unit of execution that does not exist.
+
+### Why it is not bound
+
+The only handler that could be written today runs one scenario and returns. That is
+a **plausible 200 for work that never happened** — the failure shape that took
+`lender_match` and `build_packet` off this Pack in entry 4, and the shape
+`GET /_modules` is structurally unable to detect: a handler that overclaims is bound
+to its name exactly like one that does its job.
+
+`/_modules` proves a handler is bound. It proves nothing about what the handler does.
+Binding a name to a stub is therefore worse than leaving the name unbound, because it
+converts a check that would have reported the gap into one that reports success.
+
+### Why it is not removed either — and how that differs from entry 4
+
+Entry 4 took two module names off this Pack and stated the rule as *"a Pack naming a
+module the Forge does not dispatch is exactly what V32 exists to refuse."* Read
+literally, that rule removes this one too. It is not being applied here, and the
+difference is worth stating rather than leaving as an inconsistency for a later reader
+to find.
+
+`lender_match` and `build_packet` were names with **no implementation and no
+description of one** — nothing had been built, nothing was planned, and a search found
+no service behind either. Removing them moved the gap somewhere a human reads: the
+Placement Strategist's duties, which still describe work no module performs.
+
+`run_scenario_pack` is different in one specific way: **the gap is known, bounded and
+described.** SimForge runs scenarios; it does not aggregate them into a pack run. That
+is a day of work with a clear shape, not a fiction. Leaving the name on the Pack points
+V32 at it every time the validator runs, which is a louder and more durable place for it
+than a duty line in a role.
+
+**This is a deliberate exception to entry 4's rule, not an oversight, and it is narrow.**
+It applies where the missing capability is described and intended. It does not license
+leaving speculative module names on a Pack in the hope that someone builds them — that
+is exactly what entry 4 refused, and this entry does not reopen it.
+
+### What this costs, said plainly
+
+**V32 will FAIL, not NOT_RUN, once SimForge is reachable.** That is a change in kind:
+NOT_RUN means the check could not run, FAIL means it ran and the answer was no. Gate 2
+blocks on both, so the Burkham Pack does not advance either way — but the reason in the
+report becomes true instead of absent, and a FAIL naming `run_scenario_pack` is a
+better artefact than a NOT_RUN naming a credential.
+
+**Anyone reading a red V32 after this should not treat it as the old blocker.** The old
+one was "nobody can ask SimForge". The new one is "SimForge was asked and does not
+dispatch this". They look the same in a summary line and are not the same fact.
+
+### What builds it
+
+A pack-level execution unit in SimForge: something that takes a `packId`, iterates the
+Pack's scenarios into `run_scenario` calls, and aggregates the outcomes into one result
+with its own identity — a run of a pack, not a bag of scenario runs. It needs a decision
+about partial failure (does one scenario erroring fail the pack run, or is the pack run
+the record of what happened?) and about concurrency against SimForge's own rate limit.
+
+**Not built here, and not costed.** Recording it so that the next person to see V32 fail
+on this name finds the reason rather than re-deriving it.
