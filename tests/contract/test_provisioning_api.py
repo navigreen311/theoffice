@@ -25,7 +25,13 @@ from broker.app import app
 from broker.db import connection
 from tests.conftest import requires_db, wipe_venture
 from tests.provisioning.conftest import amend_for_capacity
-from tests.world import PACK_PATH, build_world, certify_for_positions, teardown_world
+from tests.world import (
+    PACK_PATH,
+    build_world,
+    certify_for_positions,
+    dispatch_from_registry,
+    teardown_world,
+)
 
 pytestmark = [requires_db, pytest.mark.db]
 
@@ -43,10 +49,17 @@ def _wipe(conn: psycopg.Connection) -> None:
 
 
 @pytest.fixture
-def world(admin: psycopg.Connection):
+def world(admin: psycopg.Connection, monkeypatch: pytest.MonkeyPatch):
+    """Bridged, certified, and with the adapters dispatching what was registered.
+
+    The last of those is what Gate 2's V32 asks about, and it is not a row: a Pack
+    whose modules were never resolved against a Forge is unvalidated, so without it
+    every run here stops at Gate 2 instead of reaching the gate under test.
+    """
     _wipe(admin)
     build_world(admin)
     certify_for_positions(admin)
+    dispatch_from_registry(admin, monkeypatch)
     yield admin
     _wipe(admin)
     teardown_world(admin)
@@ -295,7 +308,7 @@ async def test_the_real_pack_blocks_at_gate_4_5_through_the_api(world, api, pack
 
     assert result["status"] == "blocked"
     assert result["current_gate"] == "4.5"
-    assert "192 approvals" in result["outcomes"][-1]["reason"]
+    assert "160 approvals" in result["outcomes"][-1]["reason"]
 
 
 async def test_a_run_from_the_console_stops_at_gate_9_5(world, api, feasible_yaml):

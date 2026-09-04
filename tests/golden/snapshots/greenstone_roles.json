@@ -47,7 +47,6 @@
       ],
       "forge_modules_operated": [
         "buyer_match",
-        "generate_loi",
         "place_call",
         "transcribe_call"
       ],

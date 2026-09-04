@@ -235,34 +235,13 @@
       "compliance_flag": "recording_consent_required, tsr_disclosure_required",
       "failure_and_escalation": "Proposal is rejected or times out: return to Buyer Network Manager with the reviewer's reason. Repeated rejection escalates to the venture operator.",
       "forge_modules": [
-        "generate_loi"
-      ],
-      "inputs": [
-        "assign_context",
-        "generate_loi_request"
-      ],
-      "number": 12,
-      "outputs": [
-        "generate_loi_result"
-      ],
-      "position": "Buyer Network Manager",
-      "stage": "Assign",
-      "step": "Assign: Buyer Network Manager operates generate_loi",
-      "success_metric": "generate_loi returns a complete result and the ledger row records manifest_match=required",
-      "supporting": [],
-      "trigger": "agent_initiated"
-    },
-    {
-      "compliance_flag": "recording_consent_required, tsr_disclosure_required",
-      "failure_and_escalation": "Proposal is rejected or times out: return to Buyer Network Manager with the reviewer's reason. Repeated rejection escalates to the venture operator.",
-      "forge_modules": [
         "place_call"
       ],
       "inputs": [
         "assign_context",
         "place_call_request"
       ],
-      "number": 13,
+      "number": 12,
       "outputs": [
         "place_call_result"
       ],
@@ -283,7 +262,7 @@
         "assign_context",
         "transcribe_call_request"
       ],
-      "number": 14,
+      "number": 13,
       "outputs": [
         "transcribe_call_result"
       ],
@@ -304,7 +283,7 @@
         "close_context",
         "buyer_match_request"
       ],
-      "number": 15,
+      "number": 14,
       "outputs": [
         "buyer_match_result"
       ],
@@ -319,34 +298,13 @@
       "compliance_flag": "recording_consent_required, tsr_disclosure_required",
       "failure_and_escalation": "Proposal is rejected or times out: return to Buyer Network Manager with the reviewer's reason. Repeated rejection escalates to the venture operator.",
       "forge_modules": [
-        "generate_loi"
-      ],
-      "inputs": [
-        "close_context",
-        "generate_loi_request"
-      ],
-      "number": 16,
-      "outputs": [
-        "generate_loi_result"
-      ],
-      "position": "Buyer Network Manager",
-      "stage": "Close",
-      "step": "Close: Buyer Network Manager operates generate_loi",
-      "success_metric": "generate_loi returns a complete result and the ledger row records manifest_match=required",
-      "supporting": [],
-      "trigger": "agent_initiated"
-    },
-    {
-      "compliance_flag": "recording_consent_required, tsr_disclosure_required",
-      "failure_and_escalation": "Proposal is rejected or times out: return to Buyer Network Manager with the reviewer's reason. Repeated rejection escalates to the venture operator.",
-      "forge_modules": [
         "place_call"
       ],
       "inputs": [
         "close_context",
         "place_call_request"
       ],
-      "number": 17,
+      "number": 15,
       "outputs": [
         "place_call_result"
       ],
@@ -367,7 +325,7 @@
         "close_context",
         "transcribe_call_request"
       ],
-      "number": 18,
+      "number": 16,
       "outputs": [
         "transcribe_call_result"
       ],

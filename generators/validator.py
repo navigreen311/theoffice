@@ -1,8 +1,8 @@
 """The Pack Validator — Gate 2 of the provisioning pipeline.
 
-27 rules. Any FAIL blocks provisioning; WARN is reported and does not.
+33 rules. Any FAIL blocks provisioning; WARN is reported and does not.
 
-Three things about the design are load-bearing:
+Four things about the design are load-bearing:
 
 **It returns a report, not a boolean.** A validator that answers False tells an author
 to go looking. One that says `V13 FAIL: 340 projected approvals x 5 min = 1700 minutes
@@ -17,6 +17,13 @@ converse matters just as much here, and it must never be reported as a pass eith
 **Every FAIL rule has a must-fail fixture.** A rule nobody has watched fire is a rule
 that might not. `tests/validator/` asserts both directions for all of them, and a
 meta-test fails if any rule lacks either.
+
+**A conformance rule states its own scope.** V32 resolves a Pack against what a Forge
+actually dispatches, and a report that carried that verdict without its limits would be
+the same overclaim the rule exists to catch. `render()` prints the scope whenever V32
+reached an answer: it proves a handler is bound to the name, not that the handler works
+or that it does what the name says. It automates the half of the question that was
+already being done by hand and does not touch the other half.
 """
 
 from __future__ import annotations
@@ -107,10 +114,31 @@ class ValidationReport:
             f"Pack validation: {len(self.failures)} FAIL, {len(self.warnings)} WARN, "
             f"{len(self.not_run)} NOT_RUN, of {len(self.results)} rules"
         ]
+        lines.extend(self._scope_header())
         for r in self.results:
             if r.verdict is not Verdict.PASS:
                 lines.append(f"  {r.rule_id} {r.verdict.value}: {r.message}")
         return "\n".join(lines)
+
+    def _scope_header(self) -> list[str]:
+        """What V32's verdict means, printed where its verdict is read.
+
+        Only when V32 reached the Forge. A NOT_RUN needs no scope line — nothing was
+        checked, which its own message already says — and printing one anyway would
+        put a sentence about what was proved above a report that proved nothing.
+        """
+        conformance = [
+            r for r in self.results
+            if r.rule_id == "V32" and r.verdict is not Verdict.NOT_RUN
+        ]
+        if not conformance:
+            return []
+        return [
+            "  Module conformance (V32) proves a handler is bound to the name. Not "
+            "that it works, and not that it does what the name says.",
+            "  It automates the half of the question that was done by hand and does "
+            "not touch the other half; the rest is forge_module_exclusion.",
+        ]
 
 
 # Rules that cannot be answered from the document alone.
@@ -119,7 +147,7 @@ class ValidationReport:
 # V30 were registered below and absent here, so the fixture meta-test demanded document
 # fixtures for rules that cannot be evaluated without the Village. A literal is needed
 # here rather than `set(_WORLD_RULES)` only because the registry is defined further down.
-NEEDS_WORLD = {"V2", "V6", "V11", "V28", "V29", "V30"}
+NEEDS_WORLD = {"V2", "V6", "V11", "V28", "V29", "V30", "V31", "V32", "V33"}
 
 # V24 is evaluated at Gate 4.5 against appointment output, which does not exist at
 # Gate 2. Recorded as metadata rather than a comment so the meta-test can see it.
@@ -533,7 +561,7 @@ async def _v6_modules_resolve(conn: AsyncConnection, pack: BusinessPack) -> tupl
 
 async def _v11_instructions_authored(
     conn: AsyncConnection, pack: BusinessPack
-) -> tuple[bool, str]:
+) -> tuple[bool | None, str]:
     """Every module a position operates must have live instructions that teach it.
 
     Without them SimForge has nothing to test against, so the position can never be
@@ -580,11 +608,64 @@ async def _v11_instructions_authored(
             "certification bound to it inherits that emptiness."
         )
 
+    # And the module the instructions teach has to exist.
+    #
+    # Present, and not hollow, were both questions about the document. Neither asks
+    # whether there is anything on the other end of it. `cre-forge/generate_loi` had a
+    # complete-looking instruction, assessed `state=complete`, for a module CRE Forge
+    # has never dispatched - no service, no route, no letter-of-intent among its
+    # contract templates.
+    #
+    # That reaches further than a Pack. SimForge would train an agent against that text
+    # and issue a certification carrying its `content_hash`, and afterwards a
+    # certification for a module with no handler reads exactly like one for a real
+    # module: the row is there, the hash resolves, the agent is certified. Nothing
+    # downstream can tell them apart. V32 refuses a Pack that *declares* a module the
+    # Forge does not dispatch; this is the same refusal one table over, on the path
+    # that ends in a certification.
+    from broker import forge_modules
+
+    declared = _declared_forges(pack)
+    operating = pack.forge_dependencies.operating_forge.lower()
+    per_forge: dict[str, set[str]] = {}
+    for module in modules:
+        for forge_id in declared.get(module) or {operating}:
+            per_forge.setdefault(forge_id, set()).add(module)
+
+    taught_but_absent: list[str] = []
+    unread: list[str] = []
+    for forge_id, wanted in sorted(per_forge.items()):
+        answer = await forge_modules.read(conn, forge_id, candidates=wanted)
+        if isinstance(answer, forge_modules.Unread):
+            unread.append(f"{forge_id}: {answer.reason}")
+            continue
+        taught_but_absent.extend(f"{forge_id}/{m}" for m in answer.missing(wanted))
+
+    if taught_but_absent:
+        return False, (
+            f"instructions teach a module the Forge does not dispatch: "
+            f"{_join(taught_but_absent)}. SimForge trains against that text and binds a "
+            "certification to its content_hash, and a certification for a module with "
+            "no handler is indistinguishable from a real one afterwards."
+        )
+
     thin = sorted(
         module for module in modules if assess(live[module])["state"] == "thin"
     )
     detail = f" ({_join(thin)} thin)" if thin else ""
-    return True, f"instructions authored for all {len(modules)} module(s){detail}"
+
+    if unread:
+        return None, (
+            f"instructions are authored for all {len(modules)} module(s){detail}, but "
+            f"whether the modules they teach exist could not be checked: {_join(unread)}. "
+            "NOT_RUN is not a pass - curriculum for a module that does not exist reaches "
+            "certification, and nothing here has ruled that out."
+        )
+
+    return True, (
+        f"instructions authored for all {len(modules)} module(s){detail}, each teaching "
+        "a module the Forge dispatches"
+    )
 
 
 async def _v28_library_refs_resolve(
@@ -700,6 +781,296 @@ async def _v30_department_has_seats(
     return (True, f"{len(wanted)} department(s) have seats for what the Pack asks")
 
 
+# ------------------------------------------------------- V31: unattended writes
+
+#: The only tier that reaches a Forge at all. Step 7 of the client library turns
+#: anything below `auto_execute` into a proposal and makes no HTTP call, so a human
+#: sees every call at `propose` and `suggest` before it happens. `auto_execute` is
+#: therefore not "the fast one" — it is the one with nobody in the path.
+UNATTENDED_TIER = "auto_execute"
+
+#: A module that mints a new artefact on every call and cannot be asked twice safely.
+#: `key` and `natural` both survive a retry: the Forge either de-duplicates on the
+#: idempotency key or the write is naturally the same act repeated.
+UNSAFE_IDEMPOTENCY = "at_most_once"
+
+
+@dataclass(frozen=True, slots=True)
+class ModuleShape:
+    """What `forge_module_registry` knows about calling a module twice, and whence."""
+
+    is_mutating: bool
+    idempotency_support: str
+    verification_method: str
+
+    @property
+    def unsafe_unattended(self) -> bool:
+        return self.is_mutating and self.idempotency_support == UNSAFE_IDEMPOTENCY
+
+    @property
+    def is_evidence(self) -> bool:
+        """`hand` is a claim. The other two were obtained from the Forge.
+
+        This is the asymmetry the rule turns on. A hand-written row that says a
+        module is an at-most-once writer may be wrong, and refusing on it blocks
+        a Pack that might have been fine — annoying, and safe. A hand-written row
+        that says a module is a harmless read may also be wrong, and passing on
+        it hands an unattended agent a writer. `property_lookup` was recorded
+        mutating by hand and it is a search: the one module anybody had called
+        had the checkable half wrong.
+
+        So a refusal stands on any row, and a pass needs evidence.
+        """
+        return self.verification_method != "hand"
+
+
+def _declared_forges(pack: BusinessPack) -> dict[str, set[str]]:
+    """module_id -> the forge(s) a binding declares it under.
+
+    A set rather than a single value because nothing stops two bindings from naming
+    the same module, and picking one silently would check the tier against the wrong
+    Forge's row.
+    """
+    out: dict[str, set[str]] = {}
+    for binding in pack.forge_dependencies.forge_bindings:
+        for module in binding.modules_expected:
+            out.setdefault(module, set()).add(binding.forge.lower())
+    return out
+
+
+def unattended_writes(
+    pack: BusinessPack, shapes: dict[tuple[str, str], ModuleShape]
+) -> tuple[list[str], list[str]]:
+    """(refusals, unresolved) for every module operated at `auto_execute`.
+
+    Pure, and separate from the query, so the decision can be tested without a
+    database. `shapes` is keyed `(forge_id, module_id)` with `forge_id` lowercased.
+    """
+    declared = _declared_forges(pack)
+    refusals: list[str] = []
+    unresolved: list[str] = []
+
+    for position in pack.positions_required:
+        if position.trust_tier_ceiling != UNATTENDED_TIER:
+            continue
+        for module in position.forge_modules_operated:
+            forges = declared.get(module) or {pack.forge_dependencies.operating_forge.lower()}
+            known = [shapes[(f, module)] for f in sorted(forges) if (f, module) in shapes]
+            if not known:
+                unresolved.append(f"{position.position_title}: {_join(sorted(forges))}/{module}")
+                continue
+            for forge, shape in (
+                (f, shapes[(f, module)]) for f in sorted(forges) if (f, module) in shapes
+            ):
+                if shape.unsafe_unattended:
+                    refusals.append(
+                        f"{position.position_title} operates {forge}/{module} at "
+                        f"{UNATTENDED_TIER}, and the registry says it is a mutating "
+                        f"{UNSAFE_IDEMPOTENCY} module"
+                    )
+                elif not shape.is_evidence:
+                    unresolved.append(
+                        f"{position.position_title}: {forge}/{module} "
+                        "(hand-written row, never verified against the Forge)"
+                    )
+    return refusals, unresolved
+
+
+async def _v31_unattended_writes(
+    conn: AsyncConnection, pack: BusinessPack
+) -> tuple[bool | None, str]:
+    """`auto_execute` on a module that cannot be called twice is refused.
+
+    This is the tier check with teeth, and it is a different question from V6. V6 asks
+    whether a module resolves to a registry row. This asks whether the tier the Pack
+    grants over it is survivable — a module can resolve perfectly and still be wrong to
+    run with nobody watching.
+
+    The shape it refuses is the one `regulator_dossier_export` is written around:
+    every call mints a new `exportId`, writes a row and emits an event, so a retry
+    after a timeout produces a second export of the same inquiry and the audit trail
+    then shows two. Its sibling `compliance_manifest_assemble` mints nothing and
+    retries freely — same permission, same reader, opposite handling. An agent is the
+    caller least likely to go looking for the first `exportId` before minting a second,
+    and an unattended agent is the one with nobody to stop it.
+
+    **A FAIL outranks an unresolved module.** If one module is refused and another has
+    no registry row, this reports the refusal: a defect that has been found does not
+    stop being found because something else could not be checked. Only when nothing is
+    refused and something is unknown does it report NOT_RUN, because then the honest
+    answer is that the Pack's tiers have not been checked rather than that they passed.
+    """
+    forges = {
+        b.forge.lower() for b in pack.forge_dependencies.forge_bindings
+    } | {pack.forge_dependencies.operating_forge.lower()}
+
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            """
+            SELECT lower(forge_id) AS forge_id, module_id, is_mutating,
+                   idempotency_support, verification_method
+            FROM forge_module_registry WHERE lower(forge_id) = ANY(%s)
+            """,
+            (sorted(forges),),
+        )
+        shapes = {
+            (r["forge_id"], r["module_id"]): ModuleShape(
+                is_mutating=r["is_mutating"],
+                idempotency_support=r["idempotency_support"],
+                verification_method=r["verification_method"],
+            )
+            for r in await cur.fetchall()
+        }
+
+    refusals, unresolved = unattended_writes(pack, shapes)
+    if refusals:
+        return False, (
+            f"{_join(refusals)}. An unattended retry writes a second record of the same "
+            "act, and the audit trail cannot tell the two apart afterwards. Grant it at "
+            "propose, or give the module an idempotency key."
+        )
+    if unresolved:
+        return None, (
+            f"nothing verified is known about the shape of {_join(unresolved)}, so no "
+            f"{UNATTENDED_TIER} grant has been checked against its module's behaviour. "
+            "NOT_RUN is not a pass. Run scripts/verify_forge_modules.py, which reads "
+            "is_mutating and idempotency_support from the Forge's own adapter; V6 says "
+            "which modules have no row at all."
+        )
+
+    operated = sum(
+        len(p.forge_modules_operated)
+        for p in pack.positions_required
+        if p.trust_tier_ceiling == UNATTENDED_TIER
+    )
+    return True, (
+        f"{operated} module(s) operated at {UNATTENDED_TIER}, none of them a mutating "
+        f"{UNSAFE_IDEMPOTENCY} write, each checked against a shape the Forge stated"
+    )
+
+
+# ------------------------------------------------ V32: conformance against the Forge
+
+async def _v32_modules_conform(
+    conn: AsyncConnection, pack: BusinessPack
+) -> tuple[bool | None, str]:
+    """Every declared module resolves against what the Forge actually dispatches.
+
+    V6 and this rule look alike and are not the same check. V6 resolves a Pack against
+    `forge_module_registry`, which is rows a human wrote — both sides are assertions,
+    so it compares two claims and can find a typo. This resolves the Pack against the
+    Forge's own dispatch map, which is derived: a name is in the answer if and only if
+    a handler is bound to it.
+
+    **It proves a handler is bound, and nothing further.** Not that the handler works,
+    not that it does what the name says. It automates the half of the conformance
+    question that was being done by hand and does not touch the other half — the
+    modules that answer 200 for work that never happened are bound like any other, and
+    they are caught by reading the source, in `forge_module_exclusion`.
+
+    NOT_RUN is the expected verdict for a Forge whose adapter does not exist yet. That
+    is not a defect in the Pack and it is not a pass: nothing has been checked.
+    """
+    from broker import forge_modules
+
+    wanted: dict[str, set[str]] = {}
+    for binding in pack.forge_dependencies.forge_bindings:
+        wanted.setdefault(binding.forge.lower(), set()).update(binding.modules_expected)
+    wanted = {f: m for f, m in wanted.items() if m}
+    if not wanted:
+        return True, "no modules declared"
+
+    absent: list[str] = []
+    unread: list[str] = []
+    methods: list[str] = []
+    for forge_id, modules in sorted(wanted.items()):
+        answer = await forge_modules.read(conn, forge_id, candidates=modules)
+        if isinstance(answer, forge_modules.Unread):
+            unread.append(f"{forge_id}: {answer.reason}")
+            continue
+        methods.append(f"{forge_id} via {answer.method}")
+        absent.extend(f"{forge_id}/{m}" for m in answer.missing(modules))
+
+    if absent:
+        return False, (
+            f"{len(absent)} declared module(s) the Forge does not dispatch: "
+            f"{_join(absent)}. A grant over one of these is a grant on a capability "
+            f"that is not there. ({forge_modules.SCOPE}.)"
+        )
+    if unread:
+        return None, (
+            f"could not ask: {_join(unread)}. Nothing has been resolved against what "
+            "the Forge dispatches, so the Pack's modules are unverified rather than "
+            "verified. NOT_RUN is not a pass."
+        )
+
+    total = sum(len(m) for m in wanted.values())
+    return True, (
+        f"all {total} declared module(s) are dispatched by the Forge "
+        f"({_join(methods)}) — {forge_modules.SCOPE}"
+    )
+
+
+# ----------------------------------- V33: one instruction, one content_hash
+
+async def _v33_instructions_are_distinct(
+    conn: AsyncConnection, pack: BusinessPack
+) -> tuple[bool, str]:
+    """No two live instructions on a Forge may share a `content_hash`.
+
+    A certification is bound to `instruction_content_hash`, and that column exists to
+    answer one question: certified on what, exactly. If two modules on a Forge carry the
+    same hash, it cannot answer it — a certification for a property search and one for a
+    deal underwrite are the same value.
+
+    All five live `cre-forge` instructions were byte-identical, written at the same
+    second by the same author, with **one** hash between them and no module's own name
+    appearing anywhere in its own text. Every one said "Performs one operation against
+    the Forge and returns its result", which is true of any module.
+    `underwrite_deal`'s said it "does not write to any other system", and it upserts a
+    `DealAnalysis` row.
+
+    **This is the class `curriculum_quality.assess` cannot see.** That assessor was
+    built to catch emptiness — `"what_it_does": "Documented."` — and rated all five
+    `complete`, correctly by its own lights: it is real prose, and it does not go
+    nowhere. It is simply not about any particular module, and no reading of one
+    document in isolation can tell. Two documents can.
+
+    Cheap, and it fires the day the instructions are written rather than the day
+    somebody reads five of them side by side.
+    """
+    forges = sorted(
+        {b.forge.lower() for b in pack.forge_dependencies.forge_bindings}
+        | {pack.forge_dependencies.operating_forge.lower()}
+    )
+
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            """
+            SELECT lower(forge_id) AS forge_id, content_hash,
+                   array_agg(module_id ORDER BY module_id) AS modules
+            FROM forge_operating_instruction
+            WHERE superseded_at IS NULL AND lower(forge_id) = ANY(%s)
+            GROUP BY 1, 2 HAVING count(*) > 1
+            """,
+            (forges,),
+        )
+        collisions = await cur.fetchall()
+
+    if not collisions:
+        return True, "every live instruction on a bound Forge has its own content_hash"
+
+    detail = _join(
+        f"{r['forge_id']}: {_join(r['modules'])} share {r['content_hash'][:12] or '(empty)'}"
+        for r in collisions
+    )
+    return False, (
+        f"{detail}. A certification is bound to instruction_content_hash, so one hash "
+        "across several modules cannot say which module an agent was certified on. "
+        "Identical text for two modules also teaches nothing about either."
+    )
+
+
 _WORLD_RULES = {
     "V2": (Severity.FAIL, "Bridge operational for every hard Forge binding (Gate 0)",
            _v2_bridge_operational),
@@ -713,6 +1084,12 @@ _WORLD_RULES = {
             _v29_departments_exist),
     "V30": (Severity.WARN, "Every department has seats for the positions requested",
             _v30_department_has_seats),
+    "V31": (Severity.FAIL, "No auto_execute grant over a mutating at_most_once module",
+            _v31_unattended_writes),
+    "V32": (Severity.FAIL, "Every declared module is dispatched by the Forge itself",
+            _v32_modules_conform),
+    "V33": (Severity.FAIL, "No two live instructions on a Forge share a content_hash",
+            _v33_instructions_are_distinct),
 }
 
 
@@ -790,6 +1167,9 @@ _WORLD_RULE_BLOCKS = {
     "V11": ("positions_required", "forge_operating_instructions"),
     "V28": ("forge_dependencies",),
     "V24": ("positions_required",),
+    "V31": ("positions_required", "forge_dependencies"),
+    "V32": ("forge_dependencies",),
+    "V33": ("forge_dependencies", "forge_operating_instructions"),
 }
 
 

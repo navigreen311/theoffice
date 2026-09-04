@@ -13,19 +13,24 @@ and a provisioning test that wants Gate 6 or Gate 4.5 to block certifies less th
 
 from __future__ import annotations
 
+import hashlib
 import json
 import uuid
 from pathlib import Path
 
 import psycopg
 import psycopg.types.json
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 PACK_PATH = ROOT / "packs" / "greenstone.yaml"
 
 FORGE_ID = "cre-forge"
-CRE_MODULES = ("property_lookup", "comp_analysis", "underwrite_deal", "buyer_match",
-               "generate_loi")
+# `generate_loi` was removed 2026-09-02 along with the Pack declaration. CRE Forge
+# has no letter-of-intent service, route or contract template, so a world that
+# registered it was a world describing a module that does not exist - which is the
+# state V32 exists to refuse, reproduced inside the fixture that tests V32.
+CRE_MODULES = ("property_lookup", "comp_analysis", "underwrite_deal", "buyer_match")
 VOICE_MODULES = ("place_call", "transcribe_call")
 
 # Fixed agent ids so snapshots are stable across runs and machines. Real agents arrive
@@ -153,6 +158,33 @@ VILLAGE_DEPARTMENTS = tuple(
 )
 
 
+
+def instruction_for(module_id: str) -> dict:
+    """`INSTRUCTION_CONTENT`, saying which module it is about.
+
+    The shared constant is deliberately generic, and for a while every module got it
+    verbatim with `content_hash` left as the empty string. That is the production
+    defect reproduced in a fixture: all five live `cre-forge` instructions were
+    byte-identical and carried one hash between them, so
+    `certification.instruction_content_hash` could not say which module an agent had
+    been certified on, and V33 exists to fail exactly that.
+
+    A fixture that writes one hash for every module cannot exercise V33 and would fail
+    it, so each instruction here names its own module. Still generic prose - `assess`
+    should keep reading it as complete - but no longer one document wearing five names.
+    """
+    content = json.loads(json.dumps(INSTRUCTION_CONTENT))
+    content["what_it_does"] = f"{module_id}: " + content["what_it_does"]
+    return content
+
+
+def instruction_hash(content: dict) -> str:
+    """The hash a certification is bound to. Over canonical JSON, so it is stable."""
+    return hashlib.sha256(
+        json.dumps(content, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
 def seed_departments() -> None:
     """Install the department list the rules validate against."""
     from broker import departments as depts
@@ -163,12 +195,73 @@ def seed_departments() -> None:
     ])
 
 
+def dispatch_from_registry(
+    admin: psycopg.Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The other half of a prepared world: the adapters are up and dispatching.
+
+    Every other part of this world is a database state, and V32 is deliberately not.
+    It resolves a Pack against what a Forge's adapter actually dispatches, because
+    `forge_module_registry` rows are rows a human wrote and comparing a Pack to them
+    compares two claims. A world built only in the database therefore leaves V32
+    NOT_RUN, which blocks Gate 2 - correctly, and not because anything is wrong with
+    the venture under test.
+
+    So this supplies the state rather than the mechanism: adapters that answer with
+    exactly what the world registered. The mechanism - the manifest read, the probe,
+    and the calibration failure that makes a probe refuse to answer - is driven for
+    real over a mock transport in `tests/validator/test_module_conformance.py`, and
+    a Forge that does *not* dispatch a declared module has its own test there and in
+    `test_world_rules.py`. Standing up three HTTP servers to restate that here would
+    add machinery, not coverage.
+    """
+    from datetime import UTC, datetime
+
+    from broker import forge_modules
+
+    with admin.cursor() as cur:
+        cur.execute(
+            """
+            SELECT lower(r.forge_id) AS forge_id, r.api_version, m.module_id
+            FROM forge_registry r
+            LEFT JOIN forge_module_registry m ON m.forge_id = r.forge_id
+            """
+        )
+        rows = cur.fetchall()
+
+    dispatched: dict[str, set[str]] = {}
+    versions: dict[str, str] = {}
+    for forge_id, api_version, module_id in rows:
+        versions[forge_id] = api_version
+        bucket = dispatched.setdefault(forge_id, set())
+        if module_id is not None:
+            bucket.add(module_id)
+
+    async def _answer(_conn, forge_id: str, **_kw):
+        key = forge_id.lower()
+        if key not in dispatched:
+            return forge_modules.Unread(forge_id, "not in forge_registry")
+        return forge_modules.ForgeModules(
+            forge_id=forge_id,
+            modules=frozenset(dispatched[key]),
+            method="adapter_manifest",
+            api_version=versions[key],
+            observed_at=datetime.now(UTC),
+        )
+
+    monkeypatch.setattr(forge_modules, "read", _answer)
+    forge_modules.forget()
+
+
 def build_world(admin: psycopg.Connection) -> None:
     """A fully prepared world: Forges bridged, instructions authored, roster present.
 
     This is the state Gates 0 through 8 exist to produce. Building it here means the
     golden snapshots - and the provisioning runs - describe a venture that could
     actually provision.
+
+    The adapters are a separate call - `dispatch_from_registry` - because they are the
+    one part of the world that is not a row. A suite that runs Gate 2 needs both.
     """
     seed_departments()
     teardown_world(admin)
@@ -201,21 +294,24 @@ def build_world(admin: psycopg.Connection) -> None:
                     """
                     INSERT INTO forge_module_registry
                       (forge_id, module_id, module_name, idempotency_support,
-                       is_mutating, compliance_flags_implied)
-                    VALUES (%s, %s, %s, %s, TRUE, %s)
+                       is_mutating, compliance_flags_implied,
+                       verified_at, verified_against, verification_method)
+                    VALUES (%s, %s, %s, %s, TRUE, %s,
+                            now(), 'test world', 'adapter_manifest')
                     """,
                     (forge_id, module_id, module_id.replace("_", " ").title(),
-                     "at_most_once" if module_id == "generate_loi" else "key", flags),
+                     "key", flags),
                 )
+                content = instruction_for(module_id)
                 cur.execute(
                     """
                     INSERT INTO forge_operating_instruction
                       (forge_id, module_id, instruction_version, forge_api_version,
                        content, content_hash, authored_by)
-                    VALUES (%s, %s, '1.0.0', %s, %s, '', %s)
+                    VALUES (%s, %s, '1.0.0', %s, %s, %s, %s)
                     """,
                     (forge_id, module_id, api,
-                     psycopg.types.json.Jsonb(INSTRUCTION_CONTENT),
+                     psycopg.types.json.Jsonb(content), instruction_hash(content),
                      "00000000-0000-5000-8000-00000000aaaa"),
                 )
 
@@ -346,7 +442,7 @@ def certify_for_positions(conn: psycopg.Connection) -> None:
             unit_b_departments=["research"])
     certify(conn, finance, ["comp_analysis", "underwrite_deal"], tier="propose",
             unit_b_departments=["banking"])
-    certify(conn, success, ["buyer_match", "generate_loi"], tier="propose",
+    certify(conn, success, ["buyer_match"], tier="propose",
             unit_b_departments=["operations"])
     certify(conn, success, ["place_call", "transcribe_call"], forge="voiceforge",
             tier="propose", unit_b_departments=["operations"])

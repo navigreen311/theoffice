@@ -92,7 +92,7 @@ async def test_a_run_stops_at_the_first_blocking_gate_and_names_it(
     """P3 - a state machine, not a script.
 
     This is the real Greenstone Pack, and it blocks at 4.5 on a real finding: the
-    generated workflow routes 192 compliance approvals a day against one officer's four
+    generated workflow routes 160 compliance approvals a day against one officer's four
     coverage hours. The gate stops there and says the number, rather than continuing to
     Gate 5 and issuing grants for a venture nobody can supervise.
     """
@@ -112,7 +112,11 @@ async def test_a_run_stops_at_the_first_blocking_gate_and_names_it(
         blocking = outcomes[-1]
         assert blocking.gate == "4.5"
         assert blocking.verdict == provisioning.BLOCKED
-        assert "192 approvals" in blocking.reason
+        # 192 until 2026-09-02. Cutting `generate_loi` from the Pack removed the
+        # workflow step that operated it, and one fewer step is 32 fewer approvals a
+        # day. The gate still blocks; a module that does not exist was contributing
+        # to the review load that blocked it.
+        assert "160 approvals" in blocking.reason
         assert "compliance officer" in blocking.reason
         assert state is not None
         assert state.status == "blocked"

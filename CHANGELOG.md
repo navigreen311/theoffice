@@ -5,6 +5,115 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **Pack module conformance — resolving a Pack against the Forge, not against a row.**
+  A Pack's `modules_expected` is a list a human wrote and a `forge_module_registry` row
+  is a row a human wrote, so V6 compared two claims. The Burkham Pack declared twelve
+  CapitalForge modules, three did not exist, all three were found by hand, and
+  `lender_match` had been granted `auto_execute` over a capability that was not there.
+  - **`GET {base_url}/_modules` on every adapter**, returning `sorted(MODULES)` over the
+    dispatch map. Derived, not declared: a name is in the answer if and only if a handler
+    is bound to it. `test_manifest_is_derived_from_the_dispatch_map` fails the build if
+    anyone replaces it with a literal list, which would be a third declaration and a
+    worse one than the two that already exist.
+  - **V32** resolves a Pack against that answer. **V31** refuses `auto_execute` over a
+    module the registry records as mutating and `at_most_once` — the shape
+    `regulator_dossier_export` is written around, where an unattended retry writes a
+    second record of the same act.
+  - **`OPTIONS` probe as a fallback only**, calibrated per run against an id that cannot
+    exist. If that id does not 404, the probe reports NOT_RUN rather than PASS — which is
+    what a catch-all `POST /{module_id}` dispatcher does, so it usually refuses to
+    answer. An uncalibrated probe is a green light generator.
+  - **Verification provenance on `forge_module_registry`** (migration 0031):
+    `verified_at`, `verified_against`, `verification_method` ∈ `adapter_manifest | probe
+    | hand`, defaulting to `hand` because that is what every existing row is.
+    `scripts/verify_forge_modules.py` writes them and `--check` exits 1 on drift; it
+    never deletes a row and never invents one.
+  - **The adapter is the naming authority.** A Pack, the registry rows and
+    `forge_module_exclusion` now all resolve against one set of keys, so the accident
+    `docs/module-exclusions.md` warned about — an excluded endpoint registered under a
+    second name, silently becoming grantable — fails to resolve instead of quietly
+    working.
+  - **Scope is printed with the verdict.** It proves a handler is bound to the name, not
+    that it works or that it does what the name says. It automates the half of the
+    question that was being done by hand and does not touch the other half:
+    `readiness_score` is bound, answers 200, mutates nothing, and scores a business from
+    query parameters it never reads.
+  - NOT_RUN, not PASS and not FAIL, where no adapter exists. All twelve of the Burkham
+    Pack's modules are in that state today, and Gate 2 blocks on it.
+- **The manifest carries each module's shape, and the verifier corrects the row.**
+  `_modules` now answers `{module_id, is_mutating, idempotency_support}` per module.
+  `module_id` stays derived; the other two are declared at the binding site, which is
+  weaker and is said so in every place they are reported.
+  - They are checked, not trusted. The adapter refuses at runtime a module declared
+    `is_mutating=False` whose handler dirties its session, and rolls the write back —
+    the only moment the truth is observable. `verify_forge_modules.py` then writes the
+    Forge's answer over the registry's.
+  - Its first run against the live CRE adapter corrected `property_lookup` from
+    `is_mutating: TRUE` to `FALSE`. It is a search. The one module anybody had ever
+    called had the checkable half wrong, in a hand-written row, in the field V31 turns on.
+  - So **V31 will not PASS on a `verification_method = 'hand'` row.** A refusal still
+    stands on one: blocking on a claim that might be wrong is safe, passing on one is
+    not. An adapter that answers with bare names still resolves existence and leaves
+    the shape columns alone — an unanswered question is not a correction.
+
+- **V11 asks whether the module its curriculum teaches exists.** It checked that
+  instructions were authored and not hollow — both questions about the document. Neither
+  asked whether anything was on the other end, and `cre-forge/generate_loi` had a live
+  instruction rated `state=complete` for a module CRE Forge has never dispatched. This
+  reaches past a Pack: SimForge trains against that text and binds a certification to its
+  `content_hash`, and afterwards a certification for a module with no handler is
+  indistinguishable from a real one. V32's refusal, one table over, on the path that ends
+  in a certification.
+
+- **V33: two live instructions on one Forge may not share a `content_hash`.** The class
+  `curriculum_quality.assess` cannot see — it reads one document and asks whether it
+  teaches anything, and plausible prose that happens to be module-independent passes
+  that. Two documents settle it, and comparing hashes is the cheapest way. The test
+  fixtures wrote one blank hash for every module, which was the same defect reproduced
+  in a fixture; they now write per-module content and a real one.
+
+### Removed
+- **`cre-forge/generate_loi`'s operating instruction and registry row, deleted together.**
+  Instructions are normally superseded, not deleted — `superseded_at` keeps "certified on
+  what, exactly" answerable. This one was curriculum for a capability that does not exist,
+  where leaving it makes a certification indistinguishable from a real one. No
+  certification was bound to it. What it said is preserved verbatim in
+  `docs/instruction-deletions.md`, because "an instruction was deleted" is not a record of
+  what was lost.
+
+### Fixed
+- **All five `cre-forge` operating instructions were the same document.** Byte-identical
+  content, **one** `content_hash` between them, authored at the same second by the same
+  author, and no module's own name appearing anywhere in its own instruction. Every one
+  says "Performs one operation against the Forge and returns its result", which is true of
+  any module; `underwrite_deal`'s says it "does not write to any other system", and it
+  upserts a `DealAnalysis` row.
+  - `curriculum_quality.assess` rates all five `complete`. It was built to catch
+    *emptiness* — `"what_it_does": "Documented."` — and this is plausible prose that
+    happens to be module-independent, which is a different failure it cannot see.
+  - The consequence is on `certification.instruction_content_hash`: with one hash across
+    five modules, that column cannot say which module an agent was certified on. Four of
+    the five now describe modules that at least exist, which is what deleting the fifth
+    changed and all it changed.
+  - `assess` still cannot tell a template from a curriculum, and that is not fixable by
+    reading one document. **V33** compares hashes instead and fails the Pack, so this
+    fires the day instructions are written rather than the day somebody reads five of
+    them side by side. The four remaining instructions still need writing.
+
+### Changed
+- **CRE Forge binds `comp_analysis`, `underwrite_deal` and `buyer_match`.** All three
+  had registry rows and no handler; V32 found them, and the services behind them were
+  already there. `buyer_match` calls `match_buyers_to_deal(save_matches=False)`: ranking
+  buyers is a question, recording that a deal was offered to them is an act, and an act
+  belongs in its own module with its own grant.
+- **`generate_loi` cut from the Greenstone Pack.** CRE Forge has no letter-of-intent
+  service, route or contract template. It was declared at `criticality: hard`, so the
+  Pack asserted the workflow could not run without a module that will never exist —
+  `bureau_pull`'s shape, one Forge over. Buyer Network Manager's duties are left as
+  written with a DECISION NEEDED rather than quietly narrowed. Removing its workflow
+  step also dropped the projected compliance load from 192 approvals a day to 160; a
+  module that does not exist had been contributing to the review burden that blocks
+  Gate 4.5.
 - **Module exclusion — a module that must never be granted.** Onboarding CapitalForge
   found endpoints that return a plausible success for work that never happens: rules no
   runner consumes, a `TwilioStubClient` returning fabricated SIDs from the endpoint named

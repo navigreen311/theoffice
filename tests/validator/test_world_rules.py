@@ -1,8 +1,13 @@
-"""V2, V6, V11 and V28 — the rules that read the world rather than the document.
+"""V2, V6, V11, V28, V31 and V32 — the rules that read the world, not the document.
 
 A Pack that *declares* a Forge is bridged proves nothing. That is precisely the state
-Gate 0 exists to catch, so these three rules query the database and cannot be satisfied
-by editing YAML.
+Gate 0 exists to catch, so these rules query the database and cannot be satisfied by
+editing YAML.
+
+V32 goes one further and does not trust the database either. `forge_module_registry` is
+rows a human wrote, so resolving a Pack against it compares two claims; V32 resolves
+against what the Forge's own adapter dispatches. It proves a handler is bound to the
+name — not that it works, and not that it does what the name says.
 
 `ASSUMPTION` — Greenstone's operating Forge is CRE Forge, and the bridge is going to
 CapitalForge first. In production this Pack FAILS V2 until CRE Forge is registered with
@@ -14,6 +19,7 @@ from __future__ import annotations
 
 import copy
 import uuid
+from dataclasses import replace
 from pathlib import Path
 
 import psycopg
@@ -30,7 +36,7 @@ pytestmark = [requires_db, pytest.mark.db]
 PACK_PATH = Path(__file__).resolve().parents[2] / "packs" / "greenstone.yaml"
 
 CRE_MODULES = (
-    "property_lookup", "comp_analysis", "underwrite_deal", "buyer_match", "generate_loi",
+    "property_lookup", "comp_analysis", "underwrite_deal", "buyer_match",
 )
 SIM_MODULES = ("run_scenario_pack", "gate_result")
 VOICE_MODULES = ("place_call", "transcribe_call")
@@ -123,8 +129,10 @@ def bridged_world(admin: psycopg.Connection):
                 cur.execute(
                     """
                     INSERT INTO forge_module_registry
-                      (forge_id, module_id, module_name, idempotency_support, is_mutating)
-                    VALUES (%s, %s, %s, 'key', TRUE)
+                      (forge_id, module_id, module_name, idempotency_support, is_mutating,
+                       verified_at, verified_against, verification_method)
+                    VALUES (%s, %s, %s, 'key', TRUE,
+                            now(), 'test world', 'adapter_manifest')
                     """,
                     (forge_id, module_id, module_id.replace("_", " ").title()),
                 )
@@ -152,20 +160,21 @@ def author_instructions(conn: psycopg.Connection, modules: tuple[str, ...]) -> N
     # write `"what_it_does": "x"` and `inputs: {"a": "b"}` - which V11 accepted, because
     # V11 only checked that a row existed. Now that it reads the content, a fixture that
     # writes placeholders is a fixture that tests the defect rather than the rule.
-    from tests.world import INSTRUCTION_CONTENT
+    from tests.world import instruction_for, instruction_hash
 
-    content = INSTRUCTION_CONTENT
     with conn.cursor() as cur:
         for module_id in modules:
             forge = "voiceforge" if module_id in VOICE_MODULES else "cre-forge"
+            content = instruction_for(module_id)
             cur.execute(
                 """
                 INSERT INTO forge_operating_instruction
                   (forge_id, module_id, instruction_version, forge_api_version,
                    content, content_hash, authored_by)
-                VALUES (%s, %s, '1.0.0', '1.4.0', %s, '', %s)
+                VALUES (%s, %s, '1.0.0', '1.4.0', %s, %s, %s)
                 """,
-                (forge, module_id, psycopg.types.json.Jsonb(content), str(uuid.uuid4())),
+                (forge, module_id, psycopg.types.json.Jsonb(content),
+                 instruction_hash(content), str(uuid.uuid4())),
             )
     conn.commit()
 
@@ -279,8 +288,15 @@ async def test_v11_fails_when_instructions_are_not_authored(greenstone, bridged_
 
 
 async def test_v11_passes_once_every_operated_module_has_instructions(
-    greenstone, bridged_world, admin
+    greenstone, bridged_world, adapters_dispatching, admin
 ):
+    """Authored, not hollow, and each teaching a module the Forge actually dispatches.
+
+    The adapters are part of the condition now. V11 used to be answerable from two
+    tables; since 2026-09-02 it also asks whether the module the curriculum teaches
+    exists, because `cre-forge/generate_loi` had a complete-looking instruction and no
+    handler anywhere.
+    """
     operated = tuple({m for p in greenstone.positions_required for m in p.forge_modules_operated})
     author_instructions(admin, operated)
 
@@ -358,16 +374,61 @@ async def test_v28_is_not_run_without_a_connection_never_a_pass(greenstone):
 
 # ---------------------------------------------------------------- whole-Pack gate
 
+@pytest.fixture
+def adapters_dispatching(greenstone, monkeypatch):
+    """Every bound Forge answers `_modules` with exactly what the Pack declares.
+
+    The bridged world registers Forges at `https://example.invalid`, which is right for
+    every other rule and cannot answer this one. Standing up three HTTP servers to make
+    a database fixture complete would be a lot of machinery for a question already
+    answered directly: `tests/validator/test_module_conformance.py` drives the real
+    manifest and probe paths over a mock transport, including the calibration failure.
+
+    What this fixture supplies is the *state* — adapters that are up and dispatch what
+    was declared — so the whole-Pack gate can assert that a fully prepared world has
+    nothing left NOT_RUN.
+    """
+    from datetime import UTC, datetime
+
+    from broker import forge_modules
+
+    async def _answer(_conn, forge_id, **_kw):
+        declared = {
+            m
+            for b in greenstone.forge_dependencies.forge_bindings
+            if b.forge.lower() == forge_id.lower()
+            for m in b.modules_expected
+        }
+        return forge_modules.ForgeModules(
+            forge_id=forge_id,
+            modules=frozenset(declared),
+            method="adapter_manifest",
+            api_version="1.4.0",
+            observed_at=datetime.now(UTC),
+        )
+
+    monkeypatch.setattr(forge_modules, "read", _answer)
+    forge_modules.forget()
+    yield
+    forge_modules.forget()
+
+
 async def test_greenstone_passes_gate_2_in_a_fully_prepared_world(
-    greenstone, bridged_world, stocked_library, admin
+    greenstone, bridged_world, stocked_library, adapters_dispatching, admin
 ):
     """The blueprint acceptance criterion for this increment: the Greenstone Pack
     passes validation.
 
-    'Fully prepared' now means three things, and none of them is true today: the bridge
-    reaches CRE Forge, instructions are authored, and the Compliance Library holds the
-    entries the Pack names. All three are exactly what Gate 0, V11 and V28 exist to
-    require before provisioning.
+    'Fully prepared' now means four things, and none of them is true today: the bridge
+    reaches CRE Forge, instructions are authored, the Compliance Library holds the
+    entries the Pack names, and each Forge's adapter dispatches the modules the Pack
+    declares. All four are exactly what Gate 0, V11, V28 and V32 exist to require
+    before provisioning.
+
+    The fourth is the one that is not a database state. V6 already asked whether the
+    modules resolve in `forge_module_registry` and the fixture satisfies it by writing
+    the rows — which is the point of V32: rows are what somebody typed, and a prepared
+    world is one where the Forge itself dispatches them.
     """
     operated = tuple({m for p in greenstone.positions_required for m in p.forge_modules_operated})
     author_instructions(admin, operated)
@@ -379,3 +440,359 @@ async def test_greenstone_passes_gate_2_in_a_fully_prepared_world(
     assert report.not_run == [r for r in report.not_run if r.rule_id == "V24"], (
         "only V24 may be deferred; every other rule must have run"
     )
+
+
+# ------------------------------------------------------------------------- V31
+
+async def test_v31_passes_when_every_unattended_module_survives_a_retry(
+    greenstone, bridged_world
+):
+    """The fixture registers every module with an idempotency key.
+
+    A retry the Forge de-duplicates is a retry the audit trail survives, so the tier
+    is not the finding here whatever it is set to.
+    """
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+    assert report.get("V31").verdict is Verdict.PASS, report.get("V31").message
+
+
+async def test_v31_refuses_auto_execute_over_a_mutating_at_most_once_module(
+    greenstone, bridged_world, admin
+):
+    """The shape `regulator_dossier_export` is written around.
+
+    Every call mints an id, writes a row and emits an event, so a retry after a
+    timeout produces a second record of the same act and the audit trail then shows
+    two. An unattended agent is the caller with nobody to stop it.
+    """
+    module = greenstone.positions_required[0].forge_modules_operated[0]
+    with admin.cursor() as cur:
+        cur.execute(
+            "UPDATE forge_module_registry SET is_mutating = TRUE, "
+            "idempotency_support = 'at_most_once' WHERE module_id = %s",
+            (module,),
+        )
+    admin.commit()
+    pack = copy.deepcopy(greenstone)
+    pack.positions_required[0].trust_tier_ceiling = "auto_execute"
+
+    async with connection() as conn:
+        report = await validate(pack, conn)
+
+    v31 = report.get("V31")
+    assert v31.verdict is Verdict.FAIL
+    assert module in v31.message
+    assert "propose" in v31.message, "the message must name the way out"
+
+
+async def test_v31_is_not_run_when_the_module_has_no_registry_row(
+    greenstone, bridged_world, admin
+):
+    """An unknown shape is not a safe shape."""
+    module = greenstone.positions_required[0].forge_modules_operated[0]
+    with admin.cursor() as cur:
+        cur.execute("DELETE FROM forge_module_registry WHERE module_id = %s", (module,))
+    admin.commit()
+    pack = copy.deepcopy(greenstone)
+    pack.positions_required[0].trust_tier_ceiling = "auto_execute"
+
+    async with connection() as conn:
+        report = await validate(pack, conn)
+
+    v31 = report.get("V31")
+    assert v31.verdict is Verdict.NOT_RUN
+    assert v31.verdict is not Verdict.PASS
+    assert not report.passed
+
+
+# ------------------------------------------------------------------------- V32
+
+async def test_v32_is_not_run_when_no_adapter_can_be_reached(greenstone, bridged_world):
+    """The state every Forge is in before its adapter exists.
+
+    Not a FAIL: nothing about the Pack is known to be wrong. Not a PASS: nothing has
+    been resolved against the Forge. This is the verdict the whole rule is built to be
+    able to give.
+    """
+    from broker import forge_modules
+
+    forge_modules.forget()
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+
+    v32 = report.get("V32")
+    assert v32.verdict is Verdict.NOT_RUN
+    assert not report.passed, "a Pack nobody could check has not been validated"
+
+
+async def test_v32_fails_on_a_module_the_forge_does_not_dispatch(
+    greenstone, bridged_world, monkeypatch
+):
+    """The `lender_match` shape: declared, granted, and not there.
+
+    The Forge answers, and one declared module is not in what it dispatches. The
+    registry is not consulted — that is V6's question, and a row saying the module
+    exists is exactly the claim this rule exists to disbelieve.
+    """
+    from datetime import UTC, datetime
+
+    from broker import forge_modules
+
+    absent = greenstone.forge_dependencies.forge_bindings[0].modules_expected[0]
+
+    async def _answer(_conn, forge_id, **_kw):
+        declared = {
+            m
+            for b in greenstone.forge_dependencies.forge_bindings
+            if b.forge.lower() == forge_id.lower()
+            for m in b.modules_expected
+        }
+        return forge_modules.ForgeModules(
+            forge_id=forge_id,
+            modules=frozenset(declared - {absent}),
+            method="adapter_manifest",
+            api_version="1.4.0",
+            observed_at=datetime.now(UTC),
+        )
+
+    monkeypatch.setattr(forge_modules, "read", _answer)
+    forge_modules.forget()
+
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+
+    v32 = report.get("V32")
+    assert v32.verdict is Verdict.FAIL
+    assert absent in v32.message
+    assert "capability that is not there" in v32.message
+    assert "not that it works" in v32.message, "a verdict must carry its own scope"
+
+
+async def test_the_report_header_states_what_conformance_proved(
+    greenstone, bridged_world, monkeypatch
+):
+    """The scope belongs where the verdict is read, not only in a docstring."""
+    from datetime import UTC, datetime
+
+    from broker import forge_modules
+
+    async def _answer(_conn, forge_id, **_kw):
+        declared = {
+            m
+            for b in greenstone.forge_dependencies.forge_bindings
+            if b.forge.lower() == forge_id.lower()
+            for m in b.modules_expected
+        }
+        return forge_modules.ForgeModules(
+            forge_id=forge_id,
+            modules=frozenset(declared),
+            method="adapter_manifest",
+            api_version="1.4.0",
+            observed_at=datetime.now(UTC),
+        )
+
+    monkeypatch.setattr(forge_modules, "read", _answer)
+    forge_modules.forget()
+
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+
+    assert report.get("V32").verdict is Verdict.PASS, report.get("V32").message
+    assert "proves a handler is bound to the name" in report.render()
+
+
+async def test_v11_fails_when_instructions_teach_a_module_the_forge_does_not_dispatch(
+    greenstone, bridged_world, adapters_dispatching, admin, monkeypatch
+):
+    """Curriculum for a capability that is not there.
+
+    `cre-forge/generate_loi` was exactly this until 2026-09-02: a complete-looking
+    instruction, assessed `state=complete`, for a module CRE Forge has never had a
+    service or a route for. V11 passed it, because V11 asked whether the document
+    existed and whether it was hollow — two questions about the document.
+
+    It reaches further than a Pack. SimForge trains against that text and binds a
+    certification to its `content_hash`, and afterwards a certification for a module
+    with no handler reads exactly like one for a real module.
+    """
+    from broker import forge_modules
+
+    operated = tuple({m for p in greenstone.positions_required for m in p.forge_modules_operated})
+    author_instructions(admin, operated)
+    absent = greenstone.forge_dependencies.forge_bindings[0].modules_expected[0]
+
+    real_read = forge_modules.read
+
+    async def _without(conn, forge_id, **kw):
+        answer = await real_read(conn, forge_id, **kw)
+        if isinstance(answer, forge_modules.ForgeModules):
+            return replace(answer, modules=answer.modules - {absent})
+        return answer
+
+    monkeypatch.setattr(forge_modules, "read", _without)
+    forge_modules.forget()
+
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+
+    v11 = report.get("V11")
+    assert v11.verdict is Verdict.FAIL
+    assert absent in v11.message
+    assert "indistinguishable from a real one" in v11.message
+
+
+async def test_v11_is_not_run_when_the_forge_cannot_be_asked(
+    greenstone, bridged_world, admin
+):
+    """Authored, not hollow, and nobody could check that the modules exist.
+
+    Not a pass: curriculum for a module that does not exist reaches certification, and
+    this run ruled nothing out.
+    """
+    from broker import forge_modules
+
+    operated = tuple({m for p in greenstone.positions_required for m in p.forge_modules_operated})
+    author_instructions(admin, operated)
+    forge_modules.forget()
+
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+
+    v11 = report.get("V11")
+    assert v11.verdict is Verdict.NOT_RUN
+    assert "NOT_RUN is not a pass" in v11.message
+    assert not report.passed
+
+
+async def test_v11_missing_instructions_outrank_an_unreachable_forge(
+    greenstone, bridged_world
+):
+    """A document that was never written is a finding without asking anybody."""
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+
+    v11 = report.get("V11")
+    assert v11.verdict is Verdict.FAIL
+    assert "no Forge Operating Instructions authored" in v11.message
+
+
+# ------------------------------------------------------------------------- V33
+
+async def test_v33_passes_when_every_instruction_has_its_own_hash(
+    greenstone, bridged_world, admin
+):
+    operated = tuple({m for p in greenstone.positions_required for m in p.forge_modules_operated})
+    author_instructions(admin, operated)
+
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+
+    assert report.get("V33").verdict is Verdict.PASS, report.get("V33").message
+
+
+async def test_v33_fails_when_two_modules_share_a_content_hash(
+    greenstone, bridged_world, admin
+):
+    """The state all five live cre-forge instructions were in.
+
+    Byte-identical text, one hash between them, written at the same second by the same
+    author. `curriculum_quality.assess` rated every one `complete` — correctly by its
+    own lights, because it looks for emptiness and this is real prose. It is simply not
+    about any particular module, and no reading of one document alone can tell.
+    """
+    from tests.world import INSTRUCTION_CONTENT, instruction_hash
+
+    shared = instruction_hash(INSTRUCTION_CONTENT)
+    with admin.cursor() as cur:
+        for module_id in ("property_lookup", "comp_analysis"):
+            cur.execute(
+                """
+                INSERT INTO forge_operating_instruction
+                  (forge_id, module_id, instruction_version, forge_api_version,
+                   content, content_hash, authored_by)
+                VALUES ('cre-forge', %s, '1.0.0', '1.4.0', %s, %s, %s)
+                """,
+                (module_id, psycopg.types.json.Jsonb(INSTRUCTION_CONTENT), shared,
+                 str(uuid.uuid4())),
+            )
+    admin.commit()
+
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+
+    v33 = report.get("V33")
+    assert v33.verdict is Verdict.FAIL
+    assert "comp_analysis" in v33.message and "property_lookup" in v33.message
+    assert "which module an agent was certified on" in v33.message
+
+
+async def test_v33_catches_what_the_content_assessor_cannot(
+    greenstone, bridged_world, admin
+):
+    """The two checks answer different questions, and this fixture separates them.
+
+    `assess` reads one document and asks whether it teaches anything. V33 reads two and
+    asks whether they teach anything *different*. Text that is plausible and
+    module-independent passes the first and fails the second, which is the whole reason
+    for adding it — the class the assessor is structurally unable to see.
+    """
+    from broker.curriculum_quality import assess
+    from tests.world import INSTRUCTION_CONTENT, instruction_hash
+
+    assert assess(INSTRUCTION_CONTENT)["state"] == "complete"
+    assert assess(INSTRUCTION_CONTENT)["teaches_nothing"] is False
+
+    shared = instruction_hash(INSTRUCTION_CONTENT)
+    with admin.cursor() as cur:
+        for module_id in ("property_lookup", "underwrite_deal"):
+            cur.execute(
+                """
+                INSERT INTO forge_operating_instruction
+                  (forge_id, module_id, instruction_version, forge_api_version,
+                   content, content_hash, authored_by)
+                VALUES ('cre-forge', %s, '1.0.0', '1.4.0', %s, %s, %s)
+                """,
+                (module_id, psycopg.types.json.Jsonb(INSTRUCTION_CONTENT), shared,
+                 str(uuid.uuid4())),
+            )
+    admin.commit()
+
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+
+    assert report.get("V33").verdict is Verdict.FAIL
+
+
+async def test_v33_ignores_a_superseded_instruction(
+    greenstone, bridged_world, admin
+):
+    """A superseded row keeps its hash so old certifications stay readable.
+
+    It is not a live instruction and must not collide with one. Deleting instead of
+    superseding is the exception, not the rule — see docs/instruction-deletions.md.
+    """
+    operated = tuple({m for p in greenstone.positions_required for m in p.forge_modules_operated})
+    author_instructions(admin, operated)
+
+    with admin.cursor() as cur:
+        cur.execute(
+            "SELECT content, content_hash FROM forge_operating_instruction "
+            "WHERE forge_id = 'cre-forge' AND module_id = 'property_lookup'"
+        )
+        content, content_hash = cur.fetchone()
+        cur.execute(
+            """
+            INSERT INTO forge_operating_instruction
+              (forge_id, module_id, instruction_version, forge_api_version,
+               content, content_hash, authored_by, superseded_at)
+            VALUES ('cre-forge', 'comp_analysis', '0.9.0', '1.4.0', %s, %s, %s, now())
+            """,
+            (psycopg.types.json.Jsonb(content), content_hash, str(uuid.uuid4())),
+        )
+    admin.commit()
+
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+
+    assert report.get("V33").verdict is Verdict.PASS, report.get("V33").message

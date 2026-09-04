@@ -9,7 +9,7 @@
       "required": true,
       "required_by": [
         "workflow step 11",
-        "workflow step 15"
+        "workflow step 14"
       ]
     },
     {
@@ -36,18 +36,6 @@
       "required_by": []
     },
     {
-      "criticality": "hard",
-      "declared": true,
-      "forge_id": "cre-forge",
-      "module_gap": false,
-      "module_id": "generate_loi",
-      "required": true,
-      "required_by": [
-        "workflow step 12",
-        "workflow step 16"
-      ]
-    },
-    {
       "criticality": "soft",
       "declared": true,
       "forge_id": "voiceforge",
@@ -55,8 +43,8 @@
       "module_id": "place_call",
       "required": true,
       "required_by": [
-        "workflow step 13",
-        "workflow step 17",
+        "workflow step 12",
+        "workflow step 15",
         "workflow step 2",
         "workflow step 5"
       ]
@@ -90,8 +78,8 @@
       "module_id": "transcribe_call",
       "required": true,
       "required_by": [
-        "workflow step 14",
-        "workflow step 18"
+        "workflow step 13",
+        "workflow step 16"
       ]
     },
     {
