@@ -97,9 +97,9 @@ The 422 is shared rule 1 in its sharpest form. It is deliberately **not a 404**,
 
 Until 2 September this assembled five empty arrays and returned them as a complete dossier. A dossier of empty sections reads as "this business has no records" when the fact is that no business was attached.
 
-**On a 500: an export may exist.** Look for an `exportId` before doing anything else.
+**On a 500: an export may exist.** Look for an `exportId` before doing anything else. That is the live rule and it stands on its own.
 
-Until `2b36895` the event was published first, so a failed write left `regulator.dossier.exported` in the ledger carrying an `exportId` that resolved to nothing. For any incident before that commit, the ledger event is not evidence the export exists. Check for the row.
+**Only when investigating an incident that predates `2b36895`:** the event was published before the write, so a failed write left `regulator.dossier.exported` in the ledger carrying an `exportId` that resolved to nothing. For those incidents only, the ledger event is not evidence the export exists — check for the row. An agent cannot tell whether an incident predates a commit, so this applies when a human hands it that context and never otherwise. See the appendix.
 
 ## 7. RETRY VS ESCALATE
 
@@ -173,3 +173,13 @@ first of them.
 
 Sections renumbered: the old §§3–8 are now §§4–9, and internal cross-references
 moved with them.
+
+**Added at 1.2 — the ordering history, scoped.** §6 carried the pre-`2b36895`
+publish-before-write ordering as an unqualified paragraph. It is a fact about
+history sitting in a document an agent reads for what to do now: an agent cannot
+tell whether an incident predates a commit hash, and once the last such incident
+closes the sentence reads as live guidance and is not.
+
+It is now scoped to the case it applies to and nothing else. The live rule — on a
+500 an export may exist, look for an `exportId` first — needs no qualifier and
+carries the whole weight for every incident after that commit.

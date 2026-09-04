@@ -394,16 +394,20 @@ copy for a production Forge, which should be onboarded through a Pack.
 ## The §2 audit, 3 September 2026
 
 After `submit-application.md` §2 was found asserting a middleware that does not
-exist, every manual's §2 was read for the same shape: a sentence naming a
-middleware, guard, permission or gate.
+exist, every manual was read for the same shape: a sentence naming a middleware,
+guard, permission or gate.
 
-**§2 is where this lives, because §2 is written by naming what stops you.** And the
-direction matters more than the count. An omission leaves an agent uncertain; **an
-assurance makes it confident and wrong**, and a curriculum built from an assurance
-certifies the confidence.
+**§2 is where most of this lives, because §2 is written by naming what stops you** —
+but the audit follows the claim, not the section number. It began as a §2 sweep and
+was corrected: the third confirmed claim was in a §4, and a protection claim is a
+protection claim wherever it sits.
 
-Three claims found in ten manuals. Two false, one true, and the true one is the one
-that carries. What this audit does **not** cover is recorded at the end of this
+The direction matters more than the count. An omission leaves an agent uncertain;
+**an assurance makes it confident and wrong**, and a curriculum built from an
+assurance certifies the confidence.
+
+Four claims found across ten manuals. Two false, two true, and the true ones are
+load-bearing. What this audit does **not** cover is recorded at the end of this
 section.
 
 ### Confirmed true — the mount guard, verified at line level
@@ -424,6 +428,16 @@ say `clientId` is guaranteed to exist and be the caller's. **Accurate as written
 and worth recording as confirmed rather than merely not-flagged: the audit that
 found two false claims also checked the one everything rests on.
 
+**Re-checked against the first known exception, and it holds.** The guard covers path
+segments named `:id` and `:clientId`; `/api/documents/export/:businessId` is outside
+it. The three manuals do not overreach, because each says the guard runs "before any
+handler **here**" — and every handler in `client-detail.routes.ts` inherits
+`:clientId` from the mount, with none declaring a parameter of its own. The claim is
+scoped to the module making it.
+
+No qualifier was added. The exception is recorded in the manual of the module it
+applies to, which is where an agent holding that grant will read it.
+
 ### False — `record_consent` §2 named six submission gates
 
 It listed credit-union membership disclosure among gates that run.
@@ -439,12 +453,32 @@ Five run: `no_phone`, `dnc`, `no_consent`, `unknown_timezone`, `quiet_hours`. Th
 four named were right and in the right order, with an unnamed fifth between consent
 and quiet hours. Wrong in the safe direction and wrong the same way.
 
+### Confirmed true — the ownership check on the manifest, and it was in §4
+
+`compliance_manifest_assemble` said, in its **§4** rather than its §2:
+
+> *"The ownership check runs before any record query, so nothing is read for a
+> business that is not the caller's."*
+
+**True, and the service's own comment records that it was made true.** The check once
+sat *after* an `await`, so five collections were fetched for another tenant's
+business and discarded by the throw. Nothing leaked — the throw preceded any return
+— but it was safe by ordering rather than by construction, and it is a gate now.
+
+This one matters twice over. `/api/documents/export/:businessId` is **outside the
+mount guard**: the guard in `api/routes/index.ts` covers path segments named `:id`
+and `:clientId`, and this segment is `:businessId` under `/documents`. The service's
+own check is the only one there is.
+
+**It is also why this section no longer says "the §2 audit".** Finding it required
+reading a §4.
+
 ### What the audit does not do
 
 It checks claims that are *made*. A manual that never mentions a protection is not
-audited by this, and three manuals had nothing to check —
-`compliance_manifest_assemble`, `regulator_dossier_export` and `scan_communication`
-describe absent capability rather than asserted protection.
+audited by this, and two manuals had nothing to check — `regulator_dossier_export`
+and `scan_communication` describe absent capability rather than asserted
+protection.
 
 **Run it again whenever a §2 is written.** The two false claims were both written by
 somebody who believed them, and neither was found by review.
