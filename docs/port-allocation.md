@@ -56,7 +56,8 @@ re-derive it.** And per trap #8, an override must not reach CI — the job passe
 | Port | Belongs to | Notes |
 |---|---|---|
 | **5432** | **native PostgreSQL — The Office's dev + test databases** | not a container; the port everything else must avoid |
-| 8002 | the Village (`VILLAGE_BASE_URL`, `app.py` default `VILLAGE_PORT`) | **squatted today** — see below |
+| **8120** | **the Village** | moved here 6 Sep; checked four ways before binding. Set `VILLAGE_BASE_URL=http://127.0.0.1:8120` explicitly — do not rely on the default |
+| ~~8002~~ | the Village's old default (`app.py` `VILLAGE_PORT`) | **still squatted** by `vaf-ws-j-pipeline-persistence-api-1`, verified 6 Sep. The default in `app.py` and `broker/village.py` still points here |
 
 ### Forges, as registered
 
@@ -78,7 +79,8 @@ Not allocations. Containers from other projects that hold ports something else e
 | 8000 | `visonaudioforge-api-1` | CRE Forge's committed compose (hence its override) |
 | 8100 | `voice-forge-asr` | **SimForge, until 4 Sep** — it never owned the port; see below |
 | 8001 | `vaf-ws-k-container-runtime-api-1` | AnimaForge `ai-api` |
-| **8002** | `vaf-ws-j-pipeline-persistence-api-1` | **the Village** — its 401 was read as the Village refusing a credential for a week |
+| **8002** | `vaf-ws-j-pipeline-persistence-api-1` | **the Village** — its 401 was read as the Village refusing a credential for a week. Still held on 6 Sep; the Village moved to 8120 rather than waiting for it |
+| 8130 | a native `python` process (PID 31380), **not a container** | nothing; found during the 6 Sep check. `docker ps` cannot see it — this is the case step 2 exists for |
 
 ### Other projects, for avoidance
 
@@ -139,6 +141,34 @@ The bridge was re-verified end to end afterwards: `run/start` 200, brokered call
 in SimForge's own log with `office_trace` matching the ledger's `trace_id`.
 
 **8100 is back to `voice-forge-asr` alone.**
+
+---
+
+## The Village's move to 8120 — 6 September 2026
+
+8002 was still held by `vaf-ws-j-pipeline-persistence-api-1`, so the Village was given a
+port of its own rather than waiting for one to be freed.
+
+All four checks were run **before** binding, per the procedure below:
+
+| check | result |
+|---|---|
+| `netstat -ano`, any state | nothing on 8120 |
+| `docker ps -a`, published or exposed | nothing on 8120 |
+| live probe `127.0.0.1:8120` | nothing listening |
+| live probe `localhost:8120` | nothing listening |
+
+The same sweep found **8130 occupied by a native `python` process** that `docker ps`
+cannot see. Had 8130 been the first candidate, checking containers alone would have
+picked it — which is why step 2 is not enough on its own.
+
+`VILLAGE_BASE_URL` is set explicitly rather than left to the default. The default in
+`broker/village.py` is still 8002, which is somebody else's container: relying on it
+would put the port back in the one place that has already cost a week.
+
+The Village binds `0.0.0.0:8120`, so both address spellings reach it — the property the
+8110 move was about. On an uncontested port a wrong address fails to connect instead of
+reaching a different service.
 
 ---
 

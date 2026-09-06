@@ -70,9 +70,11 @@ class VillageIdentityError(VillageUnreachableError):
     HOW THIS IS TOLD FROM A REAL REFUSAL
     ====================================
 
-        **The Village serves `/api/org/*` unauthenticated.** `app/blueprints/api/org.py`
-        carries no auth decorator and the blueprint has no `before_request`, and the
-        client below sends no credential — deliberately, because there is none to send.
+        **The Village serves every path this client uses unauthenticated.**
+        `app/blueprints/api/org.py` carries no auth decorator and the blueprint has no
+        `before_request`, and the client below sends no credential — deliberately,
+        because there is none to send. Verified against a running Village on 6 September:
+        all six surfaces answered 200 without a credential.
 
         So a `401` or `403` on these paths is not the Village being strict. It is
         positive evidence that whatever answered is not the Village, and it is derived
@@ -137,17 +139,64 @@ def base_url() -> str:
 
 
 #: Keys the Village's `/api/org/*` endpoints always carry. `success` alone is too common
-#: a word to identify anything; paired with a roster field it is specific to this surface.
-_VILLAGE_MARKERS = ("departments", "agents", "department_count", "agent_count")
+#: What each Village surface actually returns, by path prefix, longest match first.
+#:
+#: THE SECOND HALF OF THE SAME MISTAKE
+#: ===================================
+#:
+#:     The first version of this check held one tuple - `departments`, `agents`,
+#:     `department_count`, `agent_count` - and applied it to every path. Those are the
+#:     roster and department vocabulary. Two of the six surfaces The Office calls do not
+#:     use any of those words, because they are not about the roster:
+#:
+#:         /api/objectives/board          clock, objectives, available_targets, summary
+#:         /api/agents/{id}/overview      agent, overview
+#:
+#:     So the probe rejected a **real Village** on both, with the sentence "nothing at
+#:     this address identified itself as the Village". `village.quarter()` raised,
+#:     `shifts.current_quarter()` turned that into `QuarterUnknown`, and `assign_shift`
+#:     refused every assignment - for the whole time the Village was running correctly.
+#:
+#:     The original bug was the wrong system answering and being believed. This was the
+#:     right system answering and being disbelieved. Both end in a confident wrong
+#:     sentence, and this one could only appear once the Village was actually up, which
+#:     is why a week of it being down hid it.
+#:
+#: A path with no entry here is NOT shape-checked. That is deliberate: judging a surface
+#: whose shape nobody has recorded is exactly how the above happened. The 401/403 rule
+#: below still applies to every path, and it is the half that caught the real incident.
+#: `test_village_identity.py` fails if `_get` is called with a path that has no entry,
+#: so a new endpoint has to record its shape rather than inherit somebody else's.
+_SURFACE_MARKERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("/api/org/roster", ("agents", "agent_count")),
+    ("/api/org/departments", ("departments", "department_count")),
+    ("/api/objectives/shifts", ("shifts", "departments")),
+    ("/api/objectives/deputies", ("departments",)),
+    ("/api/objectives/board", ("clock", "objectives", "available_targets")),
+    ("/api/agents/", ("agent", "overview")),
+)
 
 
-def _not_the_village(response: httpx.Response) -> str | None:
+def markers_for(path: str) -> tuple[str, ...] | None:
+    """The shape expected at `path`, or None if this surface has never been recorded."""
+    best: tuple[str, ...] | None = None
+    best_len = -1
+    for prefix, markers in _SURFACE_MARKERS:
+        if path.startswith(prefix) and len(prefix) > best_len:
+            best, best_len = markers, len(prefix)
+    return best
+
+
+def _not_the_village(response: httpx.Response, path: str = "") -> str | None:
     """Why this responder is not the Village, or None if nothing says it isn't.
 
     Deliberately one-directional. It does not prove the Village answered — a
     sufficiently similar service would pass — it establishes that a *particular*
     responder did not. That is the check that was missing, and it is the one that is
     derivable rather than a guess.
+
+    `path` selects which vocabulary to expect. Judging every surface by one surface's
+    words is what made this reject a running Village on two of six paths.
     """
     # The Village serves these paths open. `app/blueprints/api/org.py` has no auth
     # decorator, the blueprint has no before_request, and this client sends no
@@ -177,13 +226,18 @@ def _not_the_village(response: httpx.Response) -> str | None:
             f"{response.headers.get('content-type', 'unknown')!r})."
         )
 
-    if not isinstance(body, dict) or not any(k in body for k in _VILLAGE_MARKERS):
+    markers = markers_for(path)
+    if markers is None:
+        # An unrecorded surface is not judged on shape. The alternative - reaching for
+        # some other surface's vocabulary - is the bug this replaced.
+        return None
+
+    if not isinstance(body, dict) or not any(k in body for k in markers):
         keys = sorted(body)[:6] if isinstance(body, dict) else type(body).__name__
         return (
             "nothing at this address identified itself as the Village - it answered "
-            f"{response.status_code} with {keys!r}, which carries none of "
-            f"{list(_VILLAGE_MARKERS)}. Something is listening and it is not the "
-            "Village."
+            f"{response.status_code} at {path} with {keys!r}, which carries none of "
+            f"{list(markers)}. Something is listening and it is not the Village."
         )
     return None
 
@@ -200,7 +254,7 @@ async def _get(path: str, *, degrade: bool = True) -> Answer:
     try:
         async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
             response = await client.get(url)
-            identity_failure = _not_the_village(response)
+            identity_failure = _not_the_village(response, path)
             if identity_failure is not None:
                 raise VillageIdentityError(f"{url}: {identity_failure}")
             response.raise_for_status()
