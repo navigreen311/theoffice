@@ -642,3 +642,71 @@ The instruction that follows, and it is a testing instruction rather than a Vill
 thing, and from every variant of it.** The parametrised replacement records six captured
 responses and names the surface in the failure, so the next failure says which one rather
 than saying "the Village".
+
+---
+
+## 9. A source file drifts ahead of what is in force, and "publish the file" ships the drift
+
+**6 September 2026.** Three department names were approved for the Greenstone Pack.
+`packs/greenstone.yaml` on disk carried those three edits **and** a second, unpublished
+change: `generate_loi` removed on 2 September, with an open `# DECISION NEEDED` in the
+comment directly above it saying whether that role still circulates an assignment package
+is Ivan's call.
+
+Publishing the file would have shipped that decision as a side effect of a rename.
+
+### What made it dangerous
+
+Not that the file had drifted — that is normal and often correct; the disk version was
+*ahead*, and its extra change was good work. The danger is the shape of the approval
+against the shape of the act:
+
+**The approval was for three lines. The act was "publish this file." Nothing in the
+publish path connected the two.** `store()` computed no diff, reported no count, and —
+until this entry — wrote **no audit entry at all**. A publish recorded a new
+`content_hash` and nothing whatever about what it had done. There was no point, before or
+after, at which anybody would have been shown that more than three lines changed.
+
+A publish is not a small act: it changes what the next provisioning run builds and voids
+every Gate 10 signature taken against the previous version's artifacts. It was the least
+observable write in the system.
+
+### What was done that day, and why that is not good enough
+
+The caller asserted the diff by hand — rewrote the three lines against the *published*
+source rather than the file, then checked that exactly three lines differed before
+publishing. That was the right instinct and it is worthless as a control, because it
+lived in a one-off script that somebody remembered to write. The next publish is a
+different script by a different author, and the property it protected is not a property
+of that author's care.
+
+### The ruling
+
+**Assert-the-diff belongs to the publish path, and the diff is recorded whether or not
+anybody asked for it.**
+
+`packs.store()` now:
+
+- computes the changed lines against whatever it is replacing, before writing;
+- accepts `expect_changed_lines`, and raises `PackDiffUnexpectedError` **before writing
+  anything** when the actual count differs — the message names the differences;
+- writes `pack_published` / `pack_drafted` naming the replaced version, the change count,
+  what the caller declared, and the changed lines themselves.
+
+Declaring the count is optional, because the console has a human editing a draft freehand
+and cannot know it in advance. **Recording what changed is not optional.**
+
+The comparison is positional, not a real diff, and that is deliberate: this control
+answers *"did exactly the edits I intended land"*, and for that an inserted line SHOULD
+read as a large change rather than as one. A caller declaring three changed lines is
+declaring that nothing moved.
+
+### The general form
+
+**Any path that promotes a file into force has this problem.** The file is edited
+continuously and promoted occasionally, so at any moment it may contain work that was
+never approved and was never meant to go out with the next thing that does. Where such a
+path exists, the promotion must state what it believes it is changing and refuse when it
+is wrong — and it must leave a record either way, because a promotion nobody can
+reconstruct is one nobody can review.
+

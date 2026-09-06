@@ -634,3 +634,133 @@ async def test_an_abandoned_draft_is_not_called_superseded(api, world):
     )
     assert rows["1.0.0"]["status"] == "live"
     assert rows["1.0.0"]["runs"] >= 0
+
+
+# ==================================== THE PUBLISH PATH SHOWS WHAT IT IS ABOUT TO CHANGE
+
+# On 6 September a rename of three department names was approved, and
+# `packs/greenstone.yaml` on disk carried a second unpublished change - `generate_loi`
+# removed, with an open `# DECISION NEEDED` in the comment above it. Publishing the file
+# would have shipped that decision as a side effect of the rename, and nothing in this
+# path would have shown that more than three lines changed: no diff, no count, and no
+# audit entry at all.
+#
+# The caller happened to assert the diff by hand that day. These make it a property of
+# the path instead.
+
+async def _publish(conn, source: str, version: str, actor, **kw):
+    return await packs.store(
+        conn, yaml_source=source, pack_version=version, authored_by=actor, **kw
+    )
+
+
+@pytest.fixture
+def base_yaml() -> str:
+    return PACK_PATH.read_text(encoding="utf-8")
+
+
+async def test_a_publish_reports_what_it_changed(world, base_yaml):
+    """The diff is computed whether or not the caller asked for it."""
+    actor = world.human_id
+    async with connection() as conn:
+        await _publish(conn, base_yaml, "9.0.0", actor)
+        edited = base_yaml.replace(
+            "source_department: research", "source_department: banking", 1
+        )
+        stored = await _publish(conn, edited, "9.0.1", actor)
+
+    assert stored.change_count == 1
+    assert stored.replaced_version == "9.0.0"
+    before, after = stored.changed_lines[0]
+    assert "research" in before and "banking" in after
+
+
+async def test_a_publish_that_does_not_match_its_description_is_refused(world, base_yaml):
+    """THE test. Three lines approved, a file carrying more, nothing written.
+
+    This is the morning of 6 September with the assertion moved into the path.
+    """
+    actor = world.human_id
+    async with connection() as conn:
+        await _publish(conn, base_yaml, "9.1.0", actor)
+
+        drifted = base_yaml.replace(
+            "source_department: research", "source_department: banking", 1
+        ).replace("headcount: 3", "headcount: 99", 1)
+
+        with pytest.raises(packs.PackDiffUnexpectedError) as exc:
+            await _publish(conn, drifted, "9.1.1", actor, expect_changed_lines=1)
+
+        # Nothing was written: what is in force is still the version before the attempt.
+        current = await packs.live(conn, "greenstone")
+
+    assert current.pack_version == "9.1.0"
+    assert "would change 2 line(s), not the 1 declared" in str(exc.value)
+    assert "headcount" in str(exc.value)
+
+
+async def test_a_publish_that_matches_its_description_goes_through(world, base_yaml):
+    """A guard that refuses everything is not a guard."""
+    actor = world.human_id
+    async with connection() as conn:
+        await _publish(conn, base_yaml, "9.2.0", actor)
+        edited = base_yaml.replace(
+            "source_department: research", "source_department: banking", 1
+        )
+        stored = await _publish(conn, edited, "9.2.1", actor, expect_changed_lines=1)
+
+    assert stored.pack_version == "9.2.1"
+
+
+async def test_an_insertion_is_not_one_changed_line(world, base_yaml):
+    """Positional, deliberately: a caller declaring 1 is declaring nothing moved.
+
+    A real diff would call an inserted line a single change. That is the wrong answer
+    for this control - inserting a line shifts everything after it, and a caller who
+    believed it was editing one value in place should be told otherwise.
+    """
+    actor = world.human_id
+    async with connection() as conn:
+        await _publish(conn, base_yaml, "9.3.0", actor)
+        inserted = base_yaml.replace(
+            "positions_required:", "positions_required:\n  # a new comment line", 1
+        )
+        with pytest.raises(packs.PackDiffUnexpectedError):
+            await _publish(conn, inserted, "9.3.1", actor, expect_changed_lines=1)
+
+
+async def test_a_first_publish_has_nothing_to_compare_against(world, base_yaml, admin):
+    """No previous version means no diff, not a diff of zero."""
+    with admin.cursor() as cur:
+        cur.execute("DELETE FROM business_pack WHERE venture_id = 'greenstone'")
+    admin.commit()
+
+    async with connection() as conn:
+        stored = await _publish(conn, base_yaml, "9.4.0", world.human_id)
+
+    assert stored.change_count == 0
+    assert stored.replaced_version is None
+
+
+async def test_the_publish_is_audited_with_what_it_changed(world, base_yaml, admin):
+    """A publish left no record at all before this - only a new content_hash."""
+    actor = world.human_id
+    async with connection() as conn:
+        await _publish(conn, base_yaml, "9.5.0", actor)
+        edited = base_yaml.replace(
+            "source_department: research", "source_department: banking", 1
+        )
+        await _publish(conn, edited, "9.5.1", actor, expect_changed_lines=1)
+
+    with admin.cursor(row_factory=psycopg.rows.dict_row) as cur:
+        cur.execute(
+            "SELECT subject FROM audit_log WHERE event_type = 'pack_published' "
+            "ORDER BY audit_id DESC LIMIT 1"
+        )
+        subject = cur.fetchone()["subject"]
+
+    assert subject["pack_version"] == "9.5.1"
+    assert subject["replaced_version"] == "9.5.0"
+    assert subject["changed_line_count"] == 1
+    assert subject["declared_change_count"] == 1
+    assert "banking" in subject["changed_lines"][0]["after"]
