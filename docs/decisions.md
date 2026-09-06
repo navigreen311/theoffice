@@ -710,3 +710,83 @@ path exists, the promotion must state what it believes it is changing and refuse
 is wrong — and it must leave a record either way, because a promotion nobody can
 reconstruct is one nobody can review.
 
+
+---
+
+## 10. `generate_loi` named the wrong module for work CRE Forge already does — a fourth class, and the question that finds it is different
+
+**Ruled 2026-09-06.** The duty stands. `generate_loi` comes off the Pack. Something binds
+to the assignment capability.
+
+### The finding
+
+`generate_loi` does not exist: CRE Forge has no letter-of-intent service, route or
+template. That much matches entries 4, 5 and 6, and on 2 September it was removed on that
+basis with the duties left unnarrowed and an open `# DECISION NEEDED` above them.
+
+**But CRE Forge can already do the work the duty describes.** Asked directly rather than
+read — `GET /api/v1/contracts/templates` on the running instance:
+
+```json
+"assignment": {
+  "name": "Assignment of Contract",
+  "description": "Assignment of purchase contract to end buyer",
+  "required_fields": ["contract_price", "assignment_fee", "buyer_contract_price"],
+  "signers": [{"role": "assignor", "description": "Assignor (Company)"},
+              {"role": "assignee", "description": "Assignee (End Buyer)"}]
+}
+```
+
+The template's own fields settle it. **Assignor is the company, assignee is the end buyer,
+and `assignment_fee` is the wholesaler's spread.** That is Buyer Network Manager's
+"circulate the assignment package", exactly. Behind it: contract creation from template
+with required-field validation, PDF generation, send-for-signature, signing URL, status
+sync, void, and a deal-package PDF.
+
+**The Pack asked for a letter of intent to describe an assignment contract.** Not a
+missing capability — a misnamed one.
+
+### Why this is its own class
+
+Entries 4, 5 and 6 are names with nothing behind them. The question that finds those is
+**"does this module exist?"** — asked of the Forge, answered no, and the fix is to remove
+the name or build the thing.
+
+**This one survives that question.** `generate_loi` genuinely does not exist. Removing it
+looks correct and is correct. And at that point the position keeps a duty —
+*"Circulate the assignment package"* — with no module behind it, and **no rule notices,
+because duties are prose.** V6, V11, V29, V31 and V32 all reason about modules. Nothing
+reads a duty and asks what it would take to do it.
+
+So the failure mode is not a Pack that claims a capability the estate lacks. It is a Pack
+that **quietly stops claiming a capability the estate has**, and reads correctly
+afterwards. The removal is locally right and globally wrong, and every automated check
+agrees with it.
+
+**The question that finds this is "what does this duty need?", not "does this module
+resolve?"** The first is asked of the Pack's prose and answered against the Forge's
+catalogue. Nothing asks it today; the `# DECISION NEEDED` comment left in the Pack on
+2 September is what carried the question forward, and it worked because a person read it.
+
+### The detection asymmetry, stated plainly
+
+| | entries 4, 5, 6 | this one |
+|---|---|---|
+| the module | does not exist | does not exist |
+| removing it | correct | correct |
+| after removal, the Pack | claims less, truthfully | claims less, **untruthfully** |
+| what a rule sees | a failure, then a clean Pack | a clean Pack, both times |
+| what finds it | "does this module exist?" | "what does this duty need?" |
+| who can ask it | a check | a person reading the duty against the catalogue |
+
+### What follows
+
+- The duty is unchanged. Buyer Network Manager still circulates the assignment package.
+- `generate_loi` comes off `forge_modules_operated` and off the cre-forge binding's
+  `modules_expected`, where it sat at `criticality: hard` — so the Pack had asserted the
+  workflow could not run without a module that will never exist.
+- A module binds to the assignment capability in CRE Forge's adapter, declared honestly
+  at the binding site: **contract creation writes and sends for signature, so it is not a
+  read.**
+- Published through the diff control of entry 9, with the change count declared.
+
