@@ -59,6 +59,92 @@ must never be reported as a failure; the converse matters just as much here.
 V24 is deferred to Gate 4.5 — appointment output does not exist at Gate 2 — and is
 reported as NOT_RUN rather than silently passed.
 
+## A rule that compared nothing must not pass — count what you checked
+
+**This has now happened twice, in two codebases, from the same two lines of code.** It is
+the most likely way a new rule is wrong, so it is written here rather than only in the fix.
+
+### The shape
+
+```python
+    over = [
+        f"{name} wants {count} of {seats[name]}"
+        for name, count in wanted.items()
+        if name in seats and count > seats[name]     # <- filter
+    ]
+    if over:
+        return (False, ...)
+    return (True, f"{len(wanted)} department(s) have seats")   # <- count
+```
+
+Two independent defects, and either alone is enough:
+
+1. **The filter can empty the comparison set.** `if name in seats` silently drops every
+   subject that could not be looked up. A rule whose subjects all fail the filter compares
+   nothing, reaches the bottom, and returns `True`.
+
+2. **The count comes from the wrong list.** `len(wanted)` is what was *asked about*, not
+   what was *compared*. So the message does not merely overstate — it reports the number
+   of things the rule skipped as the number it verified.
+
+Together they produce a confident sentence that is the exact inverse of the truth. V30
+answered **"3 department(s) have seats for what the Pack asks"** about three departments
+the Village does not have. Not one of the three was compared to anything.
+
+### Why the filter looks correct when you write it
+
+`if name in seats` reads as defensive: it avoids a `KeyError`. And it does. What it also
+does is convert *"I could not check this"* into *"this had nothing wrong with it"*, and
+those two are not the same claim. The `KeyError` you avoided was the rule telling you it
+had a subject it could not evaluate.
+
+### The rule
+
+**Split the subjects into checked and unchecked, and let each decide something
+different.**
+
+```python
+    checked   = {k: v for k, v in wanted.items() if k in seats}
+    unknown   = sorted(set(wanted) - set(checked))
+
+    if over_capacity(checked):    return (False, ...)      # the rule's actual finding
+    if not checked:               return (None,  ...)      # NOT_RUN, never PASS
+    message = f"{len(checked)} checked"                    # count the compared list
+    if unknown:  message += f"; {len(unknown)} not checked ({...})"
+    return (True, message)
+```
+
+Three obligations, in order of how often they are missed:
+
+- **Count the compared list, never the wanted list.** If those two numbers can differ,
+  reporting the wrong one is reporting the opposite of what happened.
+- **Zero comparisons is `None` — NOT_RUN — not `True`.** A rule that examined no subject
+  has not passed; it has not run. `ValidationReport.passed` already treats NOT_RUN as not
+  passing, so this costs nothing and is the honest verdict.
+- **A partial check names the half it skipped**, and points at the rule that owns it.
+  V30 defers to V29, which is the FAIL that says those departments do not exist.
+
+### Where else this has happened
+
+**The Village, `1c43c529`** — *"a validator that examines zero subjects must fail, not
+pass"*, the same defect in a different validator, found first and fixed there.
+
+**V30 here**, found on 6 September the first time the Village was running and the rule
+could actually reach a department list. It had been NOT_RUN for its whole life, so its
+pass path had never executed against real data.
+
+That second point is the part worth carrying: **a rule that has only ever been NOT_RUN has
+never had its pass path run.** Reading it proves nothing about it. When a world rule
+becomes reachable for the first time, treat its first PASS as unverified until you have
+seen it compare something.
+
+### Testing it
+
+The must-fail fixture in the next section proves the FAIL path. It does not touch this.
+A world rule needs a third case: **a subject the world does not contain**, asserting
+NOT_RUN. `test_v30_does_not_pass_when_no_department_could_be_checked` is that test, and
+it fails against the version this section describes.
+
 ## Every FAIL rule has a must-fail fixture
 
 Blueprint §5 test strategy. The must-fail half is the half that matters: a rule with
