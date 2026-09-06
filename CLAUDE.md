@@ -73,6 +73,62 @@ Blocking is the last resort. Default to forward motion with a labelled, reversib
 
 ---
 
+## 5a. NEVER RUN A SCRIPT FROM THE SCRATCHPAD
+
+**Write the script into the repository and run it there. Delete it afterwards.**
+
+Python puts the *script's own directory* first on `sys.path`. The scratchpad is a
+long-lived shared directory holding **156 patch scripts** written over weeks, almost all
+of which open a repository file by absolute path and rewrite it at import time. Running
+anything from that directory makes every one of them importable, and **which one fires
+depends on what your script happens to import** — not on anything you wrote.
+
+### The worked example, 6 September 2026
+
+A script was run from the scratchpad to publish a Business Pack. It imported
+`broker.humans`, which imports `psycopg`, whose `_acompat.py` does `import queue`.
+
+There was a `queue.py` in the scratchpad — a patch script from 25 August, named after
+the proposal queue it had once edited. Importing it executed it. It appended 261 lines to
+`broker/proposals.py`, duplicating the expiry block with an older variant that recorded
+`actor_id=None` where the committed one records the agent. Being last, the duplicate
+shadowed the good definition, and `test_expiry_never_approves` began failing.
+
+**The evidence was already on screen and was misread.** The run printed:
+
+```
+ok
+Traceback (most recent call last):
+  ...
+AttributeError: module 'queue' has no attribute 'Queue'
+```
+
+`ok` is the last line of that patch script. **It had already run and already written the
+file.** The traceback was read as a shadowing nuisance to route around — the script was
+moved into the repository and re-run, which worked — and the corruption was not noticed
+until a full test run hours later, then briefly blamed on a git worktree that had nothing
+to do with it.
+
+**A stale module on the import path is not an inconvenience. It is code that has already
+executed by the time you see the error.**
+
+### The rule
+
+- **Never** run a script whose directory is the scratchpad. Write it into the repo, run
+  it, delete it.
+- Prefer no script at all: `Edit` on the file, or a heredoc piped to `python -` from the
+  repository root, both avoid putting any directory of stale code on the path.
+- If you see an import error naming a module you did not write, **assume it ran** and
+  check `git status` before doing anything else.
+
+Two shadowing names — `queue.py` and `tests.py`, the second aimed at
+`tests/contract/test_knowledge_api.py` and never fired — were removed on 6 September.
+**That is not the fix.** The remaining 156 files can each write to this repository by
+absolute path; only their names happen not to collide today, and the next script saved
+under an importable name recreates the trap.
+
+---
+
 ## 6. QUALITY GATES — close your own feedback loop
 
 **Never hand work back to the human that you could have verified yourself.**
