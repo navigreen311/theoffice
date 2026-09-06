@@ -145,6 +145,15 @@ EVENTS: tuple[Event, ...] = (
     Event("bootstrap_human_created", "First operator created",
           "The account that removed the need for a shell to create the second one.",
           "broker.humans", SYSTEM),
+    Event("pack_published", "Business Pack published",
+          "A new Pack version took force. It changes what the next provisioning run "
+          "builds and voids every Gate 10 signature taken against the previous "
+          "version's artifacts. The entry records how many lines changed against the "
+          "version it replaced, and what the publisher said it was changing.",
+          "broker.packs", SYSTEM),
+    Event("pack_drafted", "Business Pack drafted",
+          "A Pack version was stored as a draft. It supersedes nothing and cannot "
+          "provision - Gate 1 will not find it.", "broker.packs", SYSTEM),
     Event("grant_issued", "Grant issued",
           "An agent was given authority to call one Forge module for one venture. "
           "Normally written at the end of the provisioning ladder; a Phase 0 bootstrap "

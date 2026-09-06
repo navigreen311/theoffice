@@ -642,3 +642,151 @@ The instruction that follows, and it is a testing instruction rather than a Vill
 thing, and from every variant of it.** The parametrised replacement records six captured
 responses and names the surface in the failure, so the next failure says which one rather
 than saying "the Village".
+
+---
+
+## 9. A source file drifts ahead of what is in force, and "publish the file" ships the drift
+
+**6 September 2026.** Three department names were approved for the Greenstone Pack.
+`packs/greenstone.yaml` on disk carried those three edits **and** a second, unpublished
+change: `generate_loi` removed on 2 September, with an open `# DECISION NEEDED` in the
+comment directly above it saying whether that role still circulates an assignment package
+is Ivan's call.
+
+Publishing the file would have shipped that decision as a side effect of a rename.
+
+### What made it dangerous
+
+Not that the file had drifted — that is normal and often correct; the disk version was
+*ahead*, and its extra change was good work. The danger is the shape of the approval
+against the shape of the act:
+
+**The approval was for three lines. The act was "publish this file." Nothing in the
+publish path connected the two.** `store()` computed no diff, reported no count, and —
+until this entry — wrote **no audit entry at all**. A publish recorded a new
+`content_hash` and nothing whatever about what it had done. There was no point, before or
+after, at which anybody would have been shown that more than three lines changed.
+
+A publish is not a small act: it changes what the next provisioning run builds and voids
+every Gate 10 signature taken against the previous version's artifacts. It was the least
+observable write in the system.
+
+### What was done that day, and why that is not good enough
+
+The caller asserted the diff by hand — rewrote the three lines against the *published*
+source rather than the file, then checked that exactly three lines differed before
+publishing. That was the right instinct and it is worthless as a control, because it
+lived in a one-off script that somebody remembered to write. The next publish is a
+different script by a different author, and the property it protected is not a property
+of that author's care.
+
+### The ruling
+
+**Assert-the-diff belongs to the publish path, and the diff is recorded whether or not
+anybody asked for it.**
+
+`packs.store()` now:
+
+- computes the changed lines against whatever it is replacing, before writing;
+- accepts `expect_changed_lines`, and raises `PackDiffUnexpectedError` **before writing
+  anything** when the actual count differs — the message names the differences;
+- writes `pack_published` / `pack_drafted` naming the replaced version, the change count,
+  what the caller declared, and the changed lines themselves.
+
+Declaring the count is optional, because the console has a human editing a draft freehand
+and cannot know it in advance. **Recording what changed is not optional.**
+
+The comparison is positional, not a real diff, and that is deliberate: this control
+answers *"did exactly the edits I intended land"*, and for that an inserted line SHOULD
+read as a large change rather than as one. A caller declaring three changed lines is
+declaring that nothing moved.
+
+### The general form
+
+**Any path that promotes a file into force has this problem.** The file is edited
+continuously and promoted occasionally, so at any moment it may contain work that was
+never approved and was never meant to go out with the next thing that does. Where such a
+path exists, the promotion must state what it believes it is changing and refuse when it
+is wrong — and it must leave a record either way, because a promotion nobody can
+reconstruct is one nobody can review.
+
+
+---
+
+## 10. `generate_loi` named the wrong module for work CRE Forge already does — a fourth class, and the question that finds it is different
+
+**Ruled 2026-09-06.** The duty stands. `generate_loi` comes off the Pack. Something binds
+to the assignment capability.
+
+### The finding
+
+`generate_loi` does not exist: CRE Forge has no letter-of-intent service, route or
+template. That much matches entries 4, 5 and 6, and on 2 September it was removed on that
+basis with the duties left unnarrowed and an open `# DECISION NEEDED` above them.
+
+**But CRE Forge can already do the work the duty describes.** Asked directly rather than
+read — `GET /api/v1/contracts/templates` on the running instance:
+
+```json
+"assignment": {
+  "name": "Assignment of Contract",
+  "description": "Assignment of purchase contract to end buyer",
+  "required_fields": ["contract_price", "assignment_fee", "buyer_contract_price"],
+  "signers": [{"role": "assignor", "description": "Assignor (Company)"},
+              {"role": "assignee", "description": "Assignee (End Buyer)"}]
+}
+```
+
+The template's own fields settle it. **Assignor is the company, assignee is the end buyer,
+and `assignment_fee` is the wholesaler's spread.** That is Buyer Network Manager's
+"circulate the assignment package", exactly. Behind it: contract creation from template
+with required-field validation, PDF generation, send-for-signature, signing URL, status
+sync, void, and a deal-package PDF.
+
+**The Pack asked for a letter of intent to describe an assignment contract.** Not a
+missing capability — a misnamed one.
+
+### Why this is its own class
+
+Entries 4, 5 and 6 are names with nothing behind them. The question that finds those is
+**"does this module exist?"** — asked of the Forge, answered no, and the fix is to remove
+the name or build the thing.
+
+**This one survives that question.** `generate_loi` genuinely does not exist. Removing it
+looks correct and is correct. And at that point the position keeps a duty —
+*"Circulate the assignment package"* — with no module behind it, and **no rule notices,
+because duties are prose.** V6, V11, V29, V31 and V32 all reason about modules. Nothing
+reads a duty and asks what it would take to do it.
+
+So the failure mode is not a Pack that claims a capability the estate lacks. It is a Pack
+that **quietly stops claiming a capability the estate has**, and reads correctly
+afterwards. The removal is locally right and globally wrong, and every automated check
+agrees with it.
+
+**The question that finds this is "what does this duty need?", not "does this module
+resolve?"** The first is asked of the Pack's prose and answered against the Forge's
+catalogue. Nothing asks it today; the `# DECISION NEEDED` comment left in the Pack on
+2 September is what carried the question forward, and it worked because a person read it.
+
+### The detection asymmetry, stated plainly
+
+| | entries 4, 5, 6 | this one |
+|---|---|---|
+| the module | does not exist | does not exist |
+| removing it | correct | correct |
+| after removal, the Pack | claims less, truthfully | claims less, **untruthfully** |
+| what a rule sees | a failure, then a clean Pack | a clean Pack, both times |
+| what finds it | "does this module exist?" | "what does this duty need?" |
+| who can ask it | a check | a person reading the duty against the catalogue |
+
+### What follows
+
+- The duty is unchanged. Buyer Network Manager still circulates the assignment package.
+- `generate_loi` comes off `forge_modules_operated` and off the cre-forge binding's
+  `modules_expected`, where it sat at `criticality: hard` — so the Pack had asserted the
+  workflow could not run without a module that will never exist.
+- A module binds to the assignment capability in CRE Forge's adapter, declared honestly
+  at the binding site: **contract creation writes and sends for signature, so it is not a
+  read.**
+- Published through the diff control of entry 9, with the change count declared.
+

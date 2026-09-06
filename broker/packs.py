@@ -30,6 +30,7 @@ from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from broker import audit
 from generators.pack import BusinessPack, PackLoadError
 from generators.validator import GATE_45_RULES, all_rule_ids, validate
 
@@ -46,9 +47,19 @@ class StoredPack:
     yaml_source: str
     pack: BusinessPack
 
+    #: Lines that differ from whatever this version replaced, as (before, after).
+    #: Empty when nothing was in force to compare against - a first publish changes
+    #: everything and comparing it to nothing would report a number nobody can use.
+    changed_lines: tuple[tuple[str, str], ...] = ()
+    replaced_version: str | None = None
+
     @property
     def identity(self) -> str:
         return f"{self.venture_id}@{self.pack_version}"
+
+    @property
+    def change_count(self) -> int:
+        return len(self.changed_lines)
 
 
 def parse_only(yaml_source: str) -> BusinessPack:
@@ -70,6 +81,35 @@ def parse_only(yaml_source: str) -> BusinessPack:
         raise PackStoreError(f"not a schema-v3 Business Pack: {exc}") from exc
 
 
+class PackDiffUnexpectedError(PackStoreError):
+    """The publish changed a different number of lines than the caller declared.
+
+    Raised **before** anything is written, so a publish that does not match its own
+    description does not happen at all.
+    """
+
+
+def _changed_lines(before: str, after: str) -> tuple[tuple[str, str], ...]:
+    """Line-for-line differences, positionally.
+
+    Positional rather than a real diff: this exists to answer "did exactly the edits I
+    intended land", and for that an insertion that shifts every following line SHOULD
+    read as a large change rather than as one. A caller declaring three changed lines is
+    declaring that nothing moved.
+    """
+    b, a = before.splitlines(), after.splitlines()
+    if len(b) != len(a):
+        # Different lengths cannot be compared positionally. Report every line as
+        # changed rather than guessing an alignment - the caller asked whether its
+        # small edit landed, and the answer here is "this was not a small edit".
+        return tuple(
+            (x, y) for x, y in zip(b + [""] * (len(a) - len(b)),
+                                   a + [""] * (len(b) - len(a)), strict=False)
+            if x != y
+        )
+    return tuple((x, y) for x, y in zip(b, a, strict=True) if x != y)
+
+
 async def store(
     conn: AsyncConnection,
     *,
@@ -77,8 +117,26 @@ async def store(
     pack_version: str,
     authored_by: uuid.UUID,
     publish: bool = True,
+    expect_changed_lines: int | None = None,
 ) -> StoredPack:
     """Store a Pack version, as the live one or as a draft.
+
+    `expect_changed_lines` is the control, and the reason it exists is worth the space.
+
+    **A source file drifts ahead of what is in force.** On 6 September a rename of three
+    department names was approved and `packs/greenstone.yaml` on disk carried a second,
+    unpublished change - `generate_loi` removed, with an open `# DECISION NEEDED` in the
+    comment above it. "Publish the file" would have shipped that decision as a side
+    effect of the rename, and **nothing in this path would have shown that more than
+    three lines changed.** There was no diff, no count, and until now no audit entry: a
+    publish recorded a new `content_hash` and nothing about what it did.
+
+    So a caller that knows what it is changing says so, and a publish that does not match
+    its own description raises before writing anything. Callers that cannot know - the
+    console, where a human is editing a draft freehand - pass nothing and are unaffected.
+
+    The diff is computed and audited either way. Declaring the count is optional;
+    recording what changed is not.
 
     `venture_id` is derived from the Pack rather than passed in, so a caller cannot
     store one venture's Pack under another venture's name.
@@ -92,6 +150,22 @@ async def store(
     pack = parse_only(yaml_source)
     venture_id = pack.venture_id
     status = "live" if publish else "draft"
+
+    # What this replaces, read before anything is written so the comparison is against
+    # the version actually in force at this moment.
+    previous = await live(conn, venture_id) if publish else await draft(conn, venture_id)
+    changed = (
+        _changed_lines(previous.yaml_source, yaml_source) if previous is not None else ()
+    )
+
+    if expect_changed_lines is not None and len(changed) != expect_changed_lines:
+        raise PackDiffUnexpectedError(
+            f"publishing {venture_id}@{pack_version} would change {len(changed)} "
+            f"line(s), not the {expect_changed_lines} declared. Nothing was written. "
+            "A source file can drift ahead of what is in force, so publishing it ships "
+            "everything that drifted rather than what was approved. The differences:\n"
+            + "\n".join(f"    - {b.strip()}\n    + {a.strip()}" for b, a in changed[:10])
+        )
 
     async with conn.cursor(row_factory=dict_row) as cur:
         if publish:
@@ -137,12 +211,34 @@ async def store(
     await conn.commit()
     assert row is not None
 
+    # Recorded whatever the caller declared. A publish changes what the next run
+    # provisions and voids every Gate 10 signature taken against the previous version's
+    # artifacts; that it happened, and what it altered, is not optional to write down.
+    await audit.write_event(
+        event_type="pack_published" if publish else "pack_drafted",
+        actor_type="human",
+        actor_id=authored_by,
+        venture_id=venture_id,
+        subject={
+            "pack_version": pack_version,
+            "content_hash": row["content_hash"],
+            "replaced_version": previous.pack_version if previous else None,
+            "changed_line_count": len(changed),
+            "declared_change_count": expect_changed_lines,
+            "changed_lines": [
+                {"before": b.strip(), "after": a.strip()} for b, a in changed[:40]
+            ],
+        },
+    )
+
     return StoredPack(
         venture_id=venture_id,
         pack_version=pack_version,
         content_hash=row["content_hash"],
         yaml_source=yaml_source,
         pack=pack,
+        changed_lines=changed,
+        replaced_version=previous.pack_version if previous else None,
     )
 
 
