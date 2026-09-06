@@ -147,6 +147,114 @@ it will block a real client for the same reason B3 does.
 
 ---
 
+## B5. The Village quarter is a counter that drifted from its clock, and The Office stamps it
+
+**Found 6 September 2026, the first time the Village was running and The Office could
+read it.**
+
+`shift_assignment.quarter` is the agent-quarter an assignment belongs to, and
+`one_venture_per_agent_quarter` is enforced against it. The value comes from
+`village.quarter()` — the Village's own `QuarterBoundary`, read over HTTP. **The Office
+has no other source for it and no way to sanity-check it.**
+
+### What the Village currently reports
+
+```
+quarter_state.json    current_quarter: 2027Q4   transitions: 7
+board clock           tick: 0   day_number: 0   village_date: "Day 1 of Month 1, Year 1"
+```
+
+`QuarterBoundary` advances one quarter per 90 elapsed Village days, where
+`elapsed_days = current_tick // day_length`. **At tick 0 it can never advance.** Seven
+transitions are recorded against a clock that has not moved.
+
+Corroborating, and independent of the arithmetic:
+
+- `config/objectives/` contains **only `2026Q1.yaml`**. Each of the seven transitions
+  called `_load_quarter_objectives` for a quarter with no file and loaded zero targets.
+- All 27 objectives on the board are `2026Q1`. **The Village's current quarter contains
+  no objectives at all.**
+
+`run_harness --fresh` deletes `positions.json`, `school_state.json`, `lodge_state.json`
+and `homes_state.json`. It does not delete `quarter_state.json`, so the counter is
+monotonic across every reset of the world it is supposed to be measuring. (Not the test
+suite: `tests/test_quarter_plan.py` passes `tmp_path` throughout.)
+
+### Why this blocks
+
+**Issuing a shift now binds it to `2027Q4`** — a label produced by a counter that drifted
+from its tick, naming a quarter with no objectives, while every real thing in the Village
+sits in `2026Q1`. The agent-quarter is not a display value: it is the unit
+`one_venture_per_agent_quarter` enforces on, so a wrong one silently partitions
+assignments against a boundary that corresponds to nothing.
+
+Nothing has been stamped from it. The Phase 0 shift is in `2026Q1` and stays there.
+
+### The two fixes, and the one that is not available
+
+Both real options are Village-side:
+
+1. **Reset the counter to agree with the tick**, and make `--fresh` clear
+   `quarter_state.json` with the rest of the world state.
+2. **Drive the quarter from the tick on read** rather than persisting a transition count
+   that can outlive its clock.
+
+**Not available: keeping it as a monotonic sequence number.** A sequence number spelled
+`2027Q4` is read as a date by everyone who sees it — and already was, by Ivan, on the
+morning of 6 September, from The Office's own output. A value whose format asserts
+"fourth quarter of 2027" cannot also mean "the seventh time a counter incremented"; the
+format is the claim. If it is a sequence number it has to be spelled like one, and then
+The Office's `quarter_is_a_village_quarter` CHECK (`^[0-9]{4}Q[1-4]$`) rejects it, which
+is the schema correctly refusing to store a sequence number in a date-shaped column.
+
+---
+
+## B6. Every rule that has only ever been NOT_RUN is untested where it matters
+
+**V30 is the evidence, and the generalisation is the point.**
+
+V30 had been NOT_RUN for its entire life — the Village was never reachable, so
+`depts.seats()` always returned `None` and the rule returned early every time. On
+6 September the Village came up, the rule reached its comparison for the first time, and
+**its pass path was wrong**: it filtered its subjects with `if name in seats`, compared
+none of them, and reported `len(wanted)` as the number verified. It answered *"3
+department(s) have seats for what the Pack asks"* about three departments the Village
+does not have.
+
+Reading it had not found that. Nothing had, because the code had never executed.
+
+### The general statement
+
+**A rule that has only ever reported NOT_RUN has never had its pass path run.** NOT_RUN
+exits early by construction; everything after that exit is unexecuted. So the rule is not
+"passing once unblocked" and it is not "known good pending a connection" — **it is
+untested in the only direction that decides anything.**
+
+Treat the first PASS of a newly reachable rule as unverified until you have watched it
+compare something, and check what it counted.
+
+### Which rules this currently applies to
+
+Verdicts below are against `greenstone` 1.1.0 on 6 September, Village up:
+
+| Rule | State | What has never executed |
+|---|---|---|
+| **V24** | NOT_RUN by construction at Gate 2 | Its whole body. It is evaluated at Gate 4.5 against appointment output — and **no provisioning run has ever reached Gate 4.5**, so neither path has run anywhere. |
+| **V31** | NOT_RUN | Its comparison. `voiceforge/place_call` is a hand-written registry row never verified against the Forge, so the rule has no shape to check a tier against. |
+| **V32** | FAIL here, **NOT_RUN in CI** | In CI the world is database-only and no adapter is running, so V32 cannot ask and reports NOT_RUN — documented in `tests/world.py::dispatch_from_registry`. Its pass path has only ever run locally. |
+| **V11** | FAIL here | Not NOT_RUN today — it fails on `generate_loi` having no instruction. Listed because its voiceforge subjects have never been reached in a passing state. |
+
+**NOT_RUN is not always whole-rule, and that matters for reading this list.** V32 today
+reports FAIL on the two modules it could ask about *and separately* states it could not
+ask voiceforge at all — one rule, a verdict for part of its subject and NOT_RUN for the
+rest. A rule can be green on what it reached and silent on what it did not, so "which
+rules are NOT_RUN" is not the whole question; "which subjects were compared" is.
+
+That is the same question B5's counter fails and the same question V30 failed. The
+general rule for writing these is in `docs/pack-validator.md`.
+
+---
+
 ## What is NOT on this page
 
 **`lender_match` and `build_packet`.** They have no implementation under any

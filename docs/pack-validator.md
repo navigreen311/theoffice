@@ -59,6 +59,24 @@ must never be reported as a failure; the converse matters just as much here.
 V24 is deferred to Gate 4.5 — appointment output does not exist at Gate 2 — and is
 reported as NOT_RUN rather than silently passed.
 
+## V30 is not a capacity check — Gate 4.5 is
+
+Two questions that sound like one:
+
+| | asks | needs | when |
+|---|---|---|---|
+| **V30** (WARN) | is the department **large enough at all** for the headcount requested? | the department's total size | Gate 2 |
+| **Gate 4.5** (V24) | are those seats **uncommitted** — is anybody actually free? | appointment output | after appointment |
+
+A Pack wanting 20 researchers from a department of 14 is wrong on its face and should be
+caught while somebody is still editing it. That is all V30 does.
+
+**Nobody should read a V30 pass as "there are people free."** It compares against total
+headcount and knows nothing about who is already allocated; a department of 14 with all
+14 committed elsewhere passes V30 and fails Gate 4.5. Greenstone is the standing example
+of the pair disagreeing — it passed the Gate 2 estimate and failed Gate 4.5 on real
+reviewer-minutes.
+
 ## A rule that compared nothing must not pass — count what you checked
 
 **This has now happened twice, in two codebases, from the same two lines of code.** It is

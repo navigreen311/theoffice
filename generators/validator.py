@@ -858,6 +858,11 @@ async def _v30_department_has_seats(
             "measured nothing and says so rather than passing.",
         )
 
+    # "Has seats" is not "has people free". This rule compares headcount requested
+    # against the department's total size; Gate 4.5 asks whether those seats are
+    # uncommitted, which needs appointment output that does not exist here. A V30 pass
+    # means the department is large enough in principle, and says nothing about whether
+    # anybody in it is available.
     message = f"{len(checked)} department(s) have seats for what the Pack asks"
     if unknown:
         message += (
