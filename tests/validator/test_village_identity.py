@@ -22,6 +22,8 @@ positive evidence that whatever answered is not the Village.
 
 from __future__ import annotations
 
+import pathlib
+
 import httpx
 import pytest
 
@@ -72,7 +74,9 @@ def test_a_200_that_is_not_village_shaped_is_refused() -> None:
     A responder that answers 200 with JSON of its own would have sailed past a check that
     only looked at the status, and its payload would have been parsed as a roster.
     """
-    why = village._not_the_village(_response(200, {"items": [], "page": 1}))
+    why = village._not_the_village(
+        _response(200, {"items": [], "page": 1}), "/api/org/departments"
+    )
 
     assert why is not None
     assert "identified itself as the Village" in why
@@ -87,7 +91,13 @@ def test_a_200_that_is_not_json_is_refused() -> None:
     assert "not JSON" in why
 
 
-def test_a_real_village_answer_passes() -> None:
+def test_a_real_departments_answer_passes() -> None:
+    """One surface. `test_every_surface_of_a_running_village_passes` is the real one.
+
+    This test was green for the entire period the probe was rejecting a running
+    Village on two of its six surfaces, because it exercised the one surface whose
+    vocabulary the markers had been written from.
+    """
     body = {
         "success": True,
         "department_count": 2,
@@ -95,7 +105,7 @@ def test_a_real_village_answer_passes() -> None:
             {"department": "research", "label": "Research", "seats": 4, "head": "a1"},
         ],
     }
-    assert village._not_the_village(_response(200, body)) is None
+    assert village._not_the_village(_response(200, body), "/api/org/departments") is None
 
 
 def test_a_500_is_not_evidence_either_way() -> None:
@@ -168,3 +178,108 @@ async def test_an_ordinary_outage_is_not_reported_as_misidentification(monkeypat
 
     assert await depts.names() is None
     assert depts.was_misidentified() is False
+
+
+# ============================================ THE SURFACES, AS A RUNNING VILLAGE SENDS THEM
+
+#: Top-level keys of every surface `broker.village` calls, captured from a Village
+#: running on 2026-09-06. Not invented: each was read off a live 200.
+#:
+#: The probe held one marker tuple - the roster and department vocabulary - and applied
+#: it to all six. `board` and the agent overview carry none of those words, so the probe
+#: answered "nothing at this address identified itself as the Village" about a Village
+#: that had just answered 200 with correct data. `village.quarter()` raised,
+#: `shifts.current_quarter()` turned it into `QuarterUnknown`, and `assign_shift` refused
+#: every assignment for as long as the Village was up.
+REAL_SURFACES: dict[str, list[str]] = {
+    "/api/org/roster": [
+        "agent_count", "agents", "department_count", "departments", "success",
+    ],
+    "/api/org/departments": ["department_count", "departments", "success"],
+    "/api/objectives/shifts": [
+        "current_phase", "day_number", "departments", "shifts", "success",
+    ],
+    "/api/objectives/deputies": ["departments", "success"],
+    "/api/objectives/board": [
+        "available_targets", "clock", "objectives", "success", "summary",
+    ],
+    "/api/agents/amelie_wystan/overview": ["agent", "overview", "success"],
+}
+
+
+@pytest.mark.parametrize("path", sorted(REAL_SURFACES))
+def test_every_surface_of_a_running_village_passes(path: str) -> None:
+    """THE test. A real Village must not be called an impostor on any surface it serves.
+
+    Parametrised per path rather than looped, so a failure names the surface instead of
+    reporting that "the Village" failed - which is the sentence that caused this.
+    """
+    body = {key: None for key in REAL_SURFACES[path]}
+    why = village._not_the_village(_response(200, body), path)
+    assert why is None, f"the probe rejected a real Village at {path}: {why}"
+
+
+def test_every_path_the_client_calls_has_a_recorded_shape() -> None:
+    """A surface nobody recorded must not inherit another surface's vocabulary.
+
+    Read from the source of `broker/village.py` rather than from a list here, because a
+    list here is a second copy that goes stale the moment somebody adds an endpoint -
+    and going stale is precisely what happened.
+    """
+    import re
+
+    source = pathlib.Path("broker/village.py").read_text(encoding="utf-8")
+    called = set(re.findall(r'_get\(\s*f?"([^"]+)"', source))
+    assert called, "found no _get call sites; the regex has drifted from the source"
+
+    unrecorded = []
+    for path in sorted(called):
+        # f-string paths carry a placeholder; the prefix is what the lookup matches on.
+        concrete = path.split("{")[0]
+        if village.markers_for(concrete) is None:
+            unrecorded.append(path)
+
+    assert not unrecorded, (
+        f"these paths are called with no recorded shape: {unrecorded}. Add them to "
+        "_SURFACE_MARKERS with the keys a running Village actually returns - do not "
+        "reuse another surface's markers, which is the bug this guard exists for."
+    )
+
+
+def test_the_recorded_shapes_are_not_all_the_same_vocabulary() -> None:
+    """The markers must actually differ per surface, or the split is decoration.
+
+    If a future edit collapses them back to one shared tuple this fails, which is the
+    shape of the original defect rather than one instance of it.
+    """
+    board = set(village.markers_for("/api/objectives/board") or ())
+    roster = set(village.markers_for("/api/org/roster") or ())
+    assert board and roster
+    assert not (board & roster), (
+        "board and roster now share marker vocabulary. They describe different "
+        "surfaces; a shared tuple is how a running Village got rejected."
+    )
+
+
+def test_an_impostor_is_still_caught_on_the_board_surface() -> None:
+    """Per-surface markers must not have weakened the check into uselessness."""
+    why = village._not_the_village(
+        _response(200, {"items": [], "page": 1, "total": 0}), "/api/objectives/board"
+    )
+    assert why is not None
+    assert "not the Village" in why
+
+
+def test_an_unrecorded_surface_is_not_judged_on_shape() -> None:
+    """Stated, because it is a deliberate hole rather than an oversight.
+
+    Judging a surface whose shape nobody recorded is what produced the false rejection.
+    The 401/403 rule still applies to every path, and that is the half that caught the
+    real incident.
+    """
+    assert village._not_the_village(
+        _response(200, {"anything": 1}), "/api/something/never/recorded"
+    ) is None
+    assert village._not_the_village(
+        _response(401, {"detail": "nope"}), "/api/something/never/recorded"
+    ) is not None

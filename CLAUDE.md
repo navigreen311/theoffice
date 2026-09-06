@@ -87,6 +87,17 @@ When a human has to be your hands, eyes, and ears, treat it as a defect in the a
 
 When you receive an error report, use the trigger context, not just the stack trace.
 
+**A test whose fixture you wrote proves only what you already believed.** Three defects
+in one week passed full suites this way: the CapitalForge adapter's tests asserted the
+request the adapter *built*, the CU tripwire's alias test used the alias its author had
+in mind, and `test_a_real_village_answer_passes` tested the one Village surface the
+markers were derived from. Each was found by contact with something the author did not
+write — a real upstream, a second Forge, a running Village.
+
+So: when a test asserts *"the real thing is accepted"*, the fixture must come from the
+real thing, and from **every** variant of it — parametrised, so the failure names the
+variant. `docs/decisions.md` entry 8 has the full account.
+
 ---
 
 ## 7. DESIGN PRINCIPLES

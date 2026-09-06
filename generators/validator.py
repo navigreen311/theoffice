@@ -832,14 +832,44 @@ async def _v30_department_has_seats(
         key = depts.normalize(position.source_department)
         wanted[key] = wanted.get(key, 0) + int(getattr(position, "headcount", 1) or 1)
 
+    # A department the Village does not have is not a department with room. Splitting
+    # these apart is the whole correctness of this rule: the first version filtered
+    # `if name in seats` and then reported `len(wanted)`, so a Pack naming three
+    # departments that do not exist compared nothing and answered "3 department(s) have
+    # seats for what the Pack asks". Every one of the three was absent. The rule passed
+    # by skipping its entire subject and then described the subject it had skipped.
+    checked = {name: count for name, count in wanted.items() if name in seats}
+    unknown = sorted(set(wanted) - set(checked))
+
     over = [
-        f"{name} wants {count} of {seats.get(name, 0)} seat(s)"
-        for name, count in sorted(wanted.items())
-        if name in seats and count > seats[name]
+        f"{name} wants {count} of {seats[name]} seat(s)"
+        for name, count in sorted(checked.items())
+        if count > seats[name]
     ]
     if over:
         return (False, f"{_join(over)}. The department is not that large.")
-    return (True, f"{len(wanted)} department(s) have seats for what the Pack asks")
+
+    if not checked:
+        return (
+            None,
+            f"no position could be checked against a department size: {_join(unknown)} "
+            "- none of these is a Village department, so there is no headcount to "
+            "compare against. V29 reports that as the failure it is; this rule has "
+            "measured nothing and says so rather than passing.",
+        )
+
+    # "Has seats" is not "has people free". This rule compares headcount requested
+    # against the department's total size; Gate 4.5 asks whether those seats are
+    # uncommitted, which needs appointment output that does not exist here. A V30 pass
+    # means the department is large enough in principle, and says nothing about whether
+    # anybody in it is available.
+    message = f"{len(checked)} department(s) have seats for what the Pack asks"
+    if unknown:
+        message += (
+            f"; {len(unknown)} not checked because they are not Village departments "
+            f"({_join(unknown)}) - see V29"
+        )
+    return (True, message)
 
 
 # ------------------------------------------------------- V31: unattended writes

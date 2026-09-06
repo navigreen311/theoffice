@@ -27,7 +27,7 @@ import pytest
 
 from broker.db import connection
 from generators.pack import BusinessPack, load_pack
-from generators.validator import Verdict, validate
+from generators.validator import Verdict, _v30_department_has_seats, validate
 from tests.conftest import requires_db
 from tests.world import COMPLIANCE_ENTRIES
 
@@ -893,3 +893,95 @@ async def test_v33_ignores_a_superseded_instruction(
         report = await validate(greenstone, conn)
 
     assert report.get("V33").verdict is Verdict.PASS, report.get("V33").message
+
+
+# ================================================ V30 MUST NOT PASS BY SKIPPING ITS SUBJECT
+
+# The live Greenstone Pack names three departments the Village stopped having when it was
+# rebuilt. V29 reports that. V30's first version filtered its comparison with
+# `if name in seats` and then reported `len(wanted)`, so all three were skipped and it
+# answered "3 department(s) have seats for what the Pack asks" - a pass over a subject it
+# had not looked at, describing the subject it had skipped.
+#
+# It is the shape 1c43c529 named on the Village side: a validator that examines zero
+# subjects must fail, not pass.
+
+def _pack_wanting(pack: BusinessPack, departments: dict[str, int]) -> BusinessPack:
+    """The Greenstone Pack with its positions replaced by the ones under test.
+
+    Built from the real Pack rather than a stub so the rule sees the type it actually
+    receives; only the departments and headcounts are the test's.
+    """
+    edited = copy.deepcopy(pack)
+    template = edited.positions_required[0]
+    edited.positions_required = [
+        template.model_copy(update={
+            "title": f"Position {i}",
+            "source_department": name,
+            "headcount": count,
+        })
+        for i, (name, count) in enumerate(sorted(departments.items()))
+    ]
+    return edited
+
+
+async def test_v30_does_not_pass_when_no_department_could_be_checked(admin, greenstone):
+    """Every department in the Pack is unknown to the Village: NOT_RUN, never PASS."""
+    from broker import departments as depts
+    from tests.world import seed_departments
+
+    seed_departments()
+    pack = _pack_wanting(greenstone, {
+        "Research & Market Intelligence": 2,
+        "Finance & Administration": 1,
+    })
+
+    async with connection() as conn:
+        ok, message = await _v30_department_has_seats(conn, pack)
+
+    assert ok is None, f"V30 passed without checking anything: {message}"
+    assert "measured nothing" in message
+    assert depts.normalize("Research & Market Intelligence") in message
+
+
+async def test_v30_still_passes_when_it_actually_checked_something(admin, greenstone):
+    """A rule that always answers NOT_RUN is not a rule."""
+    from tests.world import seed_departments
+
+    seed_departments()
+    pack = _pack_wanting(greenstone, {"Research": 2})
+
+    async with connection() as conn:
+        ok, message = await _v30_department_has_seats(conn, pack)
+
+    assert ok is True, message
+    assert "1 department(s) have seats" in message
+
+
+async def test_v30_names_what_it_could_not_check(admin, greenstone):
+    """A partial check must say which half it skipped, or the pass overstates itself."""
+    from tests.world import seed_departments
+
+    seed_departments()
+    pack = _pack_wanting(greenstone, {"Research": 1, "Finance & Administration": 1})
+
+    async with connection() as conn:
+        ok, message = await _v30_department_has_seats(conn, pack)
+
+    assert ok is True, message
+    assert "1 department(s) have seats" in message
+    assert "not checked" in message and "V29" in message
+
+
+async def test_v30_still_fails_a_department_that_is_too_small(admin, greenstone):
+    """The rule's actual job, unchanged."""
+    from tests.world import seed_departments
+
+    seed_departments()
+    pack = _pack_wanting(greenstone, {"Research": 9999})
+
+    async with connection() as conn:
+        ok, message = await _v30_department_has_seats(conn, pack)
+
+    assert ok is False
+    assert "not that large" in message

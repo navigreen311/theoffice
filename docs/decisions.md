@@ -566,3 +566,79 @@ derived fact — and treats a Forge's absence from it as unproven rather than as
 **The practical instruction:** when a Forge is named anywhere — a plan, a Pack draft, a
 conversation, a repository that appears on disk — check `ESTATE` at that moment. That is the
 only mechanism there is.
+
+---
+
+## 8. The identity probe was the same missing question, answered too narrowly
+
+**6 September 2026.** The Village ran for the first time since it was bridged. The probe
+written to protect it rejected it.
+
+### The mirror
+
+On 4 September a container from an unrelated project held the Village's port. It answered
+`401`, The Office reported that as the Village refusing a credential, and V29 and V30 sat
+NOT_RUN for a week. `VillageIdentityError` was the fix: a responder that cannot be
+identified as the Village is not treated as the Village.
+
+On 6 September the Village came up, and that same check rejected it on two of its six
+surfaces — `/api/objectives/board` and `/api/agents/{id}/overview` — because it held one
+marker tuple, the roster vocabulary, and applied it to every path. `village.quarter()`
+raised, `shifts.current_quarter()` turned that into `QuarterUnknown`, and **`assign_shift`
+refused every assignment for as long as the Village was running correctly.**
+
+|  | 4 September | 6 September |
+|---|---|---|
+| what answered | the wrong system | the right system |
+| what The Office concluded | it is the Village | it is not the Village |
+| what the operator was told | "the Village refused your credential" | "nothing at this address identified itself as the Village" |
+| how it was answered | too loosely | too narrowly |
+
+**Both are the same missing question — *is this response actually from the thing I asked?*
+— and the fix for the first answered it once, globally, for six surfaces that do not speak
+the same way.** Getting an identity check wrong in the permissive direction admits an
+impostor. Getting it wrong in the strict direction denies the real thing. Neither is the
+safe side; there is no safe side to be on, only a correct answer per surface.
+
+### The ruling
+
+**An identity check is per surface, and a surface nobody has recorded is not judged.**
+
+`_SURFACE_MARKERS` maps path prefix to the keys a running Village actually returns, and
+`markers_for()` returns `None` for anything unrecorded. An unrecorded path is not
+shape-checked at all — the alternative, reaching for some other surface's vocabulary, is
+precisely the defect. `test_every_path_the_client_calls_has_a_recorded_shape` reads the
+`_get` call sites out of the source and fails if any has no entry, so a new endpoint has
+to record its own shape rather than inherit one.
+
+The 401/403 half is unchanged and still applies to every path. It is the half that caught
+the real incident, and it is derived rather than guessed: the Village serves these paths
+open, verified against a running Village on all six.
+
+### The test that was green the whole time
+
+`test_a_real_village_answer_passes` asserted that a real Village answer is accepted. It
+passed throughout, because it tested the single surface the markers had been written from.
+It proved that the markers matched the example they were derived from, which is not a
+property of the Village — it is a property of the author's belief.
+
+**Third instance this week of a passing test that proved only what its author already
+believed:**
+
+1. The CapitalForge adapter's unit tests asserted the request the adapter *built* — the
+   adapter's own belief about upstream, checked against itself. Two of seventeen bindings
+   were wrong and every test passed. (`docs/forge-adapter.md`, trap #4.)
+2. The CU tripwire's alias test exercised the alias the author had in mind, so the
+   tripwire read as broader than it was.
+3. This one.
+
+The common shape: **the fixture and the code under test come from the same head at the
+same time, so the test can only confirm the assumption it was written from.** All three
+were found by contact with something the author did not write — a real upstream, a second
+Forge, a running Village.
+
+The instruction that follows, and it is a testing instruction rather than a Village one:
+**when a test asserts "the real thing is accepted", the fixture must come from the real
+thing, and from every variant of it.** The parametrised replacement records six captured
+responses and names the surface in the failure, so the next failure says which one rather
+than saying "the Village".
