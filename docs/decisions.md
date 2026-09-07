@@ -845,3 +845,76 @@ blocking gate and belongs with the capacity work rather than tacked onto a modul
 **Recorded rather than fixed**, so the next person who sees "unfilled positions" after
 touching a Pack knows to check certifications first.
 
+
+---
+
+## 12. Channel Partnerships maps to `marketing`. The other nine stay open, and here is what that costs
+
+**Ruled 2026-09-07**, one mapping only. The rest is recorded as open because it is a
+decision about how Burkham's structure sits inside the Village's, and it should not be
+settled as a side effect of wanting to bind a Forge.
+
+### The two lists intersect at zero
+
+| Burkham (10, from `blueprint-v2.md` ownership lines) | Village (12, live roster) |
+|---|---|
+| Compliance & Evidence · CapitalForge Ops · Funding Strategy · Concierge Desk · Risk & Defense · **Channel Partnerships** · Capital Operations · Founder / Executive · Capital Readiness · CFO Advisory | administration 11 · ai_data 14 · banking 14 · engineering 26 · executive 8 · infrastructure 17 · **marketing 14** · media_production 20 · music_production 20 · operations 12 · publishing 16 · research 14 |
+
+Not a near-miss. **No name appears on both sides.** `source_department` must name a
+Village department because V29 checks it against the live roster, so every Burkham
+position names a Village department chosen as the nearest fit, and the draft marks each
+one a guess.
+
+(The draft's own header lists eight Burkham departments. There are ten — it omits
+**Capital Readiness** and **CFO Advisory**.)
+
+### The one ruled
+
+**Channel Partnerships → `marketing`.** The Village's `marketing` department has 14 seats
+and Burkham uses none of them. It costs nothing that exists, and it is what makes a
+marketing role authorable at all — until some mapping exists, no marketing position can
+be written, because a position must name a department the roster has.
+
+Channel Partnerships and Concierge Desk jointly own §4.5 Marketing Ops in the blueprint.
+Only the first is ruled here; Concierge Desk keeps its open question below.
+
+### What the current guesses do, and why it is not visible
+
+Ten Burkham departments compress into **three** Village ones:
+
+| Village dept | Burkham departments landing on it | seats | positions |
+|---|---|---|---|
+| `banking` | **CapitalForge Ops** + **Funding Strategy** | 14 | Diagnostic Analyst (2), Placement Strategist (2) |
+| `operations` | **Concierge Desk** + **Capital Operations** | 12 | Intake Concierge (2), Stack Manager (1) |
+| `administration` | Compliance & Evidence | 11 | Compliance Reviewer (1) |
+
+**Two Burkham departments sharing one seat pool is invisible to every check that would
+catch it.** V30 compares requested headcount against the Village department's size, and
+Gate 4.5 asks whether those seats are uncommitted — both read `source_department`, and
+neither can see that two distinct Burkham departments are competing for the same 14. Four
+Burkham departments are drawing on two pools and the arithmetic reports three
+departments comfortably within their size.
+
+That is a lossy mapping presented as a clean one, and the loss is exactly the kind V30
+and Gate 4.5 exist to surface. They will keep passing while it is wrong.
+
+### The five with no mapping at all
+
+No position uses them, so nothing has forced a choice:
+
+**Risk & Defense · Founder / Executive · Capital Readiness · CFO Advisory** — and
+**Concierge Desk**, which is mapped for intake work but is also a Marketing Ops owner,
+where `operations` is the wrong home.
+
+`executive` (8 seats) is the obvious candidate for Founder / Executive and is untouched.
+Risk & Defense has no natural Village counterpart; `administration` already carries
+Compliance & Evidence.
+
+### Why the rest stays open
+
+Each remaining mapping decides which seat pool a Burkham department competes in, and
+therefore what Gate 4.5 says about capacity. Ruling them one at a time as each Forge
+binding needs one produces a mapping nobody designed — which is how `banking` came to
+hold two departments. The right shape is one decision covering all ten, made once,
+against the seat counts above.
+
