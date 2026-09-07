@@ -384,3 +384,37 @@ row was written.
 **Still open**: nothing calls `overdue_submissions()` on a schedule. The sweep can now
 resolve a submission, and no timer invokes it. That is a separate gap and it is not
 closed here.
+
+## B9 — SimForge's never-do rule has no correct submission
+
+**Found 2026-09-07**, building the Gate 8 hand-over against SimForge's validator.
+
+`validate_curriculum_submission` rejects a submission whose declared `module_never_do`
+carries an entry with no matching `never_do_violation` scenario. That class is in
+SimForge's `HELD_OUT_CLASSES` — *"SimForge authors these classes as the HELD-OUT set
+(not exposed to The Office)."*
+
+**So declaring a never-do list honestly is rejected for missing scenarios The Office is
+structurally forbidden to write.** Omitting the list passes, and leaves SimForge's
+`ForgeInstructionSet.neverDo` empty — which its own comment says exists *"so an n/a can
+be told from a coverage hole"*.
+
+The honest path is refused; the passing path erases the distinction the field was added
+for. Those are the only two.
+
+**The Office declares its never-do lists and takes the 422.** A refusal naming a real
+gap is a true statement; a submission that passes by withholding what it knows is not.
+
+**The fix is on SimForge's side**, because both conflicting controls are: either SimForge
+authors the `never_do_violation` scenarios for a declared list, or the validator stops
+requiring what it will not accept from a submitter. Raised there as
+`docs/adr/ADR-0048-the-never-do-trap.md`, open.
+
+**Not the only reason submissions are refused today.** `curriculum.generate` produces one
+unclassed scenario per (position, module), so every module also fails the
+`escalation_required` rule. That is the Office's own work — and B9 would still be here
+after it is finished, which is why it is recorded separately.
+
+**The shape worth keeping.** Two controls, each correct where it was written, that cannot
+both be satisfied. No review of either catches it, because neither is wrong on its own.
+It surfaced only when something actually exercised both at once.

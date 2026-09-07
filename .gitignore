@@ -31,3 +31,6 @@ deploy/*.env
 
 # Isolated console builds used for inspection; never repository content.
 console/.next-*
+
+# Isolated console builds used for inspection; never repository content.
+console/.next-*

@@ -20,7 +20,11 @@ import pytest_asyncio
 
 from broker import provisioning
 from broker.db import connection
-from broker.simforge import SimForgeError, overdue_submissions
+from broker.simforge import (
+    CurriculumRejectedError,
+    SimForgeError,
+    overdue_submissions,
+)
 from tests.conftest import requires_db
 
 pytestmark = [requires_db, pytest.mark.db]
@@ -81,14 +85,28 @@ async def _submissions(conn, venture_id: str = VENTURE) -> list[dict]:
     async with conn.cursor() as cur:
         await cur.execute(
             """
-            SELECT scenario_pack_ref, simforge_run_ref, scenario_count
+            SELECT scenario_pack_ref, simforge_run_ref, scenario_count, module_id
             FROM curriculum_submission WHERE venture_id = %s
             ORDER BY submitted_at
             """,
             (venture_id,),
         )
         rows = await cur.fetchall()
-    return [{"pack_ref": r[0], "run_ref": r[1], "count": r[2]} for r in rows]
+    return [
+        {"pack_ref": r[0], "run_ref": r[1], "count": r[2], "module_id": r[3]}
+        for r in rows
+    ]
+
+
+def _attempts(gate) -> list[dict]:
+    """The submissions that were actually sent.
+
+    A module with no live operating instruction is reported under `modules_skipped` and
+    appears in `submissions` carrying `skipped`. Nothing was sent for it, so an
+    assertion about what SimForge said does not apply to it - and folding the two
+    together is how "we tried and it failed" and "we never tried" become one number.
+    """
+    return [s for s in gate.evidence["submissions"] if "skipped" not in s]
 
 
 def _gate_8(outcomes):
@@ -115,15 +133,26 @@ async def test_an_accepted_handover_stores_the_run_ref(at_gate_8, operator):
 
     rows = await _submissions(conn)
     assert rows, "gate 8 wrote no submission"
-    assert rows[-1]["run_ref"] == "sf-run-test-0001"
+    # One row per module, each naming its module and carrying its ref. `module_id` has
+    # existed since migration 0007 and was NULL on every row Gate 8 ever wrote.
+    assert rows and all(r["run_ref"] == "sf-run-test-0001" for r in rows)
+    assert all(r["module_id"] for r in rows), "a submission row with no module"
+    assert len({r["module_id"] for r in rows}) == len(rows), "two rows for one module"
 
     gate = _gate_8(outcomes)
     assert gate.evidence["handed_over_to_simforge"] is True
-    assert gate.evidence["simforge_run_ref"] == "sf-run-test-0001"
+    assert gate.evidence["modules_accepted"] == gate.evidence["modules_submitted"]
+    assert {s["module_id"] for s in _attempts(gate)} == {r["module_id"] for r in rows}
 
-    # The hand-over carried counts and the human who provisioned - never an agent.
+    # The hand-over carried the human who provisioned - never an agent - and a real
+    # curriculum rather than a count of one.
     assert fake.calls[0]["actor"] == operator.human_id
-    assert fake.calls[0]["payload"]["scenario_count"] == rows[-1]["count"]
+    payload = fake.calls[0]["payload"]
+    assert payload["instruction_set_ref"]["content_hash"]
+    assert payload["operation_scenarios"]
+    # The two fields with no source on this side, sent as what is true.
+    assert payload["coverage_declaration"]["functions_in_module"] == 0
+    assert payload["coverage_declaration"]["functions_covered"] == 0
 
 
 async def test_an_unreachable_simforge_is_not_reported_as_a_handover(
@@ -144,12 +173,14 @@ async def test_an_unreachable_simforge_is_not_reported_as_a_handover(
     gate = _gate_8(outcomes)
     assert gate.verdict == provisioning.PASSED
     assert gate.evidence["handed_over_to_simforge"] is False
-    assert gate.evidence["simforge_run_ref"] is None
-    assert "not received by SimForge" in gate.reason
-    assert "ConnectError" in gate.evidence["handover_error"]
+    assert gate.evidence["modules_accepted"] == 0
+    assert gate.evidence["modules_submitted"] > 0
+    assert "accepted by SimForge" in gate.reason
+    attempts = _attempts(gate)
+    assert attempts and all("ConnectError" in s["error"] for s in attempts)
 
     rows = await _submissions(conn)
-    assert rows[-1]["run_ref"] is None
+    assert all(r["run_ref"] is None for r in rows)
 
 
 async def test_the_timeout_sweep_can_now_resolve_a_submission(at_gate_8, operator):
@@ -180,3 +211,63 @@ async def test_the_timeout_sweep_can_now_resolve_a_submission(at_gate_8, operato
     # The ref, not the `unanswered:<submission_id>` placeholder the helper falls back
     # to. That fallback was the only branch this could ever take before.
     assert verdict.run_ref == "sf-run-overdue"
+
+
+class SimForgeRefuses:
+    """What SimForge actually says to a curriculum from `curriculum.generate`.
+
+    One scenario per (position, module) and no `scenario_class` on any of them, against
+    a validator that counts classes per module. The violations are the real ones.
+    """
+
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    async def submit_curriculum(self, conn, **kwargs) -> str:
+        self.calls.append(kwargs)
+        module = kwargs["payload"]["instruction_set_ref"]["module_id"]
+        raise CurriculumRejectedError(
+            [
+                f"scenario[0] (module {module}, None): missing instruction_section, "
+                "expected_behavior",
+                f"module {module}: no escalation_required scenario (mandatory)",
+            ]
+        )
+
+    async def aclose(self) -> None:  # pragma: no cover - nothing to close
+        pass
+
+
+async def test_a_refusal_is_recorded_as_an_answer_not_as_an_outage(
+    at_gate_8, operator
+):
+    """A rejection names the work; an outage names nothing.
+
+    The two must not collapse into one `error` string, because the response to them is
+    different: a rejection is a list of scenarios somebody has to write, and an outage
+    is a service to restart. The evidence carries `violations` for the first and only
+    `error` for the second.
+    """
+    conn, run_id = at_gate_8
+
+    outcomes = await provisioning.advance(
+        conn, run_id=run_id, actor=operator.human_id,
+        held_out=HeldOutPasses(), simforge=SimForgeRefuses(),
+    )
+
+    gate = _gate_8(outcomes)
+    assert gate.verdict == provisioning.PASSED
+    assert gate.evidence["handed_over_to_simforge"] is False
+    assert gate.evidence["modules_accepted"] == 0
+
+    attempts = _attempts(gate)
+    assert attempts, "nothing was submitted, so nothing was refused"
+    for submission in attempts:
+        assert submission["violations"], "a refusal recorded without its reasons"
+        assert any(
+            "escalation_required" in v for v in submission["violations"]
+        ), "the refusal did not name the missing class"
+
+    # The row still exists, with no ref. A refused submission is a thing that happened.
+    rows = await _submissions(conn)
+    assert rows and all(r["run_ref"] is None for r in rows)
