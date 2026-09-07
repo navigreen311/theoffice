@@ -1683,3 +1683,55 @@ other modules; **that placeholder should be removed, not completed.**
 map to write a manual against, which is the material every CapitalForge manual was written
 from.
 
+
+## 21. No ninth instruction section for rate limiting
+
+**Ruled 2026-09-07**, while mapping the eight `REQUIRED_SECTIONS` onto SimForge's seven
+authorable scenario classes.
+
+### The ruling
+
+**`rate_limited` gets no section.** SimForge's operation curriculum has a `rate_limited`
+scenario class and nothing in a Forge Operating Instruction supplies material for it. The
+obvious move is a ninth required section; it is refused.
+
+**Two reasons, and the second is the one that decides it.**
+
+It would void every content hash. `content_hash` is computed over the whole content
+object, a certification binds to it, and SimForge voids a run whose hash does not match —
+*"never softened to a warning"*. Adding a section rewrites all nineteen live instructions
+and decertifies everything bound to them. That is a cost, and today it is survivable:
+**zero certifications are bound to any live hash** (the three that exist are already
+`stale_instructions` against superseded ones). So this reason alone would not settle it.
+
+**It would be authored to satisfy a class rather than because anyone found something
+missing.** One of nineteen live instructions mentions anything rate-limit-shaped —
+`voiceforge/transcribe_call`, on `429` and backoff. Eleven CapitalForge manuals were
+written from source by an author reading each module's code, and not one of them found
+rate limiting worth teaching.
+
+**That is a fact about these modules, not a gap in the template.** A section added now
+would be filled, per module, by people with nothing to say — which produces exactly the
+padding the `correct_sequence` rules were written to stop: *"a thin section is a fact
+about the module, not a gap to fill, and padding it is what produces the next failure."*
+
+### What it costs, stated plainly
+
+**`rate_limited` is unauthorable for every module until one actually has rate-limiting
+behaviour worth teaching.** Not hard to author — impossible to author honestly, because
+there is nothing to describe.
+
+**A curriculum submission missing that class will be refused**, and the refusal will name
+it. Every operation curriculum this Office submits carries that gap until a Forge grows
+the behaviour.
+
+**We accept a refusal we understand over a section written to pass a validator.** A
+green rule bought with nineteen invented sections is worth less than a red one naming a
+real absence — and the invented sections would then be taught to agents and bound into
+certifications.
+
+### What changes it
+
+A module that genuinely rate-limits. Then one manual has something to say, the section is
+added because an author found it missing, and the ninth section arrives with content
+rather than with a schema change looking for some.

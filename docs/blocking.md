@@ -741,3 +741,51 @@ flags must be a subset of the surface (direction 1), whether every declared flag
 carried by at least one position (direction 2), and what the honest answer is for a
 framework that genuinely applies to the venture and to no single role. Those are three
 decisions and a rule would silently take all three.
+
+## B16 — a pure-read module cannot satisfy SimForge's mandatory `escalation_required`
+
+**Found 2026-09-07**, mapping instruction sections onto scenario classes for
+`portfolio_health`.
+
+`validate_curriculum_submission` makes one class mandatory for every module:
+
+```python
+if ScenarioClass.ESCALATION_REQUIRED not in classes_present:
+    violations.append(f"module {mod}: no escalation_required scenario (mandatory)")
+```
+
+**`capitalforge/portfolio_health` has no escalation path.** Its `retry_vs_escalate` reads,
+in full: *"RETRY FREELY. It is a pure read. Nothing is written, nothing is sent, and a
+retry after a timeout costs nothing and duplicates nothing."* There is no failure this
+module produces that an agent must hand to a human. It takes no identifier, so it cannot
+be asked about something that does not exist; it writes nothing, so nothing can be half
+done.
+
+So its curriculum will be refused for lacking a class **whose honest content is that the
+class does not apply here**. Authoring one anyway means inventing an escalation trigger
+the module does not have — and that scenario would then be graded, and an agent certified
+on responding to a situation that cannot occur.
+
+**This is B9's shape a third time.** A validator requiring something a truthful submitter
+cannot provide:
+
+| B9 | `never_do_violation` required for a declared never-do list, and the class is held out |
+| B14/#75 | (a Forge defect, different shape) |
+| B16 | `escalation_required` mandatory for a module with no escalation |
+
+**Not the same as B15's `rate_limited` ruling** (decisions entry 21), and the difference
+matters. `rate_limited` is absent from every manual because no module rate-limits — a
+uniform absence with one honest answer. `escalation_required` is present and rich for most
+modules and structurally impossible for one, so no blanket ruling covers it.
+
+**The fix is SimForge's, like B9's.** Either the mandatory class admits a declared
+`not_applicable` with a reason — SimForge already treats `not_applicable` as a
+first-class verdict elsewhere, *"a not_applicable dimension carries NO score (it is not a
+zero)"* — or the rule reads the module's declared `is_mutating` and stops requiring
+escalation of pure reads.
+
+**How many modules this reaches is unmeasured.** `portfolio_health` is the one that
+surfaced it. The other read-only modules — `client_read`, `client_read_pii`,
+`client_read_credit`, `comp_analysis`, `buyer_match`, `property_lookup` — have not been
+checked against it, and several do have escalation paths (a 404 on a read is still a
+question for a human). Not all pure reads are escalation-free; this one is.
