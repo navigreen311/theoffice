@@ -705,6 +705,24 @@ Several are not marginal. `facilitator_status_required` says *"every engagement,
 state, from intake through placement"* — declared as universal, carried by nobody.
 `recording_consent_required` covers *"any recorded call, whoever dialled"*.
 
+**And two of them are not orphans in the ordinary sense.** `fair_treatment_required`
+governs *"any decision on which lenders a client is shown, or whether to serve them"*, and
+`advance_placement_prohibited` governs *"any point at which a merchant cash advance could
+be recommended, applied for or submitted"*.
+
+**Both describe acts that are specifically the Placement Strategist's**, and neither is in
+that position's `compliance_flags_in_scope`. It carries
+`per_application_authorization_required`, `application_truthfulness_required`,
+`estimate_not_offer_required` and `card_product_discipline_required` — four obligations
+about how an application is prepared, and none about **who it is sent to** or **what may
+not be placed at all**.
+
+So this is not eight obligations distributed thinly across a Pack. **It is the role whose
+acts are most consequential carrying neither of the two obligations that govern them** —
+the ECOA one and the absolute one. Written up here because scenario `ps-003` in the Pack
+exercises both, and a reader finding those flags on a Placement Strategist scenario would
+reasonably assume the position declares them.
+
 ### Why V22 does not catch either
 
 V22 compares the declared flags against the flags **scenarios claim to exercise**. It
