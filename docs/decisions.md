@@ -945,6 +945,47 @@ therefore what Gate 4.5 says about capacity. Ruling them one at a time as each F
 binding needs one produces a mapping nobody designed — which is how `banking` came to
 hold two departments. The right shape is one decision covering all ten, made once,
 against the seat counts above.
+
+### Compression is right. New Village departments are not the answer — 7 September
+
+The obvious alternative — give Burkham's ten departments their own names in the Village —
+was checked and rejected.
+
+Departments are not a fixed set. They come from `config/agentsrole.yaml`, a top-level
+`departments:` mapping whose keys are the names; `/api/org/departments` derives its answer
+by counting agents under each. Adding a key with agents under it flows through to V29 with
+no code change.
+
+**But `modules/heredity/education.py` holds a second list, and it is not a list.**
+`DEPARTMENT_NAMES` carries eleven — `executive` is excluded as *"leadership, not a
+production department"* — and every name in it needs an entry in
+`DEPARTMENT_CONSTELLATIONS`: a weight vector over nine personality traits deciding which
+agents are suited to that department.
+
+The file states its own design constraints: 2–3 traits each, weights ±0.40–0.55,
+deliberately anti-correlated pairs (`engineering↔marketing`, `banking↔ai_data`), and a
+uniform weight sum *"so no department is inherently noisier"* — the whole thing tuned to
+produce a particular aptitude spread against an unemployment threshold of 0.354.
+
+**So a new production department is a design decision about agent aptitude**, not a naming
+one. Ten new departments would mean ten new personality profiles placed in a space
+designed to hold eleven without distorting the distribution that governs whether agents
+find work at all.
+
+**Compression onto existing names is therefore right.** The problem was never that the
+mapping compresses; it is that the compressions were guessed. The draft says so itself —
+*"EVERY `source_department` below is a GUESS"* — and a guess is what put two Burkham
+departments on `banking` without anyone weighing it.
+
+**What the remaining nine need is not a Village change. It is somebody who knows what each
+Burkham department actually does**, mapping each onto the Village department whose agents
+do the nearest thing — the way `Channel Partnerships → marketing` was ruled, and the way
+`operations`' Client Liaisons settled Buyer Network Manager for Greenstone. That is a
+question about Burkham, and nobody has answered it yet.
+
+(A *leadership* department, following `executive`'s precedent, skips the constellation
+entirely — which is the one case where a new Village department would be cheap. Founder /
+Executive is the candidate if it ever needs one.)
 ## 13. `is_mutating` answers whether state changes, not whether the act is consequential
 
 **Found 2026-09-07**, sizing `generate_document` for CapitalForge.
@@ -1015,3 +1056,96 @@ gate exists as a design, in a system with no connection to the one issuing the g
 a dependency on a Console module that does not yet reach The Office. Either the grant
 waits for that connection, or the position's tier carries the restraint instead.
 
+
+---
+
+## 14. V30 measures the wrong population, and it is the rule that was supposed to catch this
+
+**Found 2026-09-07**, checking whether two Burkham departments sharing one Village seat
+pool was a live problem. It is not, and the reason is worse than the collision.
+
+### The two numbers
+
+```
+department        Village roster seats    Office identities
+banking                             14                    0
+marketing                           14                    0
+operations                          12                    0
+engineering                         26                    3
+TOTAL                              186                    3
+```
+
+**V30 reads the left column. Appointment reads the right one.**
+
+`depts.seats()` resolves through `broker/departments.py` to the Village's
+`/api/org/departments`, which counts roster positions — `entry["seats"] += 1` per agent in
+`config/agentsrole.yaml`. That is the Village's population.
+
+`appointment._candidates` selects `FROM office_agent_identity WHERE status = 'active' AND
+department = %s`. That is The Office's population, and it contains an agent only once
+somebody has issued an identity for them.
+
+**Different tables, different populations, and V30 has no way to see the difference.**
+
+### What that makes V30's answer
+
+A Pack asking for 2 positions in `banking` gets:
+
+- **V30: PASS** — *"banking has 14 seats for what the Pack asks"*
+- **Appointment: zero candidates.** There are no `banking` identities. There have never
+  been any.
+
+The number V30 reports is not the number that decides whether a position can be filled. It
+is a fact about the Village, presented in answer to a question about The Office.
+
+### This is entry 11's shape, arriving in the rule meant to catch it
+
+Entry 11 records that adding a module makes a position unfillable and Gate 4.5 reports it
+as a capacity shortfall — the symptom naming the wrong cause. **V30 is the earlier check
+that exists to catch capacity problems at Gate 2, before appointment runs.** It cannot,
+because it is looking at a different population than the one appointment draws from.
+
+So the sequence is: V30 passes at Gate 2 on 14 Village seats, and Gate 4.5 fails on 0
+appointable candidates, and neither message says the word *identity*.
+
+### The collision was real and is not the live problem
+
+`banking` carries two Burkham departments — CapitalForge Ops and Funding Strategy — and
+`operations` carries two more. Entry 12 records that as a lossy mapping that V30 and Gate
+4.5 cannot see.
+
+**That is still true and it is not what is stopping anything.** Two Burkham departments
+competing for 14 seats would matter if 14 were a constraint. It is not: `banking` has zero
+appointable candidates, so the competition is between two departments for nothing.
+
+Worth stating because it changes what to fix first. The mapping is a design question with
+time to spare. The population mismatch makes a passing rule misleading today.
+
+### What the fix is not
+
+Not "make V30 read `office_agent_identity`." That would trade one wrong answer for
+another: at Gate 2 a Pack is being validated before any identity has been issued for it,
+so a rule reading identities would fail every Pack for a reason that is about provisioning
+order rather than about the Pack.
+
+The two populations answer two different questions, and both are worth asking:
+
+| question | population | when |
+|---|---|---|
+| is this department big enough to staff this Pack at all? | Village roster | Gate 2 — V30's job, correctly |
+| is anybody actually appointable? | `office_agent_identity` | Gate 4.5 — V24's job |
+
+**The defect is that V30's message does not say which one it answered.** *"3 department(s)
+have seats for what the Pack asks"* reads as a statement about availability. It is a
+statement about the Village's headcount, and it would read the same on a database with no
+identities at all — which is the database it was read on.
+
+### Recorded rather than fixed
+
+The message change is small and the surrounding question is not: V30, V24 and Gate 4.5
+each hold part of an answer about capacity, and none of them names the thing that is
+actually missing. Fixing V30's wording alone would make it honest and still leave the
+operator without the sentence they need, which is *"no agent in this department has an
+Office identity."*
+
+That sentence belongs with the identity-issuance work, not with a validator message.
