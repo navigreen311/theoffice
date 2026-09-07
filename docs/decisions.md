@@ -1620,3 +1620,66 @@ whether it is reached depends on whose call it ends.
 citations behind them, and `voice_call_end` needs a ruling of its own. Reported rather than
 done.
 
+## 20. Three CapitalForge voice modules become `forbidden`; `voice_call_end` gets a question
+
+**Ruled 2026-09-07**, applying entry 19's founder-tier ruling to what entry 19 reported
+and did not settle.
+
+### The three
+
+`voice_call_initiate`, `outreach_apr_expiry` and `outreach_restack` initiate outbound
+calls as principal. §3.4 covers them, and the ruling reaches them.
+
+**Their reason changes shape; the original finding is kept.** Each row now says both:
+forbidden by §3.4, **and** separately recorded as stubbed when it was first excluded.
+
+That is not belt-and-braces. **Losing the stub finding would lose why anyone looked.**
+The 1 September reconnaissance is what surfaced these modules at all — somebody read
+`services/voiceforge.service.ts` and found a `TwilioStubClient` declared inside the
+service, and that reading is the provenance of the whole exclusion list. A row that said
+only *forbidden* would be correct and would have no history.
+
+**And the trap entry 19 named is now closed.** The stub reason expires: the production
+Twilio client exists in that codebase and the SMS path already imports it, so wiring the
+voice path is an afternoon's work. Under the old rows, the table's own instruction —
+*"remove the row only with the evidence that it no longer applies"* — would have had
+somebody correctly delete all three the day it was wired. Now the evidence retires the
+second reason and not the first, and the rows say so in those words.
+
+### `voice_call_end` stays `stubbed`, and carries a question
+
+**Ending a call is not initiating one.** §3.4 bans initiating as principal, and applying
+it here by inference would over-apply a founder ruling to an act it does not name.
+
+**The question, recorded and deliberately not answered:**
+
+> If no agent may start a call, what act does this end?
+
+Either it is dead alongside `voice_call_initiate` — a control for calls that can no longer
+exist — or there is a case nobody has written down: a human's call an agent is assisting
+on, where ending it is part of the assistance §3.4 expressly permits. **Those are
+different modules with the same name**, and which one it is decides whether the row
+becomes `forbidden` or whether the module needs a described purpose.
+
+Deciding it by inference goes wrong in both directions: guess forbidden and a permitted
+assisting capability is banned by implication; guess permitted and a call-control module
+sits grantable with no stated reason to exist. The question is in the exclusion row where
+whoever next reads it will find it.
+
+### `place_call`: the exclusion is the instruction
+
+Added to its row, so nobody authors one later:
+
+> **NO OPERATING INSTRUCTION IS TO BE AUTHORED FOR THIS MODULE. This row is its
+> instruction.**
+
+The eight required sections ask for the correct sequence, the failure signatures and the
+retry-vs-escalate rule **of an act no agent may perform**. Writing them produces a manual
+teaching how to do a prohibited thing, and its content hash would then bind a
+certification to it. The instruction it has today is placeholder text shared with five
+other modules; **that placeholder should be removed, not completed.**
+
+`transcribe_call` is permitted and waits on a VoiceForge adapter — there is no dispatch
+map to write a manual against, which is the material every CapitalForge manual was written
+from.
+
