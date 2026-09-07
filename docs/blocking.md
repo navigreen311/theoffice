@@ -498,3 +498,79 @@ three were not, in the same file.
 occurred. Write it when it does, and not when the attempt begins, is skipped, or fails.
 If a record of the attempt is genuinely wanted, that is a different table or a different
 column — not the same row with a NULL where the outcome goes.
+
+## B12 — V11 will demand a manual for a forbidden module, and entry 20 is the trigger
+
+**Found 2026-09-07**, checked before anyone hit it.
+
+`V11` requires a live, teaching instruction for **every** module in
+`positions_required[].forge_modules_operated`. It has no concept of
+`forge_module_exclusion` — no join, no filter, no mention.
+
+`voiceforge/place_call` is in Greenstone's operated set **and** in the exclusion table.
+
+**Today V11 does not name it**, because its placeholder instruction exists and
+`curriculum_quality.assess` rates that text `complete` — it is real prose, just not about
+any module. V11 currently names only `assign_contract`.
+
+**Entry 20 instructs that the placeholder be removed.** The moment it is, V11 reports:
+
+```
+no Forge Operating Instructions authored for: place_call
+```
+
+And the natural response to a validator naming a module is to write its manual — **which
+the exclusion row now forbids in capital letters.** One rule would be asking for the thing
+another rule prohibits.
+
+**This is B9's shape**, arriving on a delay: two controls, each correct where written, that
+cannot both be satisfied. The difference is that B9's conflict was inherited from another
+system and this one is ours, created today, with the trigger written into our own
+instruction. Nothing has fired yet only because a placeholder nobody wants is holding the
+line.
+
+**Not fixed here.** The fix is a ruling: either V11 skips excluded modules — with the
+argument that a module no agent may hold needs no curriculum — or `place_call` comes off
+`forge_modules_operated` entirely, which is a Pack change and a different conversation.
+Both are defensible and they are not the same decision.
+
+**Second defect in the same query, unrelated to exclusions.** V11 reads
+`SELECT module_id, content FROM forge_operating_instruction WHERE superseded_at IS NULL`
+and keys the result by `module_id` alone, with **no `forge_id`**. Two Forges with a
+same-named module would silently satisfy each other's requirement, and the manual an agent
+is certified against would be the other Forge's. That is B10 exactly — a composite key
+flattened to one part — in a rule rather than in a gate.
+
+
+## B13 — V33 is Pack-scoped, so a collision is invisible to Packs that don't bind the Forge
+
+**Found 2026-09-07**, answering why the 4 September fix stopped at two modules.
+
+V33 scopes itself to the Pack's own bindings:
+
+```python
+forges = sorted({b.forge.lower() for b in pack.forge_dependencies.forge_bindings}
+                | {pack.forge_dependencies.operating_forge.lower()})
+```
+
+and groups collisions **by `forge_id`**. Two consequences, both live today:
+
+**Burkham's V33 PASSES** — *"every live instruction on a bound Forge has its own
+content_hash"* — while four cre-forge instructions are byte-identical. Burkham binds
+capitalforge and simforge; cre-forge is simply not in its scope. **The same defect is FAIL
+for one Pack and PASS for another, at the same instant, over the same table.**
+
+**A cross-Forge collision is structurally invisible.** The hash `9711528544710550…` is
+shared by six modules across *two* Forges, and V33 reports it as two separate collisions
+because it groups by Forge. Had each Forge held only one module with that hash, V33 would
+have passed on both while a certification still could not say which module an agent was
+certified on — which is the exact question the rule exists to answer.
+
+**Neither is why 46cd4f0 stopped at two.** That commit is titled `fix(simforge)` and its
+own message says *"Zero certifications on any Forge are bound to 9711528544710550"* — the
+author knew the hash spanned Forges and fixed the SimForge pair as that day's scope. **Out
+of scope, not a rule limitation**, and worth saying plainly so nobody re-derives it.
+
+The scoping is still a defect, and it is a different one: per-Pack scope is right for a
+rule that gates a Pack, and it means **no rule anywhere asks the whole question**. A
+Forge nobody currently binds can hold six identical instructions and nothing reports it.
