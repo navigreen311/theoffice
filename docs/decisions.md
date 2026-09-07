@@ -417,7 +417,35 @@ on this name finds the reason rather than re-deriving it.
 
 ---
 
-## 6. `place_call` names a capability VoiceForge was never built to have
+## 6. `place_call` names an act Burkham forbids — corrected 2026-09-07
+
+**The original finding stands and was the wrong reason.** Recorded 4 September as
+*"a capability VoiceForge was never built to have"*, which is true and is not the
+governing fact.
+
+`burkham-wickmont-marketing-plan-intake.md` §3.4 is a locked founder decision:
+
+> **Explicit V1 ban:** no worker (agent) may initiate an outbound phone call as
+> principal. Voice AI (VoiceForge) may assist a human on a call (transcription,
+> coaching, note-taking) but does not dial or speak as principal. **Enforced at
+> middleware layer** per Pack Section 3.
+
+So `place_call` is not an unbuilt capability awaiting a decision about whether to build
+it. **It is an act Burkham has ruled no agent may perform**, with the reasoning recorded
+— TSR, TCPA, state two-party consent, DNC — and a V1.5 revisit that is explicitly
+human-only and non-recorded.
+
+**Why the distinction changes what to do.** "Unbuilt" invites building. A hand-written
+`forge_module_registry` row naming a banned act is worse than one naming an absent one:
+if VoiceForge ever grew telephony, the row would resolve, V32 would go quiet, and the
+only thing standing between an agent and a prohibited act would be a middleware layer in
+a different system. The row should not exist regardless of what VoiceForge can do.
+
+`transcribe_call` is unaffected — assisting a human on a call is expressly permitted.
+
+The original text follows.
+
+### As recorded 4 September: a capability VoiceForge was never built to have
 
 **Recorded 2026-09-04. Nothing built, nothing removed.**
 
@@ -917,4 +945,73 @@ therefore what Gate 4.5 says about capacity. Ruling them one at a time as each F
 binding needs one produces a mapping nobody designed — which is how `banking` came to
 hold two departments. The right shape is one decision covering all ten, made once,
 against the seat counts above.
+## 13. `is_mutating` answers whether state changes, not whether the act is consequential
+
+**Found 2026-09-07**, sizing `generate_document` for CapitalForge.
+
+### The declaration is honest and the guard is blind
+
+`POST /documents/generate` produces one of sixteen client-facing letters. Every `await`
+in its 304-line handler is a read — `checkRestackEligibility`, `getConsentStatuses`,
+`findMany` on `cardApplication` and `statementRecord`. No `create`, no `update`, no
+`upsert`, no transaction. It returns the document text in the response body and persists
+nothing.
+
+So **`is_mutating: False` is the correct declaration** and `idempotency_support: natural`
+is correct with it. Two identical calls produce identical text and change nothing.
+
+**V31 decides unattended `auto_execute` on that field.** Its rule is: no `auto_execute`
+grant over a mutating `at_most_once` module. A read is outside the guard entirely — so an
+`auto_execute` grant on this module lets an agent produce client-facing letters, about a
+client's own eligibility and consent status, with nobody in the path.
+
+### The field is standing in for something it does not mean
+
+`is_mutating` is a fact about the Forge's own state. What V31 needs is whether the act is
+**consequential** — whether something leaves the system and reaches a person. Those
+coincide for most modules, which is why the substitution has held:
+
+| | mutates | consequential |
+|---|---|---|
+| `property_lookup`, `client_read` | no | no |
+| `assign_contract`, `submit_application` | yes | yes |
+| **`generate_document`** | **no** | **yes** — its output is a letter a client is handed |
+
+A read whose output is an external artefact is the gap. The guard cannot see it, and
+nothing else in the call path asks the question.
+
+### Not proposing a third field yet
+
+The obvious move — a `produces_external_artifact` flag — is a schema change plus a
+migration plus a value for every existing module, and every value would be somebody's
+judgement rather than something derived. `is_mutating` and `idempotency_support` are at
+least checkable against a Forge's own dispatch map. Recording the gap first.
+
+The interim answer is the trust tier, which is per position: a position operating
+`generate_document` should not be ceilinged at `auto_execute` on the strength of the
+module being a read.
+
+### What Burkham's own decisions already settle, and the dependency they create
+
+`burkham-wickmont-marketing-plan-intake.md` §3.3 and §4.6 have ruled on exactly this act,
+and they agree with how the code is split:
+
+- §3.3, engagement letter delivery: **"Worker generates, Human approves send"** — each
+  engagement letter goes through **Deliverable Approval Workflow (Pack module 3.4)**
+  before sending.
+- §4.6, worker-autonomous send: **templated deliverable cover emails** (Blueprint
+  delivered, Capital Command Brief delivered) in **Pass** state.
+
+`generate_document` does not send. The code already splits generation from sending, so
+**unattended generation matches the locked decision** rather than contradicting it.
+
+**But the control that makes it safe is not in The Office.** Deliverable Approval Workflow
+is Console module 3.4, and the Console is not connected to the bridge. Today an agent
+granted `generate_document` at `auto_execute` generates a letter and nothing stands
+between that letter and a client except a human remembering to route it — the approval
+gate exists as a design, in a system with no connection to the one issuing the grant.
+
+**Written down rather than assumed:** binding `generate_document` at `auto_execute` takes
+a dependency on a Console module that does not yet reach The Office. Either the grant
+waits for that connection, or the position's tier carries the restraint instead.
 
