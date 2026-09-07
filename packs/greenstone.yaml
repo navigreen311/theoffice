@@ -103,18 +103,28 @@ positions_required:
 
   - position_title: Buyer Network Manager
     reports_to: venture_operator
-    # DECISION NEEDED. `generate_loi` was removed 2026-09-02: CRE Forge has no
-    # letter-of-intent service, route or contract template - its four templates
-    # are purchase agreement, assignment, addendum and disclosure - so the module
-    # cannot be granted and will not exist without somebody building it. The
-    # duties below are left as written rather than quietly narrowed: whether this
-    # role still circulates an assignment package, and through what, is Ivan's
-    # call and not a side effect of a module going away.
+    # DECIDED 2026-09-06, after four days with the duty deliberately unbacked.
+    #
+    # The question asked on 2026-09-02 was whether this role still circulates an
+    # assignment package, and through what, once `generate_loi` was removed for not
+    # existing. The duties were left as written rather than quietly narrowed so the
+    # answer would be a ruling and not a side effect.
+    #
+    # The answer: the duty stands, and the Pack had asked for the wrong module name
+    # for work CRE Forge could already do. Its own assignment template settles it -
+    # assignor is the company, assignee is the end buyer, and `assignment_fee` is
+    # the wholesaler's spread. That is an assignment contract, which is what
+    # "circulate the assignment package" means; a letter of intent is a different
+    # document and CRE Forge never had one.
+    #
+    # `assign_contract` binds that capability. It writes and sends for signature,
+    # so it is declared is_mutating with at_most_once idempotency at the adapter's
+    # binding site.
     duties:
       - Maintain the vetted buyer list and their stated criteria
       - Match a contracted deal to buyers by fit
       - Circulate the assignment package
-    forge_modules_operated: [buyer_match, place_call, transcribe_call]
+    forge_modules_operated: [buyer_match, assign_contract, place_call, transcribe_call]
     source_department: operations
     compliance_flags_in_scope: [recording_consent_required]
     headcount: 2
@@ -140,13 +150,20 @@ forge_dependencies:
     - forge: cre-forge
       api_version: 1.4.0
       criticality: hard
-      # generate_loi removed 2026-09-02. It cannot be granted: CRE Forge does not
-      # dispatch it and has nothing behind the name - no LOI service, no route, and
-      # no letter-of-intent among its four contract templates. It was declared here
-      # at criticality:hard, so the Pack asserted the workflow could not run without
-      # a module that will never exist. Found by V32 rather than by hand; V6 passed
-      # on all five, because five rows had been written.
-      modules_expected: [property_lookup, comp_analysis, underwrite_deal, buyer_match]
+      # generate_loi removed 2026-09-02, replaced by assign_contract 2026-09-06.
+      #
+      # generate_loi could not be granted: CRE Forge does not dispatch it and has
+      # nothing behind the name - no LOI service, no route, and no letter-of-intent
+      # among its contract templates. It was declared here at criticality:hard, so
+      # the Pack asserted the workflow could not run without a module that will
+      # never exist. Found by V32 rather than by hand; V6 passed on all five,
+      # because five rows had been written.
+      #
+      # Removing it was correct and left the Assign/Close duty with no module, which
+      # no rule would have caught - duties are prose. assign_contract is the module
+      # the duty always needed: CRE Forge's assignment template names assignor,
+      # assignee and assignment_fee, which is this workflow's closing act.
+      modules_expected: [property_lookup, comp_analysis, underwrite_deal, buyer_match, assign_contract]
       compliance_flags_propagated: [tsr_disclosure_required]
       fallback_behavior: halt
       rate_limit_policy: {max_rps: 4, burst: 10, backoff: exponential, on_429: queue}
@@ -217,6 +234,22 @@ forge_operating_instructions:
     module_id: buyer_match
     instruction_version: 1.0.0
     forge_api_version: 1.4.0
+    version_sensitivity: major.minor
+    content_hash: PENDING_AUTHORING
+    authored_by: ivan
+  - forge_id: cre-forge
+    module_id: assign_contract
+    instruction_version: 1.0.0
+    forge_api_version: 1.4.0
+    # major.minor, not major.minor.patch, and deliberately not inflated to match
+    # underwrite_deal. Its hazard is a number a human relies on without recomputing:
+    # a patch-level model change is invisible in the output and silently moves every
+    # offer. This module's output is a contract record and a document sent for
+    # signature. Nobody reads terms off a cached value - they are in the signed
+    # document - and a template change surfaces loudly, because
+    # create_contract_from_template validates the template's required_fields and
+    # raises rather than producing a plausible artifact. High stakes, different
+    # hazard; stakes are not a reason to inflate sensitivity.
     version_sensitivity: major.minor
     content_hash: PENDING_AUTHORING
     authored_by: ivan

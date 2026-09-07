@@ -37,6 +37,7 @@ PACK_PATH = Path(__file__).resolve().parents[2] / "packs" / "greenstone.yaml"
 
 CRE_MODULES = (
     "property_lookup", "comp_analysis", "underwrite_deal", "buyer_match",
+    "assign_contract",
 )
 SIM_MODULES = ("run_scenario_pack", "gate_result")
 VOICE_MODULES = ("place_call", "transcribe_call")

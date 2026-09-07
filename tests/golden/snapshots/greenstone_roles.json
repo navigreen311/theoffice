@@ -46,6 +46,7 @@
         "tsr_disclosure_required"
       ],
       "forge_modules_operated": [
+        "assign_contract",
         "buyer_match",
         "place_call",
         "transcribe_call"
