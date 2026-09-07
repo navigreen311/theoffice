@@ -853,7 +853,110 @@ makes the capacity picture look better while the venture became less able to ope
 Both numbers moved in the direction that reads as "smaller problem". The cause was a
 module binding half an hour old.
 
-### Why it will happen again
+### AMENDED 7 September 2026 — the data is not dropped. The summary flattens it.
+
+**The claim below was wrong and is corrected here rather than deleted.**
+
+It said *"the information exists one layer down and is dropped on the way up."* Tested by
+issuing 14 banking identities and running appointment:
+
+```
+Deal Underwriter:      need 2, unfilled 2, candidates-with-shortfall 14
+                              14 x never_certified
+Acquisition Analyst:   need 3, unfilled 3, candidates-with-shortfall 0
+Buyer Network Manager: need 2, unfilled 2, candidates-with-shortfall 0
+```
+
+`PositionAppointment.requires_certification` carries the reason **per position**, and the
+escalation reports all three capacity numbers separately. An operator reading the artifact
+can already tell *nobody exists* from *fourteen exist, none certified*.
+
+**What actually flattens is Gate 4.5's summary line** — `V24: unfilled positions: Buyer
+Network Manager (2 of 2)`. That sentence loses a distinction the artifact beneath it
+preserves.
+
+**Narrower defect, different fix.** Not a missing signal to be plumbed through: a message
+that should read what is already there. The original diagnosis pointed at the wrong layer,
+and would have sent somebody to add instrumentation that exists.
+
+### The class this belongs to — a rollup that loses what the layer beneath kept
+
+Three instances now, which is enough to name it:
+
+| where | the rollup says | what the layer beneath holds |
+|---|---|---|
+| **Gate 4.5 summary** | `unfilled positions: X (2 of 2)` | `requires_certification`, 14 × `never_certified` vs 0 candidates |
+| **V30's message** (entry 14) | `3 department(s) have seats` | which population was counted — Village roster, not `office_agent_identity` |
+| **V32's verdict** | `FAIL` | the message distinguishes modules it *asked about* from voiceforge it *could not ask*; the verdict does not |
+
+**The shape:** a summary is computed correctly from data that is correct, and the summary
+drops a distinction that decided the answer. Nothing is missing, nothing is wrong, and the
+sentence an operator reads is less true than the structure behind it.
+
+**Why it is worth its own name.** It looks like the failures this project keeps finding —
+a control that does not hold, a check passing for the wrong reason — and it is not. The
+control ran. The data is right. The fix is a sentence, and diagnosing it as a missing
+signal costs the wrong work: entry 11 as first written would have sent somebody to plumb
+`CandidateShortfall` up through a layer it already reaches.
+
+**How to tell them apart:** read the layer beneath before believing the summary. If the
+distinction is there, it is a message defect. If it is not, it is a signal defect. That
+check is one query and it is the difference between a wording change and a schema change.
+
+### A fourth instance, 7 September — and it extends the class
+
+`produced_not_yet_certified` is not a summary line. It is a **field name**, and it is
+wrong in the same way.
+
+It reads as a fact about the venture: *how many agents have been produced and are not yet
+certified.* It is a fact about **an appointment run** — it increments inside the
+per-position candidate loop in `generators/appointment.py`, once per candidate examined for
+a position being appointed. An uncertified identity in a department no position draws on
+is never counted, because it is never examined.
+
+**How it was separated, and it was nearly not.** Issuing 12 operations identities moved it
+14 → 26, exactly +12. Both readings predict that, because operations feeds Greenstone's
+Buyer Network Manager — every new identity was also a candidate. The operations prediction
+stated the wrong reading — *"it counts identities that exist and are uncertified across the
+venture"* — and **scored correct by coincidence.**
+
+Issuing 25 administration and marketing identities moved it **26 → 26**. Greenstone has no
+position in either department, so nothing examined them, so the counter did not see them.
+
+**The round that separated the two readings is the one dismissed in advance as the weaker
+test.** Banking and operations each had a Greenstone position and could only ever confirm;
+a department with no position was the only thing that could discriminate, and it was run
+only because a round predicting nothing is still worth running.
+
+### The extension
+
+**A rollup can lose a distinction. So can a name.**
+
+A summary line is read once, by whoever is looking at that screen. **A field name is read
+by everyone who touches the field, forever**, and it carries its claim into every call
+site, every message built from it, and every prediction made about it — including the two
+in this repository's own planning documents.
+
+The check is the same one, aimed differently: *read the code that produces the value before
+believing what it is called.* For `produced_not_yet_certified` that is one loop, and it
+says `for row in candidates` where the name says "in the venture".
+
+**Not renamed here.** It appears in `CapacityNumbers`, in the §7.2 three-number contract,
+in the escalation text and in golden snapshots, and a rename is a change to an artifact
+shape that Gate 4.5 signatures are taken against. Recorded first; the rename is its own
+change with its own diff to declare.
+
+### What still stands from the original finding
+
+The mechanism is unchanged and correct: **adding one module to a position makes every
+agent certified for the old set unfillable for it**, instantly, without any certification
+changing. That is what Unit A is for, and it will happen again on the next module added to
+any position.
+
+What changes is where to look when it does — the appointment artifact names the cause; the
+gate's summary line does not.
+
+### Original text, as recorded 6 September
 
 Nothing connects the two facts. `appointment` knows a position is unfilled and knows which
 certifications were missing — `CandidateShortfall` carries the reason per agent, naming
@@ -863,15 +966,10 @@ it.** The information exists one layer down and is dropped on the way up.
 The next module added to any position does this again, and the operator sees a capacity
 shortfall.
 
-### What would fix it
-
 V24's message should distinguish *no candidate exists* from *candidates exist and are
 uncertified for the module just added*, and name the module. The data is already in
 `Appointment.appointments[].shortfalls`. Not done here — it is a message change to a
 blocking gate and belongs with the capacity work rather than tacked onto a module binding.
-
-**Recorded rather than fixed**, so the next person who sees "unfilled positions" after
-touching a Pack knows to check certifications first.
 
 
 ---
@@ -945,6 +1043,47 @@ therefore what Gate 4.5 says about capacity. Ruling them one at a time as each F
 binding needs one produces a mapping nobody designed — which is how `banking` came to
 hold two departments. The right shape is one decision covering all ten, made once,
 against the seat counts above.
+
+### Compression is right. New Village departments are not the answer — 7 September
+
+The obvious alternative — give Burkham's ten departments their own names in the Village —
+was checked and rejected.
+
+Departments are not a fixed set. They come from `config/agentsrole.yaml`, a top-level
+`departments:` mapping whose keys are the names; `/api/org/departments` derives its answer
+by counting agents under each. Adding a key with agents under it flows through to V29 with
+no code change.
+
+**But `modules/heredity/education.py` holds a second list, and it is not a list.**
+`DEPARTMENT_NAMES` carries eleven — `executive` is excluded as *"leadership, not a
+production department"* — and every name in it needs an entry in
+`DEPARTMENT_CONSTELLATIONS`: a weight vector over nine personality traits deciding which
+agents are suited to that department.
+
+The file states its own design constraints: 2–3 traits each, weights ±0.40–0.55,
+deliberately anti-correlated pairs (`engineering↔marketing`, `banking↔ai_data`), and a
+uniform weight sum *"so no department is inherently noisier"* — the whole thing tuned to
+produce a particular aptitude spread against an unemployment threshold of 0.354.
+
+**So a new production department is a design decision about agent aptitude**, not a naming
+one. Ten new departments would mean ten new personality profiles placed in a space
+designed to hold eleven without distorting the distribution that governs whether agents
+find work at all.
+
+**Compression onto existing names is therefore right.** The problem was never that the
+mapping compresses; it is that the compressions were guessed. The draft says so itself —
+*"EVERY `source_department` below is a GUESS"* — and a guess is what put two Burkham
+departments on `banking` without anyone weighing it.
+
+**What the remaining nine need is not a Village change. It is somebody who knows what each
+Burkham department actually does**, mapping each onto the Village department whose agents
+do the nearest thing — the way `Channel Partnerships → marketing` was ruled, and the way
+`operations`' Client Liaisons settled Buyer Network Manager for Greenstone. That is a
+question about Burkham, and nobody has answered it yet.
+
+(A *leadership* department, following `executive`'s precedent, skips the constellation
+entirely — which is the one case where a new Village department would be cheap. Founder /
+Executive is the candidate if it ever needs one.)
 ## 13. `is_mutating` answers whether state changes, not whether the act is consequential
 
 **Found 2026-09-07**, sizing `generate_document` for CapitalForge.
@@ -1015,3 +1154,196 @@ gate exists as a design, in a system with no connection to the one issuing the g
 a dependency on a Console module that does not yet reach The Office. Either the grant
 waits for that connection, or the position's tier carries the restraint instead.
 
+
+---
+
+## 14. V30 measures the wrong population, and it is the rule that was supposed to catch this
+
+**Found 2026-09-07**, checking whether two Burkham departments sharing one Village seat
+pool was a live problem. It is not, and the reason is worse than the collision.
+
+### The two numbers
+
+```
+department        Village roster seats    Office identities
+banking                             14                    0
+marketing                           14                    0
+operations                          12                    0
+engineering                         26                    3
+TOTAL                              186                    3
+```
+
+**V30 reads the left column. Appointment reads the right one.**
+
+`depts.seats()` resolves through `broker/departments.py` to the Village's
+`/api/org/departments`, which counts roster positions — `entry["seats"] += 1` per agent in
+`config/agentsrole.yaml`. That is the Village's population.
+
+`appointment._candidates` selects `FROM office_agent_identity WHERE status = 'active' AND
+department = %s`. That is The Office's population, and it contains an agent only once
+somebody has issued an identity for them.
+
+**Different tables, different populations, and V30 has no way to see the difference.**
+
+### What that makes V30's answer
+
+A Pack asking for 2 positions in `banking` gets:
+
+- **V30: PASS** — *"banking has 14 seats for what the Pack asks"*
+- **Appointment: zero candidates.** There are no `banking` identities. There have never
+  been any.
+
+The number V30 reports is not the number that decides whether a position can be filled. It
+is a fact about the Village, presented in answer to a question about The Office.
+
+### This is entry 11's shape, arriving in the rule meant to catch it
+
+Entry 11 records that adding a module makes a position unfillable and Gate 4.5 reports it
+as a capacity shortfall — the symptom naming the wrong cause. **V30 is the earlier check
+that exists to catch capacity problems at Gate 2, before appointment runs.** It cannot,
+because it is looking at a different population than the one appointment draws from.
+
+So the sequence is: V30 passes at Gate 2 on 14 Village seats, and Gate 4.5 fails on 0
+appointable candidates, and neither message says the word *identity*.
+
+### The collision was real and is not the live problem
+
+`banking` carries two Burkham departments — CapitalForge Ops and Funding Strategy — and
+`operations` carries two more. Entry 12 records that as a lossy mapping that V30 and Gate
+4.5 cannot see.
+
+**That is still true and it is not what is stopping anything.** Two Burkham departments
+competing for 14 seats would matter if 14 were a constraint. It is not: `banking` has zero
+appointable candidates, so the competition is between two departments for nothing.
+
+Worth stating because it changes what to fix first. The mapping is a design question with
+time to spare. The population mismatch makes a passing rule misleading today.
+
+### What the fix is not
+
+Not "make V30 read `office_agent_identity`." That would trade one wrong answer for
+another: at Gate 2 a Pack is being validated before any identity has been issued for it,
+so a rule reading identities would fail every Pack for a reason that is about provisioning
+order rather than about the Pack.
+
+The two populations answer two different questions, and both are worth asking:
+
+| question | population | when |
+|---|---|---|
+| is this department big enough to staff this Pack at all? | Village roster | Gate 2 — V30's job, correctly |
+| is anybody actually appointable? | `office_agent_identity` | Gate 4.5 — V24's job |
+
+**The defect is that V30's message does not say which one it answered.** *"3 department(s)
+have seats for what the Pack asks"* reads as a statement about availability. It is a
+statement about the Village's headcount, and it would read the same on a database with no
+identities at all — which is the database it was read on.
+
+### Recorded rather than fixed
+
+The message change is small and the surrounding question is not: V30, V24 and Gate 4.5
+each hold part of an answer about capacity, and none of them names the thing that is
+actually missing. Fixing V30's wording alone would make it honest and still leave the
+operator without the sentence they need, which is *"no agent in this department has an
+Office identity."*
+
+That sentence belongs with the identity-issuance work, not with a validator message.
+
+---
+
+## 15. Every capacity number in this system is Greenstone's — Burkham has never been provisioned
+
+**Recorded 7 September 2026**, after the identity work, because the reasoning error is
+instructive and was caught by protocol rather than by knowing better.
+
+### The trap
+
+Operations was chosen as the second department to issue identities into, and the stated
+reason was that **Stack Manager needs only 1** — so unlike banking's two-of-two positions,
+there was a position that could plausibly be filled.
+
+**Stack Manager is a Burkham position, and Burkham is not in `business_pack`.** It exists
+only as `packs/burkham-wickmont.draft.yaml`, whose first line says `DRAFT, NOT LIVE`.
+Nothing evaluates it: no provisioning run, no gate, no validator invocation in normal
+operation.
+
+The operations position that actually moved was **Greenstone's Buyer Network Manager**,
+which needs 2 — so the reasoning that selected operations was about arithmetic no gate
+computes.
+
+### The general statement
+
+**Every capacity number this system reports today is Greenstone's.** V13's review-minutes,
+V24's unfilled positions, V30's seats, Gate 4.5's shortfall, `produced_not_yet_certified`
+— all of it resolves against `packs.live(conn, "greenstone")`, because greenstone is the
+only venture with a published Pack.
+
+So **reasoning about a Burkham position moving a gate's arithmetic is reasoning about a
+Pack that is not there.** The position exists in a file; the number it would move does not
+exist at all.
+
+Easy to do, because the draft is detailed, internally consistent, and reads exactly like a
+Pack. Nothing about looking at it says "no gate will ever see this."
+
+### How it was caught
+
+Not by knowing better. The prediction protocol required naming which evaluation path each
+prediction would be scored against, and there was no path — `validate()` and `appointment`
+both take the *live* Pack, and greenstone is the only one. Writing the prediction is what
+surfaced it.
+
+That is the second time the protocol caught something the author knew and had not applied:
+the first was testing V24, a Gate 4.5 rule, through a Gate 2 call.
+
+### What it means for the identity work
+
+**51 agents are now appointable and there is still no Burkham Pack to appoint them into.**
+
+```
+banking         14      operations      12
+administration  11      marketing       14      = 51, plus 3 engineering = 54
+```
+
+Greenstone draws on three departments — `research` (nobody), `operations` (12 uncertified),
+`banking` (14 uncertified) — and has no administration or marketing position at all.
+Issuing those 25 changed no appointment output whatsoever, which the round confirmed:
+`produced_not_yet_certified` stayed at 26.
+
+**Identities were never the blocker on their own.** They were *a* blocker — banking had
+zero candidates and now has fourteen — but for Burkham the chain is longer and identity is
+not the first link missing.
+
+### What publishing a Burkham Pack would actually require — tested, not read
+
+The draft says its values are placeholders and that the placeholders are the finding. Both
+halves were tested by parsing it and running the validator against it.
+
+**Publication is not blocked.** `packs.parse_only` accepts it as a schema-v3 Pack with
+`venture_id='burkham-wickmont'`. `store(publish=True)` requires nothing more, so it could
+be published today — and Gate 2 would then refuse it, which is the correct place for a
+Pack to be refused.
+
+**Gate 2 gives 3 FAIL, 2 NOT_RUN, 0 WARN:**
+
+| rule | verdict | what it is |
+|---|---|---|
+| **V23** | FAIL | *no scenarios for: Compliance Reviewer, Diagnostic Analyst, Intake Concierge, Placement Strategist, Stack Manager* — **the draft contains zero scenarios** |
+| **V22** | FAIL | runtime flags never exercised by a scenario — the same absence, from the compliance side |
+| **V32** | FAIL | `simforge/run_scenario_pack` not dispatched — a standing ruling (entry 5), not a Burkham problem |
+| V11 | NOT_RUN | instructions authored for all 10 modules; module existence uncheckable because CapitalForge answered 401 |
+| V24 | NOT_RUN | Gate 4.5, by construction |
+
+**So the blocking placeholder is exactly one thing: the scenario set, and it is empty
+rather than invented.** The draft header lists it among the invented values —
+*"the whole scenario set"* — and it is not invented, it is absent. 22 declared frameworks
+and 5 roles, against 0 scenarios. V23 wants ≥3 per role × domain with ≥1 expected
+escalation each; V22 wants every declared runtime flag exercised.
+
+**What is cosmetic, in the sense that it does not block:** `human_capacity`, `budget`,
+`capacity_demand`, `availability`, KPI measurement sources and `data_retention` all pass
+their rules on invented values. That is the draft's own warning restated with evidence —
+*"a rule that PASSES here may be passing on an invented value"* — and it is the more
+dangerous half, because those passes are indistinguishable from earned ones.
+
+**The order of work, therefore:** scenarios first (authorship, 5 roles × domains × 22
+frameworks), then the invented values replaced by real ones, then the department mapping
+from entry 12. Identity issuance is done and was never the constraint.

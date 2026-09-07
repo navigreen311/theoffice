@@ -18,11 +18,27 @@
 #
 # WHAT IS GUESSED, AND SO WHAT THE VALIDATOR OUTPUT MEANS
 #
-#   human_capacity, budget, capacity_demand, availability, KPI measurement sources,
-#   data_retention and the whole scenario set are INVENTED. They are set to the most
-#   plausible small values so that the rules which depend on them run at all — a Pack
-#   that fails to LOAD produces no rule results, and a list of thirty schema errors is
-#   less useful than a list of the rules that actually fail.
+#   human_capacity, budget, capacity_demand, availability, KPI measurement sources and
+#   data_retention are INVENTED. They are set to the most plausible small values so that
+#   the rules which depend on them run at all — a Pack that fails to LOAD produces no
+#   rule results, and a list of thirty schema errors is less useful than a list of the
+#   rules that actually fail.
+#
+#   THE SCENARIO SET IS NOT INVENTED. IT IS ABSENT. — corrected 2026-09-07
+#
+#   This header listed it among the invented values, and it is not: `scenarios` is an
+#   empty list. Zero, against 22 declared frameworks and 5 roles.
+#
+#   Absent is worse than invented, and the distinction matters to a reader deciding what
+#   to trust. An invented value makes a rule pass on something untrue — bad, and the
+#   paragraph below is the warning for it. An absent one makes the rule FAIL, which is
+#   the honest outcome, and it means the work is not "replace a placeholder" but "author
+#   the thing from nothing."
+#
+#   It is the only blocking gap. Confirmed by running the validator against this file:
+#   V23 fails naming all five roles, V22 fails on runtime flags no scenario exercises,
+#   and both are the same absence seen from two sides. Everything else invented above
+#   PASSES.
 #
 #   So: a rule that FAILS here fails for a real structural reason. A rule that PASSES
 #   here may be passing on an invented value. The failures are the signal.
