@@ -418,3 +418,83 @@ after it is finished, which is why it is recorded separately.
 **The shape worth keeping.** Two controls, each correct where it was written, that cannot
 both be satisfied. No review of either catches it, because neither is wrong on its own.
 It surfaced only when something actually exercised both at once.
+
+## B10 — a position's modules are not all on the venture's Forge
+
+**Found 2026-09-07**, by the first real hand-over against a live SimForge. Not found by
+974 passing tests, and it could not have been.
+
+`RoleDefinition.positions[].forge_modules_operated` is a list of **bare module ids**.
+Gate 8 resolved each one's operating instruction under
+`pack.forge_dependencies.operating_forge` — the venture's Forge — which is wrong whenever
+a position operates a module belonging to another Forge. Greenstone's roles operate
+`place_call` and `transcribe_call`, which are **voiceforge** modules.
+
+### The failure it produced was specific, and it read as work
+
+Not a crash, not a 500, not an empty result. It reported:
+
+```
+modules_skipped: ['assign_contract', 'place_call', 'transcribe_call']
+    SKIPPED: no live operating instruction for this module
+```
+
+**Two of those three have a live operating instruction.** They were looked up under
+`cre-forge`, found nothing, and were reported as uninstructed — which reads as a backlog
+item: *somebody needs to write two operating manuals.* Acting on it would have meant
+authoring instructions that already exist, and the duplicates would have gone in under the
+wrong Forge, where they would have been found by nothing and used by nothing.
+
+**A wrong answer that names plausible work is worse than one that names nothing**, because
+the work gets done.
+
+`assign_contract` was the true skip, and V11 says the same thing at Gate 2 — so one third
+of the report was right, which is what made the rest of it credible.
+
+### Why nothing caught it
+
+The test world's roles operate the test world's modules, all on one Forge. Every fixture
+agreed with the assumption, so every test passed under it. **The assumption was only
+false against real data**, and it took a real submission to a real service to find it.
+
+Fixed: each module's Forge is resolved from `forge_module_registry`. A module id
+registered by two Forges is ambiguous and `forge_modules_operated` cannot say which was
+meant — the first by `forge_id` wins, deterministically rather than correctly, and the
+module id is the thing to fix if it ever happens.
+
+**The general shape.** A composite key flattened to one of its parts, where the other part
+was constant in every fixture. Ask of any lookup: **is this identifier unique on its own,
+or unique within something the caller assumed?**
+
+
+## B11 — a record written for something that did not happen, third instance in one day
+
+**Found 2026-09-07.** Gate 8 wrote a `curriculum_submission` row for a module with no live
+operating instruction — a module nothing was sent for, because there was nothing to bind a
+certification to.
+
+That row is not inert. `overdue_submissions` selects submissions with
+`result_received_at IS NULL` past a deadline, so it would have surfaced **forever**, as a
+run awaiting a verdict that could never arrive because no run was ever requested. The
+sweep would have reported a hung hand-over that never happened.
+
+### The shape, named because it is the third today
+
+Three defects, one form: **a record whose existence asserts an event, written before or
+without the event.**
+
+| | |
+|---|---|
+| B8 | Gate 8 wrote a submission row and never set `simforge_run_ref`, so the sweep could find rows it could not resolve |
+| entry 16 / `live` | a Pack marked live carries no record of whether it passed its gates |
+| B11 | a submission row for a module nothing was submitted for |
+
+And the near-miss in the same change: `handed_over_to_simforge` was hard-coded `False`
+with a comment saying a record that read as a handover would record a fiction. **That one
+was got right on the first try, by someone who thought about exactly this.** The other
+three were not, in the same file.
+
+**The rule.** A row in a table whose name is a past-tense event is a claim that the event
+occurred. Write it when it does, and not when the attempt begins, is skipped, or fails.
+If a record of the attempt is genuinely wanted, that is a different table or a different
+column — not the same row with a NULL where the outcome goes.
