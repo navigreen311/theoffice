@@ -580,6 +580,26 @@ async def _v11_instructions_authored(
     assess it. `thin` passes - it is real content that does not go far enough, and
     blocking a release on a short but honest sentence would teach people to pad. `stub`
     and `missing` do not.
+
+    AN EXCLUDED MODULE NEEDS NO CURRICULUM, AND IS NAMED RATHER THAN SKIPPED SILENTLY
+    ================================================================================
+
+        **A curriculum exists to be certified against.** Nothing can be certified for a
+        module in `forge_module_exclusion`, because no agent may ever hold a grant over
+        it, so requiring an instruction for one asks for a document with no purpose -
+        and where the exclusion is `forbidden`, for a manual teaching how to perform a
+        prohibited act, whose `content_hash` would then bind a certification to it.
+
+        Ruled 2026-09-07 (docs/blocking.md B12). The alternative was to take the module
+        off `forge_modules_operated`, and it is worse: a Pack edit hides that the Pack
+        once asked for it, where the exclusion row is the honest record of both the ask
+        and the refusal.
+
+        **They are reported, never silently dropped.** A skipped module that vanished
+        from the message would make an exclusion indistinguishable from coverage - the
+        reader would see every operated module accounted for and could not tell which
+        were taught and which were refused. That is entry 16's shape: a rollup losing a
+        distinction the layer beneath keeps.
     """
     from broker.curriculum_quality import assess
 
@@ -587,26 +607,67 @@ async def _v11_instructions_authored(
     if not modules:
         return True, "no modules operated"
 
+    declared = _declared_forges(pack)
+    operating = pack.forge_dependencies.operating_forge.lower()
+
+    def forges_for(module: str) -> set[str]:
+        return declared.get(module) or {operating}
+
     async with conn.cursor() as cur:
         await cur.execute(
-            "SELECT module_id, content FROM forge_operating_instruction "
+            "SELECT lower(forge_id), module_id FROM forge_module_exclusion"
+        )
+        excluded_pairs = {(r[0], r[1]) for r in await cur.fetchall()}
+        # Keyed on (forge_id, module_id), not module_id. `forge_operating_instruction`
+        # is keyed on both, and flattening it to the module id lets two Forges with a
+        # same-named module satisfy each other's requirement - the manual an agent is
+        # certified against would be the other Forge's. Same defect as B10, in a rule
+        # rather than in a gate.
+        await cur.execute(
+            "SELECT lower(forge_id), module_id, content FROM forge_operating_instruction "
             "WHERE superseded_at IS NULL"
         )
-        live = {r[0]: r[1] for r in await cur.fetchall()}
+        live = {(r[0], r[1]): r[2] for r in await cur.fetchall()}
 
-    missing = sorted(modules - set(live))
+    excluded = sorted(
+        module for module in modules
+        if any((forge_id, module) in excluded_pairs for forge_id in forges_for(module))
+    )
+    excluded_note = (
+        f" ({len(excluded)} excluded, no instruction required: {_join(excluded)})"
+        if excluded else ""
+    )
+    teachable = modules - set(excluded)
+    if not teachable:
+        return True, f"no module requires an instruction{excluded_note}"
+
+    missing = sorted(
+        module for module in teachable
+        if not any((forge_id, module) in live for forge_id in forges_for(module))
+    )
     if missing:
-        return False, f"no Forge Operating Instructions authored for: {_join(missing)}"
+        return False, (
+            f"no Forge Operating Instructions authored for: {_join(missing)}"
+            f"{excluded_note}"
+        )
+
+    def content_for(module: str) -> dict[str, Any]:
+        for forge_id in sorted(forges_for(module)):
+            if (forge_id, module) in live:
+                content: dict[str, Any] = live[(forge_id, module)]
+                return content
+        raise AssertionError(f"{module} passed the missing check with no content")
 
     hollow = sorted(
-        module for module in modules
-        if assess(live[module])["teaches_nothing"]
+        module for module in teachable
+        if assess(content_for(module))["teaches_nothing"]
     )
     if hollow:
         return False, (
             f"instructions exist but teach nothing for: {_join(hollow)}. A content_hash "
             "computed over placeholder text is a valid hash of nothing, and every "
             "certification bound to it inherits that emptiness."
+            f"{excluded_note}"
         )
 
     # And the module the instructions teach has to exist.
@@ -626,11 +687,9 @@ async def _v11_instructions_authored(
     # that ends in a certification.
     from broker import forge_modules
 
-    declared = _declared_forges(pack)
-    operating = pack.forge_dependencies.operating_forge.lower()
     per_forge: dict[str, set[str]] = {}
-    for module in modules:
-        for forge_id in declared.get(module) or {operating}:
+    for module in teachable:
+        for forge_id in forges_for(module):
             per_forge.setdefault(forge_id, set()).add(module)
 
     taught_but_absent: list[str] = []
@@ -651,21 +710,25 @@ async def _v11_instructions_authored(
         )
 
     thin = sorted(
-        module for module in modules if assess(live[module])["state"] == "thin"
+        module for module in teachable if assess(content_for(module))["state"] == "thin"
     )
     detail = f" ({_join(thin)} thin)" if thin else ""
 
+    # `len(teachable)`, not `len(modules)`, and the excluded ones named beside it. The
+    # count and the note have to move together: "all 7 module(s)" over a set of six
+    # taught and one refused is the rollup that loses the distinction.
     if unread:
         return None, (
-            f"instructions are authored for all {len(modules)} module(s){detail}, but "
-            f"whether the modules they teach exist could not be checked: {_join(unread)}. "
-            "NOT_RUN is not a pass - curriculum for a module that does not exist reaches "
-            "certification, and nothing here has ruled that out."
+            f"instructions are authored for all {len(teachable)} module(s){detail}"
+            f"{excluded_note}, but whether the modules they teach exist could not be "
+            f"checked: {_join(unread)}. NOT_RUN is not a pass - curriculum for a module "
+            "that does not exist reaches certification, and nothing here has ruled that "
+            "out."
         )
 
     return True, (
-        f"instructions authored for all {len(modules)} module(s){detail}, each teaching "
-        "a module the Forge dispatches"
+        f"instructions authored for all {len(teachable)} module(s){detail}, each "
+        f"teaching a module the Forge dispatches{excluded_note}"
     )
 
 

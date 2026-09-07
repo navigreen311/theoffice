@@ -159,14 +159,20 @@ async def test_directory_reports_the_failing_rules_message_not_the_rule_name(
     """P2 - the sentence has to say what is wrong with *this* Pack.
 
     "every position's modules have instructions authored" is a specification. "no Forge
-    Operating Instructions authored for: comp_analysis, place_call" is the thing
-    somebody can act on. The page shows the second.
+    Operating Instructions authored for: comp_analysis" is the thing somebody can act
+    on. The page shows the second.
+
+    `comp_analysis`, not `place_call`, and the change is the point of the second half
+    of this test: `voiceforge/place_call` is in `forge_module_exclusion`, so V11 no
+    longer asks for its instruction - a module no agent may hold has nothing to be
+    certified against. Deleting its instruction is now a no-op for this rule, which is
+    exactly why the subject had to move to a module that is still teachable.
     """
     token = world.token
     admin = world.admin
     with admin.cursor() as cur:
         cur.execute(
-            "DELETE FROM forge_operating_instruction WHERE module_id = 'place_call'"
+            "DELETE FROM forge_operating_instruction WHERE module_id = 'comp_analysis'"
         )
     admin.commit()
 
@@ -175,9 +181,17 @@ async def test_directory_reports_the_failing_rules_message_not_the_rule_name(
 
     assert pack["validation"]["state"] == "failing"
     failure = next(f for f in pack["validation"]["failures"] if f["rule_id"] == "V11")
-    assert "place_call" in failure["message"], (
+    assert "comp_analysis" in failure["message"], (
         "the failure names the rule but not the module - a reader cannot act on it"
     )
+    # And the excluded module is NAMED, not silently absent. Silence would make an
+    # exclusion indistinguishable from coverage: a reader seeing every operated module
+    # accounted for cannot tell which were taught and which were refused.
+    assert "place_call" in failure["message"], (
+        "an excluded module vanished from the message - a reader cannot tell a module "
+        "that needs no curriculum from one that has one"
+    )
+    assert "excluded" in failure["message"]
 
 
 async def test_not_validated_is_not_valid(api, world):
