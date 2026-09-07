@@ -1514,3 +1514,109 @@ Worth asking of any conformance check: **is there a legitimate steady state it h
 verdict for?** If there is, that state will be reported as a fault forever, and the report
 loses its readers before it loses its correctness.
 
+## 19. §3.4 is founder-tier and binds every venture — and nothing said so
+
+**Ruled 2026-09-07**, resolving the question entry 6's second amendment left open.
+
+### The ruling
+
+**No worker may initiate an outbound phone call as principal. This binds every venture,
+not only Burkham.**
+
+> A worker not initiating an outbound call as principal is a statement about what agents
+> in this system do, not about how Burkham markets. It was written in a marketing intake
+> because that is where the question arose, not because that is its scope.
+
+VoiceForge may assist a human on a call — transcription, coaching, note-taking. It may not
+dial or speak as one. `transcribe_call` is expressly permitted and stays grantable; the
+whole shape of the ban is initiate-versus-assist, and excluding the assisting half would
+over-apply it.
+
+### The part worth more than the ruling
+
+**The document gave no way to tell.** A founder decision binding every venture was
+recorded inside one venture's intake document, under a heading referring to "Pack Section
+3". Nothing about its placement, its wording or its surroundings distinguishes it from a
+Burkham marketing rule — and I read it, ruled on a Greenstone Pack with it, and did not
+notice the venture had changed. The heading of entry 6 said *"an act Burkham forbids"*
+above a finding about a Pack Burkham does not own.
+
+That was a real mistake and it was not a careless one. **There was no signal to miss.**
+
+**A cross-venture decision recorded in one venture's document is findable only by whoever
+reads that document.** Everyone else — including anyone writing a second Pack, onboarding a
+third Forge, or reviewing a grant — has no reason to open it and no way to know it is
+there. The failure mode is silent in both directions: the rule gets applied where it does
+not belong, and it fails to be applied where it does.
+
+**What would have made it legible: founder-tier decisions need a home that is not a
+venture's Pack or plan.** One document, read by anyone touching any venture, where the
+scope is the location. A decision that binds everything cannot live somewhere that
+implies it binds one thing, and no amount of careful wording inside a venture document
+fixes that — the reader who needs it is the reader who never opens it.
+
+That home does not exist yet. Creating it is not done here, and this entry is the second
+item that would go in it.
+
+### The fix, and why it is this one
+
+`voiceforge/place_call` is now in `forge_module_exclusion`.
+
+**That table is the fix because it is the only mechanism on the path that refuses
+anything.** Proven the same day rather than argued: a grant over `voiceforge/place_call`
+was inserted in a rolled-back transaction and **succeeded**, with V6 passing, V32 never
+asking voiceforge, and V31 answering NOT_RUN. After the row:
+
+```
+voiceforge/place_call:      REFUSED - module place_call on forge voiceforge is
+                            excluded and cannot be granted: forbidden: a founder
+                            decision binds every venture ...
+voiceforge/transcribe_call: INSERT SUCCEEDED
+```
+
+### `forbidden` is a fourth kind of exclusion, and the distinction matters
+
+`module_exclusions.py` recorded three shapes — `inert`, `stubbed`, `refuses` — all of them
+findings about an implementation that does not do its job. Each names the evidence that
+would retire it: the stub is replaced, the runner is built, the 501 becomes a 200.
+
+**A `forbidden` exclusion has no such evidence.** The act is prohibited whether or not the
+module works, and building the capability is precisely the case it exists for. The header
+now says so, because the table's own instruction is *"Remove the row only with the evidence
+that it no longer applies"* — and under the first three shapes, working code is that
+evidence.
+
+### What the ruling reaches, checked rather than assumed
+
+Every module in every registry, against the act §3.4 forbids:
+
+| | |
+|---|---|
+| `voiceforge/place_call` | **forbidden** — row added |
+| `voiceforge/transcribe_call` | expressly permitted |
+| the other 18 registry modules | none initiates a call |
+
+**One row, as expected.** But the check found something outside the registries that is not
+settled by it.
+
+### Open: four CapitalForge modules excluded for a reason that expires
+
+`capitalforge/voice_call_initiate`, `voice_call_end`, `outreach_apr_expiry` and
+`outreach_restack` are already excluded — every one as **`stubbed`**, on the evidence that
+`VoiceForgeService` uses a `TwilioStubClient` that dials nobody. They are not in any
+registry yet, so no grant is possible today.
+
+**Their acts are what §3.4 forbids, and their recorded reason is that they do not work.**
+The real Twilio client exists in that codebase and is imported by the SMS path. The day
+somebody wires it to the voice path, the `stubbed` evidence stops applying — and the
+documented, correct procedure is to remove the row. Someone following the process exactly
+would re-open a forbidden act, and the exclusion would have done its job right up to the
+moment it mattered.
+
+`voice_call_end` is the ambiguous one: terminating a call is not initiating one, and
+whether it is reached depends on whose call it ends.
+
+**Not changed here.** Amending those reasons rewrites recorded findings with source
+citations behind them, and `voice_call_end` needs a ruling of its own. Reported rather than
+done.
+

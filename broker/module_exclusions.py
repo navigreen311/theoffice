@@ -9,17 +9,30 @@ somebody deciding whether an exclusion still holds.
 `scripts/apply_module_exclusions.py` writes these into `forge_module_exclusion`,
 where the BEFORE INSERT trigger on `agent_forge_grant` enforces them.
 
-THREE SHAPES, ONE FAILURE
-=========================
+THREE SHAPES, ONE FAILURE - AND A FOURTH THAT IS NOT A FAILURE AT ALL
+=====================================================================
 
-    Every module below returns a plausible success for work that does not happen.
-    An agent granted one gets a 200, and The Office writes a ledger row saying a
-    call was made - which is true, and which reads afterwards as evidence that the
-    work was done. It was not.
+    The first three are modules that return a plausible success for work that does
+    not happen. An agent granted one gets a 200, and The Office writes a ledger row
+    saying a call was made - which is true, and which reads afterwards as evidence
+    that the work was done. It was not.
 
     inert       persists or records something no runner ever consumes
     stubbed     calls a stub client that fabricates a third-party response
     refuses     answers 501 by design
+
+    The fourth is different in kind:
+
+    forbidden   the module may work perfectly. No agent may be granted it, because
+                the act itself is prohibited.
+
+    **That distinction decides whether an exclusion can ever be lifted.** The first
+    three are findings about an implementation, and each names the evidence that
+    would retire it - the stub is replaced, the runner is built, the 501 becomes a
+    200. A `forbidden` exclusion has no such evidence. Building the capability is
+    precisely the thing that does NOT lift it, and an exclusion whose stated reason
+    is "it does not work yet" is one somebody correctly removes the day it starts
+    working.
 
 NOTE ON NAMES
 =============
@@ -232,4 +245,27 @@ CAPITALFORGE: tuple[ModuleExclusion, ...] = (
 )
 
 #: Every declared exclusion, across every Forge.
-ALL: tuple[ModuleExclusion, ...] = CAPITALFORGE
+#: VoiceForge.
+VOICEFORGE: tuple[ModuleExclusion, ...] = (
+    # ------------------------------------------------------------ forbidden
+    ModuleExclusion(
+        "voiceforge",
+        "place_call",
+        "forbidden: a founder decision binds every venture - no agent may initiate an "
+        "outbound phone call as principal. VoiceForge may assist a human on a call "
+        "(transcription, coaching, note-taking) and may not dial or speak as one. This "
+        "is NOT an exclusion about whether the module works: it holds if VoiceForge "
+        "grows real telephony, and building the capability is the case it exists for. "
+        "The reasoning recorded with the decision is TSR, TCPA, state two-party "
+        "consent and DNC; the V1.5 revisit is explicitly human-only and non-recorded.",
+        "burkham-wickmont-marketing-plan-intake.md 3.4, ruled founder-tier and "
+        "cross-venture on 2026-09-07; docs/decisions.md entry 6 and entry 19. Greenstone "
+        "1.2.0 operates this module and a grant over it was proven to insert with "
+        "nothing refusing it, which is why the row is the fix rather than the Pack.",
+    ),
+    # `transcribe_call` is deliberately absent. Assisting a human on a call is
+    # expressly permitted by the same decision, and excluding it would over-apply a
+    # ban whose whole shape is initiate-versus-assist.
+)
+
+ALL: tuple[ModuleExclusion, ...] = CAPITALFORGE + VOICEFORGE

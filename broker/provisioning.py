@@ -328,10 +328,15 @@ async def _gate_5(ctx: _Context) -> GateOutcome:
         )
     except ValueError as exc:
         return GateOutcome("5", BLOCKED, str(exc), {"error": True})
+    blocked_modules = written.get("grants_excluded") or []
+    tail = (
+        f"; {len(blocked_modules)} grant(s) refused by exclusion"
+        if blocked_modules else ""
+    )
     return GateOutcome(
         "5", PASSED,
         f"{written['grants']} grant(s) issued INACTIVE, {written['manifest_rows']} "
-        "manifest row(s)",
+        f"manifest row(s){tail}",
         {**written, "grants_active": False},
     )
 
