@@ -654,3 +654,72 @@ this path. **No agent holds `underwrite_deal` today**, and its Unit A certificat
 not exist. So this is a defect with no current victim — and the module is in Greenstone's
 `forge_modules_operated`, so the first `underwrite_deal` grant issued is when it acquires
 one.
+
+## B15 — nothing cross-checks `compliance_flags_in_scope` against the declared surface
+
+**Found 2026-09-07**, enumerating Burkham's flags before authoring scenarios against them.
+
+A Pack states compliance obligations in two places that are never compared:
+
+```
+market.compliance_surface[].runtime_flag        what the venture is subject to
+positions_required[].compliance_flags_in_scope  what a position is held to
+```
+
+**The gap runs both ways, and each direction is a different failure.**
+
+### Direction 1 — a flag in scope with no framework
+
+An agent holds an obligation that does not exist. It has a name, it appears on the
+position, it reaches the runtime, and there is nothing behind it: no `applies_when`, no
+jurisdiction, no library entry, nothing to be right or wrong against.
+
+**This one has already been fixed, once, by hand, because somebody happened to notice.**
+Burkham's own Pack records it at line 216:
+
+> *Both of these were already in scope on a position and declared by no framework. The
+> Compliance Reviewer and the Stack Manager carry `trigger_term_disclosure_required`, the
+> Diagnostic Analyst carries `sb_lending_data_collection`, and the flag is the join
+> between a position and an entry — so an agent held a flag with nothing behind it, and
+> nothing reported that because no rule reads `compliance_flags_in_scope`.*
+
+`REG_Z_ADVERTISING` and `CFPB_1071` were re-added to the surface to close it. **The fix
+was correct and it was a person reading two lists side by side.** Nothing stops the next
+one.
+
+### Direction 2 — a framework with no role in scope
+
+An obligation nobody is held to. The venture declares it is subject to a law; no position
+carries it; no agent can violate it because no agent is measured against it.
+
+**Eight of Burkham's twenty declared flags are in this state today:**
+
+```
+advance_placement_prohibited        facilitator_status_required
+fair_treatment_required             outbound_contact_boundary_required
+privacy_request_handling            recording_consent_required
+referral_fee_permitted_in_state     tax_advice_boundary_required
+```
+
+Several are not marginal. `facilitator_status_required` says *"every engagement, in every
+state, from intake through placement"* — declared as universal, carried by nobody.
+`recording_consent_required` covers *"any recorded call, whoever dialled"*.
+
+### Why V22 does not catch either
+
+V22 compares the declared flags against the flags **scenarios claim to exercise**. It
+never reads `compliance_flags_in_scope`. So a Pack passes V22 with every flag exercised by
+a scenario attached to a role that does not carry it — and passes equally with a position
+holding a flag no framework declares.
+
+**The two lists that would answer the question are the two lists nothing compares.** This
+is the V6 shape one table over: comparing two claims, where the third artefact that would
+settle it is never asked.
+
+### Not building a rule for this
+
+Recorded, not fixed. A rule here needs a ruling first — whether a position's in-scope
+flags must be a subset of the surface (direction 1), whether every declared flag must be
+carried by at least one position (direction 2), and what the honest answer is for a
+framework that genuinely applies to the venture and to no single role. Those are three
+decisions and a rule would silently take all three.
