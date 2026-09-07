@@ -339,3 +339,48 @@ should do it without deciding first.
 
 **`statement_pull` and `portfolio_health`.** Routes exist and are bindable. What is
 missing is a manual, which is authorship, not engineering.
+
+## B8 — the timeout sweep has never been able to run
+
+**Found 2026-09-07**, while building the client that would have used it.
+
+`broker/simforge.py` carries the longest argument in that module for why The Office,
+not SimForge, must detect a run that never answered:
+
+> *the case that matters most is the one where SimForge's worker died — and a process
+> that has died cannot report that it has. A deadline held by the party that is
+> waiting is the only version of this check that survives the failure it exists to
+> catch.*
+
+The mechanism is `overdue_submissions()`, which selects `curriculum_submission` rows
+with `result_received_at IS NULL` past a deadline, and `timeout_gate_result()`, which
+builds a TIMEOUT verdict keyed on `simforge_run_ref`.
+
+**Gate 8 never set `simforge_run_ref`.** Its INSERT named eight columns and that was
+not one of them, so every submission it wrote carried NULL there. A submission with no
+run ref cannot be correlated to a verdict — there is nothing to look the verdict up by
+— so the sweep had nothing it could resolve, and `VERDICT_TO_STATE[TIMEOUT] ->
+in_training` stayed unreachable for a second reason after the first one was fixed.
+
+**This is a control that was written, reasoned about at length, defended against an
+alternative design, and dead the whole time** — because the field it keys on was never
+populated by the only thing that writes those rows.
+
+**Nothing reported it.** No test covered the sweep against a real submission, the
+column is nullable so the INSERT was valid, and the reasoning in `simforge.py` reads as
+a description of working behaviour. It was found by building the hand-over that would
+have used it, which is the only reason it surfaced now rather than at the first hung
+run.
+
+**The general shape.** A control's argument being sound says nothing about whether it
+can execute. This one was reviewed on the strength of its reasoning, which was correct,
+and the reasoning never touched the question of whether its input arrives. **Ask of any
+control: what populates the field it keys on, and has that code ever run?**
+
+Fixed in the same change: Gate 8 now sets `simforge_run_ref` from SimForge's response,
+and `handed_over_to_simforge` is true only when a ref came back rather than when the
+row was written.
+
+**Still open**: nothing calls `overdue_submissions()` on a schedule. The sweep can now
+resolve a submission, and no timer invokes it. That is a separate gap and it is not
+closed here.

@@ -39,6 +39,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from broker import audit, humans, knowledge, packs
+from broker.simforge import SimForgeClient, SimForgeError
 from generators import pipeline as generator_pipeline
 from generators import runtime_config as runtime_gen
 from generators.artifacts import GeneratedArtifacts
@@ -492,6 +493,23 @@ async def _gate_8(ctx: _Context) -> GateOutcome:
     The Office authors scenario content and records that it handed it over. It records
     refs and counts and no scenario bodies - a table on the Office side holding what was
     sent is a table holding scenario content.
+
+    THE HAND-OVER IS ATTEMPTED, AND ITS OUTCOME IS RECORDED HONESTLY
+    ===============================================================
+
+        `handed_over_to_simforge` is true only when SimForge answered with a
+        `run_ref`. It is not true because the row was written. Until this gate
+        called anything it was hard-coded false, with a comment saying a record
+        that read as a handover would record a fiction - that judgement was right
+        and this preserves it: an unreachable SimForge still produces `false`, and
+        the gate still passes, because the Office half of the hand-over is done.
+
+        `simforge_run_ref` is the field that matters more than the flag.
+        `overdue_submissions` selects submissions with no result, and
+        `timeout_gate_result` builds a TIMEOUT verdict keyed on that ref. Both
+        were unreachable while this gate never populated it: a submission with a
+        NULL ref cannot be correlated to a verdict, so the timeout sweep had
+        nothing to resolve. See docs/blocking.md B8.
     """
     artifacts = ctx.require_artifacts()
     curriculum = artifacts.curriculum
@@ -499,38 +517,84 @@ async def _gate_8(ctx: _Context) -> GateOutcome:
     denominator = max(
         (c.denominator for c in curriculum.coverage), default=1
     )
+    pack_ref = f"run:{ctx.run_id}"
+
+    run_ref: str | None = None
+    handover_error: str | None = None
+    client = ctx.simforge
+    owns_client = client is None
+    if client is None:
+        # Imported here, not at module scope: `client` imports `broker`, and a
+        # broker module importing it back at import time is a cycle waiting for
+        # the first person who adds a second edge.
+        from client.office_client import OfficeClient
+
+        client = SimForgeClient(OfficeClient())
+    try:
+        run_ref = await client.submit_curriculum(
+            ctx.conn,
+            scenario_pack_ref=pack_ref,
+            payload={
+                "scenario_count": total,
+                "coverage_denominator": max(denominator, 1),
+                "instruction_content_hash": ctx.artifacts_hash_value or "",
+                "venture_id": ctx.venture_id,
+                "forge_id": ctx.pack.pack.forge_dependencies.operating_forge,
+            },
+            actor=ctx.actor,
+            venture_id=ctx.venture_id,
+        )
+    except SimForgeError as exc:
+        # Not fatal. The Office's half of the hand-over - the curriculum, the
+        # counts, the submission row - is complete and reproducible; what failed
+        # is the other side receiving it. Blocking the ladder here would make
+        # provisioning depend on a service that is allowed to be down, and the
+        # false `handed_over_to_simforge` says plainly that it did not land.
+        handover_error = str(exc)
+    finally:
+        if owns_client:
+            await client.aclose()
+
     async with ctx.conn.cursor() as cur:
         await cur.execute(
             """
             INSERT INTO curriculum_submission
               (submission_id, venture_id, forge_id, scenario_pack_ref, scenario_count,
-               coverage_denominator, instruction_content_hash, submitted_by)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+               coverage_denominator, instruction_content_hash, submitted_by,
+               simforge_run_ref)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 uuid.uuid4(), ctx.venture_id,
                 ctx.pack.pack.forge_dependencies.operating_forge,
-                f"run:{ctx.run_id}", total, max(denominator, 1),
-                ctx.artifacts_hash_value or "", ctx.actor,
+                pack_ref, total, max(denominator, 1),
+                ctx.artifacts_hash_value or "", ctx.actor, run_ref,
             ),
         )
     await ctx.conn.commit()
+
+    detail: dict[str, Any] = {
+        "scenario_count": total,
+        # True only when SimForge answered with a ref. A row being written is not
+        # a hand-over, and this flag has meant that since it was introduced.
+        "handed_over_to_simforge": run_ref is not None,
+        "simforge_run_ref": run_ref,
+        "coverage": [
+            {"dimension": c.dimension, "covered": c.covered,
+             "denominator": c.denominator, "uncovered": c.uncovered}
+            for c in curriculum.coverage
+        ],
+    }
+    if handover_error is not None:
+        detail["handover_error"] = handover_error
+
     return GateOutcome(
         "8", PASSED,
         f"{total} scenario(s) submitted "
         f"({len(curriculum.domain_scenarios)} domain, "
-        f"{len(curriculum.operation_scenarios)} operation)",
-        {
-            "scenario_count": total,
-            # Recorded on the Office side. There is no SimForge instance to hand it
-            # to, and a record that read as a handover would record a fiction.
-            "handed_over_to_simforge": False,
-            "coverage": [
-                {"dimension": c.dimension, "covered": c.covered,
-                 "denominator": c.denominator, "uncovered": c.uncovered}
-                for c in curriculum.coverage
-            ],
-        },
+        f"{len(curriculum.operation_scenarios)} operation)"
+        + ("" if run_ref else "; not received by SimForge"),
+        detail,
     )
 
 
@@ -787,6 +851,7 @@ class _Context:
         actor: uuid.UUID,
         human_review_recorded: bool,
         held_out: HeldOutSource,
+        simforge: SimForgeClient | None = None,
     ) -> None:
         self.conn = conn
         self.run_id = run_id
@@ -795,6 +860,10 @@ class _Context:
         self.actor = actor
         self.human_review_recorded = human_review_recorded
         self.held_out = held_out
+        #: Injected by tests and by any caller holding an open client. Gate 8 builds
+        #: one on demand when this is None, so nothing above has to know the gate
+        #: talks to SimForge.
+        self.simforge = simforge
         self.artifacts: GeneratedArtifacts | None = None
         self.artifacts_hash_value: str | None = None
 
@@ -857,6 +926,7 @@ async def start_run(
 async def advance(
     conn: AsyncConnection, *, run_id: uuid.UUID, actor: uuid.UUID,
     held_out: HeldOutSource | None = None,
+    simforge: SimForgeClient | None = None,
 ) -> list[GateOutcome]:
     """Run gates from the current one until something stops the run.
 
@@ -878,7 +948,7 @@ async def advance(
     reviewed = await _human_review_recorded(conn, run_id)
     ctx = _Context(
         conn, run_id, state.venture_id, pack, actor, reviewed,
-        held_out or PartitionAbsent(),
+        held_out or PartitionAbsent(), simforge,
     )
 
     outcomes: list[GateOutcome] = []

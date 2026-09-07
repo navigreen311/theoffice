@@ -140,6 +140,13 @@ EVENTS: tuple[Event, ...] = (
     Event("provisioning_run_rejected", "Run rejected",
           "A reviewer refused the run at a gate.",
           "broker.provisioning", PROVISIONING),
+    Event("curriculum_handed_over", "Curriculum handed to SimForge",
+          "A venture's scenario curriculum was sent to SimForge for certification, and "
+          "the run reference it returned is what every later verdict is read by. The "
+          "actor is the human who provisioned, not an agent: nothing an agent did "
+          "produced this call, and naming one would put a name in the record for a "
+          "call it never made.",
+          "broker.simforge", PROVISIONING),
 
     # -------------------------------------------------------------------- system
     Event("bootstrap_human_created", "First operator created",
