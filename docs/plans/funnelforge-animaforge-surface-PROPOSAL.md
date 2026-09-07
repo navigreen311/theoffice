@@ -121,16 +121,39 @@ segment marketing sequences."*
 So no FunnelForge module can ever read underwriting data. That bounds the surface for
 good, not just for V1.
 
-### The cost of module-gating, stated
+### The price of a seventh template
 
-§4.5: *"the number of approved templates should grow as patterns solidify."* Under
-module-gating each new autonomous template is a Pack edit, a registry row, a manifest row
-and a certification.
+§4.5 expects the inventory to grow — *"the number of approved templates should grow as
+patterns solidify."* So someone will pay this, and it is better chosen than discovered.
 
-That is real friction, and it is not obviously wrong — §4.5 also says *"the review gate on
-new templates is strict (APPROVED list additions require both founders)"* and *"better to
-route to human than to add a marginal template."* A process that makes adding a template
-deliberate is aligned with that, not fighting it.
+**Adding one autonomous template under module-gating costs six steps:**
+
+| # | step | where | who can do it |
+|---|---|---|---|
+| 1 | bind the module in the adapter, template id hardcoded | FunnelForge adapter | engineer |
+| 2 | `forge_module_registry` row — `is_mutating`, `idempotency_support` | The Office | engineer, matching the adapter |
+| 3 | `venture_forge_manifest` row for the venture | The Office, via the ladder | provisioning run |
+| 4 | **operating instruction** — the manual, authored against the code | The Office | author; **V11 fails until it exists** |
+| 5 | **curriculum** — scenarios exercising the module | generated from the Pack | author, then generator |
+| 6 | **certification** — Unit A per agent, Unit B per department | SimForge verdict | certification run |
+
+Steps 4 and 5 are the expensive ones and they are not automatable: a manual is written
+against what the code does, and `PENDING_AUTHORING` is a Pack placeholder rather than a
+row. Until both exist the position operating the new template is unfillable, and Gate 4.5
+reports that as a capacity shortfall rather than a missing certification
+(`docs/decisions.md` entry 11).
+
+**This is a consequence of module-gating, not a defect in it.** The gate has to live
+somewhere; putting it in the module list means the module list is what changes when the
+gate changes. §4.5 itself says *"the review gate on new templates is strict (APPROVED list
+additions require both founders)"* and *"better to route to human than to add a marginal
+template"* — a process that makes adding a template deliberate is aligned with that
+rather than fighting it.
+
+**What would change the price:** the two upstream fields below. With a per-template
+approval scope and a readable compliance state, a seventh template costs one row in
+FunnelForge and nothing in The Office — because the module stops being the gate. That is
+the trade: today's friction buys a gate that exists; the fields buy the friction back.
 
 ### What would make template-gating viable later
 
