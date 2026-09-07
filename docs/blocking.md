@@ -574,3 +574,83 @@ of scope, not a rule limitation**, and worth saying plainly so nobody re-derives
 The scoping is still a defect, and it is a different one: per-Pack scope is right for a
 rule that gates a Pack, and it means **no rule anywhere asks the whole question**. A
 Forge nobody currently binds can hold six identical instructions and nothing reports it.
+
+## B14 — every ARV CRE Forge returns to an agent is the seller's asking price
+
+**Found 2026-09-07**, while reading `underwrite_deal`'s source to author its manual.
+**This is a Forge defect. It is recorded here and raised where the fix lives:
+`navigreen311/medlink-wholesale`.**
+
+### What happens
+
+The Office adapter calls `DealAnalysisService.analyze_deal(deal_id)` and passes **no
+comps**. `analyze_deal` accepts a `comps` argument; the adapter has no parameter for it
+and an agent cannot supply one. So `calculate_arv` takes its no-comps branch on **every
+call through this bridge**:
+
+```python
+if not comps:
+    base_price = property.asking_price or Decimal("0")
+    if base_price == 0:
+        sqft = property.square_feet or 2000
+        base_price = Decimal(str(sqft)) * Decimal("150")
+    return (base_price, base_price * 0.85, base_price * 1.15, NO_COMPS_CONFIDENCE)
+```
+
+- **`arv` is the property's asking price.** The number being evaluated, returned as the
+  evaluation.
+- **Where no asking price is recorded it is `(square_feet or 2000) × $150`.** A property
+  with neither analyses at exactly **$300,000**, a constant indistinguishable in the
+  response from a computed figure.
+- `arv_confidence` is `NO_COMPS_CONFIDENCE = 0.10`, against a `MAX_COMP_CONFIDENCE` of
+  `0.80`. **0.10 is not an outlier here, it is the only value this path produces.**
+
+**And everything downstream inherits it.** `max_allowable_offer = (ARV × multiplier) −
+repairs − wholesale fee − closing costs`; `potential_profit`, `roi`, `deal_score` and
+`deal_grade` are all functions of the same ARV. **None of them carries a confidence field
+of its own.** An agent reading `max_allowable_offer` sees a bare number with nothing
+attached saying what it rests on.
+
+`estimated_repairs` compounds it separately: `_estimate_repair_scope` buckets
+`year_built or 1980`, so a property with no recorded build year is silently priced as
+`EXTENSIVE`.
+
+### Why the manual is not the answer
+
+`underwrite_deal`'s manual is being written and its `silent_partial` and `never_do`
+sections state all of the above plainly. **That is the strongest argument for leaving the
+module exactly as it is, and it is why this entry exists.**
+
+Somebody reads a good `never_do` list, sees the hazard is known, documented and handled —
+and the pressure to fix it goes. The documentation becomes the resolution. **A wrong
+number with a permanent caveat is worse than one that gets corrected**, because the caveat
+is load-bearing forever and is only as good as the last agent who read it.
+
+The manual makes the defect legible to an agent holding the grant **today**, which is
+worth doing and is why it is being written anyway. It does not make the number right.
+
+### The two candidate fixes — a decision, not sympathy
+
+**A. The adapter supplies comps.** `analyze_deal` already accepts them and
+`calculate_arv` already weights and adjusts them. This is the intended path and it needs a
+comps source the adapter can reach — `comp_analysis` is a bound module on the same Forge
+and returns exactly this kind of data. Plausibly small; unconfirmed.
+
+**B. The module refuses when it has none.** `underwrite_deal` answers 422 or a declared
+`insufficient_comps` rather than returning a figure. **A valuation module that always
+returns the asking price should not be answering.**
+
+They are not exclusive — B is the correct floor whether or not A is built, because A can
+still be reached with an empty comps list.
+
+**Not a candidate: lowering the confidence further, or renaming the field.** The problem
+is not that 0.10 is badly labelled. It is that a number derived from the seller's price is
+being returned in a field named after an independent valuation.
+
+### Scope
+
+`cre-forge/property_lookup` holds the one live grant on this Forge and does not touch
+this path. **No agent holds `underwrite_deal` today**, and its Unit A certification does
+not exist. So this is a defect with no current victim — and the module is in Greenstone's
+`forge_modules_operated`, so the first `underwrite_deal` grant issued is when it acquires
+one.
