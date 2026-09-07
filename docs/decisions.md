@@ -853,7 +853,67 @@ makes the capacity picture look better while the venture became less able to ope
 Both numbers moved in the direction that reads as "smaller problem". The cause was a
 module binding half an hour old.
 
-### Why it will happen again
+### AMENDED 7 September 2026 — the data is not dropped. The summary flattens it.
+
+**The claim below was wrong and is corrected here rather than deleted.**
+
+It said *"the information exists one layer down and is dropped on the way up."* Tested by
+issuing 14 banking identities and running appointment:
+
+```
+Deal Underwriter:      need 2, unfilled 2, candidates-with-shortfall 14
+                              14 x never_certified
+Acquisition Analyst:   need 3, unfilled 3, candidates-with-shortfall 0
+Buyer Network Manager: need 2, unfilled 2, candidates-with-shortfall 0
+```
+
+`PositionAppointment.requires_certification` carries the reason **per position**, and the
+escalation reports all three capacity numbers separately. An operator reading the artifact
+can already tell *nobody exists* from *fourteen exist, none certified*.
+
+**What actually flattens is Gate 4.5's summary line** — `V24: unfilled positions: Buyer
+Network Manager (2 of 2)`. That sentence loses a distinction the artifact beneath it
+preserves.
+
+**Narrower defect, different fix.** Not a missing signal to be plumbed through: a message
+that should read what is already there. The original diagnosis pointed at the wrong layer,
+and would have sent somebody to add instrumentation that exists.
+
+### The class this belongs to — a rollup that loses what the layer beneath kept
+
+Three instances now, which is enough to name it:
+
+| where | the rollup says | what the layer beneath holds |
+|---|---|---|
+| **Gate 4.5 summary** | `unfilled positions: X (2 of 2)` | `requires_certification`, 14 × `never_certified` vs 0 candidates |
+| **V30's message** (entry 14) | `3 department(s) have seats` | which population was counted — Village roster, not `office_agent_identity` |
+| **V32's verdict** | `FAIL` | the message distinguishes modules it *asked about* from voiceforge it *could not ask*; the verdict does not |
+
+**The shape:** a summary is computed correctly from data that is correct, and the summary
+drops a distinction that decided the answer. Nothing is missing, nothing is wrong, and the
+sentence an operator reads is less true than the structure behind it.
+
+**Why it is worth its own name.** It looks like the failures this project keeps finding —
+a control that does not hold, a check passing for the wrong reason — and it is not. The
+control ran. The data is right. The fix is a sentence, and diagnosing it as a missing
+signal costs the wrong work: entry 11 as first written would have sent somebody to plumb
+`CandidateShortfall` up through a layer it already reaches.
+
+**How to tell them apart:** read the layer beneath before believing the summary. If the
+distinction is there, it is a message defect. If it is not, it is a signal defect. That
+check is one query and it is the difference between a wording change and a schema change.
+
+### What still stands from the original finding
+
+The mechanism is unchanged and correct: **adding one module to a position makes every
+agent certified for the old set unfillable for it**, instantly, without any certification
+changing. That is what Unit A is for, and it will happen again on the next module added to
+any position.
+
+What changes is where to look when it does — the appointment artifact names the cause; the
+gate's summary line does not.
+
+### Original text, as recorded 6 September
 
 Nothing connects the two facts. `appointment` knows a position is unfilled and knows which
 certifications were missing — `CandidateShortfall` carries the reason per agent, naming
@@ -863,15 +923,10 @@ it.** The information exists one layer down and is dropped on the way up.
 The next module added to any position does this again, and the operator sees a capacity
 shortfall.
 
-### What would fix it
-
 V24's message should distinguish *no candidate exists* from *candidates exist and are
 uncertified for the module just added*, and name the module. The data is already in
 `Appointment.appointments[].shortfalls`. Not done here — it is a message change to a
 blocking gate and belongs with the capacity work rather than tacked onto a module binding.
-
-**Recorded rather than fixed**, so the next person who sees "unfilled positions" after
-touching a Pack knows to check certifications first.
 
 
 ---
