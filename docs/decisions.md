@@ -1204,3 +1204,103 @@ operator without the sentence they need, which is *"no agent in this department 
 Office identity."*
 
 That sentence belongs with the identity-issuance work, not with a validator message.
+
+---
+
+## 15. Every capacity number in this system is Greenstone's — Burkham has never been provisioned
+
+**Recorded 7 September 2026**, after the identity work, because the reasoning error is
+instructive and was caught by protocol rather than by knowing better.
+
+### The trap
+
+Operations was chosen as the second department to issue identities into, and the stated
+reason was that **Stack Manager needs only 1** — so unlike banking's two-of-two positions,
+there was a position that could plausibly be filled.
+
+**Stack Manager is a Burkham position, and Burkham is not in `business_pack`.** It exists
+only as `packs/burkham-wickmont.draft.yaml`, whose first line says `DRAFT, NOT LIVE`.
+Nothing evaluates it: no provisioning run, no gate, no validator invocation in normal
+operation.
+
+The operations position that actually moved was **Greenstone's Buyer Network Manager**,
+which needs 2 — so the reasoning that selected operations was about arithmetic no gate
+computes.
+
+### The general statement
+
+**Every capacity number this system reports today is Greenstone's.** V13's review-minutes,
+V24's unfilled positions, V30's seats, Gate 4.5's shortfall, `produced_not_yet_certified`
+— all of it resolves against `packs.live(conn, "greenstone")`, because greenstone is the
+only venture with a published Pack.
+
+So **reasoning about a Burkham position moving a gate's arithmetic is reasoning about a
+Pack that is not there.** The position exists in a file; the number it would move does not
+exist at all.
+
+Easy to do, because the draft is detailed, internally consistent, and reads exactly like a
+Pack. Nothing about looking at it says "no gate will ever see this."
+
+### How it was caught
+
+Not by knowing better. The prediction protocol required naming which evaluation path each
+prediction would be scored against, and there was no path — `validate()` and `appointment`
+both take the *live* Pack, and greenstone is the only one. Writing the prediction is what
+surfaced it.
+
+That is the second time the protocol caught something the author knew and had not applied:
+the first was testing V24, a Gate 4.5 rule, through a Gate 2 call.
+
+### What it means for the identity work
+
+**51 agents are now appointable and there is still no Burkham Pack to appoint them into.**
+
+```
+banking         14      operations      12
+administration  11      marketing       14      = 51, plus 3 engineering = 54
+```
+
+Greenstone draws on three departments — `research` (nobody), `operations` (12 uncertified),
+`banking` (14 uncertified) — and has no administration or marketing position at all.
+Issuing those 25 changed no appointment output whatsoever, which the round confirmed:
+`produced_not_yet_certified` stayed at 26.
+
+**Identities were never the blocker on their own.** They were *a* blocker — banking had
+zero candidates and now has fourteen — but for Burkham the chain is longer and identity is
+not the first link missing.
+
+### What publishing a Burkham Pack would actually require — tested, not read
+
+The draft says its values are placeholders and that the placeholders are the finding. Both
+halves were tested by parsing it and running the validator against it.
+
+**Publication is not blocked.** `packs.parse_only` accepts it as a schema-v3 Pack with
+`venture_id='burkham-wickmont'`. `store(publish=True)` requires nothing more, so it could
+be published today — and Gate 2 would then refuse it, which is the correct place for a
+Pack to be refused.
+
+**Gate 2 gives 3 FAIL, 2 NOT_RUN, 0 WARN:**
+
+| rule | verdict | what it is |
+|---|---|---|
+| **V23** | FAIL | *no scenarios for: Compliance Reviewer, Diagnostic Analyst, Intake Concierge, Placement Strategist, Stack Manager* — **the draft contains zero scenarios** |
+| **V22** | FAIL | runtime flags never exercised by a scenario — the same absence, from the compliance side |
+| **V32** | FAIL | `simforge/run_scenario_pack` not dispatched — a standing ruling (entry 5), not a Burkham problem |
+| V11 | NOT_RUN | instructions authored for all 10 modules; module existence uncheckable because CapitalForge answered 401 |
+| V24 | NOT_RUN | Gate 4.5, by construction |
+
+**So the blocking placeholder is exactly one thing: the scenario set, and it is empty
+rather than invented.** The draft header lists it among the invented values —
+*"the whole scenario set"* — and it is not invented, it is absent. 22 declared frameworks
+and 5 roles, against 0 scenarios. V23 wants ≥3 per role × domain with ≥1 expected
+escalation each; V22 wants every declared runtime flag exercised.
+
+**What is cosmetic, in the sense that it does not block:** `human_capacity`, `budget`,
+`capacity_demand`, `availability`, KPI measurement sources and `data_retention` all pass
+their rules on invented values. That is the draft's own warning restated with evidence —
+*"a rule that PASSES here may be passing on an invented value"* — and it is the more
+dangerous half, because those passes are indistinguishable from earned ones.
+
+**The order of work, therefore:** scenarios first (authorship, 5 roles × domains × 22
+frameworks), then the invented values replaced by real ones, then the department mapping
+from entry 12. Identity issuance is done and was never the constraint.
