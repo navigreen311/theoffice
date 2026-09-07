@@ -1392,7 +1392,21 @@ draft file could not have separated the sets.
 
 ## 17. Two defects in `proposals.queue`, and they are independent
 
-Both found while checking the above. Recorded separately because fixing either leaves the
+**Read this first, because "display only" reverses here.**
+
+The question asked of both defects was *what acts on the number* — expecting that "display
+only" would mean low stakes. It does not. The number feeds one consumer, a banner on
+`/proposals`, and **the banner is the whole consequence**:
+
+> *N pending against M remaining approvals in today's coverage. The overflow will not be
+> reviewed before the window closes.*
+
+**An inflated denominator does not cause a wrong action. It suppresses a warning.** The
+failure mode is not a bad decision anybody could point at afterwards — it is **silence**,
+and silence is the hardest thing to notice missing. Nobody investigates a banner that did
+not appear.
+
+Both found while checking entry 16. Recorded separately because fixing either leaves the
 other standing.
 
 ### One — reviewer capacity is read from every live Pack with no gate check
@@ -1426,11 +1440,19 @@ capacity.remaining_today  180        summed across both live Packs
 inflation                  90
 ```
 
-Ivan is one person and contributes 60 twice. Add a third venture he reviews for and it is
-180 from one human.
+Ivan is one person and contributes 60 twice.
 
 **Even with both Packs validated and both figures real, this number is wrong.** It is a
 sum over Pack rows presented as a sum over people.
+
+**And it scales with ventures.** `human_capacity` is declared per Pack, so every venture a
+reviewer covers adds their full daily figure again: **+90 per venture Ivan and Dana both
+review for**, against a real capacity that does not move at all. Three ventures reads 270,
+four reads 360, and the same two people are doing the reviewing throughout.
+
+That matters because more ventures is the plan, not a hypothetical. The error is not a
+fixed 90 to be remembered — it grows with exactly the thing the system is built to do,
+and it grows in the direction that keeps the warning quiet.
 
 ### What acts on it — display only, and it is a warning that fails to fire
 
