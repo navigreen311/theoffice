@@ -255,6 +255,79 @@ general rule for writing these is in `docs/pack-validator.md`.
 
 ---
 
+## B7. The venture_forge_manifest was never generated — two hand-placed rows look like one that was
+
+**Found 2026-09-06**, while confirming that a Pack republish had produced a manifest row.
+It had not, and checking is what found this: the row was expected to be missing, and the
+other four were the surprise.
+
+### What is there
+
+```
+venture_forge_manifest, venture_id = 'greenstone'
+    cre-forge / property_lookup     is_required, hard
+    simforge  / gate_result         is_required, hard
+```
+
+**Two rows against seven declared modules.** Both were written by hand — `property_lookup`
+by `bootstrap_phase0` so the Phase 0.8 call would not be UNDECLARED, and `gate_result` by
+the equivalent SimForge bootstrap. Neither was generated.
+
+`runtime_config.apply` is the only thing that writes this table, and it runs at **Gate 5**
+of the provisioning ladder. **No run has ever reached Gate 5.** So the manifest for
+greenstone has never been generated at all.
+
+### Why this is worse than an empty table
+
+An empty manifest is obviously unconfigured. **Two rows look like a working manifest with
+something missing** — which is how it read this morning, when the question was "did
+`assign_contract`'s row appear" and the answer looked like "no, just that one".
+
+These five declared modules are UNDECLARED, and **every call to any of them is blocked
+with a HIGH incident** at step 4 of the call path, before the tier gate:
+
+    buyer_match · comp_analysis · underwrite_deal · assign_contract · run_scenario_pack
+
+`property_lookup` works. It is the only module anybody has called, and the only one with a
+row, and those two facts have the same cause: somebody placed the row by hand to make one
+call succeed.
+
+**Pre-existing, and not caused by today's publish.** Publishing has never written this
+table and was never going to.
+
+### What running `runtime_config.apply` for greenstone would take
+
+It is reached at Gate 5, so everything before it must pass first:
+
+| gate | state today |
+|---|---|
+| 2 | **blocked** — V11 FAIL (five CRE instructions unauthored, `PENDING_AUTHORING` is a Pack placeholder not a row), V32 FAIL (`simforge/run_scenario_pack`, which decision 5 rules stays declared and unbound), V31 NOT_RUN (`voiceforge/place_call`, which decision 6 records as a capability VoiceForge never had) |
+| 4.5 | **blocked** — V24 unfilled positions, and V13 at 192 approvals a day against the declared reviewer coverage |
+
+So it is not a command to run. It is: author five operating instructions, resolve two
+standing rulings about modules that do not exist, and settle Greenstone's capacity — which
+has failed Gate 4.5 since it was first authored, by design of the check rather than by
+accident.
+
+### What it writes when it does run
+
+| table | what |
+|---|---|
+| `venture_forge_manifest` | one row per declared module — the thing missing here |
+| `agent_forge_grant` | grants, **inactive** (`activated_at IS NULL`, so `is_assignable` is false and the call path refuses them until Gate 11 activates them) |
+| `venture_budget` | the Pack's budget block |
+| `rate_limit_bucket` | per-agent and per-Forge buckets |
+
+Idempotent by construction; it returns counts so a second run can be asserted to write
+zero.
+
+**The shortcut is the thing that created this.** Hand-writing four more manifest rows
+would unblock the calls tonight and leave the same defect one module wider: a table that
+looks generated and is not, disagreeing with the Pack the moment either changes. If rows
+are placed by hand again, they should be placed knowing that.
+
+---
+
 ## What is NOT on this page
 
 **`lender_match` and `build_packet`.** They have no implementation under any
