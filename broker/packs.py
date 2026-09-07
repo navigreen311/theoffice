@@ -118,6 +118,7 @@ async def store(
     authored_by: uuid.UUID,
     publish: bool = True,
     expect_changed_lines: int | None = None,
+    change_summary: list[str] | None = None,
 ) -> StoredPack:
     """Store a Pack version, as the live one or as a draft.
 
@@ -137,6 +138,13 @@ async def store(
 
     The diff is computed and audited either way. Declaring the count is optional;
     recording what changed is not.
+
+    `change_summary` is what the publisher *meant*, in their own words, beside the count
+    of what moved. The two answer different questions and both belong in the record: a
+    positional diff of 273 lines is the honest answer to "did anything shift that you did
+    not expect", and it says nothing about intent - 39 inserted lines of comment shift
+    every line below them. The summary says the edit was five things. Neither substitutes
+    for the other, and a reader six months later needs both to reconstruct the change.
 
     `venture_id` is derived from the Pack rather than passed in, so a caller cannot
     store one venture's Pack under another venture's name.
@@ -225,6 +233,7 @@ async def store(
             "replaced_version": previous.pack_version if previous else None,
             "changed_line_count": len(changed),
             "declared_change_count": expect_changed_lines,
+            "change_summary": change_summary,
             "changed_lines": [
                 {"before": b.strip(), "after": a.strip()} for b, a in changed[:40]
             ],

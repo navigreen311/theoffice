@@ -214,13 +214,34 @@
       "compliance_flag": "recording_consent_required, tsr_disclosure_required",
       "failure_and_escalation": "Proposal is rejected or times out: return to Buyer Network Manager with the reviewer's reason. Repeated rejection escalates to the venture operator.",
       "forge_modules": [
+        "assign_contract"
+      ],
+      "inputs": [
+        "assign_context",
+        "assign_contract_request"
+      ],
+      "number": 11,
+      "outputs": [
+        "assign_contract_result"
+      ],
+      "position": "Buyer Network Manager",
+      "stage": "Assign",
+      "step": "Assign: Buyer Network Manager operates assign_contract",
+      "success_metric": "assign_contract returns a complete result and the ledger row records manifest_match=required",
+      "supporting": [],
+      "trigger": "agent_initiated"
+    },
+    {
+      "compliance_flag": "recording_consent_required, tsr_disclosure_required",
+      "failure_and_escalation": "Proposal is rejected or times out: return to Buyer Network Manager with the reviewer's reason. Repeated rejection escalates to the venture operator.",
+      "forge_modules": [
         "buyer_match"
       ],
       "inputs": [
         "assign_context",
         "buyer_match_request"
       ],
-      "number": 11,
+      "number": 12,
       "outputs": [
         "buyer_match_result"
       ],
@@ -241,7 +262,7 @@
         "assign_context",
         "place_call_request"
       ],
-      "number": 12,
+      "number": 13,
       "outputs": [
         "place_call_result"
       ],
@@ -262,7 +283,7 @@
         "assign_context",
         "transcribe_call_request"
       ],
-      "number": 13,
+      "number": 14,
       "outputs": [
         "transcribe_call_result"
       ],
@@ -277,13 +298,34 @@
       "compliance_flag": "recording_consent_required, tsr_disclosure_required",
       "failure_and_escalation": "Proposal is rejected or times out: return to Buyer Network Manager with the reviewer's reason. Repeated rejection escalates to the venture operator.",
       "forge_modules": [
+        "assign_contract"
+      ],
+      "inputs": [
+        "close_context",
+        "assign_contract_request"
+      ],
+      "number": 15,
+      "outputs": [
+        "assign_contract_result"
+      ],
+      "position": "Buyer Network Manager",
+      "stage": "Close",
+      "step": "Close: Buyer Network Manager operates assign_contract",
+      "success_metric": "assign_contract returns a complete result and the ledger row records manifest_match=required",
+      "supporting": [],
+      "trigger": "agent_initiated"
+    },
+    {
+      "compliance_flag": "recording_consent_required, tsr_disclosure_required",
+      "failure_and_escalation": "Proposal is rejected or times out: return to Buyer Network Manager with the reviewer's reason. Repeated rejection escalates to the venture operator.",
+      "forge_modules": [
         "buyer_match"
       ],
       "inputs": [
         "close_context",
         "buyer_match_request"
       ],
-      "number": 14,
+      "number": 16,
       "outputs": [
         "buyer_match_result"
       ],
@@ -304,7 +346,7 @@
         "close_context",
         "place_call_request"
       ],
-      "number": 15,
+      "number": 17,
       "outputs": [
         "place_call_result"
       ],
@@ -325,7 +367,7 @@
         "close_context",
         "transcribe_call_request"
       ],
-      "number": 16,
+      "number": 18,
       "outputs": [
         "transcribe_call_result"
       ],

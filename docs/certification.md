@@ -290,6 +290,49 @@ longer current, and which direction the version moved is not the point.
 Declaring it decertifies every agent on that module at every patch release — sometimes
 right, always expensive, never accidental.
 
+### When to bump `forge_registry.api_version` — and when not to
+
+**Adding a module is not a version bump.** Ruled 2026-09-06, when `assign_contract` was
+bound to CRE Forge and `api_version` stayed at `1.4.0`.
+
+`api_version` is doing two jobs that usually move together and did not here:
+
+| the question | who asks it |
+|---|---|
+| what does this Forge speak? | an operator, a reader, `V7` |
+| **did what an agent learned change?** | `is_forge_version_stale`, on every certification |
+
+The second is the one with consequences. At the default `major.minor`, `1.4.0 -> 1.5.0`
+marks **stale every certification on every module of that Forge** — including modules
+whose behaviour, contract and instruction did not move. A capability *addition* changes
+what the Forge speaks and changes nothing an agent learned about `property_lookup`.
+
+**A bump is for when an existing module's contract moves.** Not for a module appearing
+beside it.
+
+#### What was checked before ruling
+
+Every reader of `api_version`, exhaustively:
+
+| reader | what it does with it |
+|---|---|
+| `certification.is_forge_version_stale` | **decides staleness** — the only decision it drives |
+| `broker/forge_modules.py` | carries it into a probe descriptor for display; conformance compares module *names and shapes*, never versions |
+| `V7` | asserts it is pinned, not `latest` — says nothing about completeness |
+| `X-Office-Forge-Api-Version` | sent on every call; the CRE Forge adapter logs it and nothing else |
+| `bootstrap_phase0`, the console | stamps it into a certification; displays it |
+
+**Nothing reads `api_version` as "the Forge's surface, complete."** The two columns that
+would express that idea — `forge_module_registry.api_version_introduced` and
+`api_version_deprecated` — exist in `0001_core_schema`, are NULL for every CRE Forge
+module, and are **queried by nothing**.
+
+If that changes — if something starts deriving "which modules exist at version X" from
+those columns — this ruling needs revisiting, because then a capability addition really
+would change the Forge's declared surface. Today the adapter's `GET /_modules` is the
+only answer to that question, and it is derived from the dispatch map rather than from a
+version number.
+
 ### The three version fields, and which one decides what
 
 A module carries three version-ish values and they answer different questions. Two

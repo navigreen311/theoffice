@@ -112,11 +112,17 @@ async def test_a_run_stops_at_the_first_blocking_gate_and_names_it(
         blocking = outcomes[-1]
         assert blocking.gate == "4.5"
         assert blocking.verdict == provisioning.BLOCKED
-        # 192 until 2026-09-02. Cutting `generate_loi` from the Pack removed the
-        # workflow step that operated it, and one fewer step is 32 fewer approvals a
-        # day. The gate still blocks; a module that does not exist was contributing
-        # to the review load that blocked it.
-        assert "160 approvals" in blocking.reason
+        # 192, and it has been here before. It was 192 until 2026-09-02, when cutting
+        # `generate_loi` removed the workflow step that operated it - one fewer step
+        # is 32 fewer approvals a day, so it fell to 160. Binding `assign_contract` on
+        # 2026-09-06 restored the step, and the figure with it.
+        #
+        # The difference is what stands behind the number. In August it counted a step
+        # operated by a module that did not exist; now it counts one the Forge
+        # dispatches. The gate blocks either way, which is why the fall to 160 was not
+        # an improvement and this rise is not a regression: the review load was always
+        # going to be real once the work was.
+        assert "192 approvals" in blocking.reason
         assert "compliance officer" in blocking.reason
         assert state is not None
         assert state.status == "blocked"

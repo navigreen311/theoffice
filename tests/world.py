@@ -30,7 +30,14 @@ FORGE_ID = "cre-forge"
 # has no letter-of-intent service, route or contract template, so a world that
 # registered it was a world describing a module that does not exist - which is the
 # state V32 exists to refuse, reproduced inside the fixture that tests V32.
-CRE_MODULES = ("property_lookup", "comp_analysis", "underwrite_deal", "buyer_match")
+CRE_MODULES = (
+    "property_lookup", "comp_analysis", "underwrite_deal", "buyer_match",
+    # Bound 2026-09-06. is_mutating with at_most_once idempotency, matching what
+    # the adapter declares at its binding site - the registry copy is the one
+    # V31 reads, so a fixture that disagreed with the adapter would be testing a
+    # world the Forge does not serve.
+    "assign_contract",
+)
 VOICE_MODULES = ("place_call", "transcribe_call")
 
 # Fixed agent ids so snapshots are stable across runs and machines. Real agents arrive
@@ -442,7 +449,11 @@ def certify_for_positions(conn: psycopg.Connection) -> None:
             unit_b_departments=["research"])
     certify(conn, finance, ["comp_analysis", "underwrite_deal"], tier="propose",
             unit_b_departments=["banking"])
-    certify(conn, success, ["buyer_match"], tier="propose",
+    # assign_contract joins buyer_match on 2026-09-06: Buyer Network Manager operates
+    # both, and an agent certified for only half its position's modules leaves the
+    # position unfillable - which shows up at Gate 4.5 as a capacity shortfall rather
+    # than as a missing certification.
+    certify(conn, success, ["buyer_match", "assign_contract"], tier="propose",
             unit_b_departments=["operations"])
     certify(conn, success, ["place_call", "transcribe_call"], forge="voiceforge",
             tier="propose", unit_b_departments=["operations"])

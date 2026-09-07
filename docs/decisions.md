@@ -790,3 +790,58 @@ catalogue. Nothing asks it today; the `# DECISION NEEDED` comment left in the Pa
   read.**
 - Published through the diff control of entry 9, with the change count declared.
 
+
+---
+
+## 11. Adding a module to a Pack decertifies the position, and Gate 4.5 names the wrong cause
+
+**Learned 2026-09-06, at a cost of 50 test failures**, binding `assign_contract` into
+Greenstone.
+
+### What happens
+
+An agent is certified per `(agent, forge, module)`. A position is fillable when its
+occupant is certified for **every** module the position operates. So adding one module to
+a position's `forge_modules_operated` makes **every agent certified for the old set
+unfillable for it** — instantly, and without any certification changing.
+
+That much is correct and is the point of Unit A. The problem is what the system then says.
+
+### The symptom names the wrong cause
+
+Gate 4.5 reported:
+
+```
+V24: unfilled positions: Buyer Network Manager (2 of 2)
+V13: The compliance officer would receive 128 approvals a day ...
+```
+
+**"Unfilled positions" reads as "not enough people."** The fact was "these two people are
+not certified for what the role now does" — a different problem with a different fix.
+Nobody adds headcount to solve a missing certification, and the V13 figure *fell* at the
+same time (160 → 128), because an unfillable position contributes no approvals, which
+makes the capacity picture look better while the venture became less able to operate.
+
+Both numbers moved in the direction that reads as "smaller problem". The cause was a
+module binding half an hour old.
+
+### Why it will happen again
+
+Nothing connects the two facts. `appointment` knows a position is unfilled and knows which
+certifications were missing — `CandidateShortfall` carries the reason per agent, naming
+`never_certified` rather than collapsing to "not eligible". **V24's message does not carry
+it.** The information exists one layer down and is dropped on the way up.
+
+The next module added to any position does this again, and the operator sees a capacity
+shortfall.
+
+### What would fix it
+
+V24's message should distinguish *no candidate exists* from *candidates exist and are
+uncertified for the module just added*, and name the module. The data is already in
+`Appointment.appointments[].shortfalls`. Not done here — it is a message change to a
+blocking gate and belongs with the capacity work rather than tacked onto a module binding.
+
+**Recorded rather than fixed**, so the next person who sees "unfilled positions" after
+touching a Pack knows to check certifications first.
+

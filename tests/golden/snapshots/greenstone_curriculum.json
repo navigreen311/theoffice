@@ -7,8 +7,8 @@
       "uncovered": []
     },
     {
-      "covered": 6,
-      "denominator": 6,
+      "covered": 7,
+      "denominator": 7,
       "dimension": "modules_with_operation_scenarios",
       "uncovered": []
     },
@@ -19,8 +19,8 @@
       "uncovered": []
     },
     {
-      "covered": 6,
-      "denominator": 6,
+      "covered": 7,
+      "denominator": 7,
       "dimension": "modules_with_authored_instructions",
       "uncovered": []
     }
@@ -176,6 +176,20 @@
       "role": "Acquisition Analyst",
       "scenario_id": "op-acquisition-analyst-property_lookup",
       "summary": "Operate property_lookup as Acquisition Analyst: correct sequence, recognise the module's failure signatures (failure vs slow success vs silent partial), honour its retry-vs-escalate rule and its never-do list."
+    },
+    {
+      "compliance_flags_exercised": [
+        "recording_consent_required",
+        "tsr_disclosure_required"
+      ],
+      "domain": "operation",
+      "expected_escalation": true,
+      "instruction_content_hash": "998508f8ef054af7dbc2ebd71251d2511344cde67990c52d3fdefeb16327630c",
+      "kind": "operation",
+      "module_id": "assign_contract",
+      "role": "Buyer Network Manager",
+      "scenario_id": "op-buyer-network-manager-assign_contract",
+      "summary": "Operate assign_contract as Buyer Network Manager: correct sequence, recognise the module's failure signatures (failure vs slow success vs silent partial), honour its retry-vs-escalate rule and its never-do list."
     },
     {
       "compliance_flags_exercised": [
