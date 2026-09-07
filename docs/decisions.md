@@ -1347,3 +1347,68 @@ dangerous half, because those passes are indistinguishable from earned ones.
 **The order of work, therefore:** scenarios first (authorship, 5 roles × domains × 22
 frameworks), then the invented values replaced by real ones, then the department mapping
 from entry 12. Identity issuance is done and was never the constraint.
+
+## 18. A module can be dispatched and deliberately not agent-facing
+
+**Decided 2026-09-07.**
+
+SimForge will bind `submit_curriculum` and `run_start` on its `/office` adapter so The
+Office can reach them with the tenant credential. **Neither gets a `forge_module_registry`
+row, and that is permanent rather than pending.**
+
+### Why no row
+
+**A registry row exists so a grant can be issued over a module.** That is what the table
+is for: `resolve_grant` joins it, `is_mutating` on it decides whether an agent may run
+unattended, `agent_forge_grant` references it, and V31 reads it. Everything a row does,
+it does for an agent.
+
+Neither of these is an agent act. `submit_curriculum` hands a curriculum over during
+provisioning — Gate 8 runs before any agent exists for the venture, and the actor is the
+human who provisioned. That is exactly why it is signed with the Office's own tenant
+credential rather than through the brokered path. `run_start` opens the run a verdict is
+later read by; it is bookkeeping between two systems.
+
+**Rows would make them look grantable.** A row is the thing a person reads to decide what
+an agent may be given, and two rows nobody may ever grant is an invitation to grant them.
+
+### The verifier said the right thing for the wrong reason
+
+`scripts/verify_forge_modules.py` reports a dispatched module with no row as:
+
+```
+DRIFT simforge/submit_curriculum: dispatched by the Forge and unknown to the registry.
+Not added - a Forge does not enlarge its own agent-facing surface.
+```
+
+**The verdict is right and the sentence is wrong.** "Unknown to the registry" describes a
+gap somebody should close. The truth is "deliberately not in it" — a decision, already
+made, that nothing is meant to change.
+
+Left alone, that is **two permanent DRIFT lines on every run**. A finding nobody can act
+on is how a report becomes something people skim, and the cost is not the noise: it is the
+real DRIFT line that appears beside them one day and gets skimmed with them.
+
+### What was built
+
+`broker.forge_modules.NOT_AGENT_FACING` — `(forge_id, module_id)` to the reason it is
+dispatched without a row. The verifier prints those as **NOT AGENT-FACING**, with the
+reason, and does not count them toward its exit status.
+
+**This does not weaken the rule beside it.** *"A Forge does not enlarge its own
+agent-facing surface"* holds exactly as before: an entry here makes nothing callable by an
+agent, creates no grantable capability, and touches no table. It records that a person
+decided this name is not agent-facing, and why. Adding one is an edit to a source file
+under review, which is the control.
+
+### The general shape
+
+**A check with only two verdicts will file a third thing under whichever fits worse.**
+This one had DRIFT and MISMATCH, and a deliberate absence is neither — it is not a
+disagreement about whether the module exists, and not a disagreement about what it does.
+It got DRIFT because DRIFT was closer.
+
+Worth asking of any conformance check: **is there a legitimate steady state it has no
+verdict for?** If there is, that state will be reported as a fault forever, and the report
+loses its readers before it loses its correctness.
+

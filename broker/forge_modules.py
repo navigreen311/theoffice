@@ -79,6 +79,47 @@ SCOPE = (
 #: The adapter's own endpoints live under `_`, which is therefore not a legal module id.
 MANIFEST_PATH = "_modules"
 
+
+# ---------------------------------------------------- dispatched, and not agent-facing
+
+#: (forge_id, module_id) -> why it is dispatched without a registry row.
+#:
+#: **A registry row exists so a grant can be issued over a module.** That is the whole
+#: of what a row is for: `resolve_grant` joins it, `is_mutating` on it decides whether
+#: an agent may run unattended, and `agent_forge_grant` references it. A module no agent
+#: will ever call has nothing to gain from a row and one thing to lose by having one -
+#: it starts looking grantable.
+#:
+#: So a Forge may bind a handler The Office calls with its own tenant credential rather
+#: than on an agent's behalf, and the correct steady state for those is **no row, for
+#: good**. Without this list the verifier reports each one as DRIFT every run, and two
+#: permanent DRIFT lines are how a report becomes something people skim past - which
+#: costs the finding the day a real one appears next to them.
+#:
+#: **This does not weaken the rule it sits beside.** "A Forge does not enlarge its own
+#: agent-facing surface" still holds exactly: adding a name here does not make it
+#: callable by an agent, does not create a grantable capability, and does not touch the
+#: registry. It records that somebody decided this name is not agent-facing and why, so
+#: the verifier can say *deliberately not in the registry* instead of *unknown to it*.
+#: Adding an entry is a reviewable act in a source file, which is the point.
+NOT_AGENT_FACING: dict[tuple[str, str], str] = {
+    ("simforge", "submit_curriculum"): (
+        "The Office hands a curriculum over during provisioning. Gate 8 runs before any "
+        "agent exists for the venture, the actor is the human who provisioned, and the "
+        "call is signed with the Office's own tenant credential. A grant over this would "
+        "name an agent for an act no agent performs."
+    ),
+    ("simforge", "run_start"): (
+        "Opens the OperationRun a verdict is later read by. Bookkeeping between the two "
+        "systems, on the same footing as the hand-over that precedes it."
+    ),
+}
+
+
+def not_agent_facing(forge_id: str, module_id: str) -> str | None:
+    """Why this module is dispatched without a registry row, or None if nobody said."""
+    return NOT_AGENT_FACING.get((forge_id, module_id))
+
 #: The three `forge_module_registry.idempotency_support` accepts. A fourth value from
 #: an adapter is a manifest this cannot read, not a new kind of module.
 IDEMPOTENCY_SUPPORT = frozenset({"key", "natural", "at_most_once"})

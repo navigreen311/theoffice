@@ -7,12 +7,24 @@
 `--check` writes nothing and exits 1 on drift or on a shape mismatch. That is the CI
 form. A registry verified once and never again is a claim with a date on it.
 
-TWO FINDINGS, KEPT APART
-========================
+THREE FINDINGS, KEPT APART
+=========================
 
     DRIFT      a row and a dispatch map disagree about whether a module EXISTS - a
                registry row the Forge does not dispatch, or a module it dispatches
                that The Office has no row for.
+
+    NOT AGENT-FACING
+               a module the Forge dispatches that The Office deliberately has no row
+               for, because no agent calls it. Reported, never counted. A registry row
+               exists so a grant can be issued; a module The Office calls with its own
+               tenant credential has nothing to gain from one and would only start
+               looking grantable. The reasons live in `broker.forge_modules`.
+
+               This was DRIFT until 7 September 2026, and the message read "unknown to
+               the registry" when the truth was "deliberately not in it". Right verdict,
+               wrong reason - and a permanent finding nobody can act on is how a report
+               becomes noise everyone learns to skip.
 
     MISMATCH   they agree it exists and disagree about WHAT IT DOES. `is_mutating`
                and `idempotency_support` are the fields, and the first one decides
@@ -292,6 +304,18 @@ async def run(only: str | None, check: bool) -> int:
                     "capability that is not there. Not deleted - revoke the grant first."
                 )
             for module_id in unknown:
+                why = forge_modules.not_agent_facing(forge_id, module_id)
+                if why is not None:
+                    # Not drift, and not a finding at all. Drift is a disagreement about
+                    # whether a module exists; this is agreement that it exists and a
+                    # recorded decision that no agent calls it. Printed so the reader
+                    # sees it was considered, and not counted so a permanent line never
+                    # trains anyone to skip the section.
+                    print(
+                        f"  NOT AGENT-FACING {forge_id}/{module_id}: dispatched, and "
+                        f"deliberately not in the registry. {why}"
+                    )
+                    continue
                 drift = True
                 print(
                     f"  DRIFT {forge_id}/{module_id}: dispatched by the Forge and "
