@@ -903,6 +903,49 @@ signal costs the wrong work: entry 11 as first written would have sent somebody 
 distinction is there, it is a message defect. If it is not, it is a signal defect. That
 check is one query and it is the difference between a wording change and a schema change.
 
+### A fourth instance, 7 September — and it extends the class
+
+`produced_not_yet_certified` is not a summary line. It is a **field name**, and it is
+wrong in the same way.
+
+It reads as a fact about the venture: *how many agents have been produced and are not yet
+certified.* It is a fact about **an appointment run** — it increments inside the
+per-position candidate loop in `generators/appointment.py`, once per candidate examined for
+a position being appointed. An uncertified identity in a department no position draws on
+is never counted, because it is never examined.
+
+**How it was separated, and it was nearly not.** Issuing 12 operations identities moved it
+14 → 26, exactly +12. Both readings predict that, because operations feeds Greenstone's
+Buyer Network Manager — every new identity was also a candidate. The operations prediction
+stated the wrong reading — *"it counts identities that exist and are uncertified across the
+venture"* — and **scored correct by coincidence.**
+
+Issuing 25 administration and marketing identities moved it **26 → 26**. Greenstone has no
+position in either department, so nothing examined them, so the counter did not see them.
+
+**The round that separated the two readings is the one dismissed in advance as the weaker
+test.** Banking and operations each had a Greenstone position and could only ever confirm;
+a department with no position was the only thing that could discriminate, and it was run
+only because a round predicting nothing is still worth running.
+
+### The extension
+
+**A rollup can lose a distinction. So can a name.**
+
+A summary line is read once, by whoever is looking at that screen. **A field name is read
+by everyone who touches the field, forever**, and it carries its claim into every call
+site, every message built from it, and every prediction made about it — including the two
+in this repository's own planning documents.
+
+The check is the same one, aimed differently: *read the code that produces the value before
+believing what it is called.* For `produced_not_yet_certified` that is one loop, and it
+says `for row in candidates` where the name says "in the venture".
+
+**Not renamed here.** It appears in `CapacityNumbers`, in the §7.2 three-number contract,
+in the escalation text and in golden snapshots, and a rename is a change to an artifact
+shape that Gate 4.5 signatures are taken against. Recorded first; the rename is its own
+change with its own diff to declare.
+
 ### What still stands from the original finding
 
 The mechanism is unchanged and correct: **adding one module to a position makes every
