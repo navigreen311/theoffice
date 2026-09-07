@@ -669,6 +669,69 @@ than verified. All twelve of the Burkham Pack's modules are in that state today.
 
 ---
 
+## Before proposing a surface: does the Forge have anything to gate on?
+
+**Ask this before designing modules, not after.** A module that takes a parameter and
+refuses some values of it needs the Forge to hold the fact it refuses on. If the Forge
+does not hold that fact, the module cannot be written — and the design that assumed it
+looks correct right up until somebody tries to implement the refusal.
+
+### The case that established this, 7 September 2026
+
+A single `send_approved_template` module was proposed for FunnelForge, gated by two things
+Burkham's marketing plan says govern autonomous send: whether an approved template exists,
+and the categorical compliance state. One grant, many templates, the handler refusing
+anything not autonomous and anything not in **Pass** state.
+
+**FunnelForge holds neither fact.** Checked against its Prisma schema and services:
+
+| what the gate needed | what FunnelForge has |
+|---|---|
+| a per-template approval scope — autonomous vs human-approve | `EmailTemplate` carries `type`, `category`, `isActive`, `metadata`. `isActive` is on/off. `OutreachTemplate` and `SMSTemplate` are the same shape |
+| a compliance state to refuse on | none. No `needs_review`, no `pass_with_findings`, no equivalent under any spelling |
+| an approval concept pointing at autonomy | `ApprovalWorkflow` / `ApprovalRequest` — a content chain whose `autoPublishOnFinalApproval` publishes **after** a human approves |
+
+There is no Marketing Claim Library in FunnelForge; the phrase appears nowhere in the
+schema or the services.
+
+### These are facts about the system, not gaps in a plan
+
+The third row is the one worth sitting with. FunnelForge has an approval concept and it
+runs the other way: it exists to route content *to* a human and publish once they approve.
+Nothing in it was built to answer *"may an agent send this without a human."*
+
+**That is not an omission. It is what a marketing platform built for human operators looks
+like.** The autonomy question had never been asked of it, so nothing in it answers.
+
+Expect the same of any Forge that predates the bridge. A Forge built for people has
+permissions shaped around people — roles, seats, who may log in — and none of that
+distinguishes *an agent acting unattended* from *a person clicking the button*. The
+absence is structural rather than accidental, and it will not be visible from reading the
+Pack, the plan, or the module list.
+
+### What it forces
+
+When the Forge cannot hold the fact, the gate moves to the module list: one module per
+permitted act, the handler hardcoding what would otherwise be a parameter, and the
+permitted set expressed by which modules exist. That works because **the adapter's keys
+are the spelling of record** — an act with no module has no route.
+
+It costs more per act (see the six-step price in
+`docs/plans/funnelforge-animaforge-surface-PROPOSAL.md`), and it is the option that
+survives a Forge with nothing to gate on.
+
+### The check, before you design
+
+1. Name the fact your refusal reads.
+2. Find the column that holds it. Not the concept — **the column.**
+3. If there is no column, the refusal cannot be written, so do not write the module that
+   assumes it. Either the Forge grows the field, or the module list becomes the gate.
+
+Step 2 is the one that gets skipped. A plan saying *"autonomous send in Pass state"* reads
+as though a Pass state exists somewhere.
+
+---
+
 ## Checklist for Forge number two
 
 - [ ] **Confirmed by `docker ps` which container owns the port, and that the port is
