@@ -417,7 +417,7 @@ on this name finds the reason rather than re-deriving it.
 
 ---
 
-## 6. `place_call` names an act Burkham forbids — corrected 2026-09-07
+## 6. `place_call` — corrected 2026-09-07, and the correction was itself wrong
 
 **The original finding stands and was the wrong reason.** Recorded 4 September as
 *"a capability VoiceForge was never built to have"*, which is true and is not the
@@ -525,6 +525,108 @@ A VoiceForge Office adapter whose `_modules` manifest answers `place_call`, back
 real telephony path. Until then the registry rows stay `hand` and V31 keeps declining. If
 the decision goes the other way, the rows come off the way `bureau_pull` and
 `readiness_score` did on 1 September.
+
+
+---
+
+### Amended 2026-09-07 (second time, same day) — the ban is Burkham's and the Pack is Greenstone's
+
+**The correction above applied a Burkham document to a Greenstone Pack.** §3.4 is
+`burkham-wickmont-marketing-plan-intake.md`. Every Pack version that operates
+`place_call` is **greenstone** — `0.0.1-smoke`, `1.0.0`, `1.1.0`, `1.2.0` (live) and two
+abandoned drafts. Burkham's Pack is not among them.
+
+I read a Burkham document and ruled on a Greenstone Pack without noticing the venture
+changed. The heading said so in its own words — *"an act Burkham forbids"* — sitting above
+a finding about a Pack Burkham does not own.
+
+### What is actually known
+
+**For Greenstone, the governing fact is the original one: VoiceForge has no telephony.**
+Zero occurrences of `place_call` in its source, no telephony provider, no outbound path.
+That was the 4 September finding, it was never wrong, and the correction demoted it in
+favour of something that does not apply here.
+
+**Whether §3.4 binds Greenstone is not written down anywhere.** It is a locked founder
+decision recorded inside one venture's intake document, under a heading that refers to
+"Pack Section 3". Nothing in this repository says whether a ban recorded that way is
+scoped to its Pack or is founder-tier and binds every venture. **That question decides
+which fix is right**, and it is not answerable from what exists.
+
+### The two consequences, named
+
+**If Burkham-scoped:** Greenstone may operate `place_call` the day VoiceForge grows a
+phone. Nothing would be violated. The only thing standing in the way today is the missing
+capability — and a missing capability is not a control. It stops being an obstacle the
+moment somebody builds the feature, and nobody building telephony in VoiceForge would have
+reason to look at a Greenstone Pack first.
+
+**If founder-tier:** it belongs in `forge_module_exclusion`, for every venture. That is the
+one mechanism on the whole path that actually refuses a grant, and a ban that lives in a
+markdown file while the trigger table has no row for it is a ban that is enforced nowhere.
+
+### What the proof established — stronger than the original claim
+
+Entry 6 said a grant over the `place_call` row *would* authorize an agent to place calls
+through a system with no phone. That was an inference. **It has now been executed**, in a
+rolled-back transaction:
+
+```
+attempting a grant over voiceforge/place_call (rolled back):
+  *** INSERT SUCCEEDED - nothing refused it ***
+```
+
+- `forge_module_exclusion` holds **20 rows, every one `capitalforge`**. None for voiceforge.
+- The `BEFORE INSERT` trigger on `agent_forge_grant` is **the only guard on the entire
+  path**, and it fires on that table alone.
+- V6 passes: *"all 9 module reference(s) resolve"*. V32 does not name it — voiceforge
+  serves no `/_modules`, so it is never asked. V31 answers `NOT_RUN`, which stops an
+  unattended grant and not a grant.
+
+**Nothing between `forge_modules_operated` and a live grant refuses anything.**
+
+And the path is one step longer than entry 6 described. On 7 September Gate 8 **built and
+submitted a curriculum for `place_call`** to a live SimForge. A curriculum is what a
+certification is earned against and a certification is what makes a grant assignable, so
+the chain entry 6 called hypothetical now has its first real link. What stopped it was a
+422 on `scenario_class: Field required` — the same refusal every other module got.
+**Nothing anywhere noticed what the module was.**
+
+### V33: what was submitted teaches nothing about `place_call`
+
+Six live operating instructions share content hash `9711528544710550...`:
+
+```
+cre-forge   buyer_match, comp_analysis, property_lookup, underwrite_deal   v1.0.0
+voiceforge  place_call, transcribe_call                                    v1.0.0
+```
+
+Every CapitalForge instruction has a distinct hash. These six are one generic text under
+six names.
+
+**This weakens the certification path's own guarantee, independently of the ban question.**
+A certification binds to `instruction_content_hash` — that binding is the mechanism that
+makes staleness computable and that SimForge *voids* a run on if the hashes disagree. It is
+one of the stronger controls here. But a hash shared by six modules binds a certification
+to generic text: an agent certified on `property_lookup` and an agent certified on
+`place_call` would be certified against **the same words**, and the hash could not tell
+them apart.
+
+So even had the submission been accepted, the resulting certification would have said
+nothing about `place_call` specifically. **The control is sound and its input is not**,
+which is the B8 shape again in a different place: a mechanism reasoned about carefully,
+keyed on a field that nothing populated meaningfully.
+
+### Status
+
+**Both questions are the founder's to decide and neither is decided here.**
+
+1. Is §3.4 Burkham-scoped or founder-tier and binding on every venture?
+2. Given the answer, does `voiceforge/place_call` come off Greenstone's Pack, gain a
+   `forge_module_exclusion` row, or stay as it is?
+
+Nothing has been changed. The six shared instruction hashes are a separate item and are
+not blocked on either answer.
 
 ---
 
