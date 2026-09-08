@@ -265,17 +265,23 @@ class CurriculumScenario:
 
     expected_behavior: str = ""
     """What the agent does. Replaces `summary`'s generated boilerplate as the field
-    SimForge reads - `summary` stays for the Pack-side domain scenarios."""
+    SimForge reads - `summary` stays for the Pack-side domain scenarios, and on an
+    operation scenario it carries the precipitating situation, which is the half of a
+    scenario no manual contains and which has no field of its own on either side."""
 
-    expected_escalation_prose: str = ""
-    """THE LIVE ONE once P-05 lands. Prose naming the escalation the scenario expects.
+    expected_escalation: str = ""
+    """Prose naming the escalation the scenario expects.
 
-    There are deliberately two escalation fields on this dataclass right now, and this
-    is the one the contract means. SimForge asks WHAT escalation is expected; the bool
-    above answers THAT one is, with a constant. A transitional window, ruled and
-    recorded in PARALLEL_BUILD.md - not a duplicate to be tidied. P-05 migrates
-    generators/curriculum.py onto this field and deletes the bool; anyone else
-    collapsing the two has broken a package boundary.
+    THE TRANSITIONAL WINDOW IS CLOSED. This field was `expected_escalation_prose` for
+    one package's duration, alongside a bool of the same name; the suffix existed only
+    to avoid the collision while both were live, and P-05 deleted the bool and took
+    the name back. The Office field and the wire name agree again, which is what
+    docs/scenario-contract.md section 6 promised.
+
+    A reader arriving from `generators/pack.py` should note that Scenario there still
+    carries `expected_escalation: bool`, and that it is a DIFFERENT CLASS. V23 reads
+    that one. Two distinctions have worn this name for a while; only one of them
+    changed.
 
     A value that restates "escalation is expected" has not satisfied this. The prose
     names the juncture: what the agent has in front of it, what it must stop short of

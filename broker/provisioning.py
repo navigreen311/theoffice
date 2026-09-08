@@ -799,7 +799,7 @@ def _curriculum_payload(
                 # Empty when nobody has authored the scenario yet. SimForge refuses a
                 # present-but-empty required field, and that refusal is the honest
                 # report that the scenario is unwritten.
-                "expected_escalation": s.expected_escalation_prose,
+                "expected_escalation": s.expected_escalation,
             }
             for s in submittable
         ],

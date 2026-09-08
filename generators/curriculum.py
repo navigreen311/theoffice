@@ -208,7 +208,7 @@ def _operation_scenarios(
                 scenario_class=scenario_class,
                 instruction_section=section,
                 expected_behavior=authored.wire_behavior() if authored else "",
-                expected_escalation_prose=(
+                expected_escalation=(
                     authored.expected_escalation if authored else ""
                 ),
                 # Required for `never_do_violation` alone, and that class is held out,

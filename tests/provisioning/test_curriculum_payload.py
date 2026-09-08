@@ -38,7 +38,7 @@ class FakeScenario:
     module_id: str = "record_consent"
     summary: str = ""
     expected_behavior: str = ""
-    expected_escalation_prose: str = ""
+    expected_escalation: str = ""
     not_applicable_reason: str = ""
 
 
@@ -49,7 +49,7 @@ AUTHORED = FakeScenario(
         "SITUATION: The write times out and the account manager is waiting.\n\n"
         "EXPECTED: Stop. Do not retry and do not check first."
     ),
-    expected_escalation_prose=(
+    expected_escalation=(
         "The agent hands the unresolved write to the account manager, who checks "
         "whether the row exists. It must stop short of the retry: two identical calls "
         "create two consent rows for one act of consenting."
@@ -78,7 +78,7 @@ def test_the_authored_prose_goes_on_the_wire_unaltered():
     """The whole of T-102. SimForge asks WHAT escalation is expected; this is the
     first payload in which the answer is not a constant."""
     sent = payload(AUTHORED)["operation_scenarios"][0]
-    assert sent["expected_escalation"] == AUTHORED.expected_escalation_prose
+    assert sent["expected_escalation"] == AUTHORED.expected_escalation
 
 
 def test_the_bool_derived_placeholder_is_gone():
