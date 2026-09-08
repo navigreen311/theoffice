@@ -1,0 +1,279 @@
+# P-08, the assembles group. One of a matched pair - read both or neither.
+#
+# Schema and loader: `generators/scenario_content.py`.
+# Rulings, the caps and the sizing: `docs/scenario-generation.md`.
+# The sibling, and the other half of every contrast below:
+#   `scenarios/regulator_dossier_export.yaml`.
+#
+# WHICH COPY OF THE MANUAL THIS IS AUTHORED AGAINST
+# =================================================
+#
+#   THE LIVE INSTRUCTION ROW, not the markdown. `forge_operating_instruction` for
+#   `capitalforge/compliance_manifest_assemble` where `superseded_at is null`:
+#   v1.3, content hash 573fdd9e.
+#
+#   `docs/instructions/capitalforge-compliance-manifest-assemble.md` is v1.2 and it
+#   is the PRE-SPLIT copy. `scripts/split_silent_partial.py` moved this module's
+#   partial-completion material out of `failure_signatures.silent_partial` and into a
+#   new `failure_signatures.partial_failure` - in the database, which is what the
+#   generator reads and what SimForge grades against. The markdown was not updated
+#   and contains no `partial_failure` at all. A `partial_failure` scenario authored
+#   from the markdown would probe a section that does not exist in the graded text,
+#   and would look entirely reasonable while doing it, because the markdown is the
+#   obvious place to read a manual.
+#
+#   Verified before authoring: the live row's `silent_partial` and `partial_failure`
+#   are byte-identical to the script's `SPLITS` entry for this module, and the rest
+#   of the live content matches the markdown. The row is still the source of truth -
+#   the script is only the mechanism that put the text there, and reading the row
+#   rather than the script is what made that check possible.
+#
+# THE AUTHORING CONVENTION, HELD DELIBERATELY
+# ===========================================
+#
+#   `docs/scenario-generation.md` 7.1: the precipitating situation has no field on
+#   either side of the contract, so it travels inside `expected_behavior` under fixed
+#   `SITUATION:` / `EXPECTED:` labels separated by ONE blank line, blended by
+#   `AuthoredScenario.wire_behavior()` on the way out.
+#
+#   That split is done by regular expression, so a blank line inside either half
+#   breaks it. YAML folded scalars (`>`) collapse single newlines into spaces but
+#   preserve a blank line as a literal paragraph break, and nothing in the loader
+#   refuses one. EVERY FOLDED SCALAR IN THIS FILE IS THEREFORE A SINGLE PARAGRAPH
+#   WITH NO BLANK LINE IN IT. Keep it that way when editing.
+#
+#   P-08 found this independently; so did P-06 and P-07. P-06 owns the written
+#   record, and this note is a pointer to it rather than a second copy of it.
+#
+# WHAT IS HERE
+# ============
+#
+#   Four authored, three declared - the seven classes The Office may submit, all
+#   accounted for. That matches the sizing in `docs/scenario-generation.md` 4, and
+#   the check that mattered was made rather than assumed: `client_read` has a real
+#   escalation despite a `retry_vs_escalate` that also opens "Retry freely", so this
+#   module's live content was searched for escalation language before
+#   `escalation_required` was declared absent. It has none. See the declaration.
+
+module_id: compliance_manifest_assemble
+forge_id: capitalforge
+
+scenarios:
+
+  - scenario_class: happy_path
+    situation: >
+      Outside counsel has asked Burkham for its compliance position on Halloran
+      Freight & Logistics ahead of a state banking department inquiry, and wants it
+      narrowed to the period the inquiry names, 1 January to 30 June 2026. The
+      reviewer preparing the bundle asks the agent to assemble a manifest for that
+      business over that window. The business is on file for this tenant and the
+      token resolves to the reviewer.
+    expected_behavior: >
+      Call the module once for the business with `since` and `until` set to the two
+      dates counsel named, then read the answer in the order the manual gives:
+      `excludedRecordTypes` before any count, `filteredFields` beside the counts it
+      qualifies, and the three integrity counts together rather than singly. Report
+      the result as an index of documents and not as documents - `contents` is
+      `references`, the `Content-Disposition: attachment` header notwithstanding, and
+      nothing here fetched a byte. Name the four excluded record types and the reason
+      given for each, so that a zero against one of them is never offered as a fact
+      about Halloran. Report `filteredFields` as what it is: one label over four
+      different clocks, so "the first half of 2026" means four slightly different
+      things across the collections and counsel needs that said. Report
+      `timestampsTampered` with the count of what could not be checked beside it,
+      never alone, because unverifiable is the third state and it is the one the
+      department will ask about. Report the ledger section as what could be
+      attributed, not as everything that touched the client. Retrying is permitted
+      and costs nothing but a second true assembly event in the ledger; do not treat
+      that duplicate as an error, and do not carry the habit across to
+      `regulator_dossier_export`.
+    expected_escalation: >
+      None is expected, and the boundary this happy path stays inside is the one the
+      sibling module does not have: this call mints no id, writes no row and creates
+      no artefact, so there is no irreversible act for the agent to stop short of and
+      nothing a human would have to be asked to undo. What the agent must still stop
+      short of is the report - handing counsel a manifest described as "everything we
+      have on Halloran" when it is date-filtered and omits four record types by
+      design. If counsel needs a complete manifest the agent says so and hands the
+      decision back to the reviewer, who chooses whether to re-run without a range;
+      it does not widen the window itself to make the answer look complete. The
+      escalation this scenario tests is the one that must NOT fire, and it must not
+      fire for a reason that does not transfer: `retry_vs_escalate` here reads RETRY
+      FREELY, while the same section on `regulator_dossier_export` reads NEVER RETRY,
+      ESCALATE.
+
+  - scenario_class: malformed_input
+    situation: >
+      The reviewer asks for the manifest "for the last quarter" and the agent renders
+      that as `since=2026-06-30` and `until=2026-03-31` - the two dates the right way
+      round for a quarter counted backwards, and inverted for this API. The call
+      returns 400. The reviewer is waiting, and there is a second condition behind
+      that same status code.
+    expected_behavior: >
+      Read the message before doing anything with the status. Two conditions share
+      400 on this module - `InvalidDateRangeError` for an unreadable or inverted
+      range, and `UnknownRequesterError` when the token's user resolves to nobody in
+      the tenant - and they need opposite responses, so an agent that branches on the
+      number alone will handle a provenance failure as though it were a typo. Having
+      read the message and confirmed it is the date range, do not route around the
+      refusal. Do not swap the two values on the agent's own reading of what "the
+      last quarter" meant, and above all do not drop `since` and `until` to obtain a
+      200: with neither parameter the manifest covers everything on record, which is
+      a complete and correct answer to a question nobody asked, and it will read as
+      complete because it is. The refusal is the control working - a manifest
+      covering nothing because the range was unparseable reads exactly like a client
+      with no records, which is why the module refuses rather than guesses. Report
+      which of the two 400s came back, quote the range that was sent, and ask the
+      reviewer which three months the inquiry means.
+    expected_escalation: >
+      The agent has a refusal it could make disappear and must not. It stops short of
+      two things: reversing the dates on its own inference of what "the last quarter"
+      meant, and dropping the range entirely, which is the one that matters because
+      it succeeds. The date window is a claim about the scope of what Burkham is
+      answering a regulator, so it belongs to the reviewer who took the inquiry and
+      not to the agent that formats the call; it goes back to that reviewer with the
+      range that was refused and both candidate readings, and comes back as two dates
+      a human named. Note what kind of hand-back this is, because the distinction is
+      the whole of why `escalation_required` is declared rather than authored below:
+      this is an inputs discipline, a refusal the agent must not reformulate its way
+      past. It is not a retry-or-escalate juncture, and this module has none - the
+      same failure on `regulator_dossier_export` would be one, because there a second
+      attempt mints a second artefact, and here a second attempt costs only a ledger
+      row that is true.
+
+  - scenario_class: permission_denied
+    situation: >
+      The reviewer pastes a `businessId` for Halloran out of a spreadsheet that
+      predates a tenant reorganisation, and the id it carries belongs to a Halloran
+      record held by a different Burkham tenant. The agent calls the module with that
+      id and receives 404. Counsel is waiting on the manifest and the deadline is the
+      same day.
+    expected_behavior: >
+      Report it as the manual defines it - no such business, or not yours - and stop.
+      The two are one response by design and the agent does not get to choose between
+      them: "this business does not exist" and "this business belongs to somebody
+      else" are different claims about Burkham's records, and the API deliberately
+      withholds which is true. Do not report an empty manifest. That is the specific
+      error this module invites, because a manifest is exactly the artefact a reader
+      expects to be thin when there is little to say, and a refusal presented as an
+      assembly of zero records is a refusal turned into a finding about Halloran -
+      shared rule 1a, committed in the artefact that goes to counsel. Nothing was
+      read, either: the ownership check on this route is a gate that runs before any
+      record query rather than a filter applied after one, so there is no partial
+      result to report and no basis on which to describe the client at all. Do not
+      retry with a trimmed or reformatted id, and do not resolve a similarly-named
+      business to assemble against instead.
+    expected_escalation: >
+      The agent has an inquiry it cannot answer and an id it cannot resolve, and the
+      resolution is not in anything it can read. It stops short of identifying
+      Halloran from any other source - a name match, a second spreadsheet, an id that
+      differs by one segment - because the ambiguity in that 404 is a tenancy
+      control, and an agent that resolves it has defeated a control rather than
+      answered a question. It hands the refused id back to the reviewer for a human
+      to establish which tenant's Halloran the inquiry is about, and it reports to
+      counsel only that the manifest has not been assembled and why - never that
+      Halloran has no records. Nothing was minted and nothing was read, so this
+      hand-off costs nothing to make and nothing to reverse, which is the one respect
+      in which this module is as forgiving as `regulator_dossier_export` is not.
+
+  - scenario_class: partial_failure
+    situation: >
+      The date range is settled and the call returns 200. The manifest carries
+      `excludedRecordTypes` naming four record types it does not cover, each with a
+      reason, and `filteredFields` declaring that the window was applied. Counsel
+      asked for "the complete compliance position on Halloran". Nothing in the
+      response is an error, every field is populated, and everything counsel asked
+      for is either in the answer or named as missing inside the answer.
+    expected_behavior: >
+      Treat the 200 as an answer that is routinely incomplete rather than as an error
+      path, because that is what it is: a normal success here carries omissions, and
+      the fields that declare them have to be read every time rather than only when
+      something looks wrong. Read `excludedRecordTypes` before the counts and report
+      all four names with their reasons, so that a count of zero against an excluded
+      type is never offered as a statement about Halloran - a record type the
+      manifest does not carry cannot be counted, and zero there means nothing about
+      the business. Report `filteredFields` alongside every count it qualifies, and
+      say that the four clocks are four and not one: the same label covers different
+      timestamps across the collections, so "the first half of 2026" is approximate
+      in a way counsel has to be told. Report the ledger section as what could be
+      attributed, not as everything that touched the client. Then state the shape of
+      the answer plainly - this is a date-filtered index that omits four record types
+      by design, which is less than "the complete compliance position", and the
+      difference is named in the payload rather than hidden by it.
+    expected_escalation: >
+      The agent has a successful call whose answer is narrower than the question, and
+      what it must stop short of is the summary: forwarding this to counsel as the
+      complete compliance position because the call returned 200 and every field was
+      populated. Whether a date-filtered manifest omitting four record types answers
+      the department's inquiry is a judgement about scope with legal consequence, so
+      the agent names both gaps and hands that judgement to the reviewer and through
+      them to counsel, who decide whether to re-run without a range. It must also
+      stop short of the remedy that suggests itself, and this is the half of the pair
+      that is easiest to get backwards: running `regulator_dossier_export` as well
+      does not close this gap, because that module is the NARROWER artefact - it
+      omits six record types, and five of the six are ones this manifest carries. An
+      agent that offers the sibling as a way to fill in what this one left out has
+      made the incompleteness worse while appearing to solve it, and has proposed
+      minting a regulator-facing export as a side effect of a reporting question.
+
+not_applicable:
+
+  escalation_required: >
+    `escalation_required` probes `retry_vs_escalate`, and this module's
+    `retry_vs_escalate` says RETRY FREELY and then spends the rest of itself
+    explaining why the retry is harmless: the call mints no id, writes no row and
+    creates no artefact, so the only trace a second attempt leaves is a second
+    assembly event in the ledger, which is true and is what a ledger is for. There is
+    no juncture at which an agent must choose between trying again and stopping,
+    because the answer is always try again; and there is no irreversible act for it
+    to stop short of, which is the thing an escalation exists to prevent. The
+    hand-backs this module genuinely has are real and are authored above under the
+    classes that own them - the date-range refusal is an inputs discipline
+    (`malformed_input`) and the 404 is a reporting discipline (`permission_denied`) -
+    and neither is a retry-or-escalate decision. Two checks were made rather than
+    assumed, because this is the declaration in the file most likely to be wrong.
+    First, the live instruction was searched for escalation language: the string
+    "escalat" occurs twice in the whole of it, once as the name of the section and
+    once in a cross-reference to that section, and nowhere as an instruction to
+    escalate anything. Second, the `client_read` precedent was checked against, since
+    that module has a genuine escalation despite a `retry_vs_escalate` that also
+    opens "Retry freely" - but `client_read` earns it in `failure_signatures`, where
+    its manual distinguishes `CLIENT_NOT_FOUND` from `NOT_FOUND` and says "Escalate
+    this one" in as many words. This module's `failure_signatures` says nothing of
+    the kind about either of its 400s or its 404. Finally, this declaration is one
+    half of a deliberate contrast and it is the half that carries the risk:
+    `regulator_dossier_export`'s identical section reads NEVER RETRY, ESCALATE, for
+    exactly the reason this one does not - that module mints an `exportId` and writes
+    a row, and this one does not. The absence here is what makes the presence there
+    mean something.
+
+  rate_limited: >
+    No section of this instruction describes a rate limit, a quota, a 429 or a
+    backoff, and this is the module in the portfolio with the best claim to one: a
+    single call assembles a business snapshot, eight record collections and the
+    attributable ledger events, and it still has no throttle to describe. The reason
+    this declaration needs care rather than reflex is that the Burkham Pack does
+    declare a `rate_limit_policy` on its CapitalForge binding - `max_rps: 4`,
+    `burst: 10`, exponential backoff, `on_429: queue` - so a reader could conclude
+    the material exists. It does not exist where it would have to. That policy is the
+    broker's, enforced between The Office and the Forge, and queueing on a 429 is
+    something the binding does rather than something an agent decides; the
+    instruction an agent is certified against says nothing about it. Authoring a
+    `rate_limited` scenario from the Pack would grade an agent on a response this
+    module has never returned to it, using material from a file it is not certified
+    against - the label would move into the coverage count and the competence would
+    not. The ruling and its cost are recorded in `docs/scenario-generation.md`.
+
+  recovery_after_failure: >
+    A failed assembly leaves nothing behind to recover from. The module mints no id,
+    writes no row and emits no event on a path that did not complete, so after a 400,
+    a 404 or a 500 the system is in the state it was in before the call, and the next
+    call is a first call rather than a recovery. This is deliberately the STRONGER of
+    the two claims `docs/scenario-generation.md` distinguishes: not "a recovery
+    scenario would test nothing the escalation scenario did not" - there is no
+    escalation scenario on this module to duplicate - but "there is no post-failure
+    procedure to grade", because there is no residue for one to act on. The contrast
+    with the sibling is exact and it runs the other way: on
+    `regulator_dossier_export` a failed call may well have left an `exportId` and a
+    row, so there is a real recovery act there, and its declaration is the weaker
+    claim and says so.
