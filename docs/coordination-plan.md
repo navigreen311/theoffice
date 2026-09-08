@@ -323,17 +323,17 @@ counts, and a reviewer who can refuse one without refusing the other.
   like a problem.**
 - **T-100 — B19**, tagged `venture-scoped: greenstone`: Greenstone has no resolvable
   credential for voiceforge (`https://example.invalid`, `VOICEFORGE_TOKEN` absent).
-  Before workstream A the clause named two Forges and read as general unreachability;
-  after A it names voiceforge alone — one Forge, one cause, one fix.
+  The clause has always named voiceforge alone — see amendment R6d, which corrects an
+  error here. One Forge, one cause, one fix.
 - **ACCEPTANCE CRITERION — not "V32 stops saying FAIL":** this package is done when
   **someone reading the next validator run cannot mistake the NOT_RUN for progress.**
 - **Test scope:**
   1. `greenstone.yaml` no longer declares `simforge/run_scenario_pack`.
   2. **Expected verdict is NOT_RUN.** A PASS means something unexpected happened —
      investigate, do not celebrate.
-  3. **R-1 verification, asserted not observed:** the `unread` clause must name
-     **voiceforge alone**. If it names voiceforge *and* capitalforge, R-1 has not taken
-     effect — **fail the package and report it against R-1, not against this change.**
+  3. The `unread` clause names **voiceforge alone**, and names it for the same reason it
+     always has. **This is NOT an R-1 check — see amendment R6d.** Greenstone does not bind
+     capitalforge, so nothing R-1 did could ever have shown up here.
 - **Merge order: 10 — last**
 
 ---
@@ -557,3 +557,51 @@ but **two distinctions wearing one name**, where the reader of either one cannot
 they have. It is recorded here rather than only in a PR because P-05 owns the migration and
 `broker/provisioning.py:774-776` is not on its card — **P-05 must escalate rather than
 touch it**, and must not migrate anything reached from `generators/pack.py`.
+
+
+---
+
+## AMENDMENT R6d — 8 September 2026 · R-1 verified, and a check that could never have worked
+
+**R-1 is complete and verified.** Both tokens set, byte-identical across the two sides.
+Observed 8 September against a live CapitalForge on `127.0.0.1:4000`:
+
+- **No-token control returns `401 OFFICE_CREDENTIAL_REJECTED`**, not `UNAUTHORIZED`. That
+  code had never appeared before. It is the proof the bridge is mounted, and it is the
+  first time anything on that surface has been checking a credential at all.
+- **With the token: `200`, `forge_id: capitalforge`, `api_version 1.0.0`, eleven modules** —
+  matching the dispatch map counted from source.
+- **Burkham V11: NOT_RUN → PASS.** Burkham totals move 29 PASS / 2 FAIL / 2 NOT_RUN →
+  **30 PASS / 2 FAIL / 1 NOT_RUN** of 33.
+- **Burkham V32's message lost its "SEPARATELY … could not ask capitalforge" clause.** The
+  FAIL is now single-caused: `simforge/run_scenario_pack` and nothing else.
+
+### The correction
+
+**P-12's test scope carried an R-1 check that could never have fired, and the claim it
+rested on was wrong.**
+
+The plan said Greenstone's `unread` clause "named two Forges before workstream A" and
+would name "voiceforge alone" after. **It has always named voiceforge alone.** Greenstone's
+`forge_bindings` are `cre-forge`, `simforge`, `voiceforge` — **it does not bind
+capitalforge at all**, so nothing R-1 did could ever have appeared in Greenstone's verdict.
+
+The check was written as "a free verification of a different package." It was free because
+it verified nothing.
+
+**Where the real R-1 verification lives: P-09.** Burkham binds capitalforge, its V32 clause
+did name it, and that clause is now gone. P-09's existing test scope already carries it —
+*"V32 PASSES; if it reports NOT_RUN instead, R-1 did not land"* — and that one works,
+because Burkham is the Pack whose verdict R-1 can actually move.
+
+### The shape, since this run keeps collecting them
+
+**A verification was designed against a remembered verdict rather than a checked binding.**
+The clause was read once, its two halves attributed to two Forges, and the attribution was
+never tested against which Forges the Pack actually binds. It then sat in a card as a
+crisp, falsifiable-looking assertion — the kind that gets trusted precisely because it
+names a specific wrong outcome.
+
+Closer to entry 22 than to the rollup class: not a summary dropping a distinction, but **a
+check asserting it would detect something it structurally could not see.** Had P-12 run it,
+it would have passed, and the pass would have meant nothing.
