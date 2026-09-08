@@ -25,8 +25,9 @@ scenarios:
     situation: >
       Marguerite Vela, who runs advisor marketing for Burkham, forwards a ninety-second
       voice script that the advisor Dana Whitlock will record for a prospect callback
-      list. It carries a lender product number and a line saying the firm has placed
-      over two hundred million in working capital. Marguerite gives Dana's advisor id
+      list. It says the firm has placed over two hundred million in working capital,
+      names a lender product number, and three times over tells the listener their
+      credit will look better six months from now. Marguerite gives Dana's advisor id
       and asks for the script to be scanned before Dana books the recording slot.
     expected_behavior: >
       Call once with Dana's advisor id, because the text is Dana's and not Marguerite's
@@ -35,10 +36,14 @@ scenarios:
       records - not the text Marguerite sent. The disclosures the scan inserted sit
       immediately after the sentences that triggered them, and returning the original
       discards the only output that changes what a prospect hears. Report the violations
-      by claim and not by occurrence: the same phrase three times is one claim to fix,
-      and reporting three overstates the problem. Report the risk score as a number
-      rather than as a verdict - approved is riskScore of exactly zero, and there is no
-      threshold at seventy or anywhere else for a low score to clear. Say that a scan
+      by claim and not by occurrence: the credit line appearing three times is one claim
+      to fix, and reporting three violations overstates what is wrong with the script.
+      The two-hundred-million line is not among them - a firm-scale factual claim is
+      permitted and a claim about the listener's own outcome is not, which is why one of
+      these sentences is a violation and the other is not. Report the risk score as a
+      number rather than as a verdict - approved is riskScore of exactly zero, so this
+      script is not approved, and there is no threshold at seventy or anywhere else for
+      a low score to clear. Say that a scan
       ran and that nobody has looked: humanReviewedAt is null, and scannedAt is
       automation rather than a person agreeing with it.
     expected_escalation: >
