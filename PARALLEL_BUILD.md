@@ -476,7 +476,7 @@ run; "Smoke red on V11/V32 as baseline, all other jobs green, no new failures" i
 | P-07 | [#54](https://github.com/navigreen311/theoffice/pull/54) | `7dda882` | run `34279098923`: Smoke alone red, list **byte-identical**; six jobs green. Diff `1048 / 0`, six files, nothing outside `scenarios/`. 16 authored + 26 declared across all 42 (module, class) pairs. | 2026-09-08 UTC |
 | P-08 | [#53](https://github.com/navigreen311/theoffice/pull/53) | `a966a6c` | run `34278996637`: Smoke alone red, list **byte-identical**; six jobs green. Diff `572 / 0`. Golden did not move; ruled out *inert* content by running `_operation_scenarios` over both files — 7 rows each, no held-out class emitted. | 2026-09-08 UTC |
 | P-09 | [#55](https://github.com/navigreen311/theoffice/pull/55) | `c49d99f` | run `34281227353`: Smoke alone red, list **byte-identical**; six jobs green incl. `Tests`. **Coordinator ran the authoritative validation** (P-09 had no credentials): real DB, both Forges up — V11 PASS, **V32 PASS**, V33 PASS, V22 FAIL. Burkham 30/2/1 → **31 PASS / 1 FAIL / 1 NOT_RUN of 33**. | 2026-09-08 UTC |
-| P-12 | | | | |
+| P-12 | [#56](https://github.com/navigreen311/theoffice/pull/56) | `90433f5` | run `34283599954`: Smoke alone red, failing-check list **byte-identical** to baseline; six jobs green incl. `Tests`. Local `1025 passed, 1 failed` (the recorded environmental `test_restore_drill`). **Coordinator ran the authoritative validation**: Greenstone **29 PASS / 0 FAIL / 4 NOT_RUN** — no red, and no closer. Two goldens re-recorded under Caveat 6; every deleted line is the single JSON object whose `module_id` is `run_scenario_pack`, verified by the coordinator. | 2026-09-08 UTC |
 
 *P-04 and P-10 are deleted by ruling Q-1 — a pack-level run gives this run nothing, and
 there are no migrations in this build. Their absence from this table is deliberate; do not
@@ -667,3 +667,57 @@ row and runs the republish.** The ledger says which half was whose.
 And the corollary P-09 asked for and got: **do not contort the YAML to keep the line count
 stable.** Write the change legibly and declare an honest larger number. A declaration
 optimised to look tidy is a declaration about the wrong thing.
+
+---
+
+## CAVEAT 6 — AMENDED 8 September 2026, on P-12's escalation
+
+**Caveat 6 was stated by mechanism and illustrated by a package list, and it got read off
+the list.** P-12 raised this against its own escalation and it is a fair criticism of how
+the caveat was written.
+
+As written, Caveat 6 names **P-00 and P-05** and reasons about packages that change **a
+generator**. P-12 changed a generator's **input** — one line of Pack YAML — and landed in
+exactly the same place: `tests/golden/snapshots/greenstone_forge_manifest.json` and
+`greenstone_runtime_config.json` moved, and without re-recording them `Tests` would have
+gone red as a NEW failure.
+
+**The rule, restated by mechanism only:** *any* change that alters what a generator emits
+moves the goldens, whether the change is to the generator or to what the generator reads.
+A Pack edit, a scenario file, a registry row and a generator function are all upstream of
+the same snapshot. **If your diff can change a generated artifact, the goldens are in
+scope for you** — read the diff, run `git diff --numstat`, predict it in writing before
+`UPDATE_GOLDEN=1`, and enumerate every changed and deleted key in the PR.
+
+**P-12's re-record, verified by the coordinator:** `forge_manifest` `1/11`,
+`runtime_config` `0/9`; the other five snapshots byte-identical; and every deleted line is
+the single JSON object whose `module_id` is `run_scenario_pack` — its fields and braces,
+not a substring match. Reversible with `git checkout origin/main -- tests/golden/snapshots/`.
+
+---
+
+## THE TWO REPUBLISHES — coordinator acts, recorded here because they are not ledger rows
+
+Both Packs were live and every change to a live Pack is a version bump and a republish
+through `broker/packs.py::store`, with the count declared. Per Caveat 11 the **package
+supplied the `change_summary`** and the **coordinator computed `expect_changed_lines`
+against the live `business_pack.yaml_source`** and ran the publish.
+
+| venture | from → to | content_hash | positional count | why the count is large |
+|---|---|---|---|---|
+| `burkham-wickmont` | 0.2.0 → **0.3.0** | `c3e19c31…` | **513** | 811 → 831 lines; 18 inserted comment lines shift every line below |
+| `greenstone` | 1.2.0 → **1.3.0** | `b9f141db…` | **210** | 380 → 393 lines; 13 inserted comment lines shift every line below |
+
+Both were accepted without raising, which is the control confirming nothing moved beyond
+what was described. **Neither count is "three changes" or "one change", and neither should
+be** — `store`'s own docstring says a caller declaring three changed lines is declaring
+that nothing moved.
+
+**On `authored_by`.** Both were published under the `office_human` row that authored 0.2.0
+and 1.2.0 — Ivan's. That is accurate in that he owns the Packs and both changes are his
+rulings (T-081, Q-1), and it is the only identity available: there is no coordinator or
+agent principal in `office_human`, and minting one would be the `origin=human` problem
+SimForge's own Gate 8 docstring names — *an actor named in a record as though it acted,
+indistinguishable afterwards from one that did.* **What actually happened is that Ivan
+ruled, package agents wrote, and the coordinator executed the publish.** The
+`change_summary` carries the substance; this note carries the part the schema cannot hold.
