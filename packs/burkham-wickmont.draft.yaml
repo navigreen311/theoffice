@@ -311,10 +311,24 @@ positions_required:
     # them to match the code would hide the gap rather than record it.
     forge_modules_operated: [submit_application]
     source_department: banking          # Burkham calls this "Funding Strategy"
+    # fair_treatment_required and advance_placement_prohibited added 2026-09-08
+    # (ruling T-081). The four flags this role already carried are all about HOW AN
+    # APPLICATION IS PREPARED - authorization, truthfulness, estimate-not-offer, card
+    # product discipline. Neither of the two governing WHO IT GOES TO was here, and
+    # those are this role's own acts: which lenders a client is shown (ECOA), and
+    # whether an advance is placed at all (UDAAP). ps-003 already exercised both, so
+    # the Pack was exercising obligations the position did not carry - the comment
+    # above that scenario calls it the sharpest instance of B15's second direction.
+    # The other six orphaned flags stay recorded and unassigned: each needs somebody
+    # who knows which role's duties touch it, and guessing is how the department
+    # mapping in entry 12 went wrong. See docs/decisions.md entry 24, docs/blocking.md
+    # B15.
     compliance_flags_in_scope:
       [per_application_authorization_required, application_truthfulness_required,
        estimate_not_offer_required,
-       card_product_discipline_required]
+       card_product_discipline_required,
+       fair_treatment_required,
+       advance_placement_prohibited]
     headcount: 2
     trust_tier_ceiling: propose
     lifecycle_stages_owned: [Placement, Funded]
@@ -414,7 +428,13 @@ forge_dependencies:
     - forge: simforge
       api_version: 3.2.0
       criticality: hard
-      modules_expected: [run_scenario_pack, gate_result]
+      # run_scenario_pack removed 2026-09-08 (ruling Q-1), reversing entry 5, which had
+      # left it declared and unbound so V32 would point at it every run. Entry 5 assumed
+      # the capability was wanted and merely unbuilt. Nobody had asked what it would buy,
+      # and when asked the answer was nothing: SimForge certifies per module, so there is
+      # no pack-level unit for a pack-level verdict to attach to. See docs/decisions.md
+      # entry 25, which supersedes entry 5.
+      modules_expected: [gate_result]
       compliance_flags_propagated: []
       fallback_behavior: halt
       rate_limit_policy: {max_rps: 1, burst: 3, backoff: linear, on_429: queue}
