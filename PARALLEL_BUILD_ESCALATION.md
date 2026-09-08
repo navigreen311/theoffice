@@ -189,3 +189,45 @@ and the "Images build" job exercises it. **If the coordinator reads the Dockerfi
 shared infrastructure, the alternative is to make content Python modules under
 `generators/` so it ships in the wheel** — worse for the humans authoring it, and P-05
 will take that direction if given it.
+
+---
+
+## E-006 — RATIFY · A1.3 and A1.4 are each right, and together they do a third thing
+
+**A1.4 says domain scenarios "lose the `expected_escalation` key… No prose substitute,
+no compensating field." A1.3 step 4 says `expected_escalation_prose` is renamed to
+`expected_escalation`. Both were followed exactly, in that order, and the key does not
+end up lost.**
+
+What actually happens to a domain scenario in `greenstone_curriculum.json`, verified
+against `origin/main`:
+
+```
+BEFORE   "expected_escalation": false        (bool, the Pack DSL's real value)
+         "expected_escalation_prose": ""
+
+AFTER    "expected_escalation": ""           (string, empty on all nine)
+```
+
+**The fact is lost, exactly as A1.4 intends** — the Pack's true/false no longer reaches
+the curriculum artifact, and nothing read it there: V23 reads
+`Scenario.expected_escalation` on the Pack DSL. **The key is not lost**, because the
+prose field was already serialised onto domain scenarios (it is defaulted on the
+dataclass, and `docs/scenario-contract.md` §8 documents that all six contract fields land
+on every scenario), and the rename moved it into the vacated name.
+
+**Why it is raised rather than noted.** §8's own recorded objection is that an empty
+string reads as *"not yet filled in"* rather than *"does not apply here"* — and this
+field is now worse than the six §8 describes, because **it is the only one that replaced a
+real value with an empty one.** A domain scenario's `expected_escalation: ""` is now
+byte-identical to an unauthored operation scenario's, and those mean different things: one
+will never be filled, the other is waiting on P-06/07/08.
+
+**Why it was not "fixed".** The only fixes are omitting the field per `kind` or splitting
+`OperationScenario` off the dataclass, and §8 says in terms: *"The dataclass is not being
+restructured here… Do not restructure the dataclass to fix it."* So the shape stands and
+the observation is filed.
+
+**Asked for:** confirmation that A1.4's intent was the *fact*, not the literal key — which
+is how it has been implemented. If the key itself was meant to go, that is a dataclass
+change and a different package's ruling.
