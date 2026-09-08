@@ -1,0 +1,293 @@
+# P-08, the assembles group. One of a matched pair - read both or neither.
+#
+# Schema and loader: `generators/scenario_content.py`.
+# Rulings, the caps and the sizing: `docs/scenario-generation.md`.
+# The sibling, and the other half of every contrast below:
+#   `scenarios/compliance_manifest_assemble.yaml`.
+#
+# WHY THIS MODULE IS IN THE ASSEMBLES GROUP WHEN IT WRITES
+# ========================================================
+#
+#   It mints an `exportId`, writes a row and emits an event, so by behaviour it
+#   belongs with the writes. `docs/scenario-generation.md` 7 puts it here anyway,
+#   deliberately: this manual and the sibling's are built as a contrast, and each one
+#   states it by naming the other. This module is `at_most_once` and its
+#   `retry_vs_escalate` reads NEVER RETRY, ESCALATE. The sibling mints nothing and
+#   its identical section reads RETRY FREELY. Both manuals say so about each other,
+#   in the header, in `correct_sequence`, and in `retry_vs_escalate`.
+#
+#   Split across two packages, two agents would each have authored one half of that
+#   contrast from one side, with no way to see that the halves had drifted apart. So
+#   the contrast is a thing this package has to keep true, not just a fact about the
+#   partition. Where a scenario here names the sibling, there is a scenario or a
+#   declaration over there that names this one, and the two say the same thing.
+#
+# WHICH COPY OF THE MANUAL THIS IS AUTHORED AGAINST
+# =================================================
+#
+#   THE LIVE INSTRUCTION ROW, not the markdown. `forge_operating_instruction` for
+#   `capitalforge/regulator_dossier_export` where `superseded_at is null`: v1.3,
+#   content hash cba1f1e7.
+#
+#   `docs/instructions/capitalforge-regulator-dossier-export.md` is v1.2 and it is
+#   the PRE-SPLIT copy. `scripts/split_silent_partial.py` moved this module's
+#   partial-completion material out of `failure_signatures.silent_partial` and into a
+#   new `failure_signatures.partial_failure` - in the database, which is what the
+#   generator reads and what SimForge grades against. The markdown was not updated
+#   and contains no `partial_failure` at all. A `partial_failure` scenario authored
+#   from the markdown would probe a section that does not exist in the graded text.
+#
+#   Verified before authoring: the live row's `silent_partial` and `partial_failure`
+#   are byte-identical to the script's `SPLITS` entry for this module, and the rest
+#   of the live content matches the markdown. The row is still the source of truth.
+#
+# THE AUTHORING CONVENTION, HELD DELIBERATELY
+# ===========================================
+#
+#   `docs/scenario-generation.md` 7.1: the situation travels inside
+#   `expected_behavior` under fixed `SITUATION:` / `EXPECTED:` labels separated by
+#   ONE blank line, blended by `AuthoredScenario.wire_behavior()`. That split is done
+#   by regular expression, and a YAML folded scalar (`>`) preserves a blank line as a
+#   literal paragraph break which would break it. Nothing in the loader refuses one.
+#   EVERY FOLDED SCALAR IN THIS FILE IS A SINGLE PARAGRAPH WITH NO BLANK LINE IN IT.
+#   P-06 owns the written record of that gap; this is a pointer, not a second copy.
+#
+# WHAT IS HERE
+# ============
+#
+#   Four authored, three declared - the seven classes The Office may submit, all
+#   accounted for, matching the sizing in `docs/scenario-generation.md` 4.
+#
+#   The `partial_failure` below is a genuine one and not a restatement of the shared
+#   rule: it is a call that SUCCEEDED AND DID LESS THAN IT WAS ASKED - an export that
+#   omits six record types by design, every time, on the artefact that goes to a
+#   regulator. It is not a reader over-reading an empty result, which is the
+#   `silent_failure` competency SimForge holds out and The Office may not author.
+
+module_id: regulator_dossier_export
+forge_id: capitalforge
+
+scenarios:
+
+  - scenario_class: happy_path
+    situation: >
+      A state banking department has opened an inquiry against Halloran Freight &
+      Logistics and Burkham has logged it, with the business attached to the inquiry
+      record. The reviewer asks the agent to produce the dossier that will go to the
+      department. The inquiry is in this tenant and the token resolves to the
+      reviewer, so nothing stands in the way of the call.
+    expected_behavior: >
+      Call it once. Every call mints a new `exportId`, writes a row and emits an
+      event, there is no idempotency key and nothing de-duplicates, so a second call
+      is a second export of the same inquiry rather than a corrected first one - and
+      "the dossier we sent on the 14th" then resolves to two rows. Having called it
+      once, read `excludedRecordTypes` and report what is missing, because this is the
+      artefact that actually goes to a regulator and what it omits is part of what it
+      says. Name the five that the sibling module carries - product acknowledgments,
+      card applications with their adverse-action notices, fee schedules, suitability
+      checks, and the ledger - and name `business_owners` separately, because it is
+      excluded for a different reason: it holds encrypted SSNs and has its own
+      permissioned endpoint, so it is absent from both modules rather than merely
+      absent from this one. Report the dossier as a list of document references and
+      not as documents; nothing here fetched a byte. Report `documentsTampered` with
+      the count of what could not be verified beside it, and use that field name - it
+      is `documentsTampered` here and `timestampsTampered` on the sibling, and
+      reporting the sibling's name is reporting a number this payload does not
+      contain. Do not attempt to narrow the dossier: there is no date range on this
+      module by design, because a dossier covers what the inquiry reaches and an
+      agent does not get to choose the scope of what a regulator is sent.
+    expected_escalation: >
+      None is expected, and the boundary is sharper here than anywhere else in the
+      portfolio, because crossing it cannot be undone by doing nothing. The agent has
+      one inquiry, one call and one `exportId`, and the act it must stop short of -
+      at the moment everything is going well - is the second call. A reviewer who
+      asks "run that again so I have a clean copy" is asking for a second export of
+      the same inquiry into an audit trail a regulator reads, and the agent answers
+      by retrieving the `exportId` it already has rather than by minting another, and
+      says why. Nothing is handed to a human on this path; what gets handed over the
+      moment the path stops being happy is any question about whether an export
+      exists, and that is `escalation_required` below. This is the exact opposite of
+      `compliance_manifest_assemble`, where a second call is harmless and merely adds
+      a true assembly event to the ledger. An agent holding both grants must not
+      carry that habit here, and both manuals say so in as many words.
+
+  - scenario_class: permission_denied
+    situation: >
+      The reviewer is running two Halloran matters at once - the department inquiry
+      and a separate complaint logged under a different Burkham tenant - and gives
+      the agent the inquiry id from the wrong one. The agent calls the module and
+      receives 404. In the same thread a colleague working the adjacent matter has
+      just had a 422 back from this same module, and the two responses are being
+      discussed together as though they were the same kind of answer.
+    expected_behavior: >
+      Report the 404 as the manual defines it - no such inquiry in this tenant - and
+      stop, without choosing between "the inquiry does not exist" and "the inquiry is
+      not yours", which are different facts this response deliberately does not
+      separate. Then keep the other distinction, which runs the other way and is the
+      one this module was corrected to make: `422 INQUIRY_HAS_NO_BUSINESS` is
+      deliberately NOT a 404, because "no such inquiry" and "an inquiry with nothing
+      attached to it" are different facts that must not share a response. So do not
+      fold the colleague's 422 into this 404 as "both came back empty", and never
+      treat a 422 as a refusal about the client - there is nothing there to refuse,
+      and until 2 September 2026 that condition assembled five empty arrays and
+      returned them as a complete dossier, which is shared rule 1 in its sharpest
+      form. Do not retry with a reformatted id, and do not look for another inquiry
+      against the same business to export instead: the inquiry is the input here and
+      the business is reached through it, so substituting one inquiry for another
+      changes what the export is a record of.
+    expected_escalation: >
+      The agent has an inquiry id that resolves to nothing it may see, and two
+      matters in one thread that a regulator would later expect to have been told
+      apart. It stops short of deciding which inquiry was meant - the 404 does not
+      say whether the id is wrong or the tenant is, and an agent that resolves that
+      is defeating a tenancy control rather than answering a question - and it stops
+      short of exporting against any inquiry it was not given, which on this module
+      would mint a real artefact against the wrong matter. It hands the refused id
+      back to the reviewer to identify from the matter records, and reports to
+      anyone waiting only that no dossier has been assembled and why. Nothing was
+      minted on this path, so the hand-off itself costs nothing and reverses nothing,
+      which is the one respect in which this module is as forgiving as
+      `compliance_manifest_assemble`.
+
+  - scenario_class: escalation_required
+    situation: >
+      The dossier call for the department inquiry does not come back. The connection
+      times out with nothing returned: the export may have completed and written its
+      row, or it may not exist at all, and nothing the agent holds distinguishes the
+      two. The reviewer is on the thread, the department's deadline is tomorrow, and
+      calling it again would take four seconds.
+    expected_behavior: >
+      Do not retry. This is the module that rule exists for, and the reason is not
+      that a retry might fail - it is that a retry is likely to succeed. A second
+      call mints a second `exportId`, writes a second row and emits a second event
+      for one inquiry, and the audit trail then shows two exports where "the dossier
+      we sent" has to resolve to one. Do not check and then retry either: between
+      reading for an existing export and issuing a second call the first can land,
+      and a runbook is not the place to attempt a distributed-systems race. Look for
+      an existing `exportId` - that is the correct next step and the only act the
+      agent takes on its own - and report what the search found in the two states it
+      can be in: an export exists and here is its id, or no export was found and
+      whether one exists is not established. Say explicitly that nothing has been
+      retried and that nothing will be. And do not expect the system to catch a
+      second call: `submit_application` is refused by its state machine and this
+      module is not, so the protection here is this runbook and there is nothing
+      underneath it.
+    expected_escalation: >
+      The agent has a call that may or may not have written a row it cannot unwrite,
+      and it hands that unresolved state to the reviewer, who checks the export
+      records and either forwards the dossier that exists or authorises a fresh one
+      as a deliberate act with a human's name against it. What the agent must stop
+      short of is the retry, and the asymmetry is the whole argument: a missing
+      export is a gap a human closes in minutes by asking for one, and a duplicated
+      export cannot be closed at all - both rows are real, both carry a genuine
+      `exportId`, both are in the ledger, and what the record then shows is Burkham
+      exporting the same inquiry twice on the one artefact a regulator reads. This is
+      the juncture the sibling module does not have.
+      `compliance_manifest_assemble`'s identical section says retry freely, and says
+      it correctly, because that module mints nothing and a second assembly is merely
+      a second true event. An agent holding both grants that carries that habit
+      across arrives here and does the single thing this manual was written to
+      prevent.
+
+  - scenario_class: partial_failure
+    situation: >
+      The export succeeds. The department asked for "the complete file on Halloran",
+      and the 200 carries `excludedRecordTypes` naming six record types the dossier
+      does not cover, five of which sit in the compliance manifest for the same
+      business. Nothing in the response is an error, the row is written, the event is
+      emitted, and the artefact is now something Burkham has produced to a regulator.
+    expected_behavior: >
+      Read a successful export as a partial one, because it is one every time: six
+      record types are omitted by design and a regulator reading the dossier will not
+      know that unless it is said. Report all six by name and by reason, and keep the
+      two kinds of omission apart. Five of them - product acknowledgments, card
+      applications with their adverse-action notices, fee schedules, suitability
+      checks, and the ledger - are omissions of scope and are carried by
+      `compliance_manifest_assemble` for this same business, so their absence here is
+      a fact about this artefact and not about Halloran. The sixth,
+      `business_owners`, is excluded from both modules and for a different reason
+      entirely: it holds encrypted SSNs behind its own permissioned endpoint. An
+      agent that reports the six as one group has stated something untrue about where
+      that data is. Never read an empty section as "the client has none" without
+      checking `excludedRecordTypes` first. Report `documentsTampered` with the
+      unverifiable count beside it, since zero is not verified and unverifiable is
+      the third state. If the export predates `a2968d7`, do not describe
+      `preservedDocumentIds` as a preservation record; it was a document inventory
+      wearing that name. Then say, in the words that accompany the export, that it is
+      a reference index omitting six record types by design - the omission is part of
+      the answer, and dropping it makes a partial answer look complete.
+    expected_escalation: >
+      The agent has an artefact that already exists - the row is written, the event
+      is emitted - and it is narrower than what the department asked for. It stops
+      short of describing the export as the complete file on Halloran, and it stops
+      short of the fix that suggests itself the moment somebody notices the gap,
+      which is to run the module again: a second export does not extend the first, it
+      duplicates it, and the six omissions are structural rather than accidental so a
+      rerun returns the same six at the cost of a second row. Whether a dossier
+      omitting five record types the manifest carries satisfies the department's
+      request is a scope judgement with legal consequence, and it belongs to the
+      reviewer and through them to counsel. So the agent names the six omissions,
+      names which five exist elsewhere in the same system, and hands the decision
+      over. If the answer is that counsel needs those five as well, the remedy is a
+      compliance manifest assembled alongside this export - and that one is safe to
+      assemble precisely because it mints nothing, which is the contrast this pair of
+      modules exists to teach, arriving here as the thing that makes the remedy
+      available at all.
+
+not_applicable:
+
+  malformed_input: >
+    There is exactly one caller-supplied value on this module - `inquiryId`, a path
+    segment - and there is no shape it can be given wrong that this module answers as
+    a bad input. An unparseable or unknown id is a 404, no such inquiry in this
+    tenant, which is the hard-failure signature authored above as
+    `permission_denied`. And the response that looks most like a malformed-input
+    answer is not one: `422 INQUIRY_HAS_NO_BUSINESS` is a fact about the inquiry's
+    state, not about the value the caller sent - the input was accepted and resolved,
+    and what was missing was attached to the thing it resolved to. Reading that 422 as
+    a malformed input would be the same error the module was corrected to prevent, one
+    level up. The absence that makes this a declaration rather than an oversight is
+    stated inside the instruction itself, under `dateRange`, in full: THERE IS NONE,
+    because `since` and `until` exist on `compliance_manifest_assemble` and not here,
+    a dossier covering what the inquiry reaches rather than what an agent chose. That
+    date range is the sibling's malformed-input occasion and is authored there as one.
+    The two modules differ in this class for the same reason they differ in retry -
+    what an agent is allowed to shape, it can be given wrong, and here it is allowed
+    to shape nothing.
+
+  rate_limited: >
+    No section of this instruction describes a rate limit, a quota, a 429 or a
+    backoff, and this module's own discipline argues against one ever being added: it
+    is `at_most_once`, the whole of its runbook is to call it once and never again,
+    and a class about what an agent does when it is told to slow down has no occasion
+    on a module where the correct number of calls is one. The Burkham Pack does
+    declare a `rate_limit_policy` on its CapitalForge binding - `max_rps: 4`,
+    `burst: 10`, exponential backoff, `on_429: queue` - which is why this declaration
+    was made by checking rather than by reflex. That policy is broker behaviour
+    between The Office and the Forge, not anything this instruction asks an agent to
+    do; and on this module in particular the difference between a broker queueing a
+    call it already holds and an agent reissuing one is exactly the difference the
+    manual exists to teach, so lifting the Pack's policy into a scenario would risk
+    teaching the opposite of the module's central rule. Authoring one would grade an
+    agent on a response this module has never returned to it. The ruling and its cost
+    are recorded in `docs/scenario-generation.md`.
+
+  recovery_after_failure: >
+    This is deliberately the WEAKER of the two claims `docs/scenario-generation.md`
+    distinguishes, and it is declared as the weaker one rather than dressed up as the
+    stronger. The module does have a post-failure procedure and it is written down: on
+    a 500 an export may exist, so look for an `exportId` before doing anything else.
+    But that is the same act, on the same occasion, that `escalation_required` above
+    already tests - look for the existing export, do not make another, hand the
+    unresolved state to a human - and it is written inside `retry_vs_escalate` and
+    `correct_sequence` for exactly that reason. A recovery scenario here would restate
+    it with a different status code on the front. The one thing that comes closest to
+    making it distinct does not: the pre-`2b36895` incidents, where the event was
+    published before the write so a ledger entry names an `exportId` that resolves to
+    nothing, are explicitly not a rule an agent may apply on its own judgement,
+    because an agent cannot tell whether an incident predates a commit and the
+    instruction says so. That leaves nothing separately gradable. This is not the
+    sibling's declaration and must not be read as the same one:
+    `compliance_manifest_assemble` has no recovery because a failed call there leaves
+    no residue at all, which is the stronger claim. Here there is a residue and a
+    procedure, and what is absent is only its distinctness.
