@@ -507,3 +507,53 @@ curriculum artifact's copy.** No prose substitute, no compensating field.
 This is the one sanctioned nonzero deletion count in this run. Caveat 6's
 `git diff --numstat` check still applies to everything else: **P-05 must enumerate every
 deleted key in its PR, and must not re-record any diff it did not predict in advance.**
+
+---
+
+## 11. CONTRACT AMENDMENT A2 — 8 September 2026 · the key
+
+**Ruled by Ivan**, on P-05's question. §"The two shapes" named this mismatch and said the
+two "are not the same count, the same key, or the same thing", and deliberately did not
+rule it. This rules it.
+
+### A2.1 — operation scenarios key on `(module, class)`. The position dimension drops.
+
+Today the generator emits one row per **`(position, module)`** — five Burkham positions
+crossed with the modules each operates. After P-05 it emits one row per
+**`(module, scenario_class)`**, with `instruction_section` carried as a field.
+
+**Why.** A scenario class probes **a module's instruction section**, not a role's use of
+it. `permission_denied` on `submit_application` is a fact about that module's hard-failure
+signature; it does not become a different fact because a different position invoked it. The
+position dimension was not doing work in the operation half, and keeping it means
+**P-06/07/08 author the same occasion once per position that operates the module** — the
+same prose, written several times, diverging the moment one copy is edited.
+
+This also makes the Office's count and SimForge's count the same count, which is what the
+contract was written to achieve.
+
+### A2.2 — two consequences, and neither may be resolved silently
+
+**(a) `compliance_flags_exercised` loses its source.** It is currently taken from
+`position.effective_compliance_flags`, and there is no position in the new key.
+**P-05 must first establish what actually reads this field on an operation scenario** —
+grep it, do not assume — and report the finding. If nothing reads it there, say so and
+leave it unpopulated with a note. If something does, **escalate rather than choosing a
+substitute**: a union across every position that operates the module is the obvious guess
+and it is exactly the kind of guess this run keeps catching, because a union reads as
+"these flags were exercised" when what is true is "some position holding these flags could
+have exercised them".
+
+**(b) Role coverage needs a stated home.** Role is still a live coverage dimension —
+Gate 4.5, the Task Ledger and the appointment path all reason about positions. Dropping
+position from the operation scenario key does not remove that need; it moves it.
+**P-05 states in `docs/scenario-generation.md` where role coverage comes from after this
+change.** A dimension that quietly stops being derivable is the shape B5's counter and
+V30's population both failed on, and it is not to be discovered later by somebody reading
+a denominator.
+
+### A2.3 — what this changes downstream
+
+The `scenario_id` scheme, the golden's row count, the `_coverage` denominators and the
+index P-06/07/08 use for their content files are all keyed on this. **P-06/07/08 index by
+module, not by position.** A module operated by two positions is authored once.
