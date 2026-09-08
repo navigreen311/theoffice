@@ -32,6 +32,7 @@ import inspect
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
@@ -148,7 +149,7 @@ class ValidationReport:
 # V30 were registered below and absent here, so the fixture meta-test demanded document
 # fixtures for rules that cannot be evaluated without the Village. A literal is needed
 # here rather than `set(_WORLD_RULES)` only because the registry is defined further down.
-NEEDS_WORLD = {"V2", "V6", "V11", "V28", "V29", "V30", "V31", "V32", "V33"}
+NEEDS_WORLD = {"V2", "V6", "V11", "V28", "V29", "V30", "V31", "V32", "V33", "V34"}
 
 # V24 is evaluated at Gate 4.5 against appointment output, which does not exist at
 # Gate 2. Recorded as metadata rather than a comment so the meta-test can see it.
@@ -1272,6 +1273,91 @@ async def _v33_instructions_are_distinct(
     )
 
 
+# ----------------------------- V34: a human-held obligation needs a current discharge
+
+async def _v34_human_held_discharged(
+    conn: AsyncConnection, pack: BusinessPack
+) -> tuple[bool | None, str]:
+    """Every obligation declared `HumanHeld` has a discharge that is current and covers.
+
+    **This rule is the other half of `HumanHeld` and neither ships without the other.**
+    V22 counts a human-held flag as accounted for; if nothing then asked whether the
+    obligation was discharged, any flag nobody wanted to write a scenario for could be
+    marked human-held and V22 would go quiet. That was measured, not supposed: with the
+    type landed and this rule unwritten, Burkham reached 32 PASS / 0 FAIL and Gate 2
+    cleared for a venture whose referral obligation nobody had verified.
+
+    **It carries its own verdict on purpose.** A missing discharge must never arrive as
+    "a flag no scenario exercises" — that is V22's sentence and it names the wrong
+    problem. Whoever reads this failure should be sent to a person, not to an author.
+
+    **On NOT_RUN.** This rule reports NOT_RUN only when it could not ask — no database.
+    An absent row is an ANSWER, and it is a FAIL. Three NOT_RUNs have been misread this
+    week as "not checked yet"; a fourth that actually meant "no discharge required"
+    would be the worst of them, because it would read as permission.
+    """
+    held = [
+        c for c in pack.market.compliance_surface
+        if c.runtime_flag.strip() and c.human_held is not None
+    ]
+    if not held:
+        # Distinguishable from a real pass. Nothing was checked because there was
+        # nothing to check, and saying so is the difference between this and the
+        # vacuous PASS a rule gives when its table happens to be empty.
+        return True, "no obligation is declared human-held in this Pack - nothing to discharge"
+
+    geographies = {g.strip() for g in pack.market.target_geographies if g.strip()}
+    problems: list[str] = []
+    async with conn.cursor(row_factory=dict_row) as cur:
+        for entry in held:
+            await cur.execute(
+                """
+                SELECT jurisdiction_scope, expires_at, discharged_by, verified_at
+                  FROM obligation_discharge
+                 WHERE venture_id = %s AND runtime_flag = %s AND superseded_at IS NULL
+                 ORDER BY verified_at DESC
+                 LIMIT 1
+                """,
+                (pack.venture_id, entry.runtime_flag),
+            )
+            row = await cur.fetchone()
+            if row is None:
+                problems.append(
+                    f"{entry.runtime_flag}: no discharge record exists. The obligation is "
+                    f"declared human-held ({entry.framework}) and nobody has verified it"
+                )
+                continue
+            if row["expires_at"] <= datetime.now(UTC):
+                problems.append(
+                    f"{entry.runtime_flag}: discharge expired {row['expires_at']:%Y-%m-%d}; "
+                    "verified is not the same claim as verified in the past"
+                )
+                continue
+            scope = set(row["jurisdiction_scope"])
+            if entry.jurisdiction not in ("ALL", "FEDERAL"):
+                uncovered = sorted({j.strip() for j in entry.jurisdiction} - scope)
+                if uncovered:
+                    problems.append(
+                        f"{entry.runtime_flag}: discharge covers {sorted(scope)} and the "
+                        f"obligation reaches {uncovered} - not covered where it applies"
+                    )
+                    continue
+            elif geographies - scope:
+                problems.append(
+                    f"{entry.runtime_flag}: jurisdiction is {entry.jurisdiction} and the "
+                    f"discharge covers {sorted(scope)}; the venture operates in "
+                    f"{sorted(geographies - scope)}, which it does not reach"
+                )
+                continue
+
+    if problems:
+        return False, "; ".join(problems)
+    return True, (
+        f"all {len(held)} human-held obligation(s) carry a current discharge covering "
+        "the venture's jurisdictions"
+    )
+
+
 _WORLD_RULES = {
     "V2": (Severity.FAIL, "Bridge operational for every hard Forge binding (Gate 0)",
            _v2_bridge_operational),
@@ -1291,6 +1377,9 @@ _WORLD_RULES = {
             _v32_modules_conform),
     "V33": (Severity.FAIL, "No two live instructions on a Forge share a content_hash",
             _v33_instructions_are_distinct),
+    "V34": (Severity.FAIL,
+            "Every human-held obligation has a current discharge",
+            _v34_human_held_discharged),
 }
 
 
@@ -1371,6 +1460,7 @@ _WORLD_RULE_BLOCKS = {
     "V31": ("positions_required", "forge_dependencies"),
     "V32": ("forge_dependencies",),
     "V33": ("forge_dependencies", "forge_operating_instructions"),
+    "V34": ("market",),
 }
 
 
