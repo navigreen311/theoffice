@@ -46,6 +46,12 @@ RUN python -m pip install --no-cache-dir /wheels/*.whl alembic \
 COPY alembic.ini ./
 COPY db/ db/
 COPY packs/ packs/
+# Authored scenario content, beside the Packs and found the same way - by a path
+# relative to the working directory. Data, not code, so it does not ride in the
+# wheel; without this line the curriculum generator finds no authored scenarios
+# in the image and reports every module as uncovered, which is true of the image
+# and not of the repository.
+COPY scenarios/ scenarios/
 
 # Non-root from here down. The API needs no write access to anything in the image; it
 # writes to Postgres and to stdout.

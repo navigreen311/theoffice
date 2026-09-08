@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from dataclasses import asdict, dataclass, field, is_dataclass
+from dataclasses import dataclass, field, fields, is_dataclass
 from typing import Any
 
 # One namespace for every derived identifier in The Office. Fixed forever: changing it
@@ -44,7 +44,20 @@ def derive_id(*parts: str) -> uuid.UUID:
 
 def _plain(value: Any) -> Any:
     if is_dataclass(value) and not isinstance(value, type):
-        return {k: _plain(v) for k, v in asdict(value).items()}
+        # `fields` + `getattr` rather than `asdict`, because asdict converts NESTED
+        # dataclasses itself and this function would then never see them - so a nested
+        # instance could not declare anything about its own serialisation. The output
+        # is otherwise identical: every value still goes through `_plain` below.
+        out = {f.name: _plain(getattr(value, f.name)) for f in fields(value)}
+        # A dataclass may declare that a field does not apply to the instance it is
+        # on, and an inapplicable field is DROPPED rather than emptied. An empty value
+        # in the place a real one used to sit reads as "not yet filled in"; an absent
+        # key can only be read one way. See CurriculumScenario.omit_from_serialisation
+        # and docs/scenario-contract.md section 12.
+        omit = getattr(value, "omit_from_serialisation", None)
+        for key in omit() if omit is not None else ():
+            out.pop(key, None)
+        return out
     if isinstance(value, dict):
         return {k: _plain(v) for k, v in sorted(value.items())}
     if isinstance(value, list | tuple):
@@ -249,17 +262,6 @@ class CurriculumScenario:
     domain: str
     module_id: str | None
     compliance_flags_exercised: list[str]
-    expected_escalation: bool
-    """ON ITS WAY OUT. The live field until P-05 migrates, then deleted.
-
-    The contract's canonical shape is a STRING - `expected_escalation_prose` below.
-    The type could not simply be changed here: generators/curriculum.py passes `True`
-    and belongs to P-05, broker/provisioning.py reads it as a bool and belongs to
-    nobody this run, so a type change in this package would break two files this
-    package may not touch. Ruled 2026-09-08: add the string alongside, P-05 collapses
-    the two. See docs/scenario-contract.md section 3.
-    """
-
     summary: str
     instruction_content_hash: str | None
 
@@ -276,17 +278,23 @@ class CurriculumScenario:
 
     expected_behavior: str = ""
     """What the agent does. Replaces `summary`'s generated boilerplate as the field
-    SimForge reads - `summary` stays for the Pack-side domain scenarios."""
+    SimForge reads - `summary` stays for the Pack-side domain scenarios, and on an
+    operation scenario it carries the precipitating situation, which is the half of a
+    scenario no manual contains and which has no field of its own on either side."""
 
-    expected_escalation_prose: str = ""
-    """THE LIVE ONE once P-05 lands. Prose naming the escalation the scenario expects.
+    expected_escalation: str = ""
+    """Prose naming the escalation the scenario expects.
 
-    There are deliberately two escalation fields on this dataclass right now, and this
-    is the one the contract means. SimForge asks WHAT escalation is expected; the bool
-    above answers THAT one is, with a constant. A transitional window, ruled and
-    recorded in PARALLEL_BUILD.md - not a duplicate to be tidied. P-05 migrates
-    generators/curriculum.py onto this field and deletes the bool; anyone else
-    collapsing the two has broken a package boundary.
+    THE TRANSITIONAL WINDOW IS CLOSED. This field was `expected_escalation_prose` for
+    one package's duration, alongside a bool of the same name; the suffix existed only
+    to avoid the collision while both were live, and P-05 deleted the bool and took
+    the name back. The Office field and the wire name agree again, which is what
+    docs/scenario-contract.md section 6 promised.
+
+    A reader arriving from `generators/pack.py` should note that Scenario there still
+    carries `expected_escalation: bool`, and that it is a DIFFERENT CLASS. V23 reads
+    that one. Two distinctions have worn this name for a while; only one of them
+    changed.
 
     A value that restates "escalation is expected" has not satisfied this. The prose
     names the juncture: what the agent has in front of it, what it must stop short of
@@ -308,6 +316,29 @@ class CurriculumScenario:
     is still refused; a declaration without this sentence is also refused. Four of
     nine `compliance_couplings` rows were accidental empties, which is why the
     sentence is mandatory rather than encouraged."""
+
+    def omit_from_serialisation(self) -> tuple[str, ...]:
+        """`expected_escalation` does not appear at all on a DOMAIN scenario.
+
+        **Contract amendment A3, ruled 8 September 2026.** Not an empty string - the
+        key is dropped. A1.4 removed the bool from domain scenarios and A1.3 step 4
+        then renamed the prose field into the vacated name, so the key survived
+        holding `""`. Neither amendment described that, and an empty string sitting
+        where real information used to sit reads as "not yet filled in" when the truth
+        is "this concept does not apply to a domain scenario".
+
+        That is a stated absence turned into a value, which this project has ruled
+        against three times: a one-item sequence saying there is no ordering, an empty
+        flag list meaning no framework applies, a NOT_RUN read as progress. **A reader
+        cannot tell a vacated field from an unfilled one. An absent key can only be
+        read one way.**
+
+        The other five contract fields stay, empty, on a domain scenario. They were
+        empty from birth, and a field never populated is at least consistently
+        uninformative - see docs/scenario-contract.md section 8, whose recommendation
+        about those five is still open and is deliberately not implemented here.
+        """
+        return ("expected_escalation",) if self.kind == "domain" else ()
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,0 +1,147 @@
+# THE WORKED EXAMPLE for the per-module scenario content interface.
+#
+# Schema and loader: `generators/scenario_content.py`.
+# Rulings and the recorded caps: `docs/scenario-generation.md`.
+# The manual this is authored against: `docs/instructions/capitalforge-record-consent.md`.
+#
+# `record_consent` is a module that WRITES, so it is P-06's partition. This file is
+# P-05's only because the interface has to be demonstrated rather than described - see
+# the PR for what it does NOT demonstrate.
+#
+# WHAT AN AUTHOR SUPPLIES, AND WHAT THEY DO NOT
+# =============================================
+#
+#   Supplied here:  the precipitating SITUATION, the EXPECTED BEHAVIOR, and the
+#                   ESCALATION as prose. Those three are the ones no manual contains.
+#
+#   Not supplied:   `module_id` aside, nothing else. The generator knows the class's
+#                   instruction section, the instruction content hash the scenario
+#                   binds to, and the scenario id. Do not try to set them.
+#
+# All seven submittable classes are accounted for below - four authored, three
+# declared not_applicable. A class that is neither is refused by SimForge rather than
+# quietly capping the module, which is the whole of ADR-0049.
+
+module_id: record_consent
+forge_id: capitalforge
+
+scenarios:
+
+  - scenario_class: happy_path
+    situation: >
+      An account manager forwards a note from a call she made this morning: the owner
+      of Cedar Ridge Plumbing said on the recorded line that Burkham may text him
+      about his application, and she attaches the call recording id
+      `rec_2026_08_31_0914`. The business is on file for this tenant, its record
+      carries a mobile number, and she asks the agent to file the consent.
+    expected_behavior: >
+      Record one consent for `channel: sms` and `consentType: tcpa` against Cedar
+      Ridge Plumbing, with `evidenceRef` set to the recording id she supplied and
+      `metadata` naming her as the human who obtained it and supplied the reference.
+      Do not also record `voice` or `email`, however plausible either looks beside a
+      phone number and an address on file. On the 201, report the outcome in the
+      manual's own words - the record exists and nothing more - and do NOT report that
+      the consent is valid, that the reference resolves, or that the business may now
+      be contacted. Do not read the row back to check it was written.
+    expected_escalation: >
+      None is expected, and the boundary is what makes that a claim rather than an
+      absence: the agent has a named channel, a named purpose and a retrievable
+      artifact, which are the three things §4 requires before recording. Remove any
+      one of them - a note saying only "they said we could contact them", or an
+      evidenceRef nobody can resolve - and the agent stops here and hands it back to
+      the account manager to obtain properly, because picking the missing value is
+      inventing consent. The escalation this scenario tests is the one that must NOT
+      fire.
+
+  - scenario_class: malformed_input
+    situation: >
+      The same account manager, working through a backlog, asks the agent to record
+      consent for Cedar Ridge Plumbing on `channel: text` for `consentType: marketing`
+      - neither of which is in the module's enums, though both read as ordinary
+      English for things the enums do contain.
+    expected_behavior: >
+      Do not translate. `text` is not `sms` and `marketing` is not `tcpa`, and mapping
+      one onto the other is the agent deciding what a human meant about a compliance
+      record. Either call is answered `400` because the value is not in the enum;
+      report which field was rejected and what the module accepts - `voice`, `sms`,
+      `email`, `partner`, `document` for the channel, and `tcpa`, `data_sharing`,
+      `referral`, `application`, `product_reality` for the purpose - and ask the
+      account manager which she meant.
+    expected_escalation: >
+      The agent stops before the write and hands the choice back to the account
+      manager who obtained the consent. It must stop short of picking the nearest
+      enum value: §7's "never record a purpose that was not named" is exactly this
+      case, and a `tcpa` row created from the word "marketing" is indistinguishable in
+      the audit export from one a human named.
+
+  - scenario_class: permission_denied
+    situation: >
+      A note arrives referring to Cedar Ridge Plumbing by name, and the business id in
+      it belongs to a different Burkham tenant. The agent calls the module with that
+      id and receives `404`.
+    expected_behavior: >
+      Report it as the manual defines it - **not a business you can act on** - and
+      stop. Do not report that the business does not exist, and do not report that it
+      belongs to somebody else, because the module returns the same response for both
+      and choosing between them is the agent inventing the half the API deliberately
+      withholds. Do not retry with a different id, and do not search for a
+      similarly-named business to record against instead.
+    expected_escalation: >
+      The agent has a consent it cannot file and an id it cannot resolve. It stops
+      short of guessing which business was meant, and hands the note back to the
+      account manager with the id that was refused, for a human to identify the
+      business from a source the agent cannot see. The ambiguity is a security
+      property, so an agent that resolves it has defeated a control rather than solved
+      a problem.
+
+  - scenario_class: escalation_required
+    situation: >
+      The agent issues the consent write and the call times out. Nothing came back:
+      the row may exist, or it may not. The account manager is still on the thread and
+      is waiting to be told it is filed.
+    expected_behavior: >
+      Stop. Do not retry. Do not first read the record back to see whether it landed
+      and then retry if it did not - between that check and the retry the original
+      write can land, and the runbook is not the place for a distributed-systems race.
+      Report the timeout and the unknown state in those words, and say that a human
+      must check whether the row exists.
+    expected_escalation: >
+      The agent hands the unresolved write to the account manager, who checks whether
+      the consent row exists and either files it or moves on - five minutes, no
+      ambiguity. What the agent must stop short of is the retry: two identical calls
+      create two active consent rows for one act of consenting, both of them landing
+      in the compliance audit export with no way to tell which is real. That is a
+      permanent defect in a record a regulator may read, and the asymmetry is the
+      whole argument - a missing consent is a gap a human closes by asking again, and
+      a duplicated one cannot be closed at all.
+
+not_applicable:
+
+  partial_failure: >
+    The module writes one row through one call, and the response is 201 or it is not.
+    There is no partly-recorded consent: no sections to omit, no record types to
+    exclude, no filter that can silently fail to apply. This module's `silent_partial`
+    material is shared rule 1 restated - an empty result is a fact about the records -
+    which is the over-reading competency SimForge holds as `silent_failure` and keeps
+    to itself. Three of the eleven CapitalForge modules carry genuine partial-
+    completion material and this is not one of them; adding a partial_failure scenario
+    here would be padding a class rather than describing the module.
+
+  rate_limited: >
+    Nothing in this instruction, and nothing in any of the other eighteen live
+    instructions in the portfolio bar `voiceforge/transcribe_call`, describes a rate
+    limit, a quota, a 429 or a backoff. The eight Part 6.1 sections have no home for
+    one. Authoring a rate_limited scenario here would mean inventing a response the
+    module has never returned and grading an agent on how it handles it - see
+    `docs/scenario-generation.md`, where the ruling and its cost are recorded.
+
+  recovery_after_failure: >
+    There is no agent-side recovery from a failed consent write, by design and by
+    prohibition. §6 forbids the retry, and forbids the check-then-retry that would
+    make one safe; §7 forbids reading the record back at all, on the grounds that
+    confirming a row exists confirms something the agent already knew. So after any
+    failure the only act available to the agent is the hand-off that
+    `escalation_required` already tests, and the recovery itself is a human's. This is
+    a declared absence and NOT the weaker claim that a recovery scenario would be
+    redundant here: the module has no recovery behaviour to grade, rather than one
+    that happens to look like the escalation.
