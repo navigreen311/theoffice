@@ -120,7 +120,6 @@ async def generate(
             domain=s.domain,
             module_id=None,
             compliance_flags_exercised=sorted(s.compliance_flags_exercised),
-            expected_escalation=s.expected_escalation,
             summary=s.summary,
             instruction_content_hash=None,
         )
@@ -200,11 +199,6 @@ def _operation_scenarios(
                 # See the module docstring. Empty is the honest value; the union
                 # this replaces was complete by construction.
                 compliance_flags_exercised=[],
-                # ON ITS WAY OUT in this same package - the prose field below is the
-                # contract's canonical one. Left true here only so that the migration
-                # lands in the order contract A1.3 requires: prose first, then the
-                # wire mapping, then the bool.
-                expected_escalation=True,
                 # The precipitating situation, which is the half of a scenario no
                 # manual contains. `summary` is the only field on this dataclass that
                 # can carry it - there is no `situation` field on either side of the

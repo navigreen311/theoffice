@@ -249,17 +249,6 @@ class CurriculumScenario:
     domain: str
     module_id: str | None
     compliance_flags_exercised: list[str]
-    expected_escalation: bool
-    """ON ITS WAY OUT. The live field until P-05 migrates, then deleted.
-
-    The contract's canonical shape is a STRING - `expected_escalation_prose` below.
-    The type could not simply be changed here: generators/curriculum.py passes `True`
-    and belongs to P-05, broker/provisioning.py reads it as a bool and belongs to
-    nobody this run, so a type change in this package would break two files this
-    package may not touch. Ruled 2026-09-08: add the string alongside, P-05 collapses
-    the two. See docs/scenario-contract.md section 3.
-    """
-
     summary: str
     instruction_content_hash: str | None
 
