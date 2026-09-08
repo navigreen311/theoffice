@@ -173,7 +173,20 @@ forge_dependencies:
     - forge: simforge
       api_version: 3.2.0
       criticality: hard
-      modules_expected: [run_scenario_pack, gate_result]
+      # run_scenario_pack removed 2026-09-08 (ruling Q-1), on the same reasoning that
+      # took it off Burkham: SimForge certifies per module, OperationCert has no
+      # pack-level unit for a pack-level verdict to attach to, and the capability was
+      # costed and declined rather than found missing. It is not entry 4's kind of
+      # removal - there is something behind this name. See docs/decisions.md entry 25,
+      # which supersedes entry 5.
+      #
+      # What this does to Greenstone's V32 is NOT progress, and a reader of the next
+      # validator run must not take it for progress. The FAIL was about this name.
+      # What is left is NOT_RUN, because nobody can ask voiceforge - which was already
+      # true before this edit and was standing behind the FAIL. Nothing was fixed; one
+      # obstacle was removed from in front of another. Greenstone's Gate 2 is exactly
+      # as far from passing as it was. See docs/blocking.md B19.
+      modules_expected: [gate_result]
       compliance_flags_propagated: []
       fallback_behavior: halt
       rate_limit_policy: {max_rps: 1, burst: 3, backoff: linear, on_429: queue}

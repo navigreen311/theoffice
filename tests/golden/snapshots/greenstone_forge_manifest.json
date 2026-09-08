@@ -74,15 +74,6 @@
       ]
     },
     {
-      "criticality": "hard",
-      "declared": true,
-      "forge_id": "simforge",
-      "module_gap": false,
-      "module_id": "run_scenario_pack",
-      "required": false,
-      "required_by": []
-    },
-    {
       "criticality": "soft",
       "declared": true,
       "forge_id": "voiceforge",
@@ -109,8 +100,7 @@
   ],
   "reconciliation": {
     "declared_not_required": [
-      "gate_result",
-      "run_scenario_pack"
+      "gate_result"
     ],
     "hard_dependency_on_gap": [],
     "required_not_declared": []
