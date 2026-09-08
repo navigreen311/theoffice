@@ -468,8 +468,8 @@ run; "Smoke red on V11/V32 as baseline, all other jobs green, no new failures" i
 | Package | PR | Merge SHA | Test results vs baseline | Timestamp (UTC) |
 |---|---|---|---|---|
 | P-00 | [#43](https://github.com/navigreen311/theoffice/pull/43) | `35bb8af` | run `34266438265`: **Smoke alone red**, its 8-check list diffed **byte-identical** to baseline `34263050339`; `Tests` green; six other jobs green. **No new failures.** One hand-back before merge — see below. | 2026-09-08T19:26:42Z |
-| P-01 | | | | |
-| P-02 | | | | |
+| P-01 | [#94](https://github.com/navigreen311/Capitalforge/pull/94) | `81c2d95` | run `34270839863` **success**, same six jobs as baseline `25bd359`, no new failures. Log proves the new tests ran rather than skipping into green: `office-bridge-unmounted.test.ts (11 tests) 3674ms`. Purely additive, 437/0. | 2026-09-08 UTC |
+| P-02 | [#133](https://github.com/navigreen311/simforge/pull/133) | `2337442` | `ci` `34270886088` **success** + `contract-tests` `34270886081` **success**; `742 passed, 2 skipped` vs local-before `708 passed`; +34 is exactly the new test file. Green baseline, no new failures. | 2026-09-08 UTC |
 | P-03 | | | | |
 | P-05 | | | | |
 | P-06 | | | | |
@@ -561,3 +561,68 @@ package agent diffing against a moving base needs to know why it moved.
 rulings and written into the contract file itself rather than relayed in briefs, because an
 interface amended verbally is an interface two packages will remember differently. The
 contract remains frozen to package agents: escalate, never edit.
+
+---
+
+## CAVEAT 7 — the contract path a brief cites can be stale, and a stale frozen file is worse than none
+
+**Found by P-03, 8 September 2026, before it wrote a line.**
+
+Briefs cited the contract by working-tree path in the primary `theoffice` checkout. That
+checkout went **six commits behind `origin/main`**, and its working-tree copy of the
+contract **contained no §10 and no §11** — neither amendment A1 nor A2. An agent reading
+only the path it was given would have missed both and had no way to know they existed.
+
+**How it was caught, which is the part worth keeping:** P-03 noticed that P-02's merged
+`never_do.py` docstring cited "Contract §10 A1.1" for a section **that was not in the file
+it was reading**. A cross-reference to something absent is a louder signal than the absence
+itself.
+
+**Who was exposed.** P-02 built the correct shape (`module_not_applicable`) — but from the
+orchestrator's message, not from the file. That is precisely the *"interface amended
+verbally"* mechanism amendment R6e was written to prevent, performed by the person who
+wrote it. P-05 had pulled and could see both. Only P-02 was affected, and only its
+mechanism, not its output.
+
+**The rule now:** briefs cite `git show origin/main:docs/scenario-contract.md`, never a
+working-tree path. A frozen interface must be read from the ref that froze it. **An agent
+told to read a path and finding no amendment cannot distinguish "there is no amendment"
+from "this copy is behind."**
+
+---
+
+## CAVEAT 8 — a git worktree shares the stash list with the primary checkout
+
+**Found by P-01, the hard way, and fully recovered.**
+
+After committing its fix, P-01 ran `git stash push -- <file>` to redo a revert control. The
+file was already committed, so **nothing was stashed and no entry was created** — and the
+following `git stash pop` therefore popped a **pre-existing stash belonging to an unrelated
+branch**, landing three foreign files in conflict in P-01's worktree.
+
+Because the pop conflicted, git kept the entry. P-01 restored the three paths from HEAD and
+verified `stash@{0}` intact and unchanged. **Nothing was lost, nothing committed, nothing
+pushed.**
+
+**The hazard generalises to every agent in this run:** worktrees share one stash list with
+the primary checkout, so a no-op `stash push` followed by `stash pop` reaches into another
+branch's work — including a human's.
+
+**Use `git checkout <ref> -- <path>`. Do not use `git stash` in a shared repo.**
+
+---
+
+## CAVEAT 9 — a CI job that only runs on pull_request cannot appear in a push baseline
+
+**Found by P-02, verified independently by P-03.**
+
+simforge's `contract-tests.yml` is `on: pull_request` with a path filter on `apps/api/**`.
+A baseline recorded from a **push to `main`** structurally cannot contain it — the trigger
+never fired.
+
+**Packages touching `apps/api/**` see four jobs, not three:** `api`, `validator`, `web`,
+`contract`. Its absence from the baseline is **not drift and not permission to treat it as
+optional.**
+
+This is the run's own central lesson arriving inside the baseline itself: **a job that did
+not run left no failure, and the absence of a failure is not evidence.**
