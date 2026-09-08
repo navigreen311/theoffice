@@ -629,3 +629,21 @@ strict mypy cannot catch it because the parameter is typed `list[Any]`.
 **The contract is still frozen to agents.** These were coordinator edits made on rulings,
 written into the file itself rather than relayed in a brief — because an interface amended
 verbally is an interface two packages will remember differently.
+
+
+---
+
+## AMENDMENT R6f — 8 September 2026
+
+Contract amendment **A2** landed: operation scenarios key on `(module, scenario_class)` and
+the position dimension drops. P-05's reading, ruled by Ivan.
+
+It carries two consequences the amendment forbids resolving silently:
+`compliance_flags_exercised` loses its source and P-05 must establish what actually reads
+it before doing anything; and role coverage needs a stated home in
+`docs/scenario-generation.md`, because a dimension that quietly stops being derivable is
+what B5's counter and V30's population both failed on.
+
+**P-06/07/08 index content files by module, not by position.** A module operated by two
+positions is authored once — which is the throughput argument for the split, and it only
+holds because the key dropped the position.
