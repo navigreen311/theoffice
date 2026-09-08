@@ -28,6 +28,34 @@ is to be re-recorded when its source legitimately changes, and the test says so 
 failure message: *"Read the diff. If the change is intended, re-record with
 UPDATE_GOLDEN=1."*
 
+## The rule that already covers this, found after the fact
+
+**`PARALLEL_BUILD.md` Caveat 6 is written for exactly this situation**, and it sanctions
+the action outright:
+
+> *"Any package that changes what a generator emits changes
+> `tests/golden/snapshots/greenstone_curriculum.json`, and the Tests job goes red until the
+> snapshot is re-recorded."*
+>
+> *"Read the diff before re-recording. That is the substance; `UPDATE_GOLDEN=1` is the
+> trivial part. ... If the diff is not what you intended, stop and report — do not
+> re-record."*
+
+The diff **is** what was intended, in full, and it is set out below rather than asserted.
+
+**One way this differs from the caveat's own examples, worth a sentence.** Caveat 6 names
+**P-00 and P-05** as the packages that would hit it, and reasons about packages that change
+**a generator**. P-12 changes a generator's **input** — the Pack — and lands in the same
+place by a different route. The caveat's own wording covers it (*"changes what a generator
+emits"*), but its list of who would be caught does not, which is presumably why the
+snapshots are absent from P-12's card. **A rule stated by mechanism and illustrated by
+package list will be read off the list.**
+
+Also worth naming: Caveat 6 is about `greenstone_curriculum.json`, and the two snapshots
+that actually moved here are `greenstone_forge_manifest.json` and
+`greenstone_runtime_config.json`. The curriculum snapshot is **byte-identical** and is not
+in this diff.
+
 ## The precedent, which is why this was re-recorded rather than left for the coordinator
 
 `PARALLEL_BUILD.md`, hand-backs section, P-00: six defaulted fields serialised into the
