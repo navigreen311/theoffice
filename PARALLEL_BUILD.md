@@ -108,19 +108,84 @@ failure is what makes this a baseline rather than a snapshot.
 **cancelled** by the next push before completing. They are not baseline evidence and
 should not be quoted as such.)*
 
-#### theoffice local suite — a second baseline, and it is not CI's
+#### theoffice local suite — a second baseline, and it is NOT a substitute for CI
+
+**Corrected 2026-09-08 after P-00's first PR was handed back. Read this before predicting
+a CI result.**
+
+**Without a database** — the state of a fresh clone with no `.env`:
 
 ```
 376 passed, 540 skipped, 59 errors
 ```
 
-**The 59 errors are `AssertionError: OFFICE_ADMIN_DSN not set` at `tests/conftest.py:182`
-— a missing local Postgres, not a code failure.** CI runs these with containers and they
-pass there. Verified identical on `main` @ `8a4ae66` and on `feature/p-00-coordinator`
-after P-00's changes, on the same machine, minutes apart.
+All 59 are `AssertionError: OFFICE_ADMIN_DSN not set` at `tests/conftest.py:182`, and the
+540 skips are `requires_db`. **This configuration is not evidence about anything.** It
+does not run the golden snapshots, the contract tests, the isolation suite or the ledger
+suite — which is to say it does not run the tests most likely to notice a generator
+change.
 
-**Do not report a local run as a CI result, in either direction.** A package that shows 59
-local errors has shown nothing; a package that shows 60 has shown something.
+**With a database** — the real local baseline, and the one to compare against:
+
+```
+974 passed, 1 failed
+FAILED tests/isolation/test_sweeps.py::test_restore_drill_restores_and_verifies_the_chain_in_the_copy
+```
+
+**That one failure is pre-existing and environmental.** Verified on `main` @ `8a4ae66` and
+on `feature/p-00-coordinator`, same container, minutes apart, identical. CI's Tests job is
+**green**, so this failure is local-only — do not chase it and do not report clearing it.
+
+*(Running `tests/golden/test_generators.py` alone also fails
+`test_runtime_config_apply_is_idempotent`, on `main` as well as on any branch. It is
+order-dependent and passes in a full run. Another reason to compare full-suite totals
+rather than single-file runs.)*
+
+#### How to get that database — every package in `theoffice` needs it
+
+`.env` is on the always-forbidden list, so this is shell environment only, and it matches
+CI's service container exactly (`postgres:16`, the blueprint target; local development
+runs 17.x and the pin is deliberate). Pick a port nothing else is on:
+
+```bash
+docker run -d --name p00-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=theoffice -p 55439:5432 postgres:16
+
+export OFFICE_APP_PASSWORD=ci-office-app-not-a-secret
+export OFFICE_ADMIN_DSN="postgresql://postgres:postgres@127.0.0.1:55439/theoffice"
+export OFFICE_APP_DSN="postgresql://office_app:ci-office-app-not-a-secret@127.0.0.1:55439/theoffice"
+export STUB_FORGE_TOKEN=stub-forge-test-token
+
+python -m alembic upgrade head          # migration 0002 creates the office_app role
+# then the two ensure_ledger_partition() calls from ci.yml's "Ledger partitions" step
+python -m pytest -q
+```
+
+### THE FINDING: a package whose local suite cannot run has no evidence about CI
+
+**P-00's first PR predicted "Smoke red on V11/V32, all six other jobs green." Two jobs were
+red. `Tests` failed on the curriculum golden snapshot, which the DB-less local suite skips
+by construction.**
+
+The prediction was not careless about the tests — the suite had been run, twice, on both
+branches, and the numbers matched. **It was careless about what the suite covered.** 540
+skips and 59 errors was recorded in this very file as "not a CI result", and then a CI
+result was asserted anyway a few paragraphs later. **"Expect green" was a prediction stated
+as an observation**, and the words that would have caught it were already written down.
+
+The general form, which is worth more than the fix: **the absence of a failure in a suite
+that did not run the relevant test is not evidence of anything.** It is the same shape as
+NOT_RUN not being a pass — the thing this entire run exists to establish — arriving one
+level down, in a local terminal, wearing a green number.
+
+**CI has a control for exactly this.** The Tests job carries a step named *"Refuse a green
+run that skipped the database suite"*, whose comment reads: *"`requires_db` skips every
+database test when the DSNs are unset or wrong, and a skipped test is reported as a pass by
+every summary."* The control exists, it works, and it did not help — **because it runs in
+CI, and the claim was made before CI ran.** A control cannot catch a prediction.
+
+**The rule for every package here: do not describe an expected CI outcome in a PR
+description. Open the PR, let CI run, then write what it did.** If you must predict, say
+"predicted" in the sentence.
 
 ### simforge — `main` @ `5e83cdd`
 
@@ -336,6 +401,44 @@ in this run touches V23, the Pack DSL, or the YAML booleans.
 
 ---
 
+## CAVEAT 6 — the curriculum golden, and fifty-four empties that do not mean unfinished
+
+**Any package that changes what a generator emits changes
+`tests/golden/snapshots/greenstone_curriculum.json`, and the Tests job goes red until the
+snapshot is re-recorded.** P-00 hit this; **P-05 will hit it harder**, because it changes
+what the generator actually produces rather than only the fields available to it.
+
+**Read the diff before re-recording. That is the substance; `UPDATE_GOLDEN=1` is the
+trivial part.** The snapshot's own failure message says so, and re-recording a golden is
+the single easiest way to bury a real regression: nothing crashes, the artifact reads fine,
+and the wrong answer is plausible. **If the diff is not what you intended, stop and report
+— do not re-record.**
+
+The check that settles it in one line is `git diff --numstat`: a purely additive change has
+**zero deletions**. P-00's was `108 0` — 108 insertions, 0 deletions, being exactly six new
+keys at empty defaults across all 18 scenarios, with every pre-existing value byte-identical
+including `expected_escalation`. A modified value would have shown as a deletion.
+
+### The fifty-four empties, and why they are not a to-do list
+
+`CurriculumScenario` backs both `domain_scenarios` and `operation_scenarios`, so the six
+contract fields serialise onto **every** scenario. Greenstone's nine domain scenarios now
+each carry six empty strings, and **nothing will ever fill them** — workstream C is closed
+by ruling T-050 and a domain scenario is never submitted to SimForge.
+
+**An empty string reads as "not yet filled in", not "does not apply here" — which is the
+exact ambiguity ADR-0049 exists to remove.** Not a live defect today: nothing reads those
+fields on a domain scenario. **It is the shape that becomes a defect when somebody counts**
+— a coverage view or a completeness report will see nine incomplete scenarios and be wrong
+in the direction that looks like work.
+
+`docs/scenario-contract.md` §8 states which fields are operation-only and what emptiness
+means per kind, and records the recommendation — that they probably should not be
+serialised onto domain scenarios at all — as a question for Ivan. **It is deliberately not
+implemented. Do not restructure the dataclass to fix it.**
+
+---
+
 ## NUMBERING — two numbers in the plan are already taken
 
 **P-00 merges first, so its appended records take the next free numbers and the plan's
@@ -394,5 +497,15 @@ Enough for a reviewer to check the claim without re-running anything:
 4. **Any escalation**, from `PARALLEL_BUILD_ESCALATION.md`, surfaced in the PR description
    rather than buried.
 
+5. **What CI actually did — not what you expect it to do.** Open the PR, let the run
+   finish, then write the result. A predicted outcome stated as an observation is how
+   P-00's first PR passed its own checklist while two jobs were red. If you genuinely must
+   write a prediction, put the word "predicted" in the sentence.
+
 **"Green" is not a report.** It is not available in `theoffice` this run, and a package
 that claims it has either broken something or is looking at the wrong branch.
+
+**And neither is a local run.** Without a database the suite skips 540 tests and errors on
+59 more, including every golden snapshot — see the local-suite section above for how to
+stand one up. **A package that has not run the database suite has no evidence about the
+Tests job**, and should say so rather than inferring.

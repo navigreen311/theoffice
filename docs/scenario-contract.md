@@ -364,7 +364,56 @@ bool.
 
 ---
 
-## 8. What this contract deliberately does not cover
+## 8. These six fields are operation-only, and they appear on domain scenarios anyway
+
+**Found 2026-09-08 by re-recording the curriculum golden.** `CurriculumScenario` backs
+both `domain_scenarios` and `operation_scenarios`, so the six contract fields serialise
+onto **every** scenario in the artifact. Greenstone's curriculum now carries nine domain
+scenarios each holding six empty strings for concepts that do not apply to them.
+
+**Do not read those empties as unfinished work.** Workstream C is closed by ruling T-050:
+domain scenarios are Pack-validation-only and are **never submitted to SimForge**. Nothing
+will ever fill these on a domain scenario, because there is nothing to fill them with.
+
+### Which field means what, per kind
+
+| field | on an operation scenario | on a domain scenario |
+|---|---|---|
+| `scenario_class` | one of the nine; required on submission | **does not apply** — a domain scenario is not classed and is never submitted |
+| `instruction_section` | required; which section it probes | **does not apply** — there is no operating instruction behind a domain scenario |
+| `never_do_entry` | required for `never_do_violation` only, and that class is held out | **does not apply** — twice over |
+| `not_applicable_reason` | a declared absence, per ADR-0049 | **does not apply** — nothing here declares class absence |
+| `expected_behavior` | required; what the agent does | **not currently populated.** `summary` is the domain scenario's prose and V22/V23 read the Pack, not this artifact |
+| `expected_escalation_prose` | canonical, prose (§3) | **not currently populated.** The `expected_escalation` bool is the live field a domain scenario carries, and V23 reads the Pack DSL's copy of it |
+
+**The last two rows differ in kind from the first four.** "Does not apply" and "not
+currently populated" are different statements, and collapsing them is the mistake this
+contract exists to prevent elsewhere.
+
+### The honest objection, recorded not resolved
+
+**An empty string reads as "not yet filled in", not as "does not apply here" — which is
+the exact ambiguity ADR-0049 exists to remove.** The contract requires a *declared*
+`not_applicable` with a reason precisely because an empty field cannot distinguish a
+considered absence from an accidental one, and this artifact now contains fifty-four
+undeclared empties that mean the first.
+
+It is not a live defect: the artifact is not submitted, and no consumer reads these fields
+on a domain scenario today. **It is the shape that becomes a defect when somebody counts.**
+A coverage view, a completeness report or a future validator rule that tallies populated
+scenario fields will read nine domain scenarios as nine incomplete ones, and be wrong in
+the direction that looks like work.
+
+**Recommendation, left for Ivan, deliberately not implemented:** the six fields probably
+should not be serialised onto domain scenarios at all — either a separate
+`OperationScenario` type, or a serialiser that omits them when `kind == "domain"`. Both are
+restructuring, both cross P-05's file, and neither belongs in a coordinator's diff. **The
+dataclass is not being restructured here.** This section exists so that the next reader
+finds the question asked rather than the empties explained away.
+
+---
+
+## 9. What this contract deliberately does not cover
 
 - **Domain scenarios.** Pack-validation-only for this run, by ruling T-050 — see
   `docs/decisions.md`. They keep satisfying V22/V23 and describing in prose what each role
