@@ -467,7 +467,7 @@ run; "Smoke red on V11/V32 as baseline, all other jobs green, no new failures" i
 
 | Package | PR | Merge SHA | Test results vs baseline | Timestamp (UTC) |
 |---|---|---|---|---|
-| P-00 | | | | |
+| P-00 | [#43](https://github.com/navigreen311/theoffice/pull/43) | `35bb8af` | run `34266438265`: **Smoke alone red**, its 8-check list diffed **byte-identical** to baseline `34263050339`; `Tests` green; six other jobs green. **No new failures.** One hand-back before merge — see below. | 2026-09-08T19:26:42Z |
 | P-01 | | | | |
 | P-02 | | | | |
 | P-03 | | | | |
@@ -509,3 +509,55 @@ that claims it has either broken something or is looking at the wrong branch.
 59 more, including every golden snapshot — see the local-suite section above for how to
 stand one up. **A package that has not run the database suite has no evidence about the
 Tests job**, and should say so rather than inferring.
+
+
+---
+
+## HAND-BACKS AND RETRIES
+
+**The plan's post-merge audit flags any package needing more than one revert-and-retry.
+This records the ones that happened, whether or not they reached that bar.**
+
+### P-00 — one hand-back, before merge, not a revert
+
+**What failed:** the merge checklist item *"no NEW failures against the baseline"*. CI run
+`34264952484` had **two** jobs red — `Smoke` (baseline, expected) and **`Tests`** (green in
+the baseline, therefore new). Six defaulted fields on `CurriculumScenario` serialise into
+the curriculum artifact, which is golden-snapshotted, and the snapshot was not re-recorded.
+
+**Why it was not caught before the PR opened:** P-00's local suite cannot run — it errors
+out on `OFFICE_ADMIN_DSN`, which P-00 itself had recorded, in this file, as *"not a CI
+result, in either direction"*. It then asserted a CI result in its PR description a few
+paragraphs later. **The failure was not ignorance of the gap; it was not applying a rule it
+had just authored.**
+
+**The control that exists and could not help:** the Tests job carries a step named
+*"Refuse a green run that skipped the database suite"*, commented *"a skipped test is
+reported as a pass by every summary."* It works. It did not fire, **because it runs in CI
+and the claim was made before CI ran. A control cannot catch a prediction.**
+
+**What changed as a result:** every subsequent brief in this run carries *"do not predict
+CI — open the PR, let it run, then write what it did"*, and item 5 of the reporting
+requirements above. The fix itself was one re-recorded golden, verified purely additive at
+`108 0` — **zero deletions**, which is the proof no existing value moved.
+
+---
+
+## COORDINATOR MERGES TO `main`
+
+Not packages, so not ledger rows. Recorded because they changed `main` during the run and a
+package agent diffing against a moving base needs to know why it moved.
+
+| PR | What | Merge SHA |
+|---|---|---|
+| [#40](https://github.com/navigreen311/theoffice/pull/40) | the coordination plan, on disk — Revision 6 had lived only in conversation | `8a4ae66` (via `17d989c`) |
+| [#41](https://github.com/navigreen311/theoffice/pull/41) | amendments R6a (two rulings) and R6b (every agent gets a worktree) | `5e14436` |
+| [#42](https://github.com/navigreen311/theoffice/pull/42) | R6c — the later cards move to entry 25 / B19, and the two-classes-one-name near-miss | `b102836` |
+| [#44](https://github.com/navigreen311/theoffice/pull/44) | R6d — R-1 verified, and a P-12 check that could never have fired | `1d6a885` |
+| [#45](https://github.com/navigreen311/theoffice/pull/45) | **contract amendment A1** — four things the frozen contract did not decide | `a22e2dc` |
+| [#46](https://github.com/navigreen311/theoffice/pull/46) | **contract amendment A2** — operation scenarios key on the module | `1fed3bc` |
+
+**Two of these amend the frozen contract.** They were made by the coordinator on Ivan's
+rulings and written into the contract file itself rather than relayed in briefs, because an
+interface amended verbally is an interface two packages will remember differently. The
+contract remains frozen to package agents: escalate, never edit.
