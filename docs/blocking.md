@@ -73,6 +73,29 @@ exists to certify against.
 
 **Blocks:** Gate 2, and every grant.
 
+### Updated 2026-09-08 — the manuals are authored, and this item's headline is false
+
+**`forge_operating_instruction` now holds 11 live rows for capitalforge, not none.**
+
+| forge | live | total |
+|---|---|---|
+| capitalforge | **11** | 17 |
+| cre-forge | 5 | 9 |
+| simforge | 2 | 4 |
+| voiceforge | 1 | 2 |
+
+**Consequence 1 above is retired.** V11 does not fail for CapitalForge modules any
+more, and it does not fail on `generate_loi` either. Against both Packs on 8 September
+it reports, in its own words, *"instructions are authored for all 10 module(s)"*
+(Burkham) and *"instructions are authored for all 6 module(s)"* (Greenstone).
+
+**Consequences 2 and 3 are not assessed here.** Whether existing Unit A certifications
+are still bound to the synthesised hash from the bootstrap is a separate question about
+`certification` rows, not about whether an instruction exists, and nothing in this
+update looked at it. Item B2 stays open on that basis alone.
+
+**The reason this is worth writing down is what it was costing.** See the note under B6.
+
 ---
 
 ## B3. No SimForge verdict for any CapitalForge module
@@ -252,6 +275,66 @@ rules are NOT_RUN" is not the whole question; "which subjects were compared" is.
 
 That is the same question B5's counter fails and the same question V30 failed. The
 general rule for writing these is in `docs/pack-validator.md`.
+
+### Updated 2026-09-08 — V11's NOT_RUN was read as unfinished curriculum for a week, and the curriculum is finished
+
+**This is a correction to what was left, not to a rule.** The **V11** row in the
+table above is superseded by this section: it reads `FAIL here` on `generate_loi`
+having no instruction, and neither the verdict nor the cause is current.
+
+V11 has reported NOT_RUN since the beginning, and NOT_RUN on a curriculum rule reads as
+*the curriculum is not finished.* It read that way on the board all week. **It is
+finished.** Every module on both Packs has an authored operating instruction — 10 of 10
+on Burkham, 6 of 6 on Greenstone, and V11 says so in its own message before it declines.
+
+What actually blocks it is **one unresolvable credential per Pack**, and nothing else:
+
+| Pack | V11 | what it could not resolve |
+|---|---|---|
+| greenstone | NOT_RUN | `voiceforge: tenant credential unavailable` |
+| burkham-wickmont | NOT_RUN | `capitalforge: tenant credential unavailable` |
+
+Both are a missing environment variable. Neither is a document anybody has to write.
+
+**Why it survived a week.** V11's verdict is one word and its cause is in the sentence
+after it, and a rule whose subject is *whether the modules the curriculum teaches exist*
+declines for a reason that has nothing to do with the curriculum. The verdict was read
+and the sentence was not — and the run output that carries the sentence is a thing
+nobody re-reads. B2's headline said the manuals were unwritten, which agreed with the
+misreading and kept it alive after it stopped being true.
+
+**What this changes on the board.** Authoring work that was believed outstanding is
+done. What remains in its place is configuration — the same two credentials named in
+`docs/decisions.md` entry 3's 2026-09-08 correction, one of which is a value that has to
+be chosen and set on two sides rather than found.
+
+### And a control observed working, which is rarer than a control failing
+
+The table above says V32's message *"distinguishes modules it asked about from
+voiceforge it could not ask"* — written on 6 September as reasoning about a message,
+before any run had put it under load.
+
+**On 8 September it faced a genuinely mixed verdict and held.** Four Forges reachable,
+one unconfigured, and a real failure in the same rule at the same time:
+
+```
+V32 FAIL: 1 declared module(s) the Forge does not dispatch: simforge/run_scenario_pack.
+A grant over one of these is a grant on a capability that is not there. SEPARATELY, and
+not covered by this failure: could not ask capitalforge: tenant credential unavailable
+— those bindings are unverified rather than verified, and fixing the modules named above
+will not resolve them.
+```
+
+It did not fold the unverified bindings into the FAIL. It named the failure, named the
+unasked Forge separately, and said in advance that fixing the first will not resolve the
+second — which is the exact wrong inference a reader would otherwise draw from a single
+verdict word.
+
+**Worth recording because the entry 13 class is a list of controls that were reasoned
+about and then found wanting.** This is one that was reasoned about and then observed
+holding, the first time a real mixed case arrived. The distinction that survived is the
+one that class exists to protect: *which subjects were compared* is a different question
+from *what the verdict says*, and here the message answered both.
 
 ---
 
