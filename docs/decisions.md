@@ -452,6 +452,12 @@ one module and duties describing three, and this entry is the answer to why.
 
 **Decided 2026-09-04.**
 
+> **SUPERSEDED 2026-09-08 by entry 25 (ruling Q-1). `run_scenario_pack` is now OFF the
+> Pack.** The decision below is left standing as written, and it remains the correct
+> reading of what was known on 4 September. What changed is not an observation in it but
+> the question asked: it assumed a pack-level run was wanted and merely unbuilt, and
+> nobody had checked whether it was. **Read entry 25 before acting on anything here.**
+
 The Burkham Pack binds SimForge at `criticality: hard` with
 `modules_expected: [run_scenario_pack, gate_result]`. A SimForge Office adapter is
 being built. **Only `gate_result` is bound. `run_scenario_pack` is left on the Pack
@@ -2280,3 +2286,131 @@ carried neither. **The other six orphaned flags stay recorded and unassigned.** 
 somebody who knows which role's duties actually touch it, and guessing is exactly how the
 department mapping in entry 12 went wrong. The Pack amendment is P-09's; the six are
 recorded under `docs/blocking.md` B15.
+
+
+---
+
+## 25. `run_scenario_pack` comes off the Pack — supersedes entry 5
+
+**Ruled 2026-09-08 (Q-1), as part of the parallel build. This entry supersedes entry 5.**
+
+Entry 5 decided, on 4 September, that `run_scenario_pack` would stay on Burkham's SimForge
+binding with nothing behind it, precisely so that V32 would FAIL on it on every run. **That
+decision is reversed. The name is off `modules_expected`, and the binding is now
+`[gate_result]`.**
+
+Entry 5 is not wrong about anything it observed, and a reader arriving there first should
+not try to reconcile the two entries: it asked a narrower question than the one that has
+now been asked, and the answer to the wider one changes what to do.
+
+### The question that had not been asked, and what came back
+
+Entry 5 established that SimForge has no pack-level unit of execution, and treated that as
+a gap to be filled — *"a day of work with a clear shape, not a fiction."* The question
+nobody had put is the one before it: **what does a pack-level run give us that N
+per-module runs do not?**
+
+**Nothing this run needs.**
+
+| | |
+|---|---|
+| `OperationCert` keys on | `unitType`, `forgeId`, `agentId`, `moduleId` — **there is no `packId`** |
+| So a pack-level verdict would attach to | **nothing.** The certification record has no pack-level unit for it |
+| `OperationRun` already is | the battery record: `unit`, `verdict`, `scenarioCount`, `coverageDenominator` |
+| Gate 8 already | submits per module and gets one `runRef` per module, **by construction** |
+
+What a pack-level run would add, stated in full: **a single `run_ref` correlating N
+submissions.** That is a convenience for reading results, not a requirement for producing
+them. Nothing becomes unmeasurable without it, no verdict is unavailable, and no agent goes
+uncertified.
+
+*(Schema facts read in SimForge for ruling Q-1 rather than inferred from its docs — the
+standard entry 5 held itself to, applied to the question entry 5 did not ask.)*
+
+### The assumption underneath entry 5 that nobody checked
+
+Entry 5's reasoning was sound given what it assumed: that the capability was **wanted and
+merely unbuilt.** Everything follows from that — if it is coming, then a standing V32 FAIL
+is the right place to keep the reminder, louder and more durable than a duty line in a
+role.
+
+**Nobody had decided it was coming.** The assumption entered as background rather than as a
+choice, and once it was in, the entry's whole argument was about *where to record the gap*
+rather than *whether there was one to record.* Q-1 asked the prior question and the answer
+was no.
+
+### How this differs from entry 4's removals — and it does differ
+
+Entry 4 took `lender_match` and `build_packet` off this Pack because they **did not exist
+under any spelling** — no route, no service, no handler, no registry row, and **no
+description of one anywhere.** Entry 5 drew its line exactly there and stayed on the right
+side of it: `run_scenario_pack` names a capability that is known, bounded and described,
+and entry 5 is the description.
+
+**That distinction still holds. It is not why this one comes off, and the two removals must
+not be collapsed by a later reader:**
+
+- `lender_match` and `build_packet` were removed because **there was nothing behind the
+  name.** The gap moved to the Placement Strategist's duties, where a human reads it.
+- `run_scenario_pack` is removed because **there is something behind the name, it was
+  costed, and it is not wanted.**
+
+The first says *this does not exist.* The second says *this was considered and declined.*
+A Pack cannot tell those apart, which is why the record has to.
+
+### What this costs — the pointer entry 5 was protecting
+
+Entry 5 chose a standing V32 FAIL over a duty line because a failing check is read every
+run and a duty line is read when somebody happens to open the Pack. That reasoning was
+right about visibility, and **removing the name gives that visibility up. This entry is now
+the only pointer.**
+
+The trade is made knowingly, and the reason is the thing entry 5 could not see from inside
+its own assumption: **a permanent failure aimed at work nobody had decided to do does not
+stay legible.** It is honest about the fact — SimForge genuinely does not dispatch that
+module — while implying a plan that did not exist. Read every run, explained nowhere, it
+becomes the check that is always red for a reason people stop looking up, and V32 is a rule
+that has to stay believable.
+
+### What this does to V32, and what it does not do to Gate 2
+
+After R-1 completed on 8 September, Burkham's V32 was single-caused: `simforge/run_scenario_pack`
+and nothing else, its earlier *"could not ask capitalforge"* clause gone. With the name off,
+the rule has nothing left to report on this Pack.
+
+**Read the clause, not the verdict.** V32 stops failing because the Pack stopped declaring a
+module the Forge does not dispatch — the rule doing exactly its job, not the rule being
+softened. Nothing about V32 changed.
+
+**Gate 2 does not open.** V22 still fails on `referral_fee_permitted_in_state` by ruling
+T-080 and entry 24, and it is supposed to. **A green Gate 2 here would mean somebody deleted
+an obligation to clear a check.**
+
+### What returns it, and where the work actually starts
+
+**Something that needs a verdict spanning modules.** Not more scenarios and not a tidier
+report — a question whose answer is a property of the Pack as a whole and cannot be
+assembled from per-module verdicts. Nobody has one today.
+
+**Reopening is not merely binding the module, and this is the part most likely to be got
+wrong.** `OperationRun.moduleId` **is already nullable** — the execution seam for a run
+that is not about a single module exists today. Somebody who reads only the adapter will
+find a dispatch map short one key, conclude the work is a handler, and be wrong about the
+size of it.
+
+**The missing piece is a pack-level unit on `OperationCert`**: a `unitType` that is not a
+module, something for it to key on, and a decision about what certifying a *pack* even
+asserts about an agent. That is a schema change and a semantics question, and it is where
+anyone who wants this back starts — **not at the adapter.**
+
+Two things travel with it and are not free, both named by entry 5 and both still open:
+**partial failure** (does one scenario erroring fail the pack run, or is the pack run the
+record of what happened?) and **concurrency** against SimForge's own rate limit.
+
+### Recorded because a reversal with no record reads as an inconsistency
+
+Entry 5 is a deliberate, argued decision, and it now sits in the file saying the opposite of
+what the Pack does. A reader who finds it and not this entry would conclude the Pack had
+drifted from its own decision record. **Entry 5 carries a pointer here for that reason** —
+the same failure entry 4 was amended to prevent on 4 September, one link further along the
+chain.

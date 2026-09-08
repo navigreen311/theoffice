@@ -428,7 +428,13 @@ forge_dependencies:
     - forge: simforge
       api_version: 3.2.0
       criticality: hard
-      modules_expected: [run_scenario_pack, gate_result]
+      # run_scenario_pack removed 2026-09-08 (ruling Q-1), reversing entry 5, which had
+      # left it declared and unbound so V32 would point at it every run. Entry 5 assumed
+      # the capability was wanted and merely unbuilt. Nobody had asked what it would buy,
+      # and when asked the answer was nothing: SimForge certifies per module, so there is
+      # no pack-level unit for a pack-level verdict to attach to. See docs/decisions.md
+      # entry 25, which supersedes entry 5.
+      modules_expected: [gate_result]
       compliance_flags_propagated: []
       fallback_behavior: halt
       rate_limit_policy: {max_rps: 1, burst: 3, backoff: linear, on_429: queue}
