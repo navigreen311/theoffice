@@ -346,3 +346,81 @@ immediately if the first venture becomes Burkham Wickmont against CapitalForge.
   not that the hash matches authored instructions — that reconciliation belongs with
   the Curriculum generator.
 - **No Pack Editor UI** (Part 17).
+
+## V22 is satisfiable by typing flag names — read this before authoring scenarios
+
+**Recorded 7 September 2026, before Burkham's scenarios are written**, because this is the
+failure mode that task specifically invites.
+
+### The rule, in full
+
+```python
+declared  = {c.runtime_flag for c in pack.market.compliance_surface}
+exercised = {f for s in pack.scenarios for f in s.compliance_flags_exercised}
+missing   = declared - exercised
+```
+
+That is the whole of it. **Nothing reads `summary`.** A scenario exercises a flag by
+naming it in a list; no check relates the flag to what the scenario describes.
+
+So this passes V22:
+
+```yaml
+- scenario_id: x-001
+  role: Intake Concierge
+  domain: intake
+  compliance_flags_exercised: [croa_perimeter_required, per_pull_authorization_required]
+  expected_escalation: true
+  summary: The client asks a question.
+```
+
+Two flags exercised, an escalation declared, a role and a domain. **V22 and V23 both go
+green and the scenario teaches nothing.**
+
+### Why this matters more here than usually
+
+Burkham declares 22 frameworks carrying **20 distinct runtime flags**, and V23 wants a
+minimum of **15 scenarios** — 5 roles × 1 domain × 3, with one escalation each. Twenty
+flag names distributed across fifteen summaries is a small amount of typing and it turns
+two FAIL rules green.
+
+**And the green then becomes evidence.** Gate 2 passes, the Pack provisions, and every
+downstream reader — the curriculum, the coverage denominators, the certification record —
+treats those flags as exercised, because the only thing that ever claimed they were is the
+list the author typed.
+
+### Same shape as trap #7 — declared, not derived
+
+`docs/forge-adapter.md` records `forge_module_registry.compliance_flags_implied` on
+`record_consent` written as `per_connection_authorization_required` — a flag that exists,
+resolves against the Pack, passes every check, and is about a **bank account** connection
+rather than consent to be contacted. A value that resolves and is wrong.
+
+This is the same defect one layer over: **the flag list on a scenario is a claim the
+system cannot check, sitting beside prose the system cannot read.** The registry case was
+found by a human reading the flag against the thing it was attached to. There is no other
+way to find this one either.
+
+### What this does not mean
+
+It does not mean V22 is broken or should be changed. Relating a summary to a flag needs
+something that can read the summary — a rubric, a judge, or a person — and the rule is
+honest about being a set comparison. **`is_mutating` is checkable against a dispatch map;
+"does this story exercise CROA" is not checkable against anything.**
+
+The point is what the green means, not what the rule does.
+
+### The instruction for whoever authors these
+
+**Write the scenario, then list the flags it actually exercises.** Not the reverse. The
+reverse — take the 20 flags, spread them across 15 scenarios, adjust until V22 passes —
+produces a Pack that validates and a curriculum that certifies agents against situations
+nobody described.
+
+If a flag has no scenario that genuinely exercises it, **the honest outcome is a 16th
+scenario, or a flag that should not have been declared.** Not an extra entry in a list.
+
+A scenario is read by SimForge and turned into a rubric an agent is graded against. A flag
+named in a scenario that does not exercise it produces a grade for a competence never
+tested, and that grade is what `certification` stores and what the call path lets an agent
+act on.
