@@ -816,3 +816,62 @@ path at all — which is also an answer, and a different one to size against.
 
 Recorded rather than left as a stalled task, because "we were going to read eleven
 modules" reads afterwards as forgotten rather than deferred.
+
+## B17 — `--no-merged` reports a squash-merged branch forever, and a reader hears a backlog
+
+**Found 2026-09-07**, taking an inventory of unmerged work before deciding what to merge.
+
+`git branch -r --no-merged origin/main` listed **eighteen branches**. Seventeen had
+already landed. The command was correct every time.
+
+**Squash merging is why.** `gh pr merge --squash` writes one new commit onto `main` and
+the branch's own commits never become ancestors of it, so the ref answers "not merged"
+for as long as it exists — regardless of whether every line of it is on `main`.
+
+**The command answers *has this ref been merged as a commit*. A reader hears *is this work
+outstanding*.** Those are different questions and the second is the one somebody asks when
+they run it.
+
+### How to tell, and why the list did not
+
+The direction of the diff separates them in one line:
+
+```
+ai-docs/v30-wrong-population        216 deletions,    0 insertions   ← behind main
+ai-feature/simforge-pack-execution   4312 deletions,  71 insertions  ← behind main
+ai-feature/simforge-client            261 deletions, 3568 insertions ← genuinely ahead
+```
+
+A branch whose content is on `main` is *behind* it. Seventeen of the eighteen were, and
+not one added a file `main` lacked. **`--no-merged` cannot show that, because it compares
+ancestry rather than content.**
+
+### The second half, which was worse
+
+Several of the eighteen did not exist on the remote at all. They had been deleted on
+GitHub and the local `refs/remotes/origin/*` still held them, because nothing had run
+`git fetch --prune`. **So part of the inventory was refs to branches that were gone**, and
+a report was written from it before that was checked.
+
+`git fetch --prune` collapsed the list from eighteen to one.
+
+### Same class as the rollups
+
+This is the family named in decisions entries 11, 14 and 16: **a true answer that loses the
+distinction a reader needs.** Gate 4.5's summary line, V30's message, V32's verdict,
+`produced_not_yet_certified`'s name, `live`'s meaning — and now a git command's output.
+
+The tell is the same each time: **the artefact answers the question it was built to answer,
+and the reader is asking a neighbouring one.** Nothing is wrong, and acting on it is wrong.
+
+### What was done
+
+Fifteen local and seven remote refs deleted, each verified individually first — deletions
+heavier than insertions against `main`, and zero files added — rather than trusting the
+list that produced them. `ai-feature/module-exclusion-registry` was kept despite being
+merged: it is checked out in another session's worktree, and deleting a branch someone
+else has open breaks their tree.
+
+**What would prevent the next hour spent on this:** prune before listing, and read the
+diff direction rather than the ref name. Neither is a control; both are habits, and this
+entry exists because the habit did not fire.
