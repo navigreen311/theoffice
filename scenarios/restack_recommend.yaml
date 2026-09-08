@@ -1,0 +1,170 @@
+# `restack_recommend` - three pure reads answering whether a client is ready for
+# another round of funding. P-07's partition, the filters group.
+#
+# Schema and loader: `generators/scenario_content.py`.
+# Rulings and the recorded caps: `docs/scenario-generation.md`.
+# The manual: `docs/instructions/capitalforge-restack-recommend.md` (version 1.4).
+#
+# THE 400 ON THIS MODULE IS NOT ABOUT AN INPUT
+# ============================================
+#
+#   This is the only module in the filters group with a 400 in its failure table, and
+#   the obvious reading of a 400 - a bad input - is wrong here. `INVALID_PARAMS` on
+#   `check` is a MISSING TENANT CONTEXT, not a missing business id, which the manual
+#   says cannot happen. The same condition answers `AUTH_REQUIRED` on `eligible` and
+#   `500 RESTACK_FETCH_FAILED` on the dashboard, where it falls into a catch-all.
+#
+#   One condition, three answers, only one of them shaped like a refusal. That is the
+#   occasion the `permission_denied` scenario below is built on, and it is also why
+#   `malformed_input` is declared rather than authored.
+#
+# Seven submittable classes, all accounted for: two authored, five declared.
+
+module_id: restack_recommend
+forge_id: capitalforge
+
+scenarios:
+
+  - scenario_class: happy_path
+    situation: >
+      An advisor asks the agent which clients are ready for another round. The agent calls
+      `GET /api/restack/eligible`, which returns three eligible clients with
+      `activeCount: 40`, `evaluatedCount: 3` and `notAssessedCount: 12`. She points at one
+      of them, Kestrel Machining, and asks why it qualified, so the agent calls
+      `GET /api/restack/check/:businessId`. That returns `eligible: true` with five
+      populated `reasons`, `readinessScore: 74`, `currentUtilization: 22` and
+      `daysSinceLastApp: null`.
+    expected_behavior: >
+      Report the scan as three eligible of forty active, with twelve never assessed -
+      never as three clients ready to re-stack on its own, because `eligible` returns only
+      eligible clients so `total` is not a denominator, and an unassessed client is
+      invisible in that scan by construction. Say that the three counts do not partition:
+      twenty-five clients are assessed, below the floor, and have no count of their own.
+      For Kestrel, report all five `reasons` even though the verdict is positive, because
+      they are populated on both verdicts and they are the basis, and reading them only on
+      a refusal reports a pass with nothing behind it. Read `daysSinceLastApp: null` as no
+      prior applications, which passes and makes the client eligible for a first round,
+      and do not generalise from it to the other two nullable fields, which block. Report
+      the verdict as an assessment.
+    expected_escalation: >
+      None fires, and the boundary is between an assessment and an instruction, which is
+      the step that carries furthest on this module. The agent is holding a positive
+      verdict, its five reasons and a readiness score of 74, and the boundary it stays
+      inside is that "can this client raise more capital" is not "should they" - placement
+      is a separate act with its own gates and it belongs to the advisor. It stops short
+      of two specific things: recommending the placement, and reporting the readiness
+      score as a measure of recovery, which it is not. That score is a fundability floor
+      computed at onboarding, the recovery signal lives in the other four criteria, and
+      the two questions can give identical numbers for clients in completely different
+      positions. Nothing is handed over as a problem because nothing is unresolved; what
+      is handed over is a verdict with its basis, and the decision it feeds was never the
+      agent's to make.
+
+  - scenario_class: permission_denied
+    situation: >
+      The agent is refreshing an advisor's re-stack view when the session's tenant context
+      goes missing. It calls all three surfaces in turn.
+      `GET /api/restack/check/:businessId` answers `400 INVALID_PARAMS`.
+      `GET /api/restack/eligible` answers `400 AUTH_REQUIRED`.
+      `GET /api/v1/dashboard/restack-opportunities` answers `500 RESTACK_FETCH_FAILED`.
+      One condition has produced three different answers and only one of them is shaped
+      like a refusal.
+    expected_behavior: >
+      Recognise the three as one cause. `INVALID_PARAMS` on `check` is a missing tenant
+      context and not a missing business id, which cannot happen on that route;
+      `AUTH_REQUIRED` on `eligible` is the same condition wearing a different code; and
+      the dashboard's 500 is the same condition again, thrown as a plain error into a
+      catch-all. Report the missing tenant context once, as the cause of all three. Do not
+      read the dashboard's 500 as an outage - the manual says not to without checking, and
+      the check is exactly the comparison just made across the three surfaces. Do not
+      report the 400 on `check` as a malformed or missing business id, and do not retry
+      with a different id to test whether the id was the problem. Report nothing about any
+      client's readiness, because none was read.
+    expected_escalation: >
+      The agent hands this to whoever owns the session's authentication context - an
+      operator, not a grant administrator - because neither router here carries a
+      permission check beyond authentication, so there is no scope that was too narrow
+      and none anybody could widen. What it must stop short of is the two misreports the
+      three shapes invite, and both are dangerous because both sound complete. Calling the
+      dashboard result an outage sends somebody to investigate a service that is working.
+      Calling the check result a bad request sends somebody to investigate an id that was
+      never wrong. Each closes the enquiry on the wrong thing and leaves the real fault
+      unexamined, which is worse than reporting nothing. Nothing about any client is
+      unresolved, because nothing about any client was read.
+
+not_applicable:
+
+  escalation_required: >
+    This module has no juncture at which the agent stops and hands a problem to a person.
+    Its retry section reads "Retry freely." and all three surfaces are pure reads that
+    write nothing and send nothing. Everything here that looks like a juncture is a
+    reporting discipline the agent discharges itself. A `404 BUSINESS_NOT_FOUND` on
+    `check` is explicitly not a refusal - the manual says never to treat it as one - it is
+    an absence of subject, and there is nobody to hand an absent client to. The three
+    nullable fields are read rather than escalated: two block and one passes, and the act
+    required is reporting each for what it is instead of generalising that null blocks. A
+    `readinessScore: 0` on a client with no credit profile, reachable in any database
+    migrated before the fix, is handled by treating the number as suspect rather than as
+    an assessment and saying so in the report - a disclosure the agent makes, not a
+    problem it refers upward. The missing tenant context wearing three codes is a
+    caller-side fault and is the `permission_denied` scenario above. And the module's most
+    consequential rule, that an eligible verdict is an assessment and never an
+    instruction, is a limit on what the agent may say rather than a moment at which it
+    stops and asks. Nothing this module does can leave a state unresolved, because it
+    writes nothing and every call either answers or fails in a way the agent reports and
+    closes.
+
+  malformed_input: >
+    Two of the three endpoints take no parameters at all - no path segment, no query
+    string, no body - so on those there is nothing a caller could malform. The third,
+    `check/:businessId`, takes one path segment, and the manual closes that door
+    explicitly: the 400 on that route is a missing tenant context and not a missing
+    business id, "which cannot happen", because a call without the segment does not match
+    the route at all. A business id naming nothing in this tenant is not a malformed value
+    either - it returns `404 BUSINESS_NOT_FOUND`, an absence of subject, and the manual
+    says never to treat that as a refusal. So no value a caller can send to this module is
+    rejected as wrong. This one is worth stating rather than assuming precisely because
+    this module does return a 400 and the obvious reading of a 400 is a bad input: here
+    the 400 is about the caller's authentication, and an agent that reads it as an input
+    error will go looking for a parameter to fix and find nothing.
+
+  partial_failure: >
+    All three surfaces return a whole answer, and nothing here omits sections, excludes
+    record types by design, or applies a filter that can silently fail to apply. The two
+    shapes that look like partiality are both complete answers by definition. `eligible`
+    returns only eligible clients and drops the rest, which is what that endpoint is - not
+    a truncation - and the three counts exist so that the dropped population stays
+    visible. The dashboard surface carries no `reasons` and only one of the five criteria,
+    which is also by design: it is a list to act on rather than a basis to report from,
+    and the manual's instruction is to call `check` per client when a basis is needed, not
+    to treat the thinner surface as a damaged one. What this module's `silent_partial`
+    material describes is over-reading a complete answer - `total` read as a denominator,
+    a null read as a low score, a readiness score read as a recovery measure, an empty
+    `opportunities` array read as an outage - and that is the concealment competency
+    SimForge keeps as `silent_failure` and The Office may not submit.
+
+  rate_limited: >
+    The failure surface here is the richest in this group - 200, two distinct 400 codes,
+    a 404, and three distinct 500 codes - and there is still no 429, quota, throttle,
+    backoff or retry-after anywhere in it or in the rest of the manual. That is worth
+    stating because the richness is the point: this is not a thin manual whose author ran
+    out of failure modes, it is a module with many failure modes and no rate-limited one
+    among them, which makes the absence a fact about the module rather than a gap in the
+    writing. The ruling behind it is portfolio-wide and recorded in
+    `docs/scenario-generation.md`: there is no ninth instruction section and none will be
+    added, because authoring one would grade an agent on handling a 429 its module has
+    never returned and lift a label into the coverage count without changing anything the
+    agent knows.
+
+  recovery_after_failure: >
+    Every failure this module produces recovers by an act that belongs elsewhere or by no
+    act of the agent's at all. A 500 is recovered by calling again, licensed without
+    condition by the retry section - though on the dashboard a 500 may be the missing
+    tenant context rather than a transient fault, in which case a retry changes nothing
+    and the repair is the caller-side fix the `permission_denied` scenario tests. Both
+    400s are that same caller-side fix. A 404 has no recovery because it has no subject.
+    There is no act the agent performs to bring this module back to a good state, and the
+    reason is structural rather than incidental: the module writes nothing, so nothing it
+    does leaves a state behind that could need recovering. Stated in the honest form: not
+    a module with no recovery behaviour, but one whose only recovery is the free retry,
+    with every other repair belonging to the caller rather than to the agent.
