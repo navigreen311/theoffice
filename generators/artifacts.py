@@ -230,6 +230,19 @@ class ApprovalProjection(Artifact):
 
 @dataclass(frozen=True, slots=True)
 class CurriculumScenario:
+    """One scenario, in the shape `docs/scenario-contract.md` agrees on.
+
+    The fields below `instruction_content_hash` are the contract's, added by P-00 and
+    frozen with it. **Every one is defaulted**, so nothing that constructs a
+    CurriculumScenario today has to change to keep working - the empty default is the
+    honest value for a generator that does not yet produce classed scenarios, and
+    P-05 is what fills them.
+
+    Empty is not a claim. `not_applicable_reason=""` means no declaration is being
+    made, NOT "not applicable, reason omitted" - that second state is refused, and the
+    difference is the whole of ADR-0049.
+    """
+
     scenario_id: str
     kind: str
     role: str
@@ -237,8 +250,64 @@ class CurriculumScenario:
     module_id: str | None
     compliance_flags_exercised: list[str]
     expected_escalation: bool
+    """ON ITS WAY OUT. The live field until P-05 migrates, then deleted.
+
+    The contract's canonical shape is a STRING - `expected_escalation_prose` below.
+    The type could not simply be changed here: generators/curriculum.py passes `True`
+    and belongs to P-05, broker/provisioning.py reads it as a bool and belongs to
+    nobody this run, so a type change in this package would break two files this
+    package may not touch. Ruled 2026-09-08: add the string alongside, P-05 collapses
+    the two. See docs/scenario-contract.md section 3.
+    """
+
     summary: str
     instruction_content_hash: str | None
+
+    # ---- the scenario contract, frozen 2026-09-08 --------------------------------
+    scenario_class: str = ""
+    """One of SimForge's nine, or empty. The Office does not coin new ones - an
+    unknown class is a rejection by design, so that a class nobody considered cannot
+    pass as one somebody did. Two of the nine (`never_do_violation`, `silent_failure`)
+    are held out and The Office must never populate them."""
+
+    instruction_section: str = ""
+    """Which section of the operating instruction this scenario probes. Required and
+    non-empty on submission; a present-but-empty string is a violation, not a pass."""
+
+    expected_behavior: str = ""
+    """What the agent does. Replaces `summary`'s generated boilerplate as the field
+    SimForge reads - `summary` stays for the Pack-side domain scenarios."""
+
+    expected_escalation_prose: str = ""
+    """THE LIVE ONE once P-05 lands. Prose naming the escalation the scenario expects.
+
+    There are deliberately two escalation fields on this dataclass right now, and this
+    is the one the contract means. SimForge asks WHAT escalation is expected; the bool
+    above answers THAT one is, with a constant. A transitional window, ruled and
+    recorded in PARALLEL_BUILD.md - not a duplicate to be tidied. P-05 migrates
+    generators/curriculum.py onto this field and deletes the bool; anyone else
+    collapsing the two has broken a package boundary.
+
+    A value that restates "escalation is expected" has not satisfied this. The prose
+    names the juncture: what the agent has in front of it, what it must stop short of
+    doing, and to whom it hands the problem.
+    """
+
+    never_do_entry: str = ""
+    """The never-do list entry a `never_do_violation` scenario tests.
+
+    Required for that class alone, and that class is held out - so from The Office's
+    side this is always empty, and its non-empty case is SimForge's own authoring.
+    Present here so a SimForge-authored scenario round-trips through this dataclass.
+    """
+
+    not_applicable_reason: str = ""
+    """Prose saying why a class this module cannot have is absent (ADR-0049).
+
+    A declared absence, never an inferred one. A class neither supplied nor declared
+    is still refused; a declaration without this sentence is also refused. Four of
+    nine `compliance_couplings` rows were accidental empties, which is why the
+    sentence is mandatory rather than encouraged."""
 
 
 @dataclass(frozen=True, slots=True)

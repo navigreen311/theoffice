@@ -2147,3 +2147,136 @@ Entry 3's 2026-09-08 correction records the same defect as the reason its own
 CapitalForge half was described one layer too shallow for a third time. That is not a
 coincidence: **an error that names a wrong cause produces documentation that names a wrong
 cause.** The 401 is upstream of the mis-description, not parallel to it.
+
+
+---
+
+## 23. Workstream C closes — domain scenarios are Pack-validation-only, and here is what reopens it
+
+**Ruled 2026-09-08 (T-050), as part of the parallel build. Supersedes nothing; this is
+the first entry to say what a domain scenario is currently for.**
+
+Burkham's Pack carries fifteen domain scenarios — three each across `compliance_review`,
+`intake`, `diagnostic`, `placement` and `stack_management`. Workstream C was going to make
+them executable. It does not.
+
+### What they are for, stated so it is not re-derived
+
+Two things, both real:
+
+1. **They satisfy V22 and V23.** V22 wants every declared compliance flag exercised by
+   some scenario; V23 wants at least three scenarios per role × domain and at least one
+   `expected_escalation` per role. The fifteen are what makes both pass.
+2. **They describe, in prose a human reads, what each role must handle.** That is not a
+   placeholder for something better. It is the artefact somebody reviews when deciding
+   whether a position has been thought about.
+
+Neither of those requires the scenarios to run anywhere, and nothing today runs them.
+
+### Why not executable
+
+A domain scenario that executes needs three things The Office cannot currently supply, and
+they are not the same kind of missing.
+
+- **A source for `testedAgentVillageId`.** SimForge's domain cert model keys on it. The
+  Office knows its own agent identifiers; which Village agent a Burkham domain scenario
+  tests is a question nobody has asked.
+- **A source for `seed` and `yamlPath`.** `yamlPath` points at a scenario file on
+  SimForge's side. The Office's fifteen live inside a Pack, not as files, and inventing a
+  path would be inventing the file it names.
+- **A decision to touch the domain cert tables.** That is a schema change on SimForge, and
+  a schema change made to accommodate scenarios nobody has decided the executable meaning
+  of is the wrong order.
+
+### What reopens it — the part that matters
+
+**A closed workstream with no reopening condition becomes a thing nobody remembers was
+deliberate.** This project has the instance already: entry 3 recorded an exit criterion
+and the criterion went stale while the entry stayed, and it took a separate correction to
+notice. So the condition is written here rather than left as a shared understanding.
+
+**Workstream C reopens when somebody decides what a domain scenario is in executable
+terms.** Concretely, all three of:
+
+1. a source for `testedAgentVillageId` — which Village agent the scenario tests, and where
+   that comes from;
+2. a source for `seed` and `yamlPath`, or a decision that a Pack-carried scenario does not
+   need a file and the model should say so;
+3. a decision to touch the domain cert tables, taken as its own decision rather than as a
+   consequence of wanting the scenarios to run.
+
+**Until all three exist this is not partially done. It is not started, deliberately.** The
+fifteen scenarios are not a stub and should not be read as one — they are doing their two
+jobs, and they do not become better by being made to execute against a model that has not
+decided what they mean.
+
+### What this does not license
+
+**Not a licence to delete them, thin them, or stop writing them.** They carry V22 and V23.
+A PR that removes a domain scenario is the standing hand-back rule's subject like any
+other removal.
+
+---
+
+## 24. Some declared obligations are held by humans, not agents — and the compliance surface cannot say so
+
+**Ruled 2026-09-08 (T-080), as part of the parallel build. Cost accepted knowingly: V22
+fails until this is fixed, and the fix is a schema question nobody has asked.**
+
+`referral_fee_permitted_in_state` stays declared on Burkham's compliance surface. It is
+not carried by any position, no agent is measured against it, and **V22 fails because of
+it.**
+
+### The reasoning, which is not about V22
+
+The obligation is real. Whether a referral fee may be taken in a given state is a thing
+Burkham Wickmont is subject to, and somebody at Burkham Wickmont has to be right about it.
+**That somebody is a person, not an agent.** No module places a referral fee, no position
+decides one, and no scenario could exercise it without inventing an agent act that does
+not exist.
+
+**Deleting the flag to make V22 pass would assert that the obligation does not exist.** It
+does exist. The Pack would then be a document that says Burkham is subject to nineteen
+things when it is subject to twenty, and the nineteen would validate cleanly — which is
+worse than the twenty failing, because the failure is the only thing pointing at the gap.
+
+### The distinction the surface cannot draw
+
+A compliance flag today has one meaning: **an obligation, carried by a position, exercised
+by a scenario.** There is no way to declare an obligation the venture holds that no agent
+carries. So the surface has exactly two states available for
+`referral_fee_permitted_in_state`, and both are wrong:
+
+```
+declared and uncarried   -> V22 fails, correctly, on a flag that is correctly declared
+not declared             -> the Pack denies an obligation the venture has
+```
+
+**This is not V22 being wrong.** V22 is checking exactly what it says it checks, against a
+vocabulary that has no word for the case. The rule is right and the vocabulary is short by
+one distinction — a **venture-carried** obligation as against an **agent-carried** one.
+
+### The cost, accepted
+
+**V22 fails on Burkham until the compliance surface can distinguish the two.** Gate 2 stays
+blocked. That is the intended state for this run and it is recorded in `PARALLEL_BUILD.md`
+so a reader does not diagnose it as an unfinished package.
+
+**A green Gate 2 in this run would mean something went wrong** — most likely that somebody
+deleted this flag to make a check pass. Treat it as a defect, not as progress.
+
+### Where the fix lives
+
+Filed as a blocking item, not as work in this run, because it is a schema decision with
+three sub-decisions attached and a rule written now would silently take all three. See
+`docs/blocking.md` B18.
+
+### The two flags that moved, and the six that did not
+
+T-081, ruled the same day: the Placement Strategist gains `fair_treatment_required` and
+`advance_placement_prohibited`, because both govern acts that are specifically that role's
+— which lenders a client is shown, and what may not be placed at all — and the position
+carried neither. **The other six orphaned flags stay recorded and unassigned.** Each needs
+somebody who knows which role's duties actually touch it, and guessing is exactly how the
+department mapping in entry 12 went wrong. The Pack amendment is P-09's; the six are
+recorded under `docs/blocking.md` B15.

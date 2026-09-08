@@ -1,4 +1,4 @@
-# Blocking — what must exist before Burkham Wickmont serves a client
+# Blocking — what must exist before the ventures this page names can serve a client
 
 Not deferred. Deferred items are in `capitalforge/docs/decisions/deferred.md` and
 each one has a reason it can wait. **Nothing on this page can wait**, because each
@@ -9,6 +9,42 @@ An item here is a **capability the vocabulary already assumes** — ten operatin
 instructions, the Business Pack and the compliance library all use words that mean
 nothing until these exist, so every document that reads correctly today is
 overstating the system until they do.
+
+## Scope — widened 2026-09-08 (T-101)
+
+**This page was titled for Burkham Wickmont, and its contents stopped being only
+Burkham's some time ago.** An item here is **venture-scoped** or **cross-cutting**, and
+from today a new one says which, on its own line under the heading:
+
+```
+**Scope:** venture-scoped: burkham-wickmont
+**Scope:** venture-scoped: greenstone
+**Scope:** cross-cutting
+```
+
+**The existing seventeen are not retro-filed.** Going back to tag B1 through B17 would be
+seventeen judgements made in one pass by whoever happened to be here, and several of them
+are not obvious — which is the same guessing that produced the department mapping in
+decisions entry 12. They stay as they are. **B-numbering continues unbroken**: the next
+item is B18 and nothing is renumbered.
+
+### The drift, recorded because the shape recurs
+
+Nothing announced that the scope had moved. The page kept a title naming one venture while
+it accumulated items that are not about that venture at all:
+
+- **B4** is SimForge's own bootstrap certification — SimForge's, not Burkham's.
+- **B13** is a defect in V33, a validator rule — every Pack's, not one venture's.
+- **B17** is a git command's output misread as a backlog — not a venture fact at all.
+
+**It was only visible when something arrived that obviously did not fit.** A stated scope
+drifts from its contents without being wrong on any single day: each individual addition is
+defensible, and nobody re-reads the title while adding to the body. That is the same shape
+as decisions entry 3 going stale — a statement true when written, left in place while the
+thing it described moved, and correct-looking the entire time.
+
+**The tag is not a filing system.** It exists so that the next item that does not fit is
+visible when it arrives rather than three months later.
 
 ---
 
@@ -825,6 +861,57 @@ carried by at least one position (direction 2), and what the honest answer is fo
 framework that genuinely applies to the venture and to no single role. Those are three
 decisions and a rule would silently take all three.
 
+### Updated 2026-09-08 (T-093, T-096) — the title names one direction and the defect is both
+
+**Scope:** cross-cutting. *The heading says "against the declared surface", which is
+direction 1. The body has always covered both. That asymmetry is worth stating, because a
+reader who reads only headings takes away half of this item.*
+
+**Nothing cross-checks the two lists in either direction, and that is why both failures are
+silent.** No rule reads `compliance_flags_in_scope` at all — not to check it against the
+surface, and not to check the surface against it. So:
+
+```
+direction 1   a position holds a flag no framework declares    nothing reports it
+direction 2   a framework is declared and no position holds it  nothing reports it
+```
+
+**One direction has already been fixed once, by hand, because somebody happened to notice.**
+`REG_Z_ADVERTISING` and `CFPB_1071` were re-added to Burkham's surface after a person read
+the two lists side by side. That fix was correct, and **it is the only mechanism there is.**
+The next instance depends on the next person happening to look, which is not a control.
+
+That is the argument for this staying open rather than being marked half-done: **the
+direction that was fixed is not safer than the direction that was not.** It was found once,
+and it is no more findable now than it was before.
+
+### T-081 assigns two of the eight orphans; six stay recorded and unassigned
+
+Ruled 2026-09-08. The **Placement Strategist gains `fair_treatment_required` and
+`advance_placement_prohibited`** — both govern acts that are specifically that role's
+(which lenders a client is shown, and what may not be placed at all), and the position
+carried neither. The Pack amendment is P-09's; the reasoning is decisions entry 24.
+
+**The other six stay orphaned, deliberately:**
+
+```
+facilitator_status_required         outbound_contact_boundary_required
+privacy_request_handling            recording_consent_required
+referral_fee_permitted_in_state     tax_advice_boundary_required
+```
+
+**Each needs somebody who knows which role's duties actually touch it, and guessing is how
+the department mapping in decisions entry 12 went wrong** — ten Burkham departments mapped
+onto twelve Village ones that intersect at zero names, every assignment but one recorded as
+a guess. Assigning six compliance obligations by plausibility is the same move with a worse
+blast radius: an agent held to an obligation on somebody's hunch is then measured against
+it in a certification.
+
+**And one of the six is not an orphan at all.** `referral_fee_permitted_in_state` is held
+by a human rather than by any agent, so there is no assignment waiting to be found — it is
+B18's subject, not this item's. **Two flags move, one is reclassified, and five are
+genuinely waiting on somebody who knows.**
+
 ## B16 — a pure-read module cannot satisfy SimForge's mandatory `escalation_required`
 
 **Found 2026-09-07**, mapping instruction sections onto scenario classes for
@@ -958,3 +1045,62 @@ else has open breaks their tree.
 **What would prevent the next hour spent on this:** prune before listing, and read the
 diff direction rather than the ref name. Neither is a control; both are habits, and this
 entry exists because the habit did not fire.
+
+## B18 — the compliance surface cannot say an obligation is held by a human
+
+**Scope:** cross-cutting. **Found 2026-09-08 (T-092)**, ruling on T-080 during the parallel
+build. The schema question nobody has asked.
+
+**A compliance flag has exactly one meaning today: an obligation, carried by a position,
+exercised by a scenario.** There is no way to declare an obligation the venture holds that
+no agent carries — and Burkham has at least one.
+
+### The instance
+
+`referral_fee_permitted_in_state`. Whether a referral fee may be taken in a given state is
+real, Burkham Wickmont is subject to it, and somebody has to be right about it. **That
+somebody is a person.** No module places a referral fee, no position decides one, and no
+scenario could exercise it without inventing an agent act that does not exist.
+
+Both states the vocabulary can express are wrong:
+
+```
+declared and uncarried   V22 fails, correctly, on a flag that is correctly declared
+not declared             the Pack denies an obligation the venture actually has
+```
+
+**When both available states are wrong, the missing thing is a word, not a value.** V22 is
+not defective — it checks precisely what it says it checks. What is short by one
+distinction is the surface: a **venture-carried** obligation as against an
+**agent-carried** one.
+
+### Why it is not being fixed here
+
+Ruled T-080: the flag **stays declared** and V22 **keeps failing**, knowingly. Deleting it
+to green the gate would assert the obligation does not exist. A Pack that then says Burkham
+is subject to nineteen things when it is subject to twenty would validate cleanly, and that
+is worse than the twenty failing — **the failure is the only thing pointing at the gap.**
+
+A rule or a schema change written now would silently take three decisions nobody has taken,
+the same three B15 names:
+
+1. must a position's in-scope flags be a subset of the surface;
+2. must every declared flag be carried by at least one position;
+3. **what is the honest representation of a framework that applies to the venture and to no
+   single role** — which is this item, and the one B15 recorded without a candidate answer.
+
+### What it blocks, and what a reader must not conclude
+
+**Blocks:** V22 on Burkham, and therefore Gate 2, for as long as this is open. That state
+is intended for this run and is recorded in `PARALLEL_BUILD.md` so that a red V22 is not
+diagnosed as an unfinished package.
+
+**A green Gate 2 would mean something went wrong** — most likely that somebody deleted this
+flag to make a check pass. **Read an unexpected pass here as a defect, not a win.**
+
+### What retires it
+
+A decision on how the compliance surface represents an obligation with no agent holder —
+a third state, a holder field, or something else — followed by a rule that can then
+distinguish the two cases. **Not** a rule alone: a rule written before the decision is the
+decision, taken by whoever wrote the rule.
