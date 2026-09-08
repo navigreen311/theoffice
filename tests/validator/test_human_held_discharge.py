@@ -13,7 +13,7 @@ answers "no discharge → FAIL" would also pass if it answered that unconditiona
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import psycopg
@@ -78,7 +78,7 @@ def _file_discharge(
     # `verified_days_ago` exists because the schema refuses `expires_at <= verified_at`.
     # An expired discharge is one verified in the past whose window has since closed -
     # not one that expired before it was written, which is not a state at all.
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     verified = now - timedelta(days=verified_days_ago)
     with admin.cursor() as cur:
         cur.execute(
