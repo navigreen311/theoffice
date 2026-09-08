@@ -216,7 +216,10 @@ counts, and a reviewer who can refuse one without refusing the other.
 ### P-05 — Office: classed scenario generation + the B4 content interface
 
 - **Repo:** theoffice · **Complexity:** L · **Branch:** `feature/p-05-classed-scenario-generation`
-- **Modifies:** `generators/curriculum.py` · **Creates:** the per-module content interface
+- **Modifies:** `generators/curriculum.py`; `generators/artifacts.py` (T-102: delete the
+  bool, then rename the prose field); **`broker/provisioning.py` — contract A1.2, two
+  named purposes only** · **Creates:** `docs/scenario-generation.md` (T-035's recorded
+  cap), and the per-module content interface
   (schema + loader + one worked example module)
 - **Will not touch:** `generators/artifacts.py`, `broker/simforge.py`, `db/`, `packs/`
 - **Depends on:** P-00 only — it builds against the frozen contract, which is what keeps
@@ -605,3 +608,24 @@ names a specific wrong outcome.
 Closer to entry 22 than to the rollup class: not a summary dropping a distinction, but **a
 check asserting it would detect something it structurally could not see.** Had P-12 run it,
 it would have passed, and the pass would have meant nothing.
+
+
+---
+
+## AMENDMENT R6e — 8 September 2026
+
+Contract amendment **A1** landed (`docs/scenario-contract.md` §10), carrying four rulings:
+a declared `not_applicable` travels as a curriculum-level map rather than a scenario row;
+`broker/provisioning.py` moves onto P-05's card for two named purposes; T-102's end state
+is a rename with the bool-derived ternary deleted; and domain scenarios lose the escalation
+key, which is the one sanctioned nonzero deletion in a golden snapshot this run.
+
+Both were found the same way: **two agents read the frozen contract before writing a line
+and reported what it did not decide.** P-02 found that the n/a shape it was told to build
+only worked if P-03 agreed to make a hole for it. P-05 found that T-102 could not be
+completed as written — deleting the bool breaks `broker/provisioning.py` at runtime, and
+strict mypy cannot catch it because the parameter is typed `list[Any]`.
+
+**The contract is still frozen to agents.** These were coordinator edits made on rulings,
+written into the file itself rather than relayed in a brief — because an interface amended
+verbally is an interface two packages will remember differently.
