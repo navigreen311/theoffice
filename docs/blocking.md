@@ -339,3 +339,539 @@ should do it without deciding first.
 
 **`statement_pull` and `portfolio_health`.** Routes exist and are bindable. What is
 missing is a manual, which is authorship, not engineering.
+
+## B8 — the timeout sweep has never been able to run
+
+**Found 2026-09-07**, while building the client that would have used it.
+
+`broker/simforge.py` carries the longest argument in that module for why The Office,
+not SimForge, must detect a run that never answered:
+
+> *the case that matters most is the one where SimForge's worker died — and a process
+> that has died cannot report that it has. A deadline held by the party that is
+> waiting is the only version of this check that survives the failure it exists to
+> catch.*
+
+The mechanism is `overdue_submissions()`, which selects `curriculum_submission` rows
+with `result_received_at IS NULL` past a deadline, and `timeout_gate_result()`, which
+builds a TIMEOUT verdict keyed on `simforge_run_ref`.
+
+**Gate 8 never set `simforge_run_ref`.** Its INSERT named eight columns and that was
+not one of them, so every submission it wrote carried NULL there. A submission with no
+run ref cannot be correlated to a verdict — there is nothing to look the verdict up by
+— so the sweep had nothing it could resolve, and `VERDICT_TO_STATE[TIMEOUT] ->
+in_training` stayed unreachable for a second reason after the first one was fixed.
+
+**This is a control that was written, reasoned about at length, defended against an
+alternative design, and dead the whole time** — because the field it keys on was never
+populated by the only thing that writes those rows.
+
+**Nothing reported it.** No test covered the sweep against a real submission, the
+column is nullable so the INSERT was valid, and the reasoning in `simforge.py` reads as
+a description of working behaviour. It was found by building the hand-over that would
+have used it, which is the only reason it surfaced now rather than at the first hung
+run.
+
+**The general shape.** A control's argument being sound says nothing about whether it
+can execute. This one was reviewed on the strength of its reasoning, which was correct,
+and the reasoning never touched the question of whether its input arrives. **Ask of any
+control: what populates the field it keys on, and has that code ever run?**
+
+Fixed in the same change: Gate 8 now sets `simforge_run_ref` from SimForge's response,
+and `handed_over_to_simforge` is true only when a ref came back rather than when the
+row was written.
+
+**Still open**: nothing calls `overdue_submissions()` on a schedule. The sweep can now
+resolve a submission, and no timer invokes it. That is a separate gap and it is not
+closed here.
+
+## B9 — SimForge's never-do rule has no correct submission
+
+**Found 2026-09-07**, building the Gate 8 hand-over against SimForge's validator.
+
+`validate_curriculum_submission` rejects a submission whose declared `module_never_do`
+carries an entry with no matching `never_do_violation` scenario. That class is in
+SimForge's `HELD_OUT_CLASSES` — *"SimForge authors these classes as the HELD-OUT set
+(not exposed to The Office)."*
+
+**So declaring a never-do list honestly is rejected for missing scenarios The Office is
+structurally forbidden to write.** Omitting the list passes, and leaves SimForge's
+`ForgeInstructionSet.neverDo` empty — which its own comment says exists *"so an n/a can
+be told from a coverage hole"*.
+
+The honest path is refused; the passing path erases the distinction the field was added
+for. Those are the only two.
+
+**The Office declares its never-do lists and takes the 422.** A refusal naming a real
+gap is a true statement; a submission that passes by withholding what it knows is not.
+
+**The fix is on SimForge's side**, because both conflicting controls are: either SimForge
+authors the `never_do_violation` scenarios for a declared list, or the validator stops
+requiring what it will not accept from a submitter. Raised there as
+`docs/adr/ADR-0048-the-never-do-trap.md`, open.
+
+**Not the only reason submissions are refused today.** `curriculum.generate` produces one
+unclassed scenario per (position, module), so every module also fails the
+`escalation_required` rule. That is the Office's own work — and B9 would still be here
+after it is finished, which is why it is recorded separately.
+
+**The shape worth keeping.** Two controls, each correct where it was written, that cannot
+both be satisfied. No review of either catches it, because neither is wrong on its own.
+It surfaced only when something actually exercised both at once.
+
+## B10 — a position's modules are not all on the venture's Forge
+
+**Found 2026-09-07**, by the first real hand-over against a live SimForge. Not found by
+974 passing tests, and it could not have been.
+
+`RoleDefinition.positions[].forge_modules_operated` is a list of **bare module ids**.
+Gate 8 resolved each one's operating instruction under
+`pack.forge_dependencies.operating_forge` — the venture's Forge — which is wrong whenever
+a position operates a module belonging to another Forge. Greenstone's roles operate
+`place_call` and `transcribe_call`, which are **voiceforge** modules.
+
+### The failure it produced was specific, and it read as work
+
+Not a crash, not a 500, not an empty result. It reported:
+
+```
+modules_skipped: ['assign_contract', 'place_call', 'transcribe_call']
+    SKIPPED: no live operating instruction for this module
+```
+
+**Two of those three have a live operating instruction.** They were looked up under
+`cre-forge`, found nothing, and were reported as uninstructed — which reads as a backlog
+item: *somebody needs to write two operating manuals.* Acting on it would have meant
+authoring instructions that already exist, and the duplicates would have gone in under the
+wrong Forge, where they would have been found by nothing and used by nothing.
+
+**A wrong answer that names plausible work is worse than one that names nothing**, because
+the work gets done.
+
+`assign_contract` was the true skip, and V11 says the same thing at Gate 2 — so one third
+of the report was right, which is what made the rest of it credible.
+
+### Why nothing caught it
+
+The test world's roles operate the test world's modules, all on one Forge. Every fixture
+agreed with the assumption, so every test passed under it. **The assumption was only
+false against real data**, and it took a real submission to a real service to find it.
+
+Fixed: each module's Forge is resolved from `forge_module_registry`. A module id
+registered by two Forges is ambiguous and `forge_modules_operated` cannot say which was
+meant — the first by `forge_id` wins, deterministically rather than correctly, and the
+module id is the thing to fix if it ever happens.
+
+**The general shape.** A composite key flattened to one of its parts, where the other part
+was constant in every fixture. Ask of any lookup: **is this identifier unique on its own,
+or unique within something the caller assumed?**
+
+
+## B11 — a record written for something that did not happen, third instance in one day
+
+**Found 2026-09-07.** Gate 8 wrote a `curriculum_submission` row for a module with no live
+operating instruction — a module nothing was sent for, because there was nothing to bind a
+certification to.
+
+That row is not inert. `overdue_submissions` selects submissions with
+`result_received_at IS NULL` past a deadline, so it would have surfaced **forever**, as a
+run awaiting a verdict that could never arrive because no run was ever requested. The
+sweep would have reported a hung hand-over that never happened.
+
+### The shape, named because it is the third today
+
+Three defects, one form: **a record whose existence asserts an event, written before or
+without the event.**
+
+| | |
+|---|---|
+| B8 | Gate 8 wrote a submission row and never set `simforge_run_ref`, so the sweep could find rows it could not resolve |
+| entry 16 / `live` | a Pack marked live carries no record of whether it passed its gates |
+| B11 | a submission row for a module nothing was submitted for |
+
+And the near-miss in the same change: `handed_over_to_simforge` was hard-coded `False`
+with a comment saying a record that read as a handover would record a fiction. **That one
+was got right on the first try, by someone who thought about exactly this.** The other
+three were not, in the same file.
+
+**The rule.** A row in a table whose name is a past-tense event is a claim that the event
+occurred. Write it when it does, and not when the attempt begins, is skipped, or fails.
+If a record of the attempt is genuinely wanted, that is a different table or a different
+column — not the same row with a NULL where the outcome goes.
+
+## B12 — V11 will demand a manual for a forbidden module, and entry 20 is the trigger
+
+**Found 2026-09-07**, checked before anyone hit it.
+
+`V11` requires a live, teaching instruction for **every** module in
+`positions_required[].forge_modules_operated`. It has no concept of
+`forge_module_exclusion` — no join, no filter, no mention.
+
+`voiceforge/place_call` is in Greenstone's operated set **and** in the exclusion table.
+
+**Today V11 does not name it**, because its placeholder instruction exists and
+`curriculum_quality.assess` rates that text `complete` — it is real prose, just not about
+any module. V11 currently names only `assign_contract`.
+
+**Entry 20 instructs that the placeholder be removed.** The moment it is, V11 reports:
+
+```
+no Forge Operating Instructions authored for: place_call
+```
+
+And the natural response to a validator naming a module is to write its manual — **which
+the exclusion row now forbids in capital letters.** One rule would be asking for the thing
+another rule prohibits.
+
+**This is B9's shape**, arriving on a delay: two controls, each correct where written, that
+cannot both be satisfied. The difference is that B9's conflict was inherited from another
+system and this one is ours, created today, with the trigger written into our own
+instruction. Nothing has fired yet only because a placeholder nobody wants is holding the
+line.
+
+**Not fixed here.** The fix is a ruling: either V11 skips excluded modules — with the
+argument that a module no agent may hold needs no curriculum — or `place_call` comes off
+`forge_modules_operated` entirely, which is a Pack change and a different conversation.
+Both are defensible and they are not the same decision.
+
+**Second defect in the same query, unrelated to exclusions.** V11 reads
+`SELECT module_id, content FROM forge_operating_instruction WHERE superseded_at IS NULL`
+and keys the result by `module_id` alone, with **no `forge_id`**. Two Forges with a
+same-named module would silently satisfy each other's requirement, and the manual an agent
+is certified against would be the other Forge's. That is B10 exactly — a composite key
+flattened to one part — in a rule rather than in a gate.
+
+
+## B13 — V33 is Pack-scoped, so a collision is invisible to Packs that don't bind the Forge
+
+**Found 2026-09-07**, answering why the 4 September fix stopped at two modules.
+
+V33 scopes itself to the Pack's own bindings:
+
+```python
+forges = sorted({b.forge.lower() for b in pack.forge_dependencies.forge_bindings}
+                | {pack.forge_dependencies.operating_forge.lower()})
+```
+
+and groups collisions **by `forge_id`**. Two consequences, both live today:
+
+**Burkham's V33 PASSES** — *"every live instruction on a bound Forge has its own
+content_hash"* — while four cre-forge instructions are byte-identical. Burkham binds
+capitalforge and simforge; cre-forge is simply not in its scope. **The same defect is FAIL
+for one Pack and PASS for another, at the same instant, over the same table.**
+
+**A cross-Forge collision is structurally invisible.** The hash `9711528544710550…` is
+shared by six modules across *two* Forges, and V33 reports it as two separate collisions
+because it groups by Forge. Had each Forge held only one module with that hash, V33 would
+have passed on both while a certification still could not say which module an agent was
+certified on — which is the exact question the rule exists to answer.
+
+**Neither is why 46cd4f0 stopped at two.** That commit is titled `fix(simforge)` and its
+own message says *"Zero certifications on any Forge are bound to 9711528544710550"* — the
+author knew the hash spanned Forges and fixed the SimForge pair as that day's scope. **Out
+of scope, not a rule limitation**, and worth saying plainly so nobody re-derives it.
+
+The scoping is still a defect, and it is a different one: per-Pack scope is right for a
+rule that gates a Pack, and it means **no rule anywhere asks the whole question**. A
+Forge nobody currently binds can hold six identical instructions and nothing reports it.
+
+## B14 — every ARV CRE Forge returns to an agent is the seller's asking price
+
+**Found 2026-09-07**, while reading `underwrite_deal`'s source to author its manual.
+**This is a Forge defect. It is recorded here and raised where the fix lives:
+`navigreen311/medlink-wholesale`.**
+
+### What happens
+
+The Office adapter calls `DealAnalysisService.analyze_deal(deal_id)` and passes **no
+comps**. `analyze_deal` accepts a `comps` argument; the adapter has no parameter for it
+and an agent cannot supply one. So `calculate_arv` takes its no-comps branch on **every
+call through this bridge**:
+
+```python
+if not comps:
+    base_price = property.asking_price or Decimal("0")
+    if base_price == 0:
+        sqft = property.square_feet or 2000
+        base_price = Decimal(str(sqft)) * Decimal("150")
+    return (base_price, base_price * 0.85, base_price * 1.15, NO_COMPS_CONFIDENCE)
+```
+
+- **`arv` is the property's asking price.** The number being evaluated, returned as the
+  evaluation.
+- **Where no asking price is recorded it is `(square_feet or 2000) × $150`.** A property
+  with neither analyses at exactly **$300,000**, a constant indistinguishable in the
+  response from a computed figure.
+- `arv_confidence` is `NO_COMPS_CONFIDENCE = 0.10`, against a `MAX_COMP_CONFIDENCE` of
+  `0.80`. **0.10 is not an outlier here, it is the only value this path produces.**
+
+**And everything downstream inherits it.** `max_allowable_offer = (ARV × multiplier) −
+repairs − wholesale fee − closing costs`; `potential_profit`, `roi`, `deal_score` and
+`deal_grade` are all functions of the same ARV. **None of them carries a confidence field
+of its own.** An agent reading `max_allowable_offer` sees a bare number with nothing
+attached saying what it rests on.
+
+`estimated_repairs` compounds it separately: `_estimate_repair_scope` buckets
+`year_built or 1980`, so a property with no recorded build year is silently priced as
+`EXTENSIVE`.
+
+### Why the manual is not the answer
+
+`underwrite_deal`'s manual is being written and its `silent_partial` and `never_do`
+sections state all of the above plainly. **That is the strongest argument for leaving the
+module exactly as it is, and it is why this entry exists.**
+
+Somebody reads a good `never_do` list, sees the hazard is known, documented and handled —
+and the pressure to fix it goes. The documentation becomes the resolution. **A wrong
+number with a permanent caveat is worse than one that gets corrected**, because the caveat
+is load-bearing forever and is only as good as the last agent who read it.
+
+The manual makes the defect legible to an agent holding the grant **today**, which is
+worth doing and is why it is being written anyway. It does not make the number right.
+
+### The two candidate fixes — a decision, not sympathy
+
+**A. The adapter supplies comps.** `analyze_deal` already accepts them and
+`calculate_arv` already weights and adjusts them. This is the intended path and it needs a
+comps source the adapter can reach — `comp_analysis` is a bound module on the same Forge
+and returns exactly this kind of data. Plausibly small; unconfirmed.
+
+**B. The module refuses when it has none.** `underwrite_deal` answers 422 or a declared
+`insufficient_comps` rather than returning a figure. **A valuation module that always
+returns the asking price should not be answering.**
+
+They are not exclusive — B is the correct floor whether or not A is built, because A can
+still be reached with an empty comps list.
+
+**Not a candidate: lowering the confidence further, or renaming the field.** The problem
+is not that 0.10 is badly labelled. It is that a number derived from the seller's price is
+being returned in a field named after an independent valuation.
+
+### Scope
+
+`cre-forge/property_lookup` holds the one live grant on this Forge and does not touch
+this path. **No agent holds `underwrite_deal` today**, and its Unit A certification does
+not exist. So this is a defect with no current victim — and the module is in Greenstone's
+`forge_modules_operated`, so the first `underwrite_deal` grant issued is when it acquires
+one.
+
+## B15 — nothing cross-checks `compliance_flags_in_scope` against the declared surface
+
+**Found 2026-09-07**, enumerating Burkham's flags before authoring scenarios against them.
+
+A Pack states compliance obligations in two places that are never compared:
+
+```
+market.compliance_surface[].runtime_flag        what the venture is subject to
+positions_required[].compliance_flags_in_scope  what a position is held to
+```
+
+**The gap runs both ways, and each direction is a different failure.**
+
+### Direction 1 — a flag in scope with no framework
+
+An agent holds an obligation that does not exist. It has a name, it appears on the
+position, it reaches the runtime, and there is nothing behind it: no `applies_when`, no
+jurisdiction, no library entry, nothing to be right or wrong against.
+
+**This one has already been fixed, once, by hand, because somebody happened to notice.**
+Burkham's own Pack records it at line 216:
+
+> *Both of these were already in scope on a position and declared by no framework. The
+> Compliance Reviewer and the Stack Manager carry `trigger_term_disclosure_required`, the
+> Diagnostic Analyst carries `sb_lending_data_collection`, and the flag is the join
+> between a position and an entry — so an agent held a flag with nothing behind it, and
+> nothing reported that because no rule reads `compliance_flags_in_scope`.*
+
+`REG_Z_ADVERTISING` and `CFPB_1071` were re-added to the surface to close it. **The fix
+was correct and it was a person reading two lists side by side.** Nothing stops the next
+one.
+
+### Direction 2 — a framework with no role in scope
+
+An obligation nobody is held to. The venture declares it is subject to a law; no position
+carries it; no agent can violate it because no agent is measured against it.
+
+**Eight of Burkham's twenty declared flags are in this state today:**
+
+```
+advance_placement_prohibited        facilitator_status_required
+fair_treatment_required             outbound_contact_boundary_required
+privacy_request_handling            recording_consent_required
+referral_fee_permitted_in_state     tax_advice_boundary_required
+```
+
+Several are not marginal. `facilitator_status_required` says *"every engagement, in every
+state, from intake through placement"* — declared as universal, carried by nobody.
+`recording_consent_required` covers *"any recorded call, whoever dialled"*.
+
+**And two of them are not orphans in the ordinary sense.** `fair_treatment_required`
+governs *"any decision on which lenders a client is shown, or whether to serve them"*, and
+`advance_placement_prohibited` governs *"any point at which a merchant cash advance could
+be recommended, applied for or submitted"*.
+
+**Both describe acts that are specifically the Placement Strategist's**, and neither is in
+that position's `compliance_flags_in_scope`. It carries
+`per_application_authorization_required`, `application_truthfulness_required`,
+`estimate_not_offer_required` and `card_product_discipline_required` — four obligations
+about how an application is prepared, and none about **who it is sent to** or **what may
+not be placed at all**.
+
+So this is not eight obligations distributed thinly across a Pack. **It is the role whose
+acts are most consequential carrying neither of the two obligations that govern them** —
+the ECOA one and the absolute one. Written up here because scenario `ps-003` in the Pack
+exercises both, and a reader finding those flags on a Placement Strategist scenario would
+reasonably assume the position declares them.
+
+### Why V22 does not catch either
+
+V22 compares the declared flags against the flags **scenarios claim to exercise**. It
+never reads `compliance_flags_in_scope`. So a Pack passes V22 with every flag exercised by
+a scenario attached to a role that does not carry it — and passes equally with a position
+holding a flag no framework declares.
+
+**The two lists that would answer the question are the two lists nothing compares.** This
+is the V6 shape one table over: comparing two claims, where the third artefact that would
+settle it is never asked.
+
+### Not building a rule for this
+
+Recorded, not fixed. A rule here needs a ruling first — whether a position's in-scope
+flags must be a subset of the surface (direction 1), whether every declared flag must be
+carried by at least one position (direction 2), and what the honest answer is for a
+framework that genuinely applies to the venture and to no single role. Those are three
+decisions and a rule would silently take all three.
+
+## B16 — a pure-read module cannot satisfy SimForge's mandatory `escalation_required`
+
+**Found 2026-09-07**, mapping instruction sections onto scenario classes for
+`portfolio_health`.
+
+`validate_curriculum_submission` makes one class mandatory for every module:
+
+```python
+if ScenarioClass.ESCALATION_REQUIRED not in classes_present:
+    violations.append(f"module {mod}: no escalation_required scenario (mandatory)")
+```
+
+**`capitalforge/portfolio_health` has no escalation path.** Its `retry_vs_escalate` reads,
+in full: *"RETRY FREELY. It is a pure read. Nothing is written, nothing is sent, and a
+retry after a timeout costs nothing and duplicates nothing."* There is no failure this
+module produces that an agent must hand to a human. It takes no identifier, so it cannot
+be asked about something that does not exist; it writes nothing, so nothing can be half
+done.
+
+So its curriculum will be refused for lacking a class **whose honest content is that the
+class does not apply here**. Authoring one anyway means inventing an escalation trigger
+the module does not have — and that scenario would then be graded, and an agent certified
+on responding to a situation that cannot occur.
+
+**This is B9's shape a third time.** A validator requiring something a truthful submitter
+cannot provide:
+
+| B9 | `never_do_violation` required for a declared never-do list, and the class is held out |
+| B14/#75 | (a Forge defect, different shape) |
+| B16 | `escalation_required` mandatory for a module with no escalation |
+
+**Not the same as B15's `rate_limited` ruling** (decisions entry 21), and the difference
+matters. `rate_limited` is absent from every manual because no module rate-limits — a
+uniform absence with one honest answer. `escalation_required` is present and rich for most
+modules and structurally impossible for one, so no blanket ruling covers it.
+
+**The fix is SimForge's, like B9's.** Either the mandatory class admits a declared
+`not_applicable` with a reason — SimForge already treats `not_applicable` as a
+first-class verdict elsewhere, *"a not_applicable dimension carries NO score (it is not a
+zero)"* — or the rule reads the module's declared `is_mutating` and stops requiring
+escalation of pure reads.
+
+**How many modules this reaches is unmeasured.** `portfolio_health` is the one that
+surfaced it. The other read-only modules — `client_read`, `client_read_pii`,
+`client_read_credit`, `comp_analysis`, `buyer_match`, `property_lookup` — have not been
+checked against it, and several do have escalation paths (a 404 on a read is still a
+question for a human). Not all pure reads are escalation-free; this one is.
+
+### This is why the eleven module reads are parked
+
+Sizing the operation curriculum needs one read per module: what fraction of the seven
+authorable classes each manual already supplies. Three are done and the ratio swings —
+`submit_application` 5 of 7, `record_consent` 3 of 7 with a caveat, `portfolio_health` 2
+of 7 — so a total cannot be extrapolated and the remaining eight would need reading
+individually.
+
+**That work is parked, and B16 is the reason.** Authoring against a validator that will
+refuse at least one of the eleven regardless of how well it is authored is work done
+twice: the scenarios get written, the submission is refused for a mandatory class the
+module cannot honestly supply, SimForge changes the rule or admits a `not_applicable`,
+and the affected manuals are revisited.
+
+**The reads would not be wasted** — every class that maps stays mapped. What would be
+wasted is the number they produce, because it is a number for a target that is going to
+move. Sizing against a contract with a known open defect prices the wrong contract, and
+the price is the thing the sizing exists to produce.
+
+**What unparks it:** a SimForge ruling on B16, either way. If the mandatory class admits a
+declared `not_applicable` with a reason, the eleven reads produce a real number. If it
+does not, the answer for `portfolio_health` is that it cannot be certified through this
+path at all — which is also an answer, and a different one to size against.
+
+Recorded rather than left as a stalled task, because "we were going to read eleven
+modules" reads afterwards as forgotten rather than deferred.
+
+## B17 — `--no-merged` reports a squash-merged branch forever, and a reader hears a backlog
+
+**Found 2026-09-07**, taking an inventory of unmerged work before deciding what to merge.
+
+`git branch -r --no-merged origin/main` listed **eighteen branches**. Seventeen had
+already landed. The command was correct every time.
+
+**Squash merging is why.** `gh pr merge --squash` writes one new commit onto `main` and
+the branch's own commits never become ancestors of it, so the ref answers "not merged"
+for as long as it exists — regardless of whether every line of it is on `main`.
+
+**The command answers *has this ref been merged as a commit*. A reader hears *is this work
+outstanding*.** Those are different questions and the second is the one somebody asks when
+they run it.
+
+### How to tell, and why the list did not
+
+The direction of the diff separates them in one line:
+
+```
+ai-docs/v30-wrong-population        216 deletions,    0 insertions   ← behind main
+ai-feature/simforge-pack-execution   4312 deletions,  71 insertions  ← behind main
+ai-feature/simforge-client            261 deletions, 3568 insertions ← genuinely ahead
+```
+
+A branch whose content is on `main` is *behind* it. Seventeen of the eighteen were, and
+not one added a file `main` lacked. **`--no-merged` cannot show that, because it compares
+ancestry rather than content.**
+
+### The second half, which was worse
+
+Several of the eighteen did not exist on the remote at all. They had been deleted on
+GitHub and the local `refs/remotes/origin/*` still held them, because nothing had run
+`git fetch --prune`. **So part of the inventory was refs to branches that were gone**, and
+a report was written from it before that was checked.
+
+`git fetch --prune` collapsed the list from eighteen to one.
+
+### Same class as the rollups
+
+This is the family named in decisions entries 11, 14 and 16: **a true answer that loses the
+distinction a reader needs.** Gate 4.5's summary line, V30's message, V32's verdict,
+`produced_not_yet_certified`'s name, `live`'s meaning — and now a git command's output.
+
+The tell is the same each time: **the artefact answers the question it was built to answer,
+and the reader is asking a neighbouring one.** Nothing is wrong, and acting on it is wrong.
+
+### What was done
+
+Fifteen local and seven remote refs deleted, each verified individually first — deletions
+heavier than insertions against `main`, and zero files added — rather than trusting the
+list that produced them. `ai-feature/module-exclusion-registry` was kept despite being
+merged: it is checked out in another session's worktree, and deleting a branch someone
+else has open breaks their tree.
+
+**What would prevent the next hour spent on this:** prune before listing, and read the
+diff direction rather than the ref name. Neither is a control; both are habits, and this
+entry exists because the habit did not fire.

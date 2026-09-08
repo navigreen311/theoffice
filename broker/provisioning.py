@@ -38,7 +38,12 @@ from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from broker import audit, humans, knowledge, packs
+from broker import audit, humans, instructions, knowledge, packs
+from broker.simforge import (
+    CurriculumRejectedError,
+    SimForgeClient,
+    SimForgeError,
+)
 from generators import pipeline as generator_pipeline
 from generators import runtime_config as runtime_gen
 from generators.artifacts import GeneratedArtifacts
@@ -323,10 +328,15 @@ async def _gate_5(ctx: _Context) -> GateOutcome:
         )
     except ValueError as exc:
         return GateOutcome("5", BLOCKED, str(exc), {"error": True})
+    blocked_modules = written.get("grants_excluded") or []
+    tail = (
+        f"; {len(blocked_modules)} grant(s) refused by exclusion"
+        if blocked_modules else ""
+    )
     return GateOutcome(
         "5", PASSED,
         f"{written['grants']} grant(s) issued INACTIVE, {written['manifest_rows']} "
-        "manifest row(s)",
+        f"manifest row(s){tail}",
         {**written, "grants_active": False},
     )
 
@@ -487,51 +497,392 @@ async def _gate_7(ctx: _Context) -> GateOutcome:
 
 
 async def _gate_8(ctx: _Context) -> GateOutcome:
-    """Hand the curriculum to SimForge.
+    """Hand the curriculum to SimForge, one submission per module.
 
-    The Office authors scenario content and records that it handed it over. It records
-    refs and counts and no scenario bodies - a table on the Office side holding what was
-    sent is a table holding scenario content.
+    ONE SUBMISSION PER MODULE, NOT ONE PER VENTURE
+    ==============================================
+
+        `ForgeOperationCurriculum.instruction_set_ref` is singular, and SimForge's
+        router reads `module_never_do.get(ref.module_id)` and upserts one instruction
+        set from it. A venture-wide submission would bind one module's instruction set
+        and silently drop the never-do lists of every other. So this is N submissions
+        and N `run_ref`s, and `curriculum_submission.module_id` - a column that has
+        existed since 0007 and that nothing populated - now carries which.
+
+    WHAT IS SENT, AND WHAT IS NOT
+    =============================
+
+        SimForge's shape wins. It has a validator behind it, and a count is not
+        something an agent can be certified against.
+
+        `functions_in_module` and `functions_covered` are sent as 0. **The Office has no
+        concept of a function inside a module** - a module is the smallest unit anything
+        here names, in the registry, in the grants, in the instructions and in the
+        Pack. Sending a guess would put a denominator in a coverage declaration that no
+        Office artifact can support, which is the exact failure "report the denominator"
+        exists to prevent. Zero is the honest value and it is visible as one.
+
+        The never-do list IS declared, from the instruction's own `never_do` section,
+        and it is expected to be refused - see docs/blocking.md B9. Declaring it
+        honestly and being refused is a true statement; omitting it to pass would erase
+        the distinction SimForge added that field to keep.
+
+    THE REJECTION IS THE ANSWER
+    ===========================
+
+        `curriculum.generate` emits one scenario per (position, module) and SimForge
+        requires classed scenarios - at minimum `escalation_required`, plus
+        `recovery_after_failure` where the rubric carries that dimension. So every
+        module is expected to 422, naming the classes it lacks.
+
+        That is recorded rather than worked around. Manufacturing scenario classes to
+        satisfy a counter would produce boilerplate that is then GRADED against, and a
+        certification earned on it would be evidence of nothing. A 422 naming missing
+        classes is a true statement about where the work is.
     """
     artifacts = ctx.require_artifacts()
     curriculum = artifacts.curriculum
     total = len(curriculum.domain_scenarios) + len(curriculum.operation_scenarios)
-    denominator = max(
-        (c.denominator for c in curriculum.coverage), default=1
+    pack_ref = f"run:{ctx.run_id}"
+
+    by_module: dict[str, list[Any]] = {}
+    for scenario in curriculum.operation_scenarios:
+        if scenario.module_id:
+            by_module.setdefault(scenario.module_id, []).append(scenario)
+
+    # A position operates modules across Forges - Greenstone's roles reach cre-forge
+    # and voiceforge - so each module's Forge is resolved from the registry rather than
+    # assumed to be the venture's operating one. Assuming it looked up voiceforge's
+    # instructions under cre-forge, found nothing, and reported two modules as having
+    # no instruction when they have one.
+    module_forge = await _module_forges(ctx.conn, set(by_module))
+    coverage_by_forge = await _module_coverage(ctx.conn, set(module_forge.values()))
+    candidates = _certification_candidates(artifacts)
+
+    client = ctx.simforge
+    owns_client = client is None
+    if client is None:
+        # Imported here, not at module scope: `client` imports `broker`, and a broker
+        # module importing it back at import time is a cycle waiting for the first
+        # person who adds a second edge.
+        from client.office_client import OfficeClient
+
+        client = SimForgeClient(OfficeClient())
+
+    submitted: list[dict[str, Any]] = []
+    try:
+        for module_id in sorted(by_module):
+            module_forge_id = module_forge.get(module_id)
+            if module_forge_id is None:
+                # In the curriculum and in no Forge's registry. Not a skip for a missing
+                # instruction - a module nothing dispatches, which is V32's finding and
+                # not this gate's to restate as an instruction gap.
+                submitted.append({
+                    "module_id": module_id,
+                    "scenario_count": len(by_module[module_id]),
+                    "run_ref": None,
+                    "skipped": "no Forge registers this module",
+                })
+                continue
+            in_forge, uncovered = coverage_by_forge[module_forge_id]
+            outcome = await _submit_one_module(
+                ctx, client,
+                forge_id=module_forge_id, module_id=module_id,
+                scenarios=by_module[module_id],
+                candidates=candidates.get(module_id, []),
+                modules_in_forge=in_forge,
+                modules_uncovered=uncovered,
+                pack_ref=pack_ref,
+            )
+            submitted.append(outcome)
+    finally:
+        if owns_client:
+            await client.aclose()
+
+    attempted = [o for o in submitted if "skipped" not in o]
+    accepted = [o for o in attempted if o["run_ref"]]
+    skipped = [o for o in submitted if "skipped" in o]
+    await ctx.conn.commit()
+
+    detail: dict[str, Any] = {
+        "scenario_count": total,
+        # True only when every module SimForge was asked about answered with a ref. A
+        # row being written is not a hand-over, and neither is three of five landing.
+        "handed_over_to_simforge": bool(attempted) and len(accepted) == len(attempted),
+        "modules_submitted": len(attempted),
+        "modules_accepted": len(accepted),
+        # Named, never folded into the submitted count. A module with no live
+        # instruction was not refused and was not lost - nothing was sent for it, and
+        # the fix is to author the instruction rather than to look at SimForge.
+        "modules_skipped": [o["module_id"] for o in skipped],
+        "submissions": submitted,
+        "coverage": [
+            {"dimension": c.dimension, "covered": c.covered,
+             "denominator": c.denominator, "uncovered": c.uncovered}
+            for c in curriculum.coverage
+        ],
+    }
+
+    tail = f"; {len(skipped)} module(s) have no live instruction" if skipped else ""
+    if not attempted:
+        reason = f"{total} scenario(s) generated; no module to submit{tail}"
+    elif len(accepted) == len(attempted):
+        reason = (
+            f"{total} scenario(s) submitted "
+            f"({len(curriculum.domain_scenarios)} domain, "
+            f"{len(curriculum.operation_scenarios)} operation) "
+            f"across {len(attempted)} module(s){tail}"
+        )
+    else:
+        reason = (
+            f"{total} scenario(s) generated; "
+            f"{len(accepted)} of {len(attempted)} module(s) accepted by SimForge{tail}"
+        )
+
+    return GateOutcome("8", PASSED, reason, detail)
+
+
+async def _submit_one_module(
+    ctx: _Context, client: Any, *, forge_id: str, module_id: str,
+    scenarios: list[Any], candidates: list[dict[str, str]],
+    modules_in_forge: int, modules_uncovered: list[str], pack_ref: str,
+) -> dict[str, Any]:
+    """One module's curriculum, its outcome, and the row that records both."""
+    instruction = await instructions.live(ctx.conn, forge_id=forge_id, module_id=module_id)
+
+    run_ref: str | None = None
+    error: str | None = None
+    violations: list[str] | None = None
+
+    if instruction is None:
+        # Not an error and NOT A SUBMISSION. SimForge binds a certification to an
+        # instruction content hash; there is nothing to bind to and nothing to teach.
+        #
+        # No `curriculum_submission` row either. That table means "something was handed
+        # over", and a row for a module nothing was sent for is the same lie as a true
+        # `handed_over_to_simforge` - it would sit in the sweep's queue for a verdict
+        # that can never arrive because no run was ever asked for.
+        return {
+            "module_id": module_id,
+            "scenario_count": len(scenarios),
+            "run_ref": None,
+            "skipped": "no live operating instruction for this module",
+        }
+
+    payload = _curriculum_payload(
+        instruction=instruction, scenarios=scenarios, candidates=candidates,
+        modules_in_forge=modules_in_forge, modules_uncovered=modules_uncovered,
+        venture_id=ctx.venture_id,
     )
+    try:
+        run_ref = await client.submit_curriculum(
+            ctx.conn, scenario_pack_ref=f"{pack_ref}/{module_id}",
+            payload=payload, actor=ctx.actor, venture_id=ctx.venture_id,
+        )
+    except CurriculumRejectedError as exc:
+        # An answer, not an outage. Kept apart in the evidence because the response to
+        # each is different: a rejection is scenarios somebody has to write, an outage
+        # is a service to restart.
+        violations = exc.violations
+        error = str(exc)
+    except SimForgeError as exc:
+        # Not fatal. The Office's half - the curriculum, the counts, the row - is
+        # complete and reproducible; what failed is the other side receiving it.
+        # Blocking the ladder here would make provisioning depend on a service that is
+        # allowed to be down.
+        error = str(exc)
+
     async with ctx.conn.cursor() as cur:
         await cur.execute(
             """
             INSERT INTO curriculum_submission
-              (submission_id, venture_id, forge_id, scenario_pack_ref, scenario_count,
-               coverage_denominator, instruction_content_hash, submitted_by)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+              (submission_id, venture_id, forge_id, module_id, scenario_pack_ref,
+               scenario_count, coverage_denominator, instruction_content_hash,
+               submitted_by, simforge_run_ref)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
-                uuid.uuid4(), ctx.venture_id,
-                ctx.pack.pack.forge_dependencies.operating_forge,
-                f"run:{ctx.run_id}", total, max(denominator, 1),
-                ctx.artifacts_hash_value or "", ctx.actor,
+                uuid.uuid4(), ctx.venture_id, forge_id, module_id,
+                f"{pack_ref}/{module_id}", len(scenarios), max(modules_in_forge, 1),
+                instruction.content_hash,
+                ctx.actor, run_ref,
             ),
         )
-    await ctx.conn.commit()
-    return GateOutcome(
-        "8", PASSED,
-        f"{total} scenario(s) submitted "
-        f"({len(curriculum.domain_scenarios)} domain, "
-        f"{len(curriculum.operation_scenarios)} operation)",
-        {
-            "scenario_count": total,
-            # Recorded on the Office side. There is no SimForge instance to hand it
-            # to, and a record that read as a handover would record a fiction.
-            "handed_over_to_simforge": False,
-            "coverage": [
-                {"dimension": c.dimension, "covered": c.covered,
-                 "denominator": c.denominator, "uncovered": c.uncovered}
-                for c in curriculum.coverage
-            ],
+
+    outcome: dict[str, Any] = {
+        "module_id": module_id,
+        "scenario_count": len(scenarios),
+        "run_ref": run_ref,
+    }
+    if error is not None:
+        outcome["error"] = error
+    if violations is not None:
+        outcome["violations"] = violations
+    return outcome
+
+
+def _curriculum_payload(
+    *, instruction: Any, scenarios: list[Any], candidates: list[dict[str, str]],
+    modules_in_forge: int, modules_uncovered: list[str], venture_id: str,
+) -> dict[str, Any]:
+    """A `ForgeOperationCurriculum`, in SimForge's shape.
+
+    Three of its fields have no source here and are sent as what is true rather than as
+    what would pass: `functions_in_module`/`functions_covered` are 0 because The Office
+    does not model functions inside a module, and `scenario_class` /
+    `instruction_section` are absent from every scenario because `curriculum.generate`
+    does not produce them. The submission is expected to be refused for the second, and
+    that refusal names the work.
+    """
+    never_do = instruction.content.get("never_do") or []
+    if isinstance(never_do, str):
+        never_do = [never_do]
+
+    return {
+        "instruction_set_ref": {
+            "forge_id": instruction.forge_id,
+            "module_id": instruction.module_id,
+            "instruction_version": instruction.instruction_version,
+            "forge_api_version": instruction.forge_api_version,
+            "content_hash": instruction.content_hash,
+            # Nullable on SimForge's side and defaulted to "office" there. The Office
+            # authors instructions under a human's id, and sending it would put a
+            # person's uuid in another system for no purpose this call has.
+            "authored_by": None,
         },
-    )
+        "certification_units_requested": [
+            {
+                "unit_type": "agent_operation",
+                "forge_id": instruction.forge_id,
+                "agent_id": c["office_agent_id"],
+                "module_id": instruction.module_id,
+            }
+            for c in candidates
+        ],
+        "operation_scenarios": [
+            {
+                # `scenario_class` and `instruction_section` are absent, deliberately.
+                # SimForge rejects a scenario without them, which is the honest answer:
+                # the generator produces one summary per (position, module), not a
+                # classed probe of one instruction section.
+                "module_id": s.module_id,
+                "expected_behavior": s.summary,
+                # A bool on this side, a string on SimForge's. The Office says THAT
+                # escalation is expected; SimForge asks WHAT. There is no honest
+                # widening of True into a description, so this says exactly what the
+                # Office knows and no more.
+                "expected_escalation": (
+                    "escalation is expected; the Office's generator does not say which"
+                    if s.expected_escalation else ""
+                ),
+            }
+            for s in scenarios
+        ],
+        "coverage_declaration": {
+            "modules_in_forge": modules_in_forge,
+            "modules_covered": modules_in_forge - len(modules_uncovered),
+            "modules_uncovered": modules_uncovered,
+            # The Office has no concept of a function inside a module. A module is the
+            # smallest unit named anywhere here. Zero, visibly, rather than a guess.
+            "functions_in_module": 0,
+            "functions_covered": 0,
+        },
+        "module_never_do": {instruction.module_id: list(never_do)},
+    }
+
+
+def _certification_candidates(artifacts: Any) -> dict[str, list[dict[str, str]]]:
+    """Which agents a Unit A certification would be requested for, per module.
+
+    `requires_certification` and not `appointed`: an appointed agent already holds the
+    certification, and the population worth certifying is the candidates who exist and
+    do not. For Greenstone today that is every one of them.
+    """
+    by_module: dict[str, list[dict[str, str]]] = {}
+    positions = {p.position_title: p for p in artifacts.roles.positions}
+    for appointment in artifacts.appointment.appointments:
+        position = positions.get(appointment.position_title)
+        if position is None:
+            continue
+        for module_id in position.forge_modules_operated:
+            by_module.setdefault(module_id, []).extend(
+                {"office_agent_id": c.office_agent_id, "agent_name": c.agent_name}
+                for c in appointment.requires_certification
+            )
+    return by_module
+
+
+async def _module_forges(
+    conn: AsyncConnection, modules: set[str]
+) -> dict[str, str]:
+    """Which Forge dispatches each module.
+
+    A position's `forge_modules_operated` is a list of bare module ids, and they are not
+    all on the venture's operating Forge - Greenstone's roles operate `place_call` and
+    `transcribe_call`, which belong to voiceforge. Resolving them against the operating
+    Forge finds no instruction and reports a module that has one as having none.
+
+    A module id registered by two Forges would be ambiguous here. The registry's primary
+    key does not prevent it, so the first by forge_id wins and it is deterministic
+    rather than correct - if that ever happens the module id is the thing to fix, since
+    `forge_modules_operated` cannot express which was meant.
+    """
+    if not modules:
+        return {}
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "SELECT module_id, forge_id FROM forge_module_registry "
+            "WHERE module_id = ANY(%s) ORDER BY module_id, forge_id",
+            (sorted(modules),),
+        )
+        rows = await cur.fetchall()
+    resolved: dict[str, str] = {}
+    for module_id, forge_id in rows:
+        resolved.setdefault(module_id, forge_id)
+    return resolved
+
+
+async def _module_coverage(
+    conn: AsyncConnection, forge_ids: set[str]
+) -> dict[str, tuple[int, list[str]]]:
+    """Per Forge: how many modules it has, and which the curriculum does not reach.
+
+    Read from `forge_module_registry` rather than from the Pack: the denominator is how
+    many modules exist, and a Pack that forgot to declare one would otherwise report
+    full coverage of what it remembered.
+    """
+    if not forge_ids:
+        return {}
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "SELECT forge_id, module_id FROM forge_module_registry "
+            "WHERE forge_id = ANY(%s)",
+            (sorted(forge_ids),),
+        )
+        rows = await cur.fetchall()
+    by_forge: dict[str, set[str]] = {f: set() for f in forge_ids}
+    for forge_id, module_id in rows:
+        by_forge.setdefault(forge_id, set()).add(module_id)
+
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "SELECT forge_id, module_id FROM forge_operating_instruction "
+            "WHERE superseded_at IS NULL AND forge_id = ANY(%s)",
+            (sorted(forge_ids),),
+        )
+        taught = {(r[0], r[1]) for r in await cur.fetchall()}
+
+    return {
+        forge_id: (
+            len(modules),
+            # Uncovered means "this Forge has a module the curriculum does not teach",
+            # measured against what has an instruction rather than against what this
+            # venture happens to use. A module nobody wrote an instruction for is the
+            # honest uncovered case.
+            sorted(m for m in modules if (forge_id, m) not in taught),
+        )
+        for forge_id, modules in by_forge.items()
+    }
 
 
 async def _gate_9(ctx: _Context) -> GateOutcome:
@@ -787,6 +1138,7 @@ class _Context:
         actor: uuid.UUID,
         human_review_recorded: bool,
         held_out: HeldOutSource,
+        simforge: SimForgeClient | None = None,
     ) -> None:
         self.conn = conn
         self.run_id = run_id
@@ -795,6 +1147,10 @@ class _Context:
         self.actor = actor
         self.human_review_recorded = human_review_recorded
         self.held_out = held_out
+        #: Injected by tests and by any caller holding an open client. Gate 8 builds
+        #: one on demand when this is None, so nothing above has to know the gate
+        #: talks to SimForge.
+        self.simforge = simforge
         self.artifacts: GeneratedArtifacts | None = None
         self.artifacts_hash_value: str | None = None
 
@@ -857,6 +1213,7 @@ async def start_run(
 async def advance(
     conn: AsyncConnection, *, run_id: uuid.UUID, actor: uuid.UUID,
     held_out: HeldOutSource | None = None,
+    simforge: SimForgeClient | None = None,
 ) -> list[GateOutcome]:
     """Run gates from the current one until something stops the run.
 
@@ -878,7 +1235,7 @@ async def advance(
     reviewed = await _human_review_recorded(conn, run_id)
     ctx = _Context(
         conn, run_id, state.venture_id, pack, actor, reviewed,
-        held_out or PartitionAbsent(),
+        held_out or PartitionAbsent(), simforge,
     )
 
     outcomes: list[GateOutcome] = []

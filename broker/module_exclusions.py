@@ -9,17 +9,30 @@ somebody deciding whether an exclusion still holds.
 `scripts/apply_module_exclusions.py` writes these into `forge_module_exclusion`,
 where the BEFORE INSERT trigger on `agent_forge_grant` enforces them.
 
-THREE SHAPES, ONE FAILURE
-=========================
+THREE SHAPES, ONE FAILURE - AND A FOURTH THAT IS NOT A FAILURE AT ALL
+=====================================================================
 
-    Every module below returns a plausible success for work that does not happen.
-    An agent granted one gets a 200, and The Office writes a ledger row saying a
-    call was made - which is true, and which reads afterwards as evidence that the
-    work was done. It was not.
+    The first three are modules that return a plausible success for work that does
+    not happen. An agent granted one gets a 200, and The Office writes a ledger row
+    saying a call was made - which is true, and which reads afterwards as evidence
+    that the work was done. It was not.
 
     inert       persists or records something no runner ever consumes
     stubbed     calls a stub client that fabricates a third-party response
     refuses     answers 501 by design
+
+    The fourth is different in kind:
+
+    forbidden   the module may work perfectly. No agent may be granted it, because
+                the act itself is prohibited.
+
+    **That distinction decides whether an exclusion can ever be lifted.** The first
+    three are findings about an implementation, and each names the evidence that
+    would retire it - the stub is replaced, the runner is built, the 501 becomes a
+    200. A `forbidden` exclusion has no such evidence. Building the capability is
+    precisely the thing that does NOT lift it, and an exclusion whose stated reason
+    is "it does not work yet" is one somebody correctly removes the day it starts
+    working.
 
 NOTE ON NAMES
 =============
@@ -86,32 +99,57 @@ CAPITALFORGE: tuple[ModuleExclusion, ...] = (
     ModuleExclusion(
         "capitalforge",
         "voice_call_initiate",
-        "stubbed: records a CallRecord and dials nobody. VoiceForgeService uses a "
-        "TwilioStubClient declared inside itself, which logs and returns fabricated "
-        "SIDs. The production Twilio client exists and is imported only by the SMS "
-        "path. A call 'placed' here reaches no telephone.",
+        "forbidden: initiates an outbound call as principal, which a founder decision "
+        "prohibits in every venture. This holds whether or not the module works, and "
+        "wiring the real client is the case it exists for. "
+        "ALSO STUBBED, and that finding is kept rather than replaced because it is why "
+        "anyone looked: it records a CallRecord and dials nobody, through a "
+        "TwilioStubClient declared inside VoiceForgeService that logs and returns "
+        "fabricated SIDs, while the production Twilio client exists and is imported "
+        "only by the SMS path. A call 'placed' here reaches no telephone. "
+        "Wiring the voice path to the real client is an afternoon's work and would "
+        "retire the second reason and not the first.",
         "capitalforge: services/voiceforge.service.ts:157 (TwilioStubClient), :216 "
         "(the service instantiates it), :257 (createCall). Contrast "
-        "services/sms-dispatch.service.ts, which imports the real client.",
+        "services/sms-dispatch.service.ts, which imports the real client. "
+        "Forbidden per burkham-wickmont-marketing-plan-intake.md 3.4, ruled "
+        "founder-tier 2026-09-07; docs/decisions.md entries 19 and 20.",
     ),
     ModuleExclusion(
         "capitalforge",
         "voice_call_end",
-        "stubbed: terminates a call that was never placed. Same stub client.",
+        "stubbed: terminates a call that was never placed. Same stub client. "
+        "DELIBERATELY NOT forbidden: 3.4 bans initiating a call as principal, and "
+        "ending one is not initiating one. "
+        "OPEN QUESTION, recorded and not answered: if no agent may start a call, what "
+        "act does this end? Either it is dead alongside voice_call_initiate, or there "
+        "is a case - a human's call an agent is assisting on - that nobody has "
+        "described. Deciding it by inference either over-applies a founder ruling or "
+        "leaves a call-control capability with no stated purpose. See docs/decisions.md "
+        "entry 20.",
         "capitalforge: services/voiceforge.service.ts:172 (updateCall).",
     ),
     ModuleExclusion(
         "capitalforge",
         "outreach_apr_expiry",
-        "stubbed: fans a campaign across a cohort through the same stub client. Reads "
-        "as the highest-blast-radius module in the Forge and contacts no one.",
-        "capitalforge: api/routes/voiceforge.routes.ts:271 -> services/voiceforge.service.ts:157.",
+        "forbidden: initiates outbound calls as principal, across a whole cohort at "
+        "once, which a founder decision prohibits in every venture. Holds whether or "
+        "not the module works. "
+        "ALSO STUBBED, kept because it is why anyone looked: it fans a campaign across "
+        "a cohort through the same stub client, reads as the highest-blast-radius "
+        "module in the Forge, and contacts no one. The stub is what made it safe so "
+        "far and is not what makes it excluded.",
+        "capitalforge: api/routes/voiceforge.routes.ts:271 -> services/voiceforge.service.ts:157. "
+        "Forbidden per 3.4, ruled founder-tier 2026-09-07; docs/decisions.md entry 20.",
     ),
     ModuleExclusion(
         "capitalforge",
         "outreach_restack",
-        "stubbed: as outreach_apr_expiry.",
-        "capitalforge: api/routes/voiceforge.routes.ts (POST /voiceforge/outreach/restack).",
+        "forbidden: as outreach_apr_expiry - initiates outbound calls as principal "
+        "across a cohort, prohibited in every venture by founder decision. "
+        "ALSO STUBBED, as outreach_apr_expiry.",
+        "capitalforge: api/routes/voiceforge.routes.ts (POST /voiceforge/outreach/restack). "
+        "Forbidden per 3.4, ruled founder-tier 2026-09-07; docs/decisions.md entry 20.",
     ),
     # ------------------------------------------------- attributed, not read
     ModuleExclusion(
@@ -232,4 +270,34 @@ CAPITALFORGE: tuple[ModuleExclusion, ...] = (
 )
 
 #: Every declared exclusion, across every Forge.
-ALL: tuple[ModuleExclusion, ...] = CAPITALFORGE
+#: VoiceForge.
+VOICEFORGE: tuple[ModuleExclusion, ...] = (
+    # ------------------------------------------------------------ forbidden
+    ModuleExclusion(
+        "voiceforge",
+        "place_call",
+        "forbidden: a founder decision binds every venture - no agent may initiate an "
+        "outbound phone call as principal. VoiceForge may assist a human on a call "
+        "(transcription, coaching, note-taking) and may not dial or speak as one. This "
+        "is NOT an exclusion about whether the module works: it holds if VoiceForge "
+        "grows real telephony, and building the capability is the case it exists for. "
+        "The reasoning recorded with the decision is TSR, TCPA, state two-party "
+        "consent and DNC; the V1.5 revisit is explicitly human-only and non-recorded. "
+        "NO OPERATING INSTRUCTION IS TO BE AUTHORED FOR THIS MODULE. This row is its "
+        "instruction. The eight required sections ask for the correct sequence, the "
+        "failure signatures and the retry-vs-escalate rule of an act no agent may "
+        "perform, so writing them would produce a manual teaching how to do a "
+        "prohibited thing - and its content hash would then bind a certification to "
+        "it. Its current instruction is placeholder text shared with five other "
+        "modules; that placeholder should be removed, not completed.",
+        "burkham-wickmont-marketing-plan-intake.md 3.4, ruled founder-tier and "
+        "cross-venture on 2026-09-07; docs/decisions.md entry 6 and entry 19. Greenstone "
+        "1.2.0 operates this module and a grant over it was proven to insert with "
+        "nothing refusing it, which is why the row is the fix rather than the Pack.",
+    ),
+    # `transcribe_call` is deliberately absent. Assisting a human on a call is
+    # expressly permitted by the same decision, and excluding it would over-apply a
+    # ban whose whole shape is initiate-versus-assist.
+)
+
+ALL: tuple[ModuleExclusion, ...] = CAPITALFORGE + VOICEFORGE

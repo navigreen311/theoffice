@@ -1,5 +1,20 @@
 """An in-process stub SimForge, used to exercise the no-read-path check.
 
+WHAT THIS FILE IS EVIDENCE OF, AND WHAT IT IS NOT
+=================================================
+
+    **Its routes are invented, and SimForge serves neither.** `GET /runs/{run_ref}`
+    and `POST /curricula` were written here before there was a client or a real
+    service to reconcile against. SimForge's Office bridge is `POST /office/{module_id}`
+    behind a tenant credential, and its operation endpoints are `/api/operation/...`
+    behind Clerk roles. Nothing in this file has ever spoken to it.
+
+    So a green run here proves `validate_response` and `assert_no_scenario_content`
+    work - which is what it was written for, and it does that well, including the
+    four leaks below. **It is not evidence that a hand-over works**, or that any
+    path, header, credential or payload shape is right. Those were all still wrong
+    when this file was green.
+
 Two modes matter:
 
   honest  responds within the contract. The check must pass.

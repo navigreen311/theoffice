@@ -417,7 +417,7 @@ on this name finds the reason rather than re-deriving it.
 
 ---
 
-## 6. `place_call` names an act Burkham forbids — corrected 2026-09-07
+## 6. `place_call` — corrected 2026-09-07, and the correction was itself wrong
 
 **The original finding stands and was the wrong reason.** Recorded 4 September as
 *"a capability VoiceForge was never built to have"*, which is true and is not the
@@ -525,6 +525,108 @@ A VoiceForge Office adapter whose `_modules` manifest answers `place_call`, back
 real telephony path. Until then the registry rows stay `hand` and V31 keeps declining. If
 the decision goes the other way, the rows come off the way `bureau_pull` and
 `readiness_score` did on 1 September.
+
+
+---
+
+### Amended 2026-09-07 (second time, same day) — the ban is Burkham's and the Pack is Greenstone's
+
+**The correction above applied a Burkham document to a Greenstone Pack.** §3.4 is
+`burkham-wickmont-marketing-plan-intake.md`. Every Pack version that operates
+`place_call` is **greenstone** — `0.0.1-smoke`, `1.0.0`, `1.1.0`, `1.2.0` (live) and two
+abandoned drafts. Burkham's Pack is not among them.
+
+I read a Burkham document and ruled on a Greenstone Pack without noticing the venture
+changed. The heading said so in its own words — *"an act Burkham forbids"* — sitting above
+a finding about a Pack Burkham does not own.
+
+### What is actually known
+
+**For Greenstone, the governing fact is the original one: VoiceForge has no telephony.**
+Zero occurrences of `place_call` in its source, no telephony provider, no outbound path.
+That was the 4 September finding, it was never wrong, and the correction demoted it in
+favour of something that does not apply here.
+
+**Whether §3.4 binds Greenstone is not written down anywhere.** It is a locked founder
+decision recorded inside one venture's intake document, under a heading that refers to
+"Pack Section 3". Nothing in this repository says whether a ban recorded that way is
+scoped to its Pack or is founder-tier and binds every venture. **That question decides
+which fix is right**, and it is not answerable from what exists.
+
+### The two consequences, named
+
+**If Burkham-scoped:** Greenstone may operate `place_call` the day VoiceForge grows a
+phone. Nothing would be violated. The only thing standing in the way today is the missing
+capability — and a missing capability is not a control. It stops being an obstacle the
+moment somebody builds the feature, and nobody building telephony in VoiceForge would have
+reason to look at a Greenstone Pack first.
+
+**If founder-tier:** it belongs in `forge_module_exclusion`, for every venture. That is the
+one mechanism on the whole path that actually refuses a grant, and a ban that lives in a
+markdown file while the trigger table has no row for it is a ban that is enforced nowhere.
+
+### What the proof established — stronger than the original claim
+
+Entry 6 said a grant over the `place_call` row *would* authorize an agent to place calls
+through a system with no phone. That was an inference. **It has now been executed**, in a
+rolled-back transaction:
+
+```
+attempting a grant over voiceforge/place_call (rolled back):
+  *** INSERT SUCCEEDED - nothing refused it ***
+```
+
+- `forge_module_exclusion` holds **20 rows, every one `capitalforge`**. None for voiceforge.
+- The `BEFORE INSERT` trigger on `agent_forge_grant` is **the only guard on the entire
+  path**, and it fires on that table alone.
+- V6 passes: *"all 9 module reference(s) resolve"*. V32 does not name it — voiceforge
+  serves no `/_modules`, so it is never asked. V31 answers `NOT_RUN`, which stops an
+  unattended grant and not a grant.
+
+**Nothing between `forge_modules_operated` and a live grant refuses anything.**
+
+And the path is one step longer than entry 6 described. On 7 September Gate 8 **built and
+submitted a curriculum for `place_call`** to a live SimForge. A curriculum is what a
+certification is earned against and a certification is what makes a grant assignable, so
+the chain entry 6 called hypothetical now has its first real link. What stopped it was a
+422 on `scenario_class: Field required` — the same refusal every other module got.
+**Nothing anywhere noticed what the module was.**
+
+### V33: what was submitted teaches nothing about `place_call`
+
+Six live operating instructions share content hash `9711528544710550...`:
+
+```
+cre-forge   buyer_match, comp_analysis, property_lookup, underwrite_deal   v1.0.0
+voiceforge  place_call, transcribe_call                                    v1.0.0
+```
+
+Every CapitalForge instruction has a distinct hash. These six are one generic text under
+six names.
+
+**This weakens the certification path's own guarantee, independently of the ban question.**
+A certification binds to `instruction_content_hash` — that binding is the mechanism that
+makes staleness computable and that SimForge *voids* a run on if the hashes disagree. It is
+one of the stronger controls here. But a hash shared by six modules binds a certification
+to generic text: an agent certified on `property_lookup` and an agent certified on
+`place_call` would be certified against **the same words**, and the hash could not tell
+them apart.
+
+So even had the submission been accepted, the resulting certification would have said
+nothing about `place_call` specifically. **The control is sound and its input is not**,
+which is the B8 shape again in a different place: a mechanism reasoned about carefully,
+keyed on a field that nothing populated meaningfully.
+
+### Status
+
+**Both questions are the founder's to decide and neither is decided here.**
+
+1. Is §3.4 Burkham-scoped or founder-tier and binding on every venture?
+2. Given the answer, does `voiceforge/place_call` come off Greenstone's Pack, gain a
+   `forge_module_exclusion` row, or stay as it is?
+
+Nothing has been changed. The six shared instruction hashes are a separate item and are
+not blocked on either answer.
 
 ---
 
@@ -1482,3 +1584,351 @@ say so.
 
 **No fix proposed for either.** The size of the second is what decides whether the first is
 worth a column.
+
+## 18. A module can be dispatched and deliberately not agent-facing
+
+**Decided 2026-09-07.**
+
+SimForge will bind `submit_curriculum` and `run_start` on its `/office` adapter so The
+Office can reach them with the tenant credential. **Neither gets a `forge_module_registry`
+row, and that is permanent rather than pending.**
+
+### Why no row
+
+**A registry row exists so a grant can be issued over a module.** That is what the table
+is for: `resolve_grant` joins it, `is_mutating` on it decides whether an agent may run
+unattended, `agent_forge_grant` references it, and V31 reads it. Everything a row does,
+it does for an agent.
+
+Neither of these is an agent act. `submit_curriculum` hands a curriculum over during
+provisioning — Gate 8 runs before any agent exists for the venture, and the actor is the
+human who provisioned. That is exactly why it is signed with the Office's own tenant
+credential rather than through the brokered path. `run_start` opens the run a verdict is
+later read by; it is bookkeeping between two systems.
+
+**Rows would make them look grantable.** A row is the thing a person reads to decide what
+an agent may be given, and two rows nobody may ever grant is an invitation to grant them.
+
+### The verifier said the right thing for the wrong reason
+
+`scripts/verify_forge_modules.py` reports a dispatched module with no row as:
+
+```
+DRIFT simforge/submit_curriculum: dispatched by the Forge and unknown to the registry.
+Not added - a Forge does not enlarge its own agent-facing surface.
+```
+
+**The verdict is right and the sentence is wrong.** "Unknown to the registry" describes a
+gap somebody should close. The truth is "deliberately not in it" — a decision, already
+made, that nothing is meant to change.
+
+Left alone, that is **two permanent DRIFT lines on every run**. A finding nobody can act
+on is how a report becomes something people skim, and the cost is not the noise: it is the
+real DRIFT line that appears beside them one day and gets skimmed with them.
+
+### What was built
+
+`broker.forge_modules.NOT_AGENT_FACING` — `(forge_id, module_id)` to the reason it is
+dispatched without a row. The verifier prints those as **NOT AGENT-FACING**, with the
+reason, and does not count them toward its exit status.
+
+**This does not weaken the rule beside it.** *"A Forge does not enlarge its own
+agent-facing surface"* holds exactly as before: an entry here makes nothing callable by an
+agent, creates no grantable capability, and touches no table. It records that a person
+decided this name is not agent-facing, and why. Adding one is an edit to a source file
+under review, which is the control.
+
+### The general shape
+
+**A check with only two verdicts will file a third thing under whichever fits worse.**
+This one had DRIFT and MISMATCH, and a deliberate absence is neither — it is not a
+disagreement about whether the module exists, and not a disagreement about what it does.
+It got DRIFT because DRIFT was closer.
+
+Worth asking of any conformance check: **is there a legitimate steady state it has no
+verdict for?** If there is, that state will be reported as a fault forever, and the report
+loses its readers before it loses its correctness.
+
+## 19. §3.4 is founder-tier and binds every venture — and nothing said so
+
+**Ruled 2026-09-07**, resolving the question entry 6's second amendment left open.
+
+### The ruling
+
+**No worker may initiate an outbound phone call as principal. This binds every venture,
+not only Burkham.**
+
+> A worker not initiating an outbound call as principal is a statement about what agents
+> in this system do, not about how Burkham markets. It was written in a marketing intake
+> because that is where the question arose, not because that is its scope.
+
+VoiceForge may assist a human on a call — transcription, coaching, note-taking. It may not
+dial or speak as one. `transcribe_call` is expressly permitted and stays grantable; the
+whole shape of the ban is initiate-versus-assist, and excluding the assisting half would
+over-apply it.
+
+### The part worth more than the ruling
+
+**The document gave no way to tell.** A founder decision binding every venture was
+recorded inside one venture's intake document, under a heading referring to "Pack Section
+3". Nothing about its placement, its wording or its surroundings distinguishes it from a
+Burkham marketing rule — and I read it, ruled on a Greenstone Pack with it, and did not
+notice the venture had changed. The heading of entry 6 said *"an act Burkham forbids"*
+above a finding about a Pack Burkham does not own.
+
+That was a real mistake and it was not a careless one. **There was no signal to miss.**
+
+**A cross-venture decision recorded in one venture's document is findable only by whoever
+reads that document.** Everyone else — including anyone writing a second Pack, onboarding a
+third Forge, or reviewing a grant — has no reason to open it and no way to know it is
+there. The failure mode is silent in both directions: the rule gets applied where it does
+not belong, and it fails to be applied where it does.
+
+**What would have made it legible: founder-tier decisions need a home that is not a
+venture's Pack or plan.** One document, read by anyone touching any venture, where the
+scope is the location. A decision that binds everything cannot live somewhere that
+implies it binds one thing, and no amount of careful wording inside a venture document
+fixes that — the reader who needs it is the reader who never opens it.
+
+That home does not exist yet. Creating it is not done here, and this entry is the second
+item that would go in it.
+
+### The fix, and why it is this one
+
+`voiceforge/place_call` is now in `forge_module_exclusion`.
+
+**That table is the fix because it is the only mechanism on the path that refuses
+anything.** Proven the same day rather than argued: a grant over `voiceforge/place_call`
+was inserted in a rolled-back transaction and **succeeded**, with V6 passing, V32 never
+asking voiceforge, and V31 answering NOT_RUN. After the row:
+
+```
+voiceforge/place_call:      REFUSED - module place_call on forge voiceforge is
+                            excluded and cannot be granted: forbidden: a founder
+                            decision binds every venture ...
+voiceforge/transcribe_call: INSERT SUCCEEDED
+```
+
+### `forbidden` is a fourth kind of exclusion, and the distinction matters
+
+`module_exclusions.py` recorded three shapes — `inert`, `stubbed`, `refuses` — all of them
+findings about an implementation that does not do its job. Each names the evidence that
+would retire it: the stub is replaced, the runner is built, the 501 becomes a 200.
+
+**A `forbidden` exclusion has no such evidence.** The act is prohibited whether or not the
+module works, and building the capability is precisely the case it exists for. The header
+now says so, because the table's own instruction is *"Remove the row only with the evidence
+that it no longer applies"* — and under the first three shapes, working code is that
+evidence.
+
+### What the ruling reaches, checked rather than assumed
+
+Every module in every registry, against the act §3.4 forbids:
+
+| | |
+|---|---|
+| `voiceforge/place_call` | **forbidden** — row added |
+| `voiceforge/transcribe_call` | expressly permitted |
+| the other 18 registry modules | none initiates a call |
+
+**One row, as expected.** But the check found something outside the registries that is not
+settled by it.
+
+### Open: four CapitalForge modules excluded for a reason that expires
+
+`capitalforge/voice_call_initiate`, `voice_call_end`, `outreach_apr_expiry` and
+`outreach_restack` are already excluded — every one as **`stubbed`**, on the evidence that
+`VoiceForgeService` uses a `TwilioStubClient` that dials nobody. They are not in any
+registry yet, so no grant is possible today.
+
+**Their acts are what §3.4 forbids, and their recorded reason is that they do not work.**
+The real Twilio client exists in that codebase and is imported by the SMS path. The day
+somebody wires it to the voice path, the `stubbed` evidence stops applying — and the
+documented, correct procedure is to remove the row. Someone following the process exactly
+would re-open a forbidden act, and the exclusion would have done its job right up to the
+moment it mattered.
+
+`voice_call_end` is the ambiguous one: terminating a call is not initiating one, and
+whether it is reached depends on whose call it ends.
+
+**Not changed here.** Amending those reasons rewrites recorded findings with source
+citations behind them, and `voice_call_end` needs a ruling of its own. Reported rather than
+done.
+
+## 20. Three CapitalForge voice modules become `forbidden`; `voice_call_end` gets a question
+
+**Ruled 2026-09-07**, applying entry 19's founder-tier ruling to what entry 19 reported
+and did not settle.
+
+### The three
+
+`voice_call_initiate`, `outreach_apr_expiry` and `outreach_restack` initiate outbound
+calls as principal. §3.4 covers them, and the ruling reaches them.
+
+**Their reason changes shape; the original finding is kept.** Each row now says both:
+forbidden by §3.4, **and** separately recorded as stubbed when it was first excluded.
+
+That is not belt-and-braces. **Losing the stub finding would lose why anyone looked.**
+The 1 September reconnaissance is what surfaced these modules at all — somebody read
+`services/voiceforge.service.ts` and found a `TwilioStubClient` declared inside the
+service, and that reading is the provenance of the whole exclusion list. A row that said
+only *forbidden* would be correct and would have no history.
+
+**And the trap entry 19 named is now closed.** The stub reason expires: the production
+Twilio client exists in that codebase and the SMS path already imports it, so wiring the
+voice path is an afternoon's work. Under the old rows, the table's own instruction —
+*"remove the row only with the evidence that it no longer applies"* — would have had
+somebody correctly delete all three the day it was wired. Now the evidence retires the
+second reason and not the first, and the rows say so in those words.
+
+### `voice_call_end` stays `stubbed`, and carries a question
+
+**Ending a call is not initiating one.** §3.4 bans initiating as principal, and applying
+it here by inference would over-apply a founder ruling to an act it does not name.
+
+**The question, recorded and deliberately not answered:**
+
+> If no agent may start a call, what act does this end?
+
+Either it is dead alongside `voice_call_initiate` — a control for calls that can no longer
+exist — or there is a case nobody has written down: a human's call an agent is assisting
+on, where ending it is part of the assistance §3.4 expressly permits. **Those are
+different modules with the same name**, and which one it is decides whether the row
+becomes `forbidden` or whether the module needs a described purpose.
+
+Deciding it by inference goes wrong in both directions: guess forbidden and a permitted
+assisting capability is banned by implication; guess permitted and a call-control module
+sits grantable with no stated reason to exist. The question is in the exclusion row where
+whoever next reads it will find it.
+
+### `place_call`: the exclusion is the instruction
+
+Added to its row, so nobody authors one later:
+
+> **NO OPERATING INSTRUCTION IS TO BE AUTHORED FOR THIS MODULE. This row is its
+> instruction.**
+
+The eight required sections ask for the correct sequence, the failure signatures and the
+retry-vs-escalate rule **of an act no agent may perform**. Writing them produces a manual
+teaching how to do a prohibited thing, and its content hash would then bind a
+certification to it. The instruction it has today is placeholder text shared with five
+other modules; **that placeholder should be removed, not completed.**
+
+`transcribe_call` is permitted and waits on a VoiceForge adapter — there is no dispatch
+map to write a manual against, which is the material every CapitalForge manual was written
+from.
+
+
+## 21. No ninth instruction section for rate limiting
+
+**Ruled 2026-09-07**, while mapping the eight `REQUIRED_SECTIONS` onto SimForge's seven
+authorable scenario classes.
+
+### The ruling
+
+**`rate_limited` gets no section.** SimForge's operation curriculum has a `rate_limited`
+scenario class and nothing in a Forge Operating Instruction supplies material for it. The
+obvious move is a ninth required section; it is refused.
+
+**Two reasons, and the second is the one that decides it.**
+
+It would void every content hash. `content_hash` is computed over the whole content
+object, a certification binds to it, and SimForge voids a run whose hash does not match —
+*"never softened to a warning"*. Adding a section rewrites all nineteen live instructions
+and decertifies everything bound to them. That is a cost, and today it is survivable:
+**zero certifications are bound to any live hash** (the three that exist are already
+`stale_instructions` against superseded ones). So this reason alone would not settle it.
+
+**It would be authored to satisfy a class rather than because anyone found something
+missing.** One of nineteen live instructions mentions anything rate-limit-shaped —
+`voiceforge/transcribe_call`, on `429` and backoff. Eleven CapitalForge manuals were
+written from source by an author reading each module's code, and not one of them found
+rate limiting worth teaching.
+
+**That is a fact about these modules, not a gap in the template.** A section added now
+would be filled, per module, by people with nothing to say — which produces exactly the
+padding the `correct_sequence` rules were written to stop: *"a thin section is a fact
+about the module, not a gap to fill, and padding it is what produces the next failure."*
+
+### What it costs — corrected 2026-09-07, the same day
+
+**The first version of this section said the cost was a refusal. It is not.** Recorded as
+a correction rather than an edit, because the ruling survives and the reason it is
+acceptable does not — and a reader who took the original at face value would be waiting
+for something red that never appears.
+
+**`rate_limited` is unauthorable for every module until one actually has rate-limiting
+behaviour worth teaching.** Not hard to author — impossible to author honestly, because
+there is nothing to describe. That part was right.
+
+**What follows from it is a cap, not a rejection.** `validate_curriculum_submission`
+rejects only its named violations and a missing non-mandatory class is not among them.
+The classification is a separate function:
+
+```python
+def classify_certification_level(classes_present):
+    """A module is certifiable only if EVERY scenario class is present. A module tested
+    only on happy_path (or missing any class) is "demonstrated", never "certified"."""
+    return "certified" if set(ALL_SCENARIO_CLASSES) <= present else "demonstrated"
+```
+
+and the validator's own docstring draws the line: *"Not a rejection (a LABEL): a module
+missing some non-mandatory class → demonstrated."*
+
+**So the submission is accepted, nothing fails, and every module stays at `demonstrated`
+forever.** `escalation_required` is the hard rejection — that is B16, and it is a
+different problem. `rate_limited` is a label that quietly lowers a ceiling.
+
+**Corrected statement of what we are accepting: a silent cap we have recorded, over a
+section authored to lift it.**
+
+**A silent permanent cap is worse than a refusal in the one way that matters: nothing goes
+red, so nobody fixes it.** A refusal announces itself every time it happens and eventually
+somebody acts on it. A cap is a value in a field on a response nobody reads, and it holds
+for as long as the system runs.
+
+That is an argument for recording it, not against the ruling. **The fix for the cap is a
+module that genuinely rate-limits** — nineteen invented sections would lift the label
+without changing anything an agent knows, which is a worse outcome than the cap: a
+`certified` earned by describing behaviour that does not exist.
+
+### What changes it
+
+A module that genuinely rate-limits. Then one manual has something to say, the section is
+added because an author found it missing, and the ninth section arrives with content
+rather than with a schema change looking for some.
+
+### Where the cap should be legible — named, not built
+
+Eleven modules sitting below `certified` forever, for a class no manual has material for,
+is a fact somebody should be able to see without reading this entry. Three places, in the
+order they would have to be done, because the first is a precondition for the other two.
+
+**1. `broker/simforge_response_manifest.json`, under `submit_curriculum`.** The cap
+cannot reach The Office at all today. SimForge's `/office` adapter returns
+`{accepted, module_levels, coverage_declaration, gate_9_5_flag}`; the manifest declares
+`{run_ref, accepted, scenario_count, coverage_denominator, rejected_reason}`. So
+**`module_levels` — the field that carries the cap — is undeclared, and `validate_response`
+would refuse the response for containing it.** Adding it is exactly the reviewable act
+that manifest exists to force, and the question it asks has a clear answer: the field is a
+module id mapped to one of two fixed words and can carry no scenario content.
+
+**2. `curriculum_submission`, beside `simforge_run_ref`.** The table records what was
+handed over and holds nothing about what came back. A `module_level` column makes the cap
+durable and queryable rather than a value that existed once in a response. **This is
+`simforge_run_ref`'s own shape — see docs/blocking.md B8 — so adding the column without
+the code that populates and reads it would repeat that defect exactly.** Column, writer
+and reader in one change or not at all.
+
+**3. The console's instruction page, `/instructions/{forge}/{module}`.** Where the cap
+should be *read*, because it is where somebody deciding whether to author more looks.
+Today that page shows curriculum quality, which says the manual is good. A manual assessed
+`complete` and nonetheless capped at `demonstrated`, with the class responsible named, is
+the one screen where both facts sit together — and the only place the difference between
+"this manual is thin" and "this manual is finished and the ceiling is elsewhere" is
+visible.
+
+**Not built here.** Item 1 is a manifest change carrying a boundary question, item 2 is a
+migration with two pieces of code attached, item 3 is a page. Naming them is the point: a
+cap recorded only in a decision entry is a cap nobody sees, which is the failure this
+correction is about.

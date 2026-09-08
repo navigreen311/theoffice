@@ -22,6 +22,8 @@ be reviewed at Gate 4 before anything touches the database.
 
 from __future__ import annotations
 
+from typing import Any
+
 from psycopg import AsyncConnection
 
 from generators.artifacts import (
@@ -116,20 +118,55 @@ def generate(
     )
 
 
+async def _excluded_modules(conn: AsyncConnection) -> dict[tuple[str, str], str]:
+    """(forge_id, module_id) -> why no agent may be granted it.
+
+    Read once per apply rather than per grant: the set is small, it does not change
+    mid-run, and a per-grant query would make the number of round trips depend on how
+    many agents a Pack appoints.
+    """
+    async with conn.cursor() as cur:
+        await cur.execute("SELECT forge_id, module_id, reason FROM forge_module_exclusion")
+        return {(r[0], r[1]): r[2] for r in await cur.fetchall()}
+
+
 async def apply(
     config: RuntimeConfig, conn: AsyncConnection, *, granted_by: str
-) -> dict[str, int]:
+) -> dict[str, Any]:
     """Write the config. Idempotent: re-running changes nothing and adds nothing.
 
     Returns counts so a caller can assert the second run wrote zero new rows, which
     is what "zero duplicate side-effects" means in practice.
+
+    AN EXCLUDED MODULE IS SKIPPED AND NAMED, NOT CRASHED ON
+    ======================================================
+
+        `forge_module_exclusion` is enforced by a BEFORE INSERT trigger, so a Pack
+        whose roles operate an excluded module used to abort the whole apply with a
+        raw `IntegrityConstraintViolation` - taking every other grant, the manifest
+        rows, the budget and the rate limits down with it. The control was right and
+        the caller had never been told it existed.
+
+        Now the excluded modules are read first and their grants are skipped, with
+        the module and the reason returned under `grants_excluded`. The rest of the
+        config applies. **Skipping is the whole point**: an exclusion means no agent
+        may hold this, and a provisioning run that cannot finish because of one is a
+        run that pressures somebody to remove the row.
+
+        The trigger stays. This reads the same table a moment earlier; the trigger is
+        what makes it true, and a check without it would be a check somebody can
+        bypass by writing a grant another way.
     """
     if config.blocked_reason:
         raise ValueError(
             f"refusing to apply a blocked runtime config: {config.blocked_reason}"
         )
 
-    written = {"manifest_rows": 0, "grants": 0, "budget": 0, "rate_limits": 0}
+    excluded = await _excluded_modules(conn)
+    written: dict[str, Any] = {
+        "manifest_rows": 0, "grants": 0, "budget": 0, "rate_limits": 0,
+        "grants_excluded": [],
+    }
 
     async with conn.cursor() as cur:
         for row in config.manifest_rows:
@@ -151,6 +188,15 @@ async def apply(
             written["manifest_rows"] += 1
 
         for grant in config.grants:
+            reason = excluded.get((grant.forge_id, grant.module_id))
+            if reason is not None:
+                written["grants_excluded"].append({
+                    "forge_id": grant.forge_id,
+                    "module_id": grant.module_id,
+                    "office_agent_id": str(grant.office_agent_id),
+                    "reason": reason,
+                })
+                continue
             # No ON CONFLICT DO NOTHING on the natural key here: the deterministic
             # grant_id IS the conflict target, so a re-run updates its own row.
             await cur.execute(

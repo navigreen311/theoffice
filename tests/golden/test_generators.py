@@ -420,7 +420,17 @@ async def test_runtime_config_apply_is_idempotent(artifacts):
 
     assert first == second, "the same config must plan the same writes both times"
     assert after_first == after_second, "re-applying changed state"
-    assert len(after_first["grants"]) == len(artifacts.runtime_config.grants)
+    # Planned minus excluded, not planned. Greenstone's roles operate
+    # `voiceforge/place_call`, which `forge_module_exclusion` refuses - so a planned
+    # grant that is never written is the correct outcome, and the count that would
+    # have caught a real regression is this one rather than `len(grants)`.
+    assert len(after_first["grants"]) == (
+        len(artifacts.runtime_config.grants) - len(first["grants_excluded"])
+    )
+    assert first["grants_excluded"], (
+        "greenstone plans a grant over an excluded module; if this is empty the "
+        "exclusion stopped being applied and nothing else here would notice"
+    )
     assert len(after_first["budget"]) == 1, "budget must not duplicate"
 
 
@@ -435,7 +445,7 @@ async def test_apply_wires_both_certification_refs_onto_each_grant(artifacts):
     from generators import runtime_config as runtime_gen
 
     async with connection() as conn:
-        await runtime_gen.apply(
+        written = await runtime_gen.apply(
             artifacts.runtime_config, conn,
             granted_by="00000000-0000-5000-8000-00000000bbbb",
         )
@@ -450,7 +460,7 @@ async def test_apply_wires_both_certification_refs_onto_each_grant(artifacts):
             row = await cur.fetchone()
     assert row is not None
     certed, active, total = row
-    assert total == len(artifacts.runtime_config.grants)
+    assert total == len(artifacts.runtime_config.grants) - len(written["grants_excluded"])
     assert certed == total, "both certification refs must be resolved onto every grant"
     assert active == 0, (
         "Gate 5 issues grants inactive; activating here would skip Gate 10 sign-off"

@@ -31,9 +31,18 @@ import json
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any
 
+import httpx
 from psycopg.rows import dict_row
+
+from broker.audit import write_event
+from broker.config import get_settings
+from broker.credentials import Credential, build_resolver
+from broker.errors import CredentialUnavailable
+
+if TYPE_CHECKING:  # a broker module must not import the client at runtime
+    from client.office_client import AgentContext, OfficeClient
 
 MANIFEST_PATH = Path(__file__).with_name("simforge_response_manifest.json")
 
@@ -76,6 +85,24 @@ class SimForgeError(Exception):
     """SimForge could not be reached, or answered in a shape the contract forbids."""
 
 
+class CurriculumRejectedError(SimForgeError):
+    """SimForge validated the curriculum and refused it, naming what is missing.
+
+    Its own type because it is **an answer, not a fault**. Unreachable means nothing was
+    learned; rejected means SimForge read the submission and said which Batch-3 rules it
+    fails. Collapsing the two loses the only useful half - a rejection names the work.
+    """
+
+    def __init__(self, violations: list[str]) -> None:
+        self.violations = violations
+        count = len(violations)
+        super().__init__(
+            f"SimForge refused the curriculum: {count} violation(s). "
+            + "; ".join(violations[:4])
+            + (" ..." if count > 4 else "")
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class GateResult:
     """What The Office is allowed to learn from a certification run.
@@ -97,12 +124,228 @@ class GateResult:
     coverage_denominator: int
 
 
-class SimForgeClient(Protocol):
-    async def submit_curriculum(
-        self, *, scenario_pack_ref: str, payload: dict[str, Any]
-    ) -> str: ...
+class SimForgeClient:
+    """The only two calls The Office makes to SimForge.
 
-    async def get_gate_result(self, run_ref: str) -> dict[str, Any]: ...
+    **They travel different paths, and that asymmetry is the design.**
+
+    `get_gate_result` is brokered. An agent reads a verdict about its own
+    certification, so it goes through `OfficeClient.call` exactly like any other
+    Forge module: a grant resolved fresh, a trust tier, a shift, an idempotency
+    key, an audit entry before the call and a ledger row after. Nothing here
+    modifies that path - this class supplies the module name and narrows the
+    answer.
+
+    `submit_curriculum` is not brokered. It is signed with The Office's own
+    tenant credential and audited as `curriculum_handed_over`, naming the human
+    who provisioned.
+
+    WHY GATE 8 DOES NOT GET AN AGENT
+    ================================
+
+        The brokered path takes an `AgentContext` and writes a ledger row naming
+        that agent. Gate 8 runs during provisioning: the actor is a human, and
+        the agents that will hold grants for this venture do not exist yet.
+        There is no agent behind a curriculum hand-over because no agent
+        performs it.
+
+        Minting one to satisfy the signature is `origin='human'` again. That
+        column exists because an audit entry signed by a fixture is worthless -
+        an actor named in a record as though it acted. An agent invented to fill
+        an `agent_ctx` is the same object: a name in a ledger row for a call it
+        did not make, indistinguishable afterwards from one it did.
+
+        So the hand-over is recorded as what it is - an Office act, with the
+        human on it - and the ledger keeps meaning "an agent did this".
+    """
+
+    def __init__(
+        self,
+        office: OfficeClient,
+        *,
+        forge_id: str = "simforge",
+        http: httpx.AsyncClient | None = None,
+        resolver: Any | None = None,
+    ) -> None:
+        self._office = office
+        self._forge_id = forge_id
+        settings = get_settings()
+        self._http = http or httpx.AsyncClient()
+        self._owns_http = http is None
+        self._resolver = resolver or build_resolver(settings.credential_backend)
+        self._timeout = settings.forge_timeout_seconds
+
+    # ------------------------------------------------------------- brokered
+
+    async def get_gate_result(
+        self, run_ref: str, *, agent_ctx: AgentContext
+    ) -> GateResult:
+        """Read one verdict, as the agent it is about.
+
+        The response is validated before any caller sees it. `parse_gate_result`
+        runs `validate_response`, which refuses a field the manifest does not
+        name and refuses prose anywhere in the body - so a SimForge that started
+        returning scenario content raises here rather than reaching a caller who
+        might store it.
+        """
+        result = await self._office.call(
+            self._forge_id, "gate_result", {"run_ref": run_ref}, agent_ctx=agent_ctx
+        )
+        if result.status_code == 404:
+            raise SimForgeError(f"SimForge has no record of run_ref {run_ref!r}")
+        if result.status_code >= 400:
+            # The body is not echoed. A Forge error body has not been through
+            # validate_response, and an exception message is the one place a leak
+            # would travel without being checked.
+            raise SimForgeError(
+                f"gate_result for {run_ref!r} returned {result.status_code}"
+            )
+        if not isinstance(result.body, dict):
+            raise SimForgeError(
+                f"gate_result for {run_ref!r} returned "
+                f"{type(result.body).__name__}, not an object"
+            )
+        return parse_gate_result(result.body)
+
+    # --------------------------------------------------------- not brokered
+
+    async def submit_curriculum(
+        self,
+        conn: Any,
+        *,
+        scenario_pack_ref: str,
+        payload: dict[str, Any],
+        actor: uuid.UUID,
+        venture_id: str,
+    ) -> str:
+        """Hand a curriculum over. Returns SimForge's `run_ref`.
+
+        Audited before the call and not after, for the reason `broker/audit.py`
+        gives: a hand-over that reaches SimForge and then crashes this process
+        must still have left a trace, or the run exists on one side only and
+        nothing here knows to wait for it.
+        """
+        credential = await self._tenant_credential(conn)
+        base_url, api_version = await self._registry(conn)
+
+        await write_event(
+            event_type="curriculum_handed_over",
+            actor_type="human",
+            actor_id=actor,
+            venture_id=venture_id,
+            subject={
+                "forge_id": self._forge_id,
+                "scenario_pack_ref": scenario_pack_ref,
+                # Counts, never bodies. Same rule as `record_submission`: a record
+                # of what was sent must not become a copy of it.
+                "scenario_count": payload.get("scenario_count"),
+                "coverage_denominator": payload.get("coverage_denominator"),
+            },
+        )
+
+        url = f"{base_url.rstrip('/')}/submit_curriculum"
+        try:
+            response = await self._http.post(
+                url,
+                # The body is a `ForgeOperationCurriculum` and is sent verbatim.
+                # SimForge's shape wins here: it has a validator behind it, and a
+                # summary of a curriculum is not a curriculum - nothing can be
+                # certified against a count. `scenario_pack_ref` is the Office's own
+                # correlation id and stays on this side, in the audit entry.
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {credential.reveal()}",
+                    "X-Office-Forge-Api-Version": api_version,
+                    "Content-Type": "application/json",
+                },
+                timeout=self._timeout,
+            )
+        except httpx.HTTPError as exc:
+            # type(exc).__name__, never str(exc): the message can carry the URL,
+            # and this request carried a credential.
+            raise SimForgeError(
+                f"could not reach SimForge: {type(exc).__name__}"
+            ) from exc
+
+        if response.status_code == 422:
+            # The one error body worth reading. It is checked the same way a success
+            # body is - refusing to look would throw away the violations, and reading
+            # it unchecked is the hole the manifest exists to close.
+            raise _rejection(response)
+        if response.status_code >= 400:
+            # Not echoed. An error body that is not a 422 has no declared shape, and
+            # an exception message is the one place a leak would travel unvalidated.
+            raise SimForgeError(
+                f"submit_curriculum returned {response.status_code}"
+            )
+        try:
+            body = response.json()
+        except ValueError as exc:
+            raise SimForgeError("submit_curriculum returned a non-JSON body") from exc
+
+        validate_response("submit_curriculum", body)
+        if not body.get("accepted"):
+            raise SimForgeError(
+                f"SimForge refused the curriculum: {body.get('rejected_reason')!r}"
+            )
+        run_ref = body.get("run_ref")
+        if not isinstance(run_ref, str) or not run_ref:
+            # An accepted hand-over with no ref is unusable: nothing correlates a
+            # verdict to it, and `overdue_submissions` cannot see it time out.
+            raise SimForgeError(
+                "SimForge accepted the curriculum without returning a run_ref"
+            )
+        return run_ref
+
+    # ----------------------------------------------------------- internals
+
+    async def _tenant_credential(self, conn: Any) -> Credential:
+        """The tenant credential, or a `SimForgeError` naming why there is none.
+
+        **The resolver raises `CredentialUnavailable`, not `SimForgeError`**, and that
+        difference escaped this class until CI ran without `SIMFORGE_TOKEN`: Gate 8
+        catches `SimForgeError` and records a failed hand-over, so an unresolvable
+        credential went straight past it and 503'd the whole provisioning API. A Forge
+        that cannot be reached must never stop a provisioning run - that is the entire
+        reason the hand-over is non-fatal - and "cannot be reached" includes "we hold no
+        credential for it".
+
+        So it is translated here rather than caught at the call site. The ref travels in
+        the message and the value never does, which is `CredentialUnavailable`'s own
+        rule.
+        """
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "SELECT credential_ref FROM forge_tenant_credential WHERE forge_id = %s",
+                (self._forge_id,),
+            )
+            row = await cur.fetchone()
+        if row is None:
+            raise SimForgeError(
+                f"no tenant credential is registered for {self._forge_id!r}; "
+                "this Forge has not been onboarded"
+            )
+        try:
+            return await self._resolver.resolve(row[0])
+        except CredentialUnavailable as exc:
+            raise SimForgeError(
+                f"the tenant credential for {self._forge_id!r} did not resolve: {exc}"
+            ) from exc
+
+    async def _registry(self, conn: Any) -> tuple[str, str]:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "SELECT base_url, api_version FROM forge_registry WHERE forge_id = %s",
+                (self._forge_id,),
+            )
+            row = await cur.fetchone()
+        if row is None:
+            raise SimForgeError(f"{self._forge_id!r} is not in forge_registry")
+        return str(row[0]), str(row[1])
+
+    async def aclose(self) -> None:
+        if self._owns_http:
+            await self._http.aclose()
 
 
 def load_manifest() -> dict[str, dict[str, Any]]:
@@ -209,6 +452,32 @@ def parse_gate_result(body: dict[str, Any]) -> GateResult:
         coverage_denominator=body["coverage_denominator"],
     )
 
+
+def _rejection(response: Any) -> SimForgeError:
+    """Turn a 422 into a `CurriculumRejectedError` carrying its violations.
+
+    The violations are generated by SimForge's `validate_curriculum_submission` from
+    fixed format strings over module ids, scenario indices, class names and never-do
+    entries - all of them things The Office authored and sent. None of it is held-out
+    content. **That is an argument, not a guarantee**, so the strings go through
+    `assert_no_scenario_content` before they are read, and a violation list that trips
+    it becomes a plain refusal rather than a message.
+    """
+    try:
+        detail = response.json().get("detail", {})
+    except ValueError:
+        return SimForgeError("submit_curriculum returned 422 with a non-JSON body")
+    violations = detail.get("violations") if isinstance(detail, dict) else None
+    if not isinstance(violations, list) or not violations:
+        return SimForgeError("submit_curriculum returned 422 naming no violations")
+    try:
+        assert_no_scenario_content("submit_curriculum", violations)
+    except SimForgeError:
+        return SimForgeError(
+            "submit_curriculum returned 422 whose violations did not pass the "
+            "no-scenario-content check; they are not reproduced here"
+        )
+    return CurriculumRejectedError([str(v) for v in violations])
 
 # ------------------------------------------------------- the timeout that never came
 
