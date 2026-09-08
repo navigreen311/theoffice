@@ -470,12 +470,12 @@ run; "Smoke red on V11/V32 as baseline, all other jobs green, no new failures" i
 | P-00 | [#43](https://github.com/navigreen311/theoffice/pull/43) | `35bb8af` | run `34266438265`: **Smoke alone red**, its 8-check list diffed **byte-identical** to baseline `34263050339`; `Tests` green; six other jobs green. **No new failures.** One hand-back before merge — see below. | 2026-09-08T19:26:42Z |
 | P-01 | [#94](https://github.com/navigreen311/Capitalforge/pull/94) | `81c2d95` | run `34270839863` **success**, same six jobs as baseline `25bd359`, no new failures. Log proves the new tests ran rather than skipping into green: `office-bridge-unmounted.test.ts (11 tests) 3674ms`. Purely additive, 437/0. | 2026-09-08 UTC |
 | P-02 | [#133](https://github.com/navigreen311/simforge/pull/133) | `2337442` | `ci` `34270886088` **success** + `contract-tests` `34270886081` **success**; `742 passed, 2 skipped` vs local-before `708 passed`; +34 is exactly the new test file. Green baseline, no new failures. | 2026-09-08 UTC |
-| P-03 | | | | |
-| P-05 | | | | |
-| P-06 | | | | |
-| P-07 | | | | |
-| P-08 | | | | |
-| P-09 | | | | |
+| P-03 | [#134](https://github.com/navigreen311/simforge/pull/134) | `2ce2f5d` | `ci` `34276557037` + `contract-tests` `34276557074`, **all four jobs green** (`api`, `validator`, `web`, `contract`). Green baseline, nothing green turned red. Local `767 passed, 2 skipped`; 25 added, no pre-existing test changed status. | 2026-09-08 UTC |
+| P-05 | [#48](https://github.com/navigreen311/theoffice/pull/48) | `f32e70d` | run `34276249027`: Smoke alone red, 8-check list **string-identical** to baseline; six jobs green incl. `Tests` and `Images build`. Local `1025 passed, 1 failed` (the recorded environmental `test_restore_drill`). Four golden re-records, each predicted before `UPDATE_GOLDEN=1` and verified after. | 2026-09-08 UTC |
+| P-06 | [#52](https://github.com/navigreen311/theoffice/pull/52) | `85e5a76` | run `34278884205`: Smoke alone red, failing-check list **byte-identical**; six jobs green. Diff `541 / 0`. Greenstone golden did not move — proved by running the suite with its files removed and getting an identical result. | 2026-09-08 UTC |
+| P-07 | [#54](https://github.com/navigreen311/theoffice/pull/54) | `7dda882` | run `34279098923`: Smoke alone red, list **byte-identical**; six jobs green. Diff `1048 / 0`, six files, nothing outside `scenarios/`. 16 authored + 26 declared across all 42 (module, class) pairs. | 2026-09-08 UTC |
+| P-08 | [#53](https://github.com/navigreen311/theoffice/pull/53) | `a966a6c` | run `34278996637`: Smoke alone red, list **byte-identical**; six jobs green. Diff `572 / 0`. Golden did not move; ruled out *inert* content by running `_operation_scenarios` over both files — 7 rows each, no held-out class emitted. | 2026-09-08 UTC |
+| P-09 | [#55](https://github.com/navigreen311/theoffice/pull/55) | `c49d99f` | run `34281227353`: Smoke alone red, list **byte-identical**; six jobs green incl. `Tests`. **Coordinator ran the authoritative validation** (P-09 had no credentials): real DB, both Forges up — V11 PASS, **V32 PASS**, V33 PASS, V22 FAIL. Burkham 30/2/1 → **31 PASS / 1 FAIL / 1 NOT_RUN of 33**. | 2026-09-08 UTC |
 | P-12 | | | | |
 
 *P-04 and P-10 are deleted by ruling Q-1 — a pack-level run gives this run nothing, and
@@ -626,3 +626,44 @@ optional.**
 
 This is the run's own central lesson arriving inside the baseline itself: **a job that did
 not run left no failure, and the absence of a failure is not evidence.**
+
+---
+
+## CAVEAT 10 — the branch names in the plan and the branch names in the run disagree
+
+The plan's card names `feature/p-06-authorship-writes`, `-filters`, `-collects`-style suffixes.
+The branches actually created and merged are `feature/p-06-authorship`,
+`feature/p-07-authorship`, `feature/p-08-authorship`.
+
+**Coordinator drift, not agent drift** — the worktrees were created with the short names and
+all three agents flagged the mismatch in their acknowledgments rather than silently picking
+one. Recorded here so the ledger rows and the plan's cards are not read as two different
+packages. Nothing was renamed mid-flight, because renaming a branch under a reviewed PR is
+worse than the inconsistency.
+
+---
+
+## CAVEAT 11 — a package cannot honestly declare a publish-diff count, and must not try
+
+`broker/packs.py`'s `store(..., expect_changed_lines=, change_summary=)` computes
+`_changed_lines` **positionally, not as a semantic diff** — its own docstring says an
+insertion that shifts every following line *should* read as a large change, because "a
+caller declaring three changed lines is declaring that nothing moved."
+
+**The count must be computed against the live `business_pack.yaml_source`**, not against a
+`git diff` and not against the file on disk — those can disagree, which is the drift the
+control exists to catch.
+
+**P-09 worked out that it could not do this and stopped.** `broker/*` and `db/*` are
+forbidden to a Pack package, a fresh DB from Caveat 6's recipe has no `business_pack` row
+for the live version, and `.env` is always-forbidden. A number derived from `git diff`
+instead would have been *exactly the drift the control was built to catch, declared as
+though it were the real thing.*
+
+**The division that follows, and it applies to P-09 and P-12 alike:** the package supplies
+the `change_summary`; **the coordinator computes `expect_changed_lines` against the live
+row and runs the republish.** The ledger says which half was whose.
+
+And the corollary P-09 asked for and got: **do not contort the YAML to keep the line count
+stable.** Write the change legibly and declare an honest larger number. A declaration
+optimised to look tidy is a declaration about the wrong thing.
