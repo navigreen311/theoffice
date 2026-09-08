@@ -1,5 +1,36 @@
 # BUSINESS PACK — Burkham Wickmont · SPLIT-POSITION VARIANT · **DRAFT, NOT LIVE**
 #
+# SUPERSEDED, NOT MAINTAINED, NEVER PUBLISHED — note added 2026-09-08
+#
+#   `burkham-wickmont.draft.yaml` is the source. This file is a superseded variant kept
+#   for the Gate 4.5 comparison it was written for, and it is NOT maintained alongside
+#   the main draft. Nothing in this repository reads it — verified 2026-09-08, zero
+#   references outside documentation — and it holds no `business_pack` row: it has never
+#   been published, in any version, and cannot be provisioned from.
+#
+#   IT IS ALREADY OUT OF DATE, AND THAT IS THE POINT RATHER THAN A DEFECT:
+#
+#     - It declares `simforge/run_scenario_pack`, in its `simforge` binding below.
+#       That module was REMOVED from the main draft on 8 September 2026 under ruling
+#       Q-1 — see docs/decisions.md entry 25, which supersedes entry 5. (No line
+#       number is cited on purpose: a pointer into an unmaintained file is the next
+#       thing to go stale, and this note adding lines above it would have done it.)
+#     - The READ/WRITE LINE below still lists `lender_match` and `build_packet`, which
+#       came off the main draft on 4 September 2026 under entry 4 because neither
+#       exists in CapitalForge under any spelling.
+#
+#   WHY THOSE ARE NOT CORRECTED HERE. Correcting a second copy is what starts
+#   maintaining a second copy, and that is exactly what the publish-diff control in
+#   `broker/packs.py` exists to prevent: a source file drifting ahead of what is in
+#   force, so that "publish the file" ships whatever else drifted. Two maintained
+#   copies of a Pack means two answers to "what does Burkham declare", and the second
+#   one is authoritative to nobody while looking authoritative to everybody. The same
+#   reasoning keeps the scenario contract to one copy in one repo.
+#
+#   So: read this file as a record of a comparison made on a particular day. Do not
+#   read it as a statement of what Burkham declares. If the comparison is ever run
+#   again, regenerate the variant from the current main draft rather than editing this.
+#
 # WHAT THIS IS
 #
 #   `burkham-wickmont.draft.yaml` with ONE variable changed: every position that mixed
