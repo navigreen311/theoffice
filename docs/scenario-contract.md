@@ -341,8 +341,9 @@ violation, not a pass.
 **The wire name is `expected_escalation` and it carries a string.** On The Office side the
 value comes from `expected_escalation_prose` during the transitional window (§3.1); after
 P-05 the bool is gone and the two names agree again. `broker/provisioning.py` is what maps
-Office fields onto wire names and it belongs to no package this run — so if the mapping
-needs to change, that is an escalation, not an edit.
+Office fields onto wire names — ~~and it belongs to no package this run, so if the mapping
+needs to change, that is an escalation, not an edit~~. **Superseded by contract amendment
+A1: `broker/provisioning.py` is now on P-05's card.** See §10.
 
 ---
 
@@ -424,3 +425,85 @@ finds the question asked rather than the empties explained away.
 - **Scoring.** How a scenario is graded, and the authoritative "did it decline" judgement,
   are SimForge's content layer, not this interface.
 - **`classify_certification_level`.** See §2.1.
+
+---
+
+## 10. CONTRACT AMENDMENT A1 — 8 September 2026
+
+Four rulings, made after P-02 and P-05 read this file and found places it did not decide,
+or could not be executed as written. **This section is part of the contract and carries the
+same weight as the sections above it.** Where it and an earlier section disagree, this one
+governs, and the earlier text is left standing so the change is visible.
+
+### A1.1 — A declared `not_applicable` travels as a curriculum-level map, not a scenario row
+
+**Ruled by Ivan.** ADR-0049 says "per class per module"; §2.2 puts `not_applicable_reason`
+on `CurriculumScenario`, which is per scenario. Those point different ways and this settles
+it.
+
+**The wire shape is a map on `ForgeOperationCurriculum`:**
+
+    module_not_applicable: dict[str, dict[str, str]]      # module -> class -> reason
+
+structurally parallel to the existing `module_never_do: dict[str, list[str]]` one field
+above it.
+
+**Why.** A declared `not_applicable` is a statement about a **(module, class) pair** —
+*"`portfolio_health` cannot supply `escalation_required`, because it is a pure read that
+takes no identifier, writes nothing, and has no failure to hand a human."* That is not a
+scenario. The row shape would have created an object that claims to be a scenario while
+declaring that it is not one, and would then have needed an exemption from every field §6
+requires of a scenario — an exemption living in `scenarios.py`, which is P-03's file, which
+P-02 can neither write nor verify. **A shape that only works if another package agrees to
+make a hole for it is a shape that has not been designed.**
+
+**`CurriculumScenario.not_applicable_reason` keeps its place on the dataclass** so the
+shape is complete on both sides, as §2.2 says. **It has no wire role.** §8 already lists it
+among the fields that "do not apply" to a domain scenario; it now also does not travel.
+
+### A1.2 — `broker/provisioning.py` is P-05's, for two named purposes
+
+**Ruled by Ivan.** The file previously belonged to no package, which was a gap rather than
+a decision: something has to map Office fields onto wire names, and both A1.1 and T-102
+need that mapping to change.
+
+P-05 owns it **for exactly two things** — the `expected_escalation` migration (§A1.3) and
+the `module_not_applicable` mapping (§A1.1). It is not a general licence to edit the file.
+Anything else there is still an escalation.
+
+### A1.3 — T-102's end state is a rename, and the ternary must go with it
+
+§6 says *"after P-05 the bool is gone and the two names agree again."* Spelled out, because
+P-05 correctly asked which of two readings that was:
+
+1. `generators/curriculum.py` populates the prose field with real prose — not `True`, not
+   boilerplate.
+2. `broker/provisioning.py:774-776` stops deriving the string from a bool and passes the
+   prose through. **The existing ternary must be deleted, not adapted.** It reads
+   `"escalation is expected; the Office's generator does not say which" if s.expected_escalation else ""` — and a non-empty prose string is truthy, so left in place it would send
+   the boilerplate placeholder and silently discard the real prose. **The wire payload would
+   get worse while every test still passed.**
+3. The bool is deleted from `CurriculumScenario`.
+4. `expected_escalation_prose` is **renamed to `expected_escalation: str`**, so the Office
+   field and the wire name agree — which is what §6 promised. The `_prose` suffix was only
+   ever a device to avoid a same-name collision during the window (§3.1, R6a), and the
+   window closes here.
+
+**Order matters.** Step 3 before step 2 is an `AttributeError` at runtime that **strict
+mypy will not catch**, because `provisioning.py:725` types the parameter
+`scenarios: list[Any]`. It would be caught by the DB-backed tests, or by production.
+
+### A1.4 — domain scenarios lose the escalation key, and that is the expected shape
+
+Deleting the bool removes `expected_escalation` from every **domain** scenario in the
+curriculum artifact, because `generators/curriculum.py:60` copies the Pack DSL's bool onto
+them. **This is a deletion in the golden snapshot and it is correct.**
+
+§8 said the bool "is the live field a domain scenario carries". After P-05 it carries no
+escalation field at all, and nothing reads the one it is losing: **V23 reads
+`Scenario.expected_escalation` on the Pack DSL (`generators/pack.py:338`), not the
+curriculum artifact's copy.** No prose substitute, no compensating field.
+
+This is the one sanctioned nonzero deletion count in this run. Caveat 6's
+`git diff --numstat` check still applies to everything else: **P-05 must enumerate every
+deleted key in its PR, and must not re-record any diff it did not predict in advance.**
