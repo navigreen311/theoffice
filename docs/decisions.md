@@ -1715,23 +1715,85 @@ would be filled, per module, by people with nothing to say — which produces ex
 padding the `correct_sequence` rules were written to stop: *"a thin section is a fact
 about the module, not a gap to fill, and padding it is what produces the next failure."*
 
-### What it costs, stated plainly
+### What it costs — corrected 2026-09-07, the same day
+
+**The first version of this section said the cost was a refusal. It is not.** Recorded as
+a correction rather than an edit, because the ruling survives and the reason it is
+acceptable does not — and a reader who took the original at face value would be waiting
+for something red that never appears.
 
 **`rate_limited` is unauthorable for every module until one actually has rate-limiting
 behaviour worth teaching.** Not hard to author — impossible to author honestly, because
-there is nothing to describe.
+there is nothing to describe. That part was right.
 
-**A curriculum submission missing that class will be refused**, and the refusal will name
-it. Every operation curriculum this Office submits carries that gap until a Forge grows
-the behaviour.
+**What follows from it is a cap, not a rejection.** `validate_curriculum_submission`
+rejects only its named violations and a missing non-mandatory class is not among them.
+The classification is a separate function:
 
-**We accept a refusal we understand over a section written to pass a validator.** A
-green rule bought with nineteen invented sections is worth less than a red one naming a
-real absence — and the invented sections would then be taught to agents and bound into
-certifications.
+```python
+def classify_certification_level(classes_present):
+    """A module is certifiable only if EVERY scenario class is present. A module tested
+    only on happy_path (or missing any class) is "demonstrated", never "certified"."""
+    return "certified" if set(ALL_SCENARIO_CLASSES) <= present else "demonstrated"
+```
+
+and the validator's own docstring draws the line: *"Not a rejection (a LABEL): a module
+missing some non-mandatory class → demonstrated."*
+
+**So the submission is accepted, nothing fails, and every module stays at `demonstrated`
+forever.** `escalation_required` is the hard rejection — that is B16, and it is a
+different problem. `rate_limited` is a label that quietly lowers a ceiling.
+
+**Corrected statement of what we are accepting: a silent cap we have recorded, over a
+section authored to lift it.**
+
+**A silent permanent cap is worse than a refusal in the one way that matters: nothing goes
+red, so nobody fixes it.** A refusal announces itself every time it happens and eventually
+somebody acts on it. A cap is a value in a field on a response nobody reads, and it holds
+for as long as the system runs.
+
+That is an argument for recording it, not against the ruling. **The fix for the cap is a
+module that genuinely rate-limits** — nineteen invented sections would lift the label
+without changing anything an agent knows, which is a worse outcome than the cap: a
+`certified` earned by describing behaviour that does not exist.
 
 ### What changes it
 
 A module that genuinely rate-limits. Then one manual has something to say, the section is
 added because an author found it missing, and the ninth section arrives with content
 rather than with a schema change looking for some.
+
+### Where the cap should be legible — named, not built
+
+Eleven modules sitting below `certified` forever, for a class no manual has material for,
+is a fact somebody should be able to see without reading this entry. Three places, in the
+order they would have to be done, because the first is a precondition for the other two.
+
+**1. `broker/simforge_response_manifest.json`, under `submit_curriculum`.** The cap
+cannot reach The Office at all today. SimForge's `/office` adapter returns
+`{accepted, module_levels, coverage_declaration, gate_9_5_flag}`; the manifest declares
+`{run_ref, accepted, scenario_count, coverage_denominator, rejected_reason}`. So
+**`module_levels` — the field that carries the cap — is undeclared, and `validate_response`
+would refuse the response for containing it.** Adding it is exactly the reviewable act
+that manifest exists to force, and the question it asks has a clear answer: the field is a
+module id mapped to one of two fixed words and can carry no scenario content.
+
+**2. `curriculum_submission`, beside `simforge_run_ref`.** The table records what was
+handed over and holds nothing about what came back. A `module_level` column makes the cap
+durable and queryable rather than a value that existed once in a response. **This is
+`simforge_run_ref`'s own shape — see docs/blocking.md B8 — so adding the column without
+the code that populates and reads it would repeat that defect exactly.** Column, writer
+and reader in one change or not at all.
+
+**3. The console's instruction page, `/instructions/{forge}/{module}`.** Where the cap
+should be *read*, because it is where somebody deciding whether to author more looks.
+Today that page shows curriculum quality, which says the manual is good. A manual assessed
+`complete` and nonetheless capped at `demonstrated`, with the class responsible named, is
+the one screen where both facts sit together — and the only place the difference between
+"this manual is thin" and "this manual is finished and the ceiling is elsewhere" is
+visible.
+
+**Not built here.** Item 1 is a manifest change carrying a boundary question, item 2 is a
+migration with two pieces of code attached, item 3 is a page. Naming them is the point: a
+cap recorded only in a decision entry is a cap nobody sees, which is the failure this
+correction is about.
