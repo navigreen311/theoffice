@@ -1347,3 +1347,138 @@ dangerous half, because those passes are indistinguishable from earned ones.
 **The order of work, therefore:** scenarios first (authorship, 5 roles × domains × 22
 frameworks), then the invented values replaced by real ones, then the department mapping
 from entry 12. Identity issuance is done and was never the constraint.
+
+---
+
+## 16. `live` means published, not validated — the fifth instance, and the first signal defect
+
+**Found 7 September 2026**, within the hour of publishing a second Pack.
+
+### The class test returns *not there*
+
+The four instances in entry 11 share a fix: the distinction exists one layer down, and the
+rollup or the name fails to carry it. The test is *read the layer beneath before believing
+the summary* — if the distinction is there it is a message defect.
+
+**For `live` it is not there.** `business_pack` carries
+`venture_id, pack_version, schema_version, yaml_source, parsed, content_hash, authored_by,
+authored_at, superseded_at, status`, and `status` is `draft | live | superseded |
+abandoned` — a **publication lifecycle**. No column, no other table, and no audit
+projection records whether a Pack passed its gates.
+
+So `live` cannot be read correctly by any reader however careful. The fact that would
+justify the inference is not written down anywhere.
+
+**That makes this the first signal defect of the five.** The previous four were fixable
+with a sentence or a rename. This one needs a fact to exist first.
+
+### How it was found, which is the part worth keeping
+
+**`live` and `validated` were the same set while one Pack existed**, and both were true of
+it. Greenstone passed its gates and was in force; every reader treating `live` as *usable*
+was correct, and had been correct for as long as the system had been running.
+
+Publishing Burkham — a Pack Gate 2 refuses, published deliberately so the refusal would be
+legible — **separated the two sets within the hour**, and it surfaced in a query about
+reviewer capacity rather than anywhere near provisioning.
+
+It would have surfaced whenever the second venture arrived. Later, with more built on top,
+and probably by somebody acting on the number rather than by somebody looking for it.
+
+**The argument that publishing Burkham was right is that it did this.** A Pack sitting in a
+draft file could not have separated the sets.
+
+---
+
+## 17. Two defects in `proposals.queue`, and they are independent
+
+**Read this first, because "display only" reverses here.**
+
+The question asked of both defects was *what acts on the number* — expecting that "display
+only" would mean low stakes. It does not. The number feeds one consumer, a banner on
+`/proposals`, and **the banner is the whole consequence**:
+
+> *N pending against M remaining approvals in today's coverage. The overflow will not be
+> reviewed before the window closes.*
+
+**An inflated denominator does not cause a wrong action. It suppresses a warning.** The
+failure mode is not a bad decision anybody could point at afterwards — it is **silence**,
+and silence is the hardest thing to notice missing. Nobody investigates a banner that did
+not appear.
+
+Both found while checking entry 16. Recorded separately because fixing either leaves the
+other standing.
+
+### One — reviewer capacity is read from every live Pack with no gate check
+
+```python
+await cur.execute("SELECT venture_id FROM business_pack WHERE status = 'live'")
+# Reviewer capacity comes from each venture's live Pack, which is where
+# `human_capacity` is declared... There is no reviewer table: the Pack is the
+# source of truth for who reviews and how much they can take.
+```
+
+**Burkham's `human_capacity` is INVENTED** — its own header says so — and Burkham is now
+live, so those invented figures are real input to this view:
+
+```
+greenstone         Ivan  capacity=60      Dana  capacity=30
+burkham-wickmont   Ivan  capacity=60      Dana  capacity=30     <- Gate 2 refuses this Pack
+```
+
+This is instance five above, seen from the consuming end.
+
+### Two — the same human is counted once per venture, and the view sums him
+
+Independent of the gate question and **survives fixing it.** `human_capacity` is declared
+per Pack; a human who reviews for two ventures appears in two Packs; nothing
+de-duplicates by person.
+
+```
+capacity.remaining_today  180        summed across both live Packs
+                           90        greenstone alone
+inflation                  90
+```
+
+Ivan is one person and contributes 60 twice.
+
+**Even with both Packs validated and both figures real, this number is wrong.** It is a
+sum over Pack rows presented as a sum over people.
+
+**And it scales with ventures.** `human_capacity` is declared per Pack, so every venture a
+reviewer covers adds their full daily figure again: **+90 per venture Ivan and Dana both
+review for**, against a real capacity that does not move at all. Three ventures reads 270,
+four reads 360, and the same two people are doing the reviewing throughout.
+
+That matters because more ventures is the plan, not a hypothetical. The error is not a
+fixed 90 to be remembered — it grows with exactly the thing the system is built to do,
+and it grows in the direction that keeps the warning quiet.
+
+### What acts on it — display only, and it is a warning that fails to fire
+
+`capacity_remaining` feeds exactly one thing:
+
+```python
+"over_capacity": len(pending) > capacity_remaining and len(pending) > 0,
+```
+
+which renders a banner on `/proposals`: *"N pending against M remaining approvals in
+today's coverage. The overflow will not be reviewed before the window closes."*
+
+Nothing refuses, throttles, routes or blocks on it. **No control consumes it.**
+
+**But the harm is not zero, and it is the shape that is easy to dismiss.** An inflated
+denominator does not cause a wrong action — it **suppresses a warning**. The banner exists
+to tell a human that work will not be reviewed before the window closes, and a capacity
+figure 90 too high is 90 proposals of silence before it appears.
+
+A false negative on an alert, not a bad decision. Smaller than "something acts on it",
+larger than "display only" suggests, and the two words are not synonyms.
+
+Today: 2 pending against a claimed 180, so the banner is nowhere near firing under either
+figure. The defect is latent and will stay latent until proposal volume approaches
+reviewer capacity — which is the point at which the banner is the only thing that would
+say so.
+
+**No fix proposed for either.** The size of the second is what decides whether the first is
+worth a column.
