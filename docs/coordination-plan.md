@@ -118,11 +118,12 @@ counts, and a reviewer who can refuse one without refusing the other.
 ### P-00 — Coordinator: freeze the contract, the baselines, and the rulings
 
 - **Repo:** theoffice · **Complexity:** M · **Branch:** `feature/p-00-coordinator`
-- **Creates:** `docs/scenario-contract.md` (and an identical copy for simforge),
+- **Creates:** `docs/scenario-contract.md` (**theoffice only — see amendment R6a**),
   `PARALLEL_BUILD.md`
 - **Modifies:** `generators/artifacts.py` (add `CurriculumScenario` fields:
   `scenario_class`, `instruction_section`, `never_do_entry`, `expected_behavior`,
-  `expected_escalation: str`, `not_applicable_reason` — all defaulted),
+  `expected_escalation_prose: str`, `not_applicable_reason` — all defaulted; the existing
+  `expected_escalation: bool` is left untouched, see amendment R6a),
   `docs/decisions.md`, `docs/blocking.md`
 - **Will not touch:** every other file in the risk map
 - **Depends on:** NONE (PRs #37/#38/#39 already merged)
@@ -220,7 +221,14 @@ counts, and a reviewer who can refuse one without refusing the other.
 - **Will not touch:** `generators/artifacts.py`, `broker/simforge.py`, `db/`, `packs/`
 - **Depends on:** P-00 only — it builds against the frozen contract, which is what keeps
   it off P-03's chain
-- **Tasks:** T-030, T-031, T-032, T-033, T-034, T-035 (doc), T-037
+- **Tasks:** T-030, T-031, T-032, T-033, T-034, T-035 (doc), T-037, **T-102**
+- **T-102 (added by amendment R6a):** migrate `generators/curriculum.py` from
+  `expected_escalation: bool` (hardcoded `True` at ~:83) to
+  `expected_escalation_prose: str`, then **delete the bool from `CurriculumScenario`**.
+  P-00 leaves both fields in place deliberately; you are the package that collapses them.
+  P-00's PR description carries the grep of every bool consumer — inherit that list, do
+  not re-derive it. This is the one sanctioned edit to `generators/artifacts.py` after
+  P-00 freezes it, and it is sanctioned only for removing the superseded field.
 - **Three mechanical maps:** `happy_path` ← `correct_sequence`; `permission_denied` ←
   `failure_signatures.hard_failure`; `escalation_required` ← `retry_vs_escalate`.
 - **The rest do not map.** `partial_failure` uses the `silent_partial` split already
@@ -446,3 +454,66 @@ If any point is missing or point 5 is soft, **re-brief before letting it proceed
   instructions it received from the system being certified. Retired only by a scenario pack
   run by a **different** SimForge instance. Carried as a reading caveat in
   `PARALLEL_BUILD.md`, not as work.
+
+
+---
+
+## AMENDMENT R6a — 8 September 2026
+
+Two rulings made during Wave 0, after P-00 found that its card could not be executed as
+written. Recorded here rather than in a brief, because a card an agent cannot follow is a
+card the next agent will also not be able to follow.
+
+**1. The contract lives in `theoffice` only. There is no simforge copy.**
+
+The card said "an identical copy for simforge" and named no path and no merge slot. Two
+copies in two repos is **a second copy of a source** — frozen during the run by rule, free
+to drift the moment the run ends. That is the same reasoning that refused to maintain the
+Burkham split draft in parallel with the main draft.
+
+`docs/scenario-contract.md` in theoffice is the single source. **P-02 and P-03 work in
+simforge, a repo that does not contain the file they are bound by** — their briefs carry
+the absolute path, and that obligation is on the orchestrator, not on them.
+
+**2. `expected_escalation` becomes a new field alongside the bool, not a type change.**
+
+`CurriculumScenario` already carries `expected_escalation: bool`, hardcoded `True` in
+`generators/curriculum.py` at ~:83 — **a file P-05 owns and P-00 may not touch.** A type
+change therefore lands in P-00's PR, breaks strict mypy, and appears as a NEW failure
+against the baseline P-00 is itself recording. Unresolvable inside P-00's card.
+
+So: P-00 adds `expected_escalation_prose: str = ""` and leaves the bool alone. **P-05
+migrates and deletes the bool (T-102).** The contract declares the string canonical and
+names the transition, so a reader finding two escalation fields can tell immediately which
+is live and which is leaving.
+
+**There is a deliberate transitional two-field window on `CurriculumScenario`. It is not a
+defect and not a duplicate to be tidied.** Anyone who cleans it up outside P-05 has broken
+a boundary.
+
+---
+
+## AMENDMENT R6b — 8 September 2026 · EXECUTION MODEL
+
+**Every agent gets its own git worktree. Agents must not share a working directory.**
+
+Found the hard way in Wave 0: the orchestrator ran `git checkout -b` in the primary
+`theoffice` checkout while P-00 held uncommitted work there, and moved P-00's branch out
+from under it. Nothing was lost — P-00 had not committed and both branches sat at the same
+SHA — but the next occurrence would not be so cheap.
+
+**Branches in one checkout are serialised, not parallel.** The plan assumed per-branch
+isolation and never said where each agent works. That is the gap.
+
+- Wave 2 puts **P-06, P-07 and P-08 in `theoffice` simultaneously**. Three agents, one
+  checkout, is a guaranteed collision.
+- P-01 (capitalforge) and P-02 (simforge) are naturally isolated by being in other repos.
+- **P-05 is theoffice** and overlaps any coordinator activity there.
+
+**Rule:** before dispatching an agent, the orchestrator runs
+`git worktree add <scratchpad>/wt-<pkg> -b <branch> main` and briefs the agent with that
+path as its working directory. The coordinator does its own work in its own worktree too.
+`git worktree list` is the check that no two agents share a path.
+
+P-00 keeps the primary checkout for the remainder of its work — moving an agent mid-flight
+is a worse risk than the one being avoided.
