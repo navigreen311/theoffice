@@ -538,6 +538,36 @@ after it is finished, which is why it is recorded separately.
 both be satisfied. No review of either catches it, because neither is wrong on its own.
 It surfaced only when something actually exercised both at once.
 
+
+### RESOLVED 2026-09-08 — the refusal moved to scoring time, and there is no 422 to take
+
+**This item is closed by `simforge` PR #134 (P-03), merged at `2ce2f5d`.** Flagged by P-03
+itself as E-4: the text above is now false in a specific way, and a reader arriving here
+would act on it.
+
+**What changed.** The submission-time demand is gone. A declared `module_never_do` entry is
+recorded as an outstanding obligation, written to the instruction set and echoed back;
+coverage of it is decided at **scoring** time against SimForge's held-out scenarios, where
+`never_do_status` already lived. **The refusal moved. It was not deleted** — and P-03
+asserts that with a test rather than a sentence
+(`test_the_never_do_refusal_moved_to_scoring_time_and_was_not_deleted`).
+
+**The mirror image was closed in the same ruling.** The validator used to silently *accept*
+a submitted `never_do_violation` as evidence — letting the certified party supply its own
+refusal test. It is now refused. Ivan ruled both halves as one, because the trap and its
+mirror are the same mistake about **who the rule asks**. See `simforge` ADR-0048, Resolved.
+
+**Where the text above was wrong, and how it was found.** B9 said The Office "declares its
+never-do lists honestly and takes the 422". **There is no 422 to take.** The trap was also
+living in a test fixture — `test_office_bridge.py` had to author a `never_do_violation`
+scenario to get a 200, and that had been read as a fixture rather than as the defect.
+
+**An honest consequence, not a defect.** Every declared never-do entry is now an open
+obligation, because SimForge's held-out authoring pipeline does not exist. Modules
+declaring a never-do list will sit at `provisional`. **That is a real coverage hole
+reported as one, rather than a 422 naming work nobody was allowed to do** — and building
+held-out authoring is now the next piece of work rather than a blocked one.
+
 ## B10 — a position's modules are not all on the venture's Forge
 
 **Found 2026-09-07**, by the first real hand-over against a live SimForge. Not found by
