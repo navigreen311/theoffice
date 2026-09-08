@@ -1932,3 +1932,103 @@ visible.
 migration with two pieces of code attached, item 3 is a page. Naming them is the point: a
 cap recorded only in a decision entry is a cap nobody sees, which is the failure this
 correction is about.
+
+---
+
+## 22. A state that is honest and invisible accumulates; one that is dishonest and loud misdirects — and they are not the same defect
+
+**Decided 2026-09-08.** Filed as `navigreen311/Capitalforge#92` on the side that owns the
+fix. Recorded here because the class is ours and we have been collecting it.
+
+### The instance
+
+An unconfigured CapitalForge Office bridge answers `401 UNAUTHORIZED / "Authentication
+token required."` Its own `.env.example` states the intended behaviour: *"When any is
+absent the adapter is NOT MOUNTED and `/api/office` 404s, which The Office reads as
+'serves no manifest' - the truth."*
+
+The 401 does not come from the bridge. `PUBLIC_API_PATHS` exempts `/^\/office(?:\/|$)/`
+from `requireAuth`; `officeBridgeConfigured()` is false so the router is never mounted;
+the request falls through to a router mounted at `/` inside `apiRouter` whose
+router-level `tenantMiddleware` rejects it at `tenant.middleware.ts:55`.
+
+**The three codes are what separate the readings, and the diagnostic one is the absent
+one:**
+
+```
+/api/office/_modules                -> 401  UNAUTHORIZED        (neither gate)
+/api/office/definitely-not-a-route  -> 401  UNAUTHORIZED        (neither gate)
+/api/definitely-not-a-route         -> 401  AUTH_TOKEN_MISSING  (the generic gate)
+/api/health                         -> 200
+```
+
+`OFFICE_CREDENTIAL_REJECTED` is what a **mounted** bridge returns to an unauthenticated
+caller. It never appears. Its absence is the proof that nothing on that side is checking
+a credential at all.
+
+### Why this is not the rollup class
+
+The class named at entry 13 and extended through entry 16 is a **summary that drops a
+distinction the layer beneath still holds** — the message defect, and its harder sibling
+where the distinction was never recorded. Every instance so far has the same moral shape:
+**the reader is told less than is true.** Nothing asserted is false. A rollup that says
+`3 department(s) have seats` is not lying about which population it counted; it is silent
+about it. That silence is why they accumulate — nobody is stopped by one, so nobody
+fixes one, and they pile up until a number is acted on.
+
+**This defect is the opposite failure and needs its own name.** The reader is not told
+less than is true. **The reader is told something specific and false.** `401
+UNAUTHORIZED / "Authentication token required."` is a claim: a credential was presented
+or required, and it was not accepted. The truth is that there is no bridge here and no
+credential is being checked by anyone. The response does not omit the cause — it names a
+different one, confidently, in a well-formed error envelope with a code.
+
+**The costs run opposite ways.**
+
+| | honest and invisible | dishonest and loud |
+|---|---|---|
+| what the reader is told | less than is true | a specific wrong cause |
+| how it is found | someone acts on the number | someone acts on the message |
+| what it costs | accumulates quietly, unbounded | one wrong investigation, immediately |
+| why it survives | nobody is stopped by it | it looks like a finished answer |
+
+A quiet defect wastes the time of whoever eventually trips on it. **A loud one spends
+somebody's time on the wrong question the first time it is read, and it spends it
+efficiently, because a specific error is exactly what a careful person follows.** This one
+cost the morning of 8 September: the whole of it went to tracing where
+`CAPITALFORGE_TOKEN` comes from and what value belongs in it, because a 401 said a
+credential was the subject. No value exists on either side. The question was wrong and the
+error is why it was asked.
+
+### The test that separates them
+
+Both classes are found by reading the layer beneath. The question differs:
+
+- **Rollup class:** *is the distinction present underneath?* Present → message defect,
+  fix is a sentence. Absent → signal defect, fix is a schema.
+- **This class:** *does the responder that produced this actually know the thing it is
+  asserting?* `tenantMiddleware` asserts that a credential was required. It does not know
+  whether a bridge exists — it was never asked, and it answers for paths it was never
+  meant to see.
+
+**A wrong answer from a component that was not asked the question.** That is the
+compressed form, and it is worth carrying: the middleware is not buggy. It did its job on
+a request that should never have reached it.
+
+### What this does not license
+
+**Not a rule that every 401 must be audited.** The generic gate returning
+`AUTH_TOKEN_MISSING` on an unknown path is correct — that path does require a token.
+
+The property worth holding, and it is narrow: **where a surface has two distinguishable
+absent states — not configured, and configured-but-refused — they must not return the same
+status.** Collapsing them is what turns a missing configuration into a credential hunt.
+Every Forge adapter has exactly these two states, `docs/forge-adapter.md` is the guide for
+the seven remaining, and this is now a thing that guide has to say.
+
+### Where this leaves the entry that found it
+
+Entry 3's 2026-09-08 correction records the same defect as the reason its own
+CapitalForge half was described one layer too shallow for a third time. That is not a
+coincidence: **an error that names a wrong cause produces documentation that names a wrong
+cause.** The 401 is upstream of the mis-description, not parallel to it.

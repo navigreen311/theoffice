@@ -521,6 +521,57 @@ on a schedule.
 
 ---
 
+## A ninth: an adapter that is not configured must not answer like one whose credential was refused
+
+Trap eight is a 401 from the **wrong service**. This is a 401 from the **right one**, and it
+is the more expensive of the two because every check trap eight teaches you to run comes
+back clean. The port is right, the process is CapitalForge's own, the path is the one in
+`forge_registry`. The response is still describing a different problem.
+
+**Every Forge adapter has two distinguishable absent states, and they must not share a
+status code:**
+
+    not onboarded        no credential configured on the Forge side, so the bridge
+                         is not mounted. The Office should read this as "serves no
+                         manifest".  ->  404
+
+    credential refused   the bridge is mounted and checking, and what The Office
+                         presented did not match.                              ->  401
+
+**Collapse them and a missing configuration reads as a credential problem.** That is not a
+vague error, it is a specific wrong one: it names a credential, so the next person goes
+looking for which side issued the token, where it is stored and why it stopped working.
+On 8 September 2026 that cost a morning on CapitalForge before the absent
+`OFFICE_CREDENTIAL_REJECTED` showed nothing was checking a credential at all. Filed as
+`navigreen311/Capitalforge#92`; the class is `docs/decisions.md` entry 22.
+
+### How it happens, and it is not a bug in the thing that answers
+
+CapitalForge exempts `/api/office/*` from its user auth gate, correctly — the bridge
+authenticates with a tenant credential, not a user JWT. When the bridge is unconfigured the
+router is never mounted, nothing matches, and the request falls through to a router mounted
+at `/` that applies `tenantMiddleware`, which rejects it.
+
+**The middleware is not broken. It answered a question it was never asked**, for a path it
+was never meant to see. Look for this wherever a framework has both a path exemption and a
+catch-all mount: the exemption gets applied to one gate and the request walks into the
+other on its way to a 404 it never reaches.
+
+### The check
+
+Probe an adapter you believe is unconfigured and read the **code**, not the status:
+
+    unconfigured           -> 404, or a 401 whose code is the adapter's own
+    mounted, no credential -> the adapter's own rejection code
+    mounted, credential    -> 200 and a manifest
+
+If an unauthenticated call and an unknown path under the adapter's prefix return the same
+body, the adapter is not answering — something behind it is. **The adapter's own rejection
+code being absent is the diagnostic**, and it is worth knowing what that code is before you
+need it.
+
+---
+
 ## What an adapter is, and is not
 
 The Office posts to `{forge_registry.base_url}/{module_id}` with a JSON body. The
