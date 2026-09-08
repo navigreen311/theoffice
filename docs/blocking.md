@@ -789,3 +789,30 @@ surfaced it. The other read-only modules — `client_read`, `client_read_pii`,
 `client_read_credit`, `comp_analysis`, `buyer_match`, `property_lookup` — have not been
 checked against it, and several do have escalation paths (a 404 on a read is still a
 question for a human). Not all pure reads are escalation-free; this one is.
+
+### This is why the eleven module reads are parked
+
+Sizing the operation curriculum needs one read per module: what fraction of the seven
+authorable classes each manual already supplies. Three are done and the ratio swings —
+`submit_application` 5 of 7, `record_consent` 3 of 7 with a caveat, `portfolio_health` 2
+of 7 — so a total cannot be extrapolated and the remaining eight would need reading
+individually.
+
+**That work is parked, and B16 is the reason.** Authoring against a validator that will
+refuse at least one of the eleven regardless of how well it is authored is work done
+twice: the scenarios get written, the submission is refused for a mandatory class the
+module cannot honestly supply, SimForge changes the rule or admits a `not_applicable`,
+and the affected manuals are revisited.
+
+**The reads would not be wasted** — every class that maps stays mapped. What would be
+wasted is the number they produce, because it is a number for a target that is going to
+move. Sizing against a contract with a known open defect prices the wrong contract, and
+the price is the thing the sizing exists to produce.
+
+**What unparks it:** a SimForge ruling on B16, either way. If the mandatory class admits a
+declared `not_applicable` with a reason, the eleven reads produce a real number. If it
+does not, the answer for `portfolio_health` is that it cannot be certified through this
+path at all — which is also an answer, and a different one to size against.
+
+Recorded rather than left as a stalled task, because "we were going to read eleven
+modules" reads afterwards as forgotten rather than deferred.
