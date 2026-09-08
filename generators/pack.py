@@ -164,6 +164,47 @@ class Identity(Strict):
     positioning_one_liner: str = Field(max_length=200)
 
 
+class HumanHeld(Strict):
+    """A declared absence: this obligation is real, and no agent role holds it.
+
+    **The third application of one pattern, and the reason it keeps recurring.**
+    `compliance_couplings.NoFramework(why=...)` exists because `validate_sections`
+    refused an empty coupling list, so SimForge's two modules carried
+    `tsr_disclosure_required` - Greenstone's flag, on a Forge whose Packs declare
+    `[]`. A schema that cannot express an honest absence gets a false value written
+    into it. ADR-0049 is the same shape again for scenario classes: a declared
+    `not_applicable` with a required reason, because a module that cannot supply a
+    class was otherwise capped silently and permanently.
+
+    This is the third. V22 requires every declared `runtime_flag` to appear in some
+    scenario's `compliance_flags_exercised`, and for an obligation no position holds
+    there is no true value - only inventing a scenario for a duty no role has, or
+    deleting a real obligation. Both are false. So the absence is declared instead,
+    and it carries the sentence that justifies it.
+
+    **`why` is required and non-empty for the reason `NoFramework`'s is: nothing can
+    tell an accidental declaration from a considered one.** Four of nine coupling rows
+    were accidental empties before that was enforced.
+
+    **This type does not gate anything on its own, and must never ship without the
+    rule that checks a discharge.** Marking a flag human-held removes it from V22's
+    subject; if nothing then asks whether the obligation was actually discharged, any
+    flag nobody wants to write a scenario for could be marked human-held and V22 would
+    go quiet. Today V22 fails loudly and wrongly - it names a missing scenario when the
+    truth is that no agent holds the duty. `HumanHeld` without a discharge rule would
+    pass silently and wrongly, which is worse: a loud wrong answer is at least read.
+
+    **This was produced deliberately rather than argued.** On 8 September, with this
+    type landed and no discharge rule, Burkham Wickmont validated at **32 PASS / 0 FAIL
+    / 1 NOT_RUN of 33** - the single NOT_RUN being V24, which never runs at Gate 2 by
+    construction. **Gate 2 cleared, for a venture whose referral-fee obligation nobody
+    had verified, on the strength of one YAML key.** That is what this type does alone.
+    It is why it and V34 ship together, and why that tree was never merged.
+    """
+
+    why: str = Field(min_length=1)
+
+
 class ComplianceSurface(Strict):
     framework: ComplianceFramework
     jurisdiction: list[str] | Literal["FEDERAL", "ALL"]
@@ -171,6 +212,9 @@ class ComplianceSurface(Strict):
     runtime_flag: str
     library_entry_ref: str | None = None
     library_gap: bool = False
+    #: Set when no agent role holds this obligation. See `HumanHeld`; a human-held
+    #: flag is accounted for by V22 and is the subject of the discharge rule instead.
+    human_held: HumanHeld | None = None
 
 
 class Market(Strict):

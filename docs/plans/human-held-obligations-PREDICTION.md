@@ -109,4 +109,45 @@ before anything merges.
 
 ## Scored
 
-*(filled in after the run, below the line, without editing anything above it)*
+*Nothing above this line was edited after the run.*
+
+### The intermediate state — evidence, not a step
+
+With `HumanHeld` landed and **V34 not yet written**, Burkham validated at:
+
+```
+burkham-wickmont: 32 PASS / 0 FAIL / 1 NOT_RUN of 33
+    V24 NOT_RUN        <- evaluated at Gate 4.5, never runs at Gate 2 by construction
+```
+
+**Zero failures. Gate 2 cleared** - for a venture whose referral-fee obligation nobody
+has verified, on the strength of one YAML key.
+
+This tree was produced deliberately and was never merged. It is recorded here because
+the argument for coupling the two halves is much weaker as an argument than as a
+measurement: **this is what `HumanHeld` does alone**, and it is a quieter, worse failure
+than the loud wrong one it replaced.
+
+### P1 - CORRECT
+
+V22 **PASS**, and the message changed in kind as predicted - it no longer names a missing
+scenario, and it hands the flag to another rule rather than falling silent:
+
+> all 20 compliance flag(s) accounted for: 19 exercised by a scenario, 1 declared
+> human-held (referral_fee_permitted_in_state) - whether those were discharged is V34's
+> question, not this one
+
+### P5 - CORRECT
+
+Greenstone unchanged at 29 PASS / 0 FAIL / 4 NOT_RUN. It declares no human-held
+obligation, so the change has no subject there.
+
+### P3 - the finished state is as predicted; the intermediate tree falsified a weaker reading
+
+P3 says Gate 2 stays blocked. **That is true of the finished change and false of the
+intermediate tree**, where Gate 2 cleared for the two hours V34 did not exist.
+
+The prediction was written about the completed change and remains right about it. But a
+reader could take "building this unblocks nothing" to mean *at no point during the build*,
+and that reading is false - which is worth stating rather than smoothing over, because the
+gap between those two readings is exactly where the cheap escape lives.

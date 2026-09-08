@@ -436,10 +436,31 @@ def v22(pack: BusinessPack) -> tuple[bool, str]:
     # against framework names would make this rule unsatisfiable by construction.
     declared = {c.runtime_flag for c in pack.market.compliance_surface if c.runtime_flag.strip()}
     exercised = {f for s in pack.scenarios for f in s.compliance_flags_exercised}
-    missing = sorted(declared - exercised)
-    return (not missing,
-            f"runtime flag(s) never exercised by a scenario: {_join(missing)}" if missing
-            else f"all {len(declared)} compliance flag(s) exercised")
+
+    # A human-held obligation is accounted for here and checked elsewhere. It is real,
+    # and no agent role holds it - so demanding a scenario would mean inventing a duty
+    # no position has. `HumanHeld` says so with a reason; whether the obligation was
+    # actually discharged is a different question with its own rule and its own verdict,
+    # so that a missing discharge can never read as an unexercised flag.
+    #
+    # This rule stays a pure function of the Pack. It does not read the discharge record
+    # and must not: a world rule reports NOT_RUN where there is no database, and turning
+    # the one failure that is supposed to be visible into a NOT_RUN would bury it.
+    human_held = {
+        c.runtime_flag for c in pack.market.compliance_surface
+        if c.runtime_flag.strip() and c.human_held is not None
+    }
+    missing = sorted(declared - exercised - human_held)
+    if missing:
+        return False, f"runtime flag(s) never exercised by a scenario: {_join(missing)}"
+    if human_held:
+        return True, (
+            f"all {len(declared)} compliance flag(s) accounted for: "
+            f"{len(declared) - len(human_held)} exercised by a scenario, "
+            f"{len(human_held)} declared human-held ({_join(sorted(human_held))}) - "
+            "whether those were discharged is V34's question, not this one"
+        )
+    return True, f"all {len(declared)} compliance flag(s) exercised"
 
 
 @rule("V23", Severity.FAIL, ">=3 scenarios per role x domain; >=1 expected_escalation per role")
