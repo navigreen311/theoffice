@@ -270,7 +270,7 @@ counts, and a reviewer who can refuse one without refusing the other.
 ### P-09 — Burkham Pack amendments
 
 - **Repo:** theoffice · **Complexity:** M · **Branch:** `feature/p-09-pack-amendments`
-- **Modifies:** `packs/burkham-wickmont.draft.yaml`, `docs/decisions.md` (entry 23),
+- **Modifies:** `packs/burkham-wickmont.draft.yaml`, `docs/decisions.md` (**entry 25** — see amendment R6c),
   and `packs/burkham-wickmont.split.draft.yaml` — **header comment only**
 - **Will not touch:** `packs/greenstone.yaml` (P-12 owns it)
 - **Depends on:** P-00 · **Precondition: R-1 complete** · **Tasks:** T-095, T-097a, T-098
@@ -288,7 +288,7 @@ counts, and a reviewer who can refuse one without refusing the other.
   source, which is what the publish-diff control exists to prevent. The note says:
   superseded by the main draft, not maintained, never published, declares
   `run_scenario_pack` which was removed 8 September 2026 — see entry 23.
-- **Entry 23 must supersede entry 5 explicitly**, and record: what was asked and what came
+- **Entry 25 must supersede entry 5 explicitly**, and record: what was asked and what came
   back; that this differs from entry 4's removals because `lender_match` had no
   implementation *and no description of one* while this has both; **what returns it —
   something that needs a verdict spanning modules**, and that reopening starts at
@@ -308,8 +308,8 @@ counts, and a reviewer who can refuse one without refusing the other.
 > afterthought — which is exactly the outcome the note exists to prevent.
 
 - **Modifies:** `packs/greenstone.yaml` (`:176`, one line), `docs/blocking.md` (append
-  B18 only)
-- **Will not touch:** any burkham Pack file; `docs/decisions.md` (entry 23 is P-09's —
+  **B19** only — see amendment R6c)
+- **Will not touch:** any burkham Pack file; `docs/decisions.md` (entry 25 is P-09's —
   reference it, do not append); `generators/*`; `broker/*`
 - **Depends on:** **P-09** · **Precondition: R-1 complete** · **Tasks:** T-097b, T-099, T-100
 - **One version bump 1.2.0 → 1.3.0**, own publish, own declared counts
@@ -321,7 +321,7 @@ counts, and a reviewer who can refuse one without refusing the other.
   family: there a quiet truth was replaced by a loud falsehood; here a loud truth is
   replaced by a quiet one. **Both make the reader worse off, and only one of them looks
   like a problem.**
-- **T-100 — B18**, tagged `venture-scoped: greenstone`: Greenstone has no resolvable
+- **T-100 — B19**, tagged `venture-scoped: greenstone`: Greenstone has no resolvable
   credential for voiceforge (`https://example.invalid`, `VOICEFORGE_TOKEN` absent).
   Before workstream A the clause named two Forges and read as general unreachability;
   after A it names voiceforge alone — one Forge, one cause, one fix.
@@ -517,3 +517,43 @@ path as its working directory. The coordinator does its own work in its own work
 
 P-00 keeps the primary checkout for the remainder of its work — moving an agent mid-flight
 is a worse risk than the one being avoided.
+
+
+---
+
+## AMENDMENT R6c — 8 September 2026 · numbering, and a near-miss worth keeping
+
+**P-09 writes `decisions.md` entry 25, not 23. P-12 writes `blocking.md` B19, not B18.**
+
+P-00 merges first and its ruling records took the next free numbers — entries 23 and 24 in
+`decisions.md`, B18 in `blocking.md`. The plan was written before those existed. Nothing
+was renumbered; the later cards move. Both cards above are corrected in place so those
+agents read a right number rather than a wrong one plus a correction. **P-09's content
+requirement is unchanged: entry 25 must still supersede entry 5 explicitly.**
+
+`PARALLEL_BUILD.md` keeps P-00's note recording why the numbers moved.
+
+### The near-miss, recorded because the ruling that avoided it was made for a different reason
+
+Amendment R6a changed `expected_escalation` from a type change to a new field, on the
+grounds that a type change would break strict mypy in a file P-00 may not touch. That
+reasoning was correct and it was not the whole danger.
+
+**Two different classes share the name `expected_escalation`:**
+
+| class | where | who reads it |
+|---|---|---|
+| `CurriculumScenario.expected_escalation` | `generators/artifacts.py` | `generators/curriculum.py:60`, `:83`, and **`broker/provisioning.py:774-776`** — the last is outside P-05's card |
+| `Scenario.expected_escalation` | `generators/pack.py:338` — **the Pack DSL** | **`generators/validator.py:452` (`if s.expected_escalation:`) and `:467`** — V23. Plus 15 rows in the Burkham Pack and 9 in Greenstone |
+
+**Had the type been changed in place on the wrong class, V23's truthiness check would have
+silently become "at least one scenario with non-empty prose" instead of "at least one
+scenario expecting escalation" — a validator rule changing meaning with no diff to the
+validator.** No test would necessarily have caught it; a Pack with prose on every scenario
+passes either reading.
+
+This is the entry 13 class arriving in a new place: not a summary dropping a distinction,
+but **two distinctions wearing one name**, where the reader of either one cannot tell which
+they have. It is recorded here rather than only in a PR because P-05 owns the migration and
+`broker/provisioning.py:774-776` is not on its card — **P-05 must escalate rather than
+touch it**, and must not migrate anything reached from `generators/pack.py`.
