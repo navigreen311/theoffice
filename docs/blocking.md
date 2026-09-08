@@ -1134,3 +1134,156 @@ A decision on how the compliance surface represents an obligation with no agent 
 a third state, a holder field, or something else — followed by a rule that can then
 distinguish the two cases. **Not** a rule alone: a rule written before the decision is the
 decision, taken by whoever wrote the rule.
+
+## B19 - Greenstone cannot ask voiceforge, and removing the FAIL in front of it changed nothing
+
+**Scope:** venture-scoped: greenstone. **Found 2026-09-08 (T-100)** during the parallel
+build, at the moment T-097b made it the only thing left in V32's message.
+
+**Greenstone binds three Forges - `cre-forge`, `simforge`, `voiceforge` - and one of them
+has never been asked a question.** `place_call` and `transcribe_call` are declared at
+`criticality: soft` with `fallback_behavior: manual_handoff`, and every rule that would
+resolve them against the Forge declines, because there is nothing at the other end to
+decline from.
+
+This is one Forge, one cause and one fix. It is not one setting.
+
+### The cause, stated honestly: two things to set, and the order is the point
+
+voiceforge has a row in `forge_registry` and is not registered in any sense that matters:
+
+```
+forge_registry.base_url   https://example.invalid
+VOICEFORGE_TOKEN          absent
+```
+
+The clause the validator actually prints is `voiceforge: tenant credential unavailable`.
+That is `broker/forge_modules.read()` failing at the credential resolver - **before any
+request is made.** The base URL is never dialled, because nothing gets far enough to dial
+it.
+
+So `https://example.invalid` is **latent, not absent.** It is a second wrong value hidden
+behind the first wrong value, in exactly the way this whole item is about.
+
+**Which means setting the token alone moves the clause without moving the Pack.**
+`tenant credential unavailable` becomes `unreachable: ...`, the verdict stays NOT_RUN,
+nothing has been verified, and whoever set it has a changed message to show for an
+unchanged fact. **Anyone retiring this item sets both, or has not started.**
+
+### What it blocks
+
+| Rule | Verdict | Cause |
+|---|---|---|
+| **V11** | NOT_RUN | `voiceforge: tenant credential unavailable`. Recorded in B6's 2026-09-08 update. Not an unfinished curriculum - Greenstone's is 6 of 6 authored. |
+| **V31** | NOT_RUN | `voiceforge/place_call` is a hand-written `forge_module_registry` row never verified against the Forge, so the rule has no shape to check a tier against. |
+| **V32** | NOT_RUN, **as of today** | `could not ask: voiceforge`. It was a FAIL until `run_scenario_pack` came off the SimForge binding. See below - the verdict moved and the Pack did not. |
+
+Three rules, one missing pair of values. Gate 2 stays blocked on Greenstone for as long as
+this is open.
+
+### Why V32's verdict change today is not progress
+
+**T-097b removed `simforge/run_scenario_pack` from this Pack (ruling Q-1,
+`docs/decisions.md` entry 25, superseding entry 5). Greenstone's V32 goes FAIL -> NOT_RUN.
+That is not movement, and it must not be read as movement.**
+
+Both facts were in V32's message before the edit, and the rule was careful to keep them
+apart - that separation is a control somebody built on purpose:
+
+```
+V32 FAIL: 1 declared module(s) the Forge does not dispatch: simforge/run_scenario_pack.
+A grant over one of these is a grant on a capability that is not there. SEPARATELY, and
+not covered by this failure: could not ask voiceforge: tenant credential unavailable -
+those bindings are unverified rather than verified, and fixing the modules named above
+will not resolve them.
+```
+
+Read the last clause again: **"fixing the modules named above will not resolve them."** The
+message said in advance exactly what today's edit would and would not accomplish. The FAIL
+was about a module that does not exist. The NOT_RUN is about a Forge nobody can ask. **The
+second fact was always true - it was standing behind the first, and removing the first is
+what makes it visible.**
+
+**Nothing was fixed. One obstacle was removed from in front of another.** Greenstone's
+Gate 2 is exactly as far from passing as it was this morning.
+
+**And the board now looks better than the venture is.** On the totals recorded before this
+change - 29 PASS / 1 FAIL / 3 NOT_RUN of 33 - moving the one FAIL into NOT_RUN leaves
+**29 PASS / 0 FAIL / 4 NOT_RUN: a Greenstone board with no red on it at all, and a Gate 2
+that is still blocked.** That arithmetic follows from the recorded totals; it is not a run
+anybody has performed. It is written down here because a reader who sees zero failures and
+concludes zero problems will have made the only mistake this item exists to prevent - and
+they will have made it from a screen that agreed with them.
+
+### The inverse of entry 22, and why it is the harder half
+
+`docs/decisions.md` entry 22 separated two defects that had been treated as one: a state
+that is **honest and invisible**, which accumulates, and one that is **dishonest and loud**,
+which misdirects. Its instance was a `401 UNAUTHORIZED` from a bridge that was not mounted -
+a quiet truth replaced by a loud falsehood, and it cost somebody a morning because a
+specific error is what a careful person follows.
+
+**This is the same family running the other way. A loud truth is replaced by a quiet one.**
+Nothing here asserts anything false. V32's NOT_RUN is scrupulously accurate and says so in
+its own words - *"NOT_RUN is not a pass."* It is simply quieter than what it replaced, and
+it is quieter about a fact that has not improved.
+
+| | entry 22's instance | this one |
+|---|---|---|
+| before | a quiet truth | a loud truth |
+| after | a loud falsehood | a quiet truth |
+| what the reader does | follows a specific wrong cause | stops looking, because the red went away |
+| how it is caught | somebody acts on the message | **nobody acts at all - that is the failure** |
+
+**Both make the reader worse off, and only one of them looks like a problem.** A loud
+falsehood gets investigated. A quiet truth gets filed. The second is harder to catch
+precisely because every individual statement in it is correct, and because the direction of
+travel looks right.
+
+### What retires it - and the honest answer is that it may go red
+
+**Register voiceforge for real: a reachable `base_url` and a resolvable `VOICEFORGE_TOKEN`,
+both, on both sides.** That is operator configuration of the shape R-1 already did for
+capitalforge - not a document anybody has to write, and not a package.
+
+**What that buys is that the Pack becomes askable. It does not buy a PASS, and the person
+who does it should expect a new failure.**
+
+`docs/decisions.md` entry 6 records `voiceforge/place_call` as **a capability VoiceForge
+never had**, and V31 is NOT_RUN today precisely because that registry row was hand-written
+and never checked against the Forge. So the likely sequence when the credential resolves is
+**V32: NOT_RUN -> FAIL on `voiceforge/place_call`.**
+
+**That is the rule finally doing its job. It is not a regression, and it is not something
+this item's fix broke.** The Pack has declared an unverified module for as long as it has
+existed; a credential is what lets anybody find out. **Do not put the placeholder back, and
+do not read the fresh red as evidence the change was wrong** - the red is the first real
+answer this binding has ever produced.
+
+Written here rather than left to be discovered, for the same reason entry 25 records what
+returns `run_scenario_pack`: a future reader should meet reasoning where they would
+otherwise meet an absence.
+
+### The pattern, said once, so three instances are not read as three coincidences
+
+**A verdict that changed has not necessarily improved. Read the clause, not the verdict.**
+`PARALLEL_BUILD.md` Caveat 3 states it as an operational rule. This item is the third place
+in one month, in one repo, in one rule family, where it decides what somebody does next:
+
+1. **It already happened.** V11 reported NOT_RUN and it was read as *the curriculum is
+   unfinished* - for a week, on the board, while the curriculum was finished: 6 of 6 on
+   Greenstone, 10 of 10 on Burkham, and V11 said so in its own message before declining.
+   The real blocker was one missing environment variable. B6's 2026-09-08 update is the
+   record. **The verdict is one word; the cause is the sentence after it, and the sentence
+   was not read.**
+2. **It is happening now.** V32 FAIL -> NOT_RUN on this Pack, above. The absence of red
+   read as the presence of progress.
+3. **It will be available again the moment somebody starts on this item.** Setting
+   `VOICEFORGE_TOKEN` and leaving `https://example.invalid` changes
+   `tenant credential unavailable` to `unreachable`, which is a different sentence under
+   the same verdict, reporting the same unverified state.
+
+The same misreading, three times, at three depths, on the same Forge. It is not a lapse of
+attention by three people - **it is what a one-word verdict does to a reader when the
+finding lives in the sentence underneath it.** That is why each of these is written down
+with its clause rather than its verdict.
