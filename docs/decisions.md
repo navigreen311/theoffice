@@ -246,6 +246,121 @@ The distinction is the one these rules exist to enforce, and it would be a poor
 irony to lose it here: **NOT_RUN is not a pass**, and merging past NOT_RUN is a
 decision that has to be written down every time. This is that writing.
 
+### Corrected 2026-09-08 — both SimForge blockers were retired on 6 September, and this entry did not notice
+
+**The table above is wrong, and has been for two days.** It is left standing because
+the correction is the point. What it says:
+
+| | |
+|---|---|
+| `forge_registry.base_url` | `https://example.invalid` — a deliberate placeholder |
+| `SIMFORGE_TOKEN` in `.env` | **absent** — not unset in a shell, missing from the file |
+
+**Both were false by 6 September 2026.** Verified live on 8 September, by response
+body rather than by a port answering:
+
+- `forge_registry.base_url` for simforge is `http://127.0.0.1:8110/office`. It was
+  moved on 4 September — the same day this entry's correction was written, and
+  `docs/port-allocation.md` records the move in detail. This entry cited the
+  placeholder anyway.
+- `SIMFORGE_TOKEN` is present in `.env` (written 6 September) and is byte-identical
+  to `OFFICE_TENANT_TOKEN` in SimForge's own `.env`. The two sides hold the same
+  credential.
+- `GET http://127.0.0.1:8110/office/_modules` with that credential returns **200**
+  and a manifest naming `simforge` and three modules: `gate_result`, `run_start`,
+  `submit_curriculum`. The same request with no credential returns 401, so the
+  authentication is real and not an open surface.
+
+### The shape, which is worth more than the correction
+
+**An entry whose subject is "what retires this blocker" went stale while the blocker
+was being retired, and nothing pointed at it.**
+
+This entry names, in its own words, the exact conditions that would retire it. Two of
+those conditions were met by other work — a port move recorded in one document, a
+credential added to a file — and neither piece of work came back here. The entry kept
+being read, and kept describing a state that no longer existed, because a document
+that states its own exit criteria has no way to notice when they are satisfied.
+
+That is the same failure mode this entry already documents twice — a blocker named
+one layer too shallow, found by fixing the named thing and watching nothing happen.
+The variant here is worse in one respect: **the named thing was fixed, something did
+happen, and the entry still said otherwise.** Nobody was misled by an unfixed
+blocker; they were misled by a fixed one.
+
+**No process is proposed here.** A convention that every change greps the decision
+record for what it might retire is the kind of rule that is followed twice. What is
+recorded is the failure, so that the next reader of an entry stating exit criteria
+treats those criteria as a claim with a date on it rather than as current fact.
+
+### What is actually true, 2026-09-08
+
+**SimForge — reachable, credentialled, answering.** The half of this blocker that was
+described as unscoped, uncosted and not even described is done.
+
+**But that is not V32 clearing, and this entry's own hypothesis says why.** The
+third reading above requires SimForge's manifest to contain `run_scenario_pack` and
+`gate_result` under those exact spellings. **The live manifest does not contain
+`run_scenario_pack`** — it has `gate_result`, `run_start` and `submit_curriculum`.
+Entry 5 decided that deliberately and predicted the consequence in those words:
+*"V32 will FAIL, not NOT_RUN, once SimForge is reachable."* SimForge is now
+reachable. **The predicted change in kind has arrived and has not yet been observed
+in a run.** Anyone reading a red V32 after this should read entry 5 before treating
+it as the old blocker.
+
+**CapitalForge — the blocker is a missing token, not a missing adapter.** This is the
+third time this entry's subject has had its cause named one layer too shallow, and it
+is being written down before it is discovered a fourth time. The adapter exists, is
+running on `127.0.0.1:4000`, and serves eleven modules. What is missing is
+configuration, on **both** sides:
+
+- The Office: `forge_tenant_credential` for capitalforge holds
+  `env://CAPITALFORGE_TOKEN`, and **no such key exists in `.env`.**
+- CapitalForge: `OFFICE_SHARED_SECRET`, `OFFICE_VENTURE_TENANTS` and
+  `OFFICE_SERVICE_PRINCIPAL_ID` are all absent from its `.env`. Its
+  `officeBridgeConfigured()` requires all three, so **the office router is not
+  mounted at all.**
+
+The value The Office should present is whatever `OFFICE_SHARED_SECRET` is set to on
+CapitalForge's side. Neither side has one yet, so this is a value to be chosen and
+set in two places, not a value to be found.
+
+**voiceforge is now the only `https://example.invalid` left in `forge_registry`.**
+
+### A defect found while verifying the above
+
+**An unconfigured CapitalForge bridge does not 404. It 401s, and the 401 is not the
+adapter's.**
+
+`capitalforge/.env.example` states the intended behaviour in its own comment: *"When
+any is absent the adapter is NOT MOUNTED and /api/office 404s, which The Office reads
+as 'serves no manifest' - the truth."* That is not what happens. Probed live:
+
+```
+GET /api/office/_modules              -> 401 UNAUTHORIZED       "Authentication token required."
+GET /api/office/definitely-not-a-route -> 401 UNAUTHORIZED       "Authentication token required."
+GET /api/definitely-not-a-route        -> 401 AUTH_TOKEN_MISSING "Authorization token is required."
+GET /api/health                        -> 200
+```
+
+The office path is exempted from the user auth gate by `PUBLIC_API_PATHS`, so
+`requireAuth` does not run. The office router is not mounted, so nothing matches.
+The request then falls through to one of the routers mounted at `/` inside
+`apiRouter`, which applies `tenantMiddleware` at router level — and that is what
+returns `UNAUTHORIZED` from `tenant.middleware.ts:55`.
+
+**The distinguishing evidence:** a mounted bridge rejects an unauthenticated caller
+with `OFFICE_CREDENTIAL_REJECTED`. That code never appeared. And the generic gate
+returns `AUTH_TOKEN_MISSING`, a different code, on a path outside `/office`. Three
+distinct responses, and the one the bridge would give is absent.
+
+**Why it matters here rather than in CapitalForge's tracker.** The design intends
+absent configuration to be legible to The Office as "serves no manifest". It is
+instead legible as "your credential was refused" — which is the reading that produced
+the question this correction was written to answer, and which would have sent the
+next person looking for a token that does not exist rather than for configuration
+that was never set.
+
 ---
 
 ## 4. `lender_match` and `build_packet` come off the Pack — they do not exist
