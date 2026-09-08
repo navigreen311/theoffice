@@ -730,16 +730,19 @@ def _curriculum_payload(
     `functions_in_module` / `functions_covered` are 0 because The Office does not model
     functions inside a module. Zero, visibly, rather than a guess.
 
-    `scenario_class` and `instruction_section` are still absent from every scenario
-    dict below, and **the reason has changed**. It used to be that
-    `curriculum.generate` did not produce them; it now does, on every operation
-    scenario. What stops them being sent is package scope: contract A1.2 puts this file
-    on P-05's card for exactly two purposes - the `expected_escalation` migration and
-    the `module_not_applicable` mapping - and adding two fields to the wire payload is
-    neither. Raised as **E-001 in `PARALLEL_BUILD_ESCALATION.md`** with the hunk it
-    needs, because it is what stands between this payload and SimForge's Pydantic layer
-    accepting a curriculum for the first time. Until then the submission is refused at
-    the schema, which is where it has always been refused.
+    `scenario_class` and `instruction_section` ARE SENT, as of P-05 and contract A1.2's
+    third named purpose. They were absent for as long as `curriculum.generate` produced
+    one summary per (position, module) rather than a classed probe of one instruction
+    section, and the code said so at the site. It produces the classed probe now.
+
+    **This is the change that lets a submission reach `validate_curriculum_submission`
+    at all.** Both fields are required by `OperationScenarioSubmission`, so every
+    submission until now has been refused by Pydantic before the validator ran - which
+    is why `docs/scenario-contract.md` opens by pointing out that the validator has
+    never once executed against a real Office payload. Sending them moves the refusal
+    from the schema to the validator. **That is one layer, not acceptance:** the
+    validator will still refuse an unauthored scenario for an empty `expected_behavior`
+    or `expected_escalation`, and filling those is B4's authorship, not this file's.
     """
     never_do = instruction.content.get("never_do") or []
     if isinstance(never_do, str):
@@ -779,8 +782,11 @@ def _curriculum_payload(
         ],
         "operation_scenarios": [
             {
-                # See this function's docstring for `scenario_class` and
-                # `instruction_section`, which are produced now and still not sent.
+                # The two the schema requires and the Office has never sent. See this
+                # function's docstring: this pair is what moves a submission from a
+                # Pydantic refusal to a validator one.
+                "scenario_class": s.scenario_class,
+                "instruction_section": s.instruction_section,
                 "module_id": s.module_id,
                 # `expected_behavior`, not `summary`. P-00 froze the distinction into
                 # CurriculumScenario - "replaces `summary`'s generated boilerplate as

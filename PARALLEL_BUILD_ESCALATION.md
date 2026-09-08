@@ -5,10 +5,15 @@ item, newest package last. **Every entry here must also appear in its package's 
 description** — the merge checklist requires escalations surfaced rather than buried, and
 a file nobody opens is a place to bury one.
 
-An entry is either **BLOCKING** (the package cannot complete the task as written),
+An entry is raised as **BLOCKING** (the package cannot complete the task as written),
 **RATIFY** (the package took a decision it was not clearly authorised to take, and is
 declaring it rather than hiding it), or **RECORDED** (a finding for whoever holds the
 contract next; nothing is waiting on it).
+
+**Each entry carries the coordinator's DISPOSITION in a quoted block under its heading,
+and the body below it is left as it was raised.** The body is the record of what was
+asked and on what grounds; editing it to match the answer would destroy the only
+evidence of what the asker actually knew at the time.
 
 This file is created by the first package that needs it. That was P-05.
 
@@ -18,7 +23,17 @@ This file is created by the first package that needs it. That was P-05.
 
 ---
 
-## E-001 — BLOCKING the run's stated deliverable · `scenario_class` and `instruction_section` are still not sent
+## E-001 — `scenario_class` and `instruction_section` were not sent · **GRANTED, APPLIED**
+
+> **DISPOSITION — GRANTED by the coordinator. A1.2 is extended to a THIRD named purpose.**
+> *"The entire stated purpose of this run is 'SimForge accepts the curriculum for the
+> first time.' A run that shipped everything except this would have produced a green
+> board over an unchanged system."* The two-line hunk below is applied, and
+> `test_scenario_class_and_instruction_section_are_still_absent` **was deleted in the
+> commit that made it false** — a test pinning a defect dies with the defect, and it
+> has to be visible that it did. It is replaced by `test_the_classed_fields_are_sent`
+> and by a test asserting the payload carries exactly the five fields
+> `OperationScenarioSubmission` requires.
 
 **What.** `broker/provisioning.py`'s `_curriculum_payload` builds each
 `operation_scenarios` entry with `module_id`, `expected_behavior` and
@@ -29,18 +44,19 @@ module at the Pydantic layer, before `validate_curriculum_submission` runs.**
 **Why it is not already fixed.** Contract A1.2 puts that file on P-05's card **for
 exactly two purposes** — the `expected_escalation` migration and the
 `module_not_applicable` mapping — and says in terms that anything else there is still an
-escalation. Adding two fields to the wire payload is neither. **So it was not done, and
-this is the escalation instead.**
+escalation. Adding two fields to the wire payload was neither. **So it was not done, and
+this was the escalation instead.** *(Granted: A1.2 now has a third named purpose.)*
 
 **What changed underneath it.** The reason those fields were absent has expired. The
 code's own comment said they were absent because *"the generator produces one summary per
 (position, module), not a classed probe of one instruction section"*. After this package
 the generator produces exactly a classed probe of one instruction section, on every
-operation scenario. The comment has been rewritten to say the true current reason
-(package scope) and to point here; the fields are still not sent.
+operation scenario. *(As raised, the comment was rewritten to say the true reason —
+package scope — and to point here. On the grant, both the comment and the fields
+changed: the docstring now describes what sending them does and does not achieve.)*
 
-**The hunk it needs**, in `_curriculum_payload`, inside the `operation_scenarios`
-comprehension:
+**The hunk it needed**, in `_curriculum_payload`, inside the `operation_scenarios`
+comprehension — applied verbatim:
 
 ```python
                 "scenario_class": s.scenario_class,
@@ -48,8 +64,8 @@ comprehension:
 ```
 
 **What it unblocks.** `docs/coordination-plan.md`'s WHAT THIS RUN DELIVERS names
-*"SimForge accepts the curriculum for the first time"*. This is what stands between the
-payload and that sentence. It is two lines and it is not P-05's to write.
+*"SimForge accepts the curriculum for the first time"*. This is what stood between the
+payload and that sentence. It is two lines, and as raised it was not P-05's to write.
 
 **What it does NOT unblock, so nobody reads the fix as more than it is.** Acceptance
 still needs non-empty `expected_behavior` and `expected_escalation` per scenario, which
@@ -60,12 +76,20 @@ progress of exactly one layer. That is still worth having: it is the first time
 `docs/scenario-contract.md` opens by pointing out has never once happened.
 
 `tests/provisioning/test_curriculum_payload.py::test_scenario_class_and_instruction_section_are_still_absent`
-asserts the current absence, so the day it changes it is a decision somebody made rather
-than a line that drifted in. **Delete that test with the fix.**
+asserted the absence, so that the day it changed it would be a decision somebody made
+rather than a line that drifted in. **It was deleted in the commit that made it false**,
+and replaced by `test_the_classed_fields_are_sent` plus a test asserting the payload
+carries exactly the five fields the submission schema requires. A test pinning a defect
+dies with the defect; inverting its assertion in place would have hidden that it had
+ever been there.
 
 ---
 
-## E-002 — RATIFY · a third line changed in `broker/provisioning.py`
+## E-002 — `expected_behavior` stops reading `summary` · **GRANTED**
+
+> **DISPOSITION — GRANTED.** *"This is A1.3's reasoning one field to the left: it
+> would send the occasion in the field the response is graded in, with nothing
+> raising."* The line stands as landed in `2905872`.
 
 **What.** One line beyond A1.2's two purposes:
 
@@ -94,7 +118,13 @@ situation as a behaviour to a validator that would now actually read it.
 
 ---
 
-## E-003 — RATIFY · `compliance_flags_exercised` has exactly one reader, and it is in P-05's own file
+## E-003 — `compliance_flags_exercised` has exactly one reader · **RATIFIED**
+
+> **DISPOSITION — RATIFIED.** A2.2(a) was followed exactly: grep, report, choose no
+> substitute. **"Down is the correction."** A coverage number that falls because a
+> fictitious source was removed is a number getting more true, and somebody reading a
+> smaller denominator later needs to find that reasoning rather than infer a
+> regression. Recorded in `docs/scenario-generation.md` §5 and in the PR.
 
 **Contract A2.2(a) required this established by grep, and required an escalation rather
 than a substitute if something reads it. Something does.**
@@ -128,7 +158,15 @@ telling nobody anything. Recorded in full in `docs/scenario-generation.md` §5.
 
 ---
 
-## E-004 — RECORDED · the precipitating situation has no field on either side of the contract
+## E-004 — the situation has no field on either side · **RECORDED, stands as a contract gap**
+
+> **DISPOSITION — RECORDED. The workaround is accepted; the gap is not closed.**
+> Named for what it is — **a second encoding inside a field**, mechanically
+> splittable — in `docs/scenario-generation.md` **§7.1** and in
+> `AuthoredScenario.wire_behavior()`'s docstring, because P-06/07/08 each write into
+> the convention and **a convention nobody wrote down drifts by the third author**.
+> Whoever adds a real `situation` field to both sides deletes `wire_behavior()` in
+> the same change and splits the stored prose with it.
 
 **Not a request to change the contract. A finding, for whoever holds it next.**
 
@@ -166,7 +204,13 @@ cross-repo contract change, it is late, and nothing is blocked on it.
 
 ---
 
-## E-005 — RECORDED · one line added to the `Dockerfile`
+## E-005 — one line added to the `Dockerfile` · **GRANTED, narrowly**
+
+> **DISPOSITION — GRANTED, narrowly. That line only.**
+> And the limit of the evidence, stated because the green job invites the wrong
+> reading: **`Images build` passing does not prove the content files reach the image.**
+> It proves the build succeeded, which is a different claim. Nothing in CI opens the
+> image and looks for `/app/scenarios`.
 
 **What.** `COPY scenarios/ scenarios/`, immediately after the existing
 `COPY packs/ packs/`, with a comment saying why.
@@ -192,7 +236,11 @@ will take that direction if given it.
 
 ---
 
-## E-006 — RATIFY · A1.3 and A1.4 are each right, and together they do a third thing
+## E-006 — A1.3 and A1.4 together do a third thing · **HELD, escalated to Ivan**
+
+> **DISPOSITION — HELD. P-05 must not act on it.** Escalated to Ivan: it is the §8
+> ambiguity arriving for the third time and **the first time with real information
+> lost**. The artifact ships as described below; nothing in this PR changes it.
 
 **A1.4 says domain scenarios "lose the `expected_escalation` key… No prose substitute,
 no compensating field." A1.3 step 4 says `expected_escalation_prose` is renamed to

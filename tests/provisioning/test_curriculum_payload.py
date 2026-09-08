@@ -36,6 +36,7 @@ class FakeInstruction:
 class FakeScenario:
     scenario_class: str
     module_id: str = "record_consent"
+    instruction_section: str = "retry_vs_escalate"
     summary: str = ""
     expected_behavior: str = ""
     expected_escalation: str = ""
@@ -140,14 +141,37 @@ def test_no_declaration_is_an_empty_map_rather_than_a_missing_key():
     assert result["module_not_applicable"] == {"record_consent": {}}
 
 
-# ------------------------------------------------ what is still not sent
+# ------------------------------- purpose three: the two fields the schema requires
 
 
-def test_scenario_class_and_instruction_section_are_still_absent():
-    """Not because the generator lacks them - it produces both now - but because
-    adding them is a third purpose in a file this package holds for two. E-001 in
-    PARALLEL_BUILD_ESCALATION.md. This test exists so that the day they appear, it is
-    a decision somebody made rather than a line that drifted in."""
+def test_the_classed_fields_are_sent():
+    """What every submission so far has been refused for, before
+    `validate_curriculum_submission` could run.
+
+    This replaces `test_scenario_class_and_instruction_section_are_still_absent`,
+    which asserted the opposite and was deleted in the commit that made it false. A
+    test pinning a defect dies with the defect; leaving it and inverting the assertion
+    would have hidden that it had ever been there.
+    """
     sent = payload(AUTHORED)["operation_scenarios"][0]
-    assert "scenario_class" not in sent
-    assert "instruction_section" not in sent
+    assert sent["scenario_class"] == AUTHORED.scenario_class
+    assert sent["instruction_section"] == AUTHORED.instruction_section
+
+
+def test_every_field_the_submission_schema_requires_is_present():
+    """Required by the Pydantic schema, before any validator rule is reached:
+    scenario_class, module_id, instruction_section, expected_behavior,
+    expected_escalation. `never_do_entry` is optional and stays absent - it is
+    required only for `never_do_violation`, which is held out."""
+    sent = payload(AUTHORED)["operation_scenarios"][0]
+    assert set(sent) == {
+        "scenario_class", "module_id", "instruction_section",
+        "expected_behavior", "expected_escalation",
+    }
+
+
+def test_a_declared_absence_still_sends_no_scenario_row():
+    """The classed fields do not turn a declaration into a submittable scenario."""
+    result = payload(DECLARED_ABSENT)
+    assert result["operation_scenarios"] == []
+    assert result["module_not_applicable"]["record_consent"]["rate_limited"]

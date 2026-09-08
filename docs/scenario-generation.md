@@ -298,8 +298,40 @@ has to survive somebody checking it.
    answer names the boundary the happy path stays inside, rather than claiming there is no
    boundary. A value that restates "escalation is expected" has not satisfied it.
 
-**The situation has no field of its own on either side of the contract.** It rides in
-`summary` on the Office artifact and inside `expected_behavior` on the wire, labelled
-`SITUATION:` / `EXPECTED:` so a later revision can split them back out mechanically. That
-is `AuthoredScenario.wire_behavior()`, and it is raised as **E-004** in
-`PARALLEL_BUILD_ESCALATION.md` rather than left as a convention somebody discovers.
+### 7.1 A SECOND ENCODING INSIDE A FIELD — read this before authoring anything
+
+**The precipitating situation has no field of its own on either side of the contract**,
+and `docs/scenario-contract.md` §6 is the authority on that: it lists every field that
+reaches SimForge, and there is none for the occasion. `CurriculumScenario` has none
+either, and `generators/artifacts.py` is frozen.
+
+**So the situation travels as a second encoding inside `expected_behavior`.** Call it
+what it is. `AuthoredScenario.wire_behavior()` emits:
+
+```
+SITUATION: <the occasion>
+
+EXPECTED: <what the agent does>
+```
+
+**Three properties, and they are the whole of why this is acceptable rather than merely
+convenient:**
+
+1. **It is mechanically splittable.** The two labels are fixed strings and the separator
+   is a blank line. When somebody adds a real `situation` field to
+   `OperationScenarioSubmission` and to `CurriculumScenario`, every scenario authored
+   under this convention can be split back out by a regular expression rather than by a
+   human rereading prose. **Do not vary the labels, do not translate them, and do not
+   put a blank line inside either half.**
+2. **The halves stay separate where they are authored.** A content file has `situation`
+   and `expected_behavior` as two required fields. The blending happens once, in one
+   function, on the way out — so an author writes an occasion as an occasion and a
+   reviewer can check that it is not a restated rule.
+3. **It is written down here, in the loader's docstring, and in the escalation file.**
+   That is deliberate. **A convention nobody wrote down drifts by the third author**, and
+   this one will have at least three: P-06, P-07 and P-08 each write into it.
+
+**This is a workaround and it is accepted as one.** It is E-004 in
+`PARALLEL_BUILD_ESCALATION.md`, recorded as a contract gap rather than closed. **The
+thing to fix is the missing field on both sides**, and whoever adds it should delete
+`wire_behavior()` in the same change and split the stored prose with it.

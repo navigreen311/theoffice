@@ -172,12 +172,21 @@ class AuthoredScenario:
     def wire_behavior(self) -> str:
         """`expected_behavior` as SimForge receives it: the occasion, then the act.
 
-        The contract has no `situation` field on the wire, and an expected behaviour
-        stated without its occasion is not gradable - a grader reading "the agent
-        records `sms` and nothing else" cannot tell whether that was right without
-        knowing what it was handed. So both halves travel in the one field that
-        exists, separated and labelled rather than blended, so that a later contract
-        revision can split them back out mechanically.
+        **THIS IS A SECOND ENCODING INSIDE A FIELD, and it is a recorded workaround.**
+        `docs/scenario-contract.md` §6 lists every field that reaches SimForge and
+        there is none for the occasion - while §7 says a scenario needs one. An
+        expected behaviour stated without its occasion is not gradable: a grader
+        reading "the agent records `sms` and nothing else" cannot tell whether that was
+        right without knowing what it was handed. So both halves travel in the one
+        field that exists.
+
+        The labels are fixed and the separator is a blank line, **so this is
+        splittable by a regular expression rather than by rereading prose** on the day
+        somebody adds a real `situation` field to both sides. Do not vary the labels
+        and do not put a blank line inside either half. **Whoever adds that field
+        should delete this method in the same change** and split the stored prose with
+        it. E-004 in `PARALLEL_BUILD_ESCALATION.md`, and
+        `docs/scenario-generation.md` §7.1.
         """
         return f"SITUATION: {self.situation}\n\nEXPECTED: {self.expected_behavior}"
 
