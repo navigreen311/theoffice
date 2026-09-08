@@ -152,7 +152,7 @@ class AuthoredScenario:
 
     `docs/scenario-contract.md` §6 lists the fields that reach SimForge and there is
     no field for this one, so it travels inside `expected_behavior` rather than
-    beside it. See `wire_behavior()`, and E-003 in `PARALLEL_BUILD_ESCALATION.md`."""
+    beside it. See `wire_behavior()`, and E-004 in `PARALLEL_BUILD_ESCALATION.md`."""
 
     expected_behavior: str
     """What the agent does with the situation."""

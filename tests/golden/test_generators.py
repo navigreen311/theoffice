@@ -23,7 +23,10 @@ import psycopg
 import pytest
 
 from broker.db import connection
+from generators import appointment as appointment_gen
 from generators import pipeline
+from generators import roles as roles_gen
+from generators import workflow as workflow_gen
 from generators.artifacts import Artifact
 from generators.pack import load_pack
 from tests.conftest import requires_db
@@ -278,6 +281,69 @@ async def test_operation_scenarios_bind_to_the_instruction_hash(artifacts):
         if scenario.module_id in CRE_MODULES:
             assert scenario.instruction_content_hash, scenario.scenario_id
             assert len(scenario.instruction_content_hash) == 64
+
+
+async def test_authored_content_reaches_the_artifact_end_to_end(
+    greenstone_world, admin
+):
+    """The golden covers Greenstone, which has no authored content and never will this
+    run - so on its own it proves the mechanical half and nothing about the interface
+    P-06/07/08 fill. This threads a content set through `generate` and asserts the
+    authored fields arrive.
+
+    `place_call` is used because it is a real Greenstone module with a live
+    instruction; the content is built here rather than read from `scenarios/`, so the
+    test says what it depends on instead of depending on a file it does not name.
+    """
+    from generators import curriculum as curriculum_gen
+    from generators import scenario_content as sc
+
+    authored = sc.ModuleContent(
+        module_id="place_call",
+        forge_id="voiceforge",
+        scenarios={
+            "happy_path": sc.AuthoredScenario(
+                scenario_class="happy_path",
+                situation="An analyst asks for a seller to be called about a listing.",
+                expected_behavior="Place the call and report what came back.",
+                expected_escalation="None; the boundary is a named recipient.",
+            )
+        },
+        not_applicable={"rate_limited": "No section of this instruction has one."},
+    )
+    content = sc.ScenarioContentSet(
+        root=sc.default_root(), root_exists=True, modules={"place_call": authored}
+    )
+
+    certify_for_positions(admin)
+    pack = load_pack(PACK_PATH)
+    async with connection() as conn:
+        module_forge = await appointment_gen.module_forge_map(conn)
+        roles = await roles_gen.generate(pack, conn)
+        appointment = await appointment_gen.generate(
+            roles, conn, venture_id=pack.venture_id, module_forge=module_forge
+        )
+        workflow = workflow_gen.generate(pack, roles)
+        curriculum = await curriculum_gen.generate(
+            pack, roles, workflow, appointment, conn, content=content
+        )
+
+    rows = {s.scenario_class: s for s in curriculum.operation_scenarios
+            if s.module_id == "place_call"}
+
+    assert rows["happy_path"].summary == authored.scenarios["happy_path"].situation
+    assert rows["happy_path"].expected_escalation
+    assert "SITUATION: " in rows["happy_path"].expected_behavior
+    assert rows["rate_limited"].not_applicable_reason
+    assert rows["rate_limited"].expected_behavior == ""
+
+    # And the two mechanical classes nobody authored are still there, still empty.
+    assert rows["permission_denied"].expected_behavior == ""
+    assert rows["escalation_required"].expected_escalation == ""
+
+    covered = {c.dimension: c for c in curriculum.coverage}
+    assert covered["modules_with_authored_scenario_content"].covered == 1
+    assert "place_call" not in covered["modules_with_authored_scenario_content"].uncovered
 
 
 async def test_domain_and_operation_scenarios_are_never_merged(artifacts):
