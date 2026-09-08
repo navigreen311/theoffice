@@ -151,3 +151,54 @@ The prediction was written about the completed change and remains right about it
 reader could take "building this unblocks nothing" to mean *at no point during the build*,
 and that reading is false - which is worth stating rather than smoothing over, because the
 gap between those two readings is exactly where the cheap escape lives.
+
+### P2, P4 - CORRECT
+
+```
+burkham-wickmont: 32 PASS / 1 FAIL / 1 NOT_RUN of 34
+  V34 FAIL - referral_fee_permitted_in_state: no discharge record exists. The
+             obligation is declared human-held (REFERRAL_FEE_REGULATION) and nobody
+             has verified it
+```
+
+FAIL rather than NOT_RUN with a database present, and the totals land exactly as
+predicted. **Greenstone reached 30 PASS / 0 FAIL / 4 NOT_RUN of 34** - P5's second half,
+also exact.
+
+### P6 - WRONG AS WRITTEN, and right where the reasoning actually went
+
+**The Smoke half was correct.** The failing-check list is byte-identical to the baseline,
+and the `['V11', 'V32']` line did not even gain V34: V22 stayed a pure function of the
+Pack, so nothing it does can move Smoke.
+
+**But P6 said "CI unchanged", and CI was not unchanged.** The `Tests` job went red on
+three assertions that count things:
+
+- `broker.app.EXPECTED_SCHEMA_REVISION` was still `0031`. **The assertion's own message
+  says what to do: "Bump it in the same commit as the migration; a build that expects an
+  older schema will never become ready."** The readiness probe returning 503 was the same
+  cause one layer up. That control exists to catch exactly this and it worked.
+- `assert len(ids) == 33` and `range(1, 34)` - adding V34 legitimately moves both, and
+  they have to move in the same commit for the same reason the schema revision does.
+
+**The error is not that the mechanism was misunderstood - it is that the prediction was
+broader than the evidence reasoned about.** P6 reasoned carefully about Smoke, then
+claimed the whole board. Every part that was actually thought through held; the part
+that was asserted by extension did not.
+
+That is worth separating from being wrong about a mechanism, because the fix is
+different: not "understand the system better" but **"predict only what you reasoned
+about, and say which parts you did not."**
+
+### An omission the numbers caught, not the tests
+
+The first clean suite after V34 came back at **1026 passed - the same count as before the
+rule existed.** A rule had been added and no test written for it.
+
+Every package in the parallel build was held to writing tests for what it produced. The
+only reason this surfaced is that the pass count did not move, which is a weak signal and
+nearly missed. Eight tests now assert **every way the escape could reopen** rather than
+the happy path alone: a rule that only ever answered "no discharge -> FAIL" would pass a
+single-case test too.
+
+Final: **1034 passed, 0 failed**, ruff clean, mypy clean on 62 source files.
