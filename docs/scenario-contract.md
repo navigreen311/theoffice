@@ -495,6 +495,11 @@ mypy will not catch**, because `provisioning.py:725` types the parameter
 
 ### A1.4 — domain scenarios lose the escalation key, and that is the expected shape
 
+> **AMENDED BY §12 (A3), 8 September 2026.** As written, A1.4 plus A1.3 step 4 did not
+> drop the key — the rename moved the prose field into the vacated name and domain
+> scenarios ended up carrying `expected_escalation: ""`. **The key is dropped, not
+> renamed-then-emptied.** Read §12 before acting on this section.
+
 Deleting the bool removes `expected_escalation` from every **domain** scenario in the
 curriculum artifact, because `generators/curriculum.py:60` copies the Pack DSL's bool onto
 them. **This is a deletion in the golden snapshot and it is correct.**
@@ -557,3 +562,53 @@ a denominator.
 The `scenario_id` scheme, the golden's row count, the `_coverage` denominators and the
 index P-06/07/08 use for their content files are all keyed on this. **P-06/07/08 index by
 module, not by position.** A module operated by two positions is authored once.
+
+---
+
+## 12. CONTRACT AMENDMENT A3 — 8 September 2026 · an absent key, not an empty one
+
+**Ruled by Ivan**, on P-05's E-006. **Domain scenarios carry no `expected_escalation` key at
+all.** Not an empty string. The key is dropped, not renamed-then-emptied.
+
+### What A1.3 and A1.4 did together that neither described
+
+A1.4 said domain scenarios lose the escalation key. A1.3 step 4 renamed
+`expected_escalation_prose` into the vacated name. Run in sequence, the second undoes the
+first: the key survives, now holding `""`. **Neither amendment describes this and it was
+found by the package implementing both.**
+
+### Why an empty string is the wrong answer here
+
+**An empty string that used to hold a bool reads as "not yet filled in". The truth is
+"this concept does not apply to a domain scenario."** That is **a stated absence turned
+into a value**, and it is the thing this project has now ruled against three times:
+
+- a one-item sequence that says there is no ordering,
+- an empty flag list that means no framework applies,
+- a `NOT_RUN` read as progress.
+
+**The deciding difference from §8's other six fields:** those were empty from birth, and an
+empty field that was never populated is at least consistently uninformative. This one
+**held real information and now holds an empty string in the same place.** A reader cannot
+tell a vacated field from an unfilled one. **An absent key can only be read one way.**
+
+### Why the two earlier declines went the other way, and why this one does not
+
+§8 recorded the objection and left it. A2 and the §8 recommendation were both declined on
+the grounds that omitting these fields from domain scenarios meant restructuring that
+**crossed a file boundary P-05 did not own** — `broker/provisioning.py` belonged to no
+package, and the serialiser change would have needed an owner nobody had appointed.
+
+**That reason no longer applies.** A1.2 put `broker/provisioning.py` on P-05's card, and
+E-001's grant extended it. P-05 now owns both files involved, so the change that was
+previously out of reach is a change one package can make and one reviewer can read.
+
+**Anyone reading the two earlier declines should find this paragraph**, because the
+declines were correct when made and the thing that changed was ownership, not the argument.
+
+### The test this requires
+
+**Assert that a domain scenario has no `expected_escalation` key at all — not that the key
+is empty.** A test asserting emptiness passes when the next refactor puts `""` back, and
+nothing notices. The property is the absence of the key, so the absence of the key is what
+must be asserted.
