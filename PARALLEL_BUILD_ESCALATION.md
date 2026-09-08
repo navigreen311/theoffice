@@ -236,11 +236,38 @@ will take that direction if given it.
 
 ---
 
-## E-006 — A1.3 and A1.4 together do a third thing · **HELD, escalated to Ivan**
+## E-006 — A1.3 and A1.4 together do a third thing · **RULED by Ivan — contract A3, APPLIED**
 
-> **DISPOSITION — HELD. P-05 must not act on it.** Escalated to Ivan: it is the §8
-> ambiguity arriving for the third time and **the first time with real information
-> lost**. The artifact ships as described below; nothing in this PR changes it.
+> **DISPOSITION — RULED by Ivan as contract amendment A3 (`docs/scenario-contract.md`
+> §12), and applied in this PR.** Held first, then ruled.
+>
+> **A domain scenario carries no `expected_escalation` key at all. Not an empty
+> string.** *"An empty string that used to hold a bool reads as 'not yet filled in'.
+> The truth is 'this concept does not apply to a domain scenario.' That is a stated
+> absence turned into a value"* — the thing this project has ruled against three times:
+> a one-item sequence saying there is no ordering, an empty flag list meaning no
+> framework applies, a `NOT_RUN` read as progress.
+>
+> **Why this one goes the other way from §8's two earlier declines**, which were
+> correct when made: those rested on the change crossing a file boundary P-05 did not
+> own. A1.2 and E-001's grant put `broker/provisioning.py` on P-05's card, so both
+> files involved now have one owner. **What changed was ownership, not the argument.**
+>
+> Implemented as `CurriculumScenario.omit_from_serialisation()`, honoured by `_plain`.
+> `_plain` had to stop delegating to `dataclasses.asdict`, which converts nested
+> dataclasses itself and so never let a nested instance say anything about its own
+> serialisation; it now walks `fields()` and recurses. **Output-identical, verified:
+> the other six golden snapshots did not move.**
+>
+> **The test asserts the ABSENCE of the key and never `== ""`.** An emptiness test
+> passes the day a refactor puts an empty string back, and nothing notices — so the
+> property protected is the one asserted:
+> `test_a_domain_scenario_has_no_expected_escalation_key_at_all`.
+>
+> Golden: **0 insertions / 9 deletions**, predicted before re-recording. Every deleted
+> line is the same line, one per Greenstone domain scenario. 0 of 9 domain rows carry
+> the key; 21 of 21 operation rows still do, where empty means "nobody has authored
+> this yet" and must stay expressible.
 
 **A1.4 says domain scenarios "lose the `expected_escalation` key… No prose substitute,
 no compensating field." A1.3 step 4 says `expected_escalation_prose` is renamed to

@@ -123,3 +123,64 @@ def test_authored_content_survives_a_module_having_no_instruction(record_consent
     rows = _operation_scenarios("record_consent", record_consent, False, {})
     assert {r.scenario_class for r in rows} == set(sc.SUBMITTABLE_CLASSES)
     assert all(r.instruction_content_hash is None for r in rows)
+
+
+# ------------------------------------------------------- contract A3: an absent key
+
+
+def _serialised(scenario) -> dict:
+    """One scenario as it appears in the artifact - through the real serialiser, not
+    through `dataclasses.asdict`, because the omission happens in the serialiser."""
+    from generators.artifacts import ScenarioPack
+
+    pack = ScenarioPack(
+        venture_id="v", domain_scenarios=[scenario], operation_scenarios=[], coverage=[]
+    )
+    return pack.to_dict()["domain_scenarios"][0]
+
+
+def _scenario(kind: str):
+    from generators.artifacts import CurriculumScenario
+
+    return CurriculumScenario(
+        scenario_id="s1", kind=kind, role="Analyst", domain="d", module_id=None,
+        compliance_flags_exercised=[], summary="A human asks for something.",
+        instruction_content_hash=None,
+    )
+
+
+def test_a_domain_scenario_has_no_expected_escalation_key_at_all():
+    """Contract A3. **The key is absent, not empty.**
+
+    Asserted as absence and never as `== ""`, deliberately: an emptiness test passes
+    the day a refactor puts an empty string back, and nothing notices. The property
+    being protected is that a reader cannot mistake a vacated field for an unfilled
+    one, and only an absent key has that property.
+    """
+    assert "expected_escalation" not in _serialised(_scenario("domain"))
+
+
+def test_an_operation_scenario_still_has_the_key():
+    """The field is inapplicable to a domain scenario, not deleted from the dataclass.
+    On an operation scenario it is the canonical field the contract means, and empty
+    there means "nobody has authored this yet" - which is a real state and must remain
+    expressible."""
+    from generators.artifacts import ScenarioPack
+
+    pack = ScenarioPack(
+        venture_id="v", domain_scenarios=[], coverage=[],
+        operation_scenarios=[_scenario("operation")],
+    )
+    row = pack.to_dict()["operation_scenarios"][0]
+    assert "expected_escalation" in row
+    assert row["expected_escalation"] == ""
+
+
+def test_the_other_contract_fields_are_still_present_and_empty_on_a_domain_scenario():
+    """A3 drops one key and not six. The other five were empty from birth, which is at
+    least consistently uninformative; section 8's recommendation about them is open and
+    is not implemented here."""
+    row = _serialised(_scenario("domain"))
+    for field in ("scenario_class", "instruction_section", "expected_behavior",
+                  "never_do_entry", "not_applicable_reason"):
+        assert field in row and row[field] == "", field

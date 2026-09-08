@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from dataclasses import asdict, dataclass, field, is_dataclass
+from dataclasses import dataclass, field, fields, is_dataclass
 from typing import Any
 
 # One namespace for every derived identifier in The Office. Fixed forever: changing it
@@ -44,7 +44,20 @@ def derive_id(*parts: str) -> uuid.UUID:
 
 def _plain(value: Any) -> Any:
     if is_dataclass(value) and not isinstance(value, type):
-        return {k: _plain(v) for k, v in asdict(value).items()}
+        # `fields` + `getattr` rather than `asdict`, because asdict converts NESTED
+        # dataclasses itself and this function would then never see them - so a nested
+        # instance could not declare anything about its own serialisation. The output
+        # is otherwise identical: every value still goes through `_plain` below.
+        out = {f.name: _plain(getattr(value, f.name)) for f in fields(value)}
+        # A dataclass may declare that a field does not apply to the instance it is
+        # on, and an inapplicable field is DROPPED rather than emptied. An empty value
+        # in the place a real one used to sit reads as "not yet filled in"; an absent
+        # key can only be read one way. See CurriculumScenario.omit_from_serialisation
+        # and docs/scenario-contract.md section 12.
+        omit = getattr(value, "omit_from_serialisation", None)
+        for key in omit() if omit is not None else ():
+            out.pop(key, None)
+        return out
     if isinstance(value, dict):
         return {k: _plain(v) for k, v in sorted(value.items())}
     if isinstance(value, list | tuple):
@@ -303,6 +316,29 @@ class CurriculumScenario:
     is still refused; a declaration without this sentence is also refused. Four of
     nine `compliance_couplings` rows were accidental empties, which is why the
     sentence is mandatory rather than encouraged."""
+
+    def omit_from_serialisation(self) -> tuple[str, ...]:
+        """`expected_escalation` does not appear at all on a DOMAIN scenario.
+
+        **Contract amendment A3, ruled 8 September 2026.** Not an empty string - the
+        key is dropped. A1.4 removed the bool from domain scenarios and A1.3 step 4
+        then renamed the prose field into the vacated name, so the key survived
+        holding `""`. Neither amendment described that, and an empty string sitting
+        where real information used to sit reads as "not yet filled in" when the truth
+        is "this concept does not apply to a domain scenario".
+
+        That is a stated absence turned into a value, which this project has ruled
+        against three times: a one-item sequence saying there is no ordering, an empty
+        flag list meaning no framework applies, a NOT_RUN read as progress. **A reader
+        cannot tell a vacated field from an unfilled one. An absent key can only be
+        read one way.**
+
+        The other five contract fields stay, empty, on a domain scenario. They were
+        empty from birth, and a field never populated is at least consistently
+        uninformative - see docs/scenario-contract.md section 8, whose recommendation
+        about those five is still open and is deliberately not implemented here.
+        """
+        return ("expected_escalation",) if self.kind == "domain" else ()
 
 
 @dataclass(frozen=True, slots=True)
