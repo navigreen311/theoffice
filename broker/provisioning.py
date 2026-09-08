@@ -727,16 +727,34 @@ def _curriculum_payload(
 ) -> dict[str, Any]:
     """A `ForgeOperationCurriculum`, in SimForge's shape.
 
-    Three of its fields have no source here and are sent as what is true rather than as
-    what would pass: `functions_in_module`/`functions_covered` are 0 because The Office
-    does not model functions inside a module, and `scenario_class` /
-    `instruction_section` are absent from every scenario because `curriculum.generate`
-    does not produce them. The submission is expected to be refused for the second, and
-    that refusal names the work.
+    `functions_in_module` / `functions_covered` are 0 because The Office does not model
+    functions inside a module. Zero, visibly, rather than a guess.
+
+    `scenario_class` and `instruction_section` are still absent from every scenario
+    dict below, and **the reason has changed**. It used to be that
+    `curriculum.generate` did not produce them; it now does, on every operation
+    scenario. What stops them being sent is package scope: contract A1.2 puts this file
+    on P-05's card for exactly two purposes - the `expected_escalation` migration and
+    the `module_not_applicable` mapping - and adding two fields to the wire payload is
+    neither. Raised as **E-001 in `PARALLEL_BUILD_ESCALATION.md`** with the hunk it
+    needs, because it is what stands between this payload and SimForge's Pydantic layer
+    accepting a curriculum for the first time. Until then the submission is refused at
+    the schema, which is where it has always been refused.
     """
     never_do = instruction.content.get("never_do") or []
     if isinstance(never_do, str):
         never_do = [never_do]
+
+    # A declared `not_applicable` is a statement about a (module, class) pair, not a
+    # scenario, and contract A1.1 gives it a curriculum-level map rather than a row -
+    # structurally parallel to `module_never_do` below. So the rows carrying one are
+    # lifted out of `operation_scenarios` here rather than submitted as scenarios that
+    # declare they are not scenarios.
+    submittable = [s for s in scenarios if not s.not_applicable_reason]
+    declared_absent = {
+        s.scenario_class: s.not_applicable_reason
+        for s in scenarios if s.not_applicable_reason and s.scenario_class
+    }
 
     return {
         "instruction_set_ref": {
@@ -761,22 +779,29 @@ def _curriculum_payload(
         ],
         "operation_scenarios": [
             {
-                # `scenario_class` and `instruction_section` are absent, deliberately.
-                # SimForge rejects a scenario without them, which is the honest answer:
-                # the generator produces one summary per (position, module), not a
-                # classed probe of one instruction section.
+                # See this function's docstring for `scenario_class` and
+                # `instruction_section`, which are produced now and still not sent.
                 "module_id": s.module_id,
-                "expected_behavior": s.summary,
-                # A bool on this side, a string on SimForge's. The Office says THAT
-                # escalation is expected; SimForge asks WHAT. There is no honest
-                # widening of True into a description, so this says exactly what the
-                # Office knows and no more.
-                "expected_escalation": (
-                    "escalation is expected; the Office's generator does not say which"
-                    if s.expected_escalation else ""
-                ),
+                # `expected_behavior`, not `summary`. P-00 froze the distinction into
+                # CurriculumScenario - "replaces `summary`'s generated boilerplate as
+                # the field SimForge reads" - and P-05 made it load-bearing: `summary`
+                # on an operation scenario now carries the precipitating situation,
+                # and sending that as the expected behaviour would hand SimForge the
+                # occasion in the field it grades the response in.
+                "expected_behavior": s.expected_behavior,
+                # PROSE, straight through. There was a ternary here deriving a fixed
+                # sentence from a bool, and contract A1.3 requires it deleted rather
+                # than adapted: a non-empty prose string is truthy, so an adapted
+                # ternary would have sent the boilerplate placeholder and silently
+                # discarded the real prose. The payload would have got worse while
+                # every test still passed.
+                #
+                # Empty when nobody has authored the scenario yet. SimForge refuses a
+                # present-but-empty required field, and that refusal is the honest
+                # report that the scenario is unwritten.
+                "expected_escalation": s.expected_escalation_prose,
             }
-            for s in scenarios
+            for s in submittable
         ],
         "coverage_declaration": {
             "modules_in_forge": modules_in_forge,
@@ -788,6 +813,12 @@ def _curriculum_payload(
             "functions_covered": 0,
         },
         "module_never_do": {instruction.module_id: list(never_do)},
+        # module -> class -> reason. ADR-0049 and contract A1.1: the absence is
+        # stated, never inferred, and never a pass - it carries VERDICT_NOT_APPLICABLE
+        # to the cert rather than a zero. An empty map means no class was declared
+        # absent for this module, which is a different statement from a class being
+        # absent with nothing said about it, and that is the whole point.
+        "module_not_applicable": {instruction.module_id: declared_absent},
     }
 
 
