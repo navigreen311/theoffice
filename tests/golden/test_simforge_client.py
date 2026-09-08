@@ -289,3 +289,37 @@ async def test_an_undeclared_field_in_an_acceptance_fails_the_call(monkeypatch):
 
 async def _noop():
     return 1
+
+
+class NoCredential:
+    """The resolver's own failure type, which is not a SimForgeError."""
+
+    async def resolve(self, credential_ref: str):
+        from broker.errors import CredentialUnavailable
+
+        raise CredentialUnavailable(
+            "credential ref did not resolve", credential_ref=credential_ref
+        )
+
+
+async def test_an_unresolvable_credential_is_a_simforge_error(monkeypatch):
+    """The regression CI caught and 974 local tests did not.
+
+    `CredentialUnavailable` is an `OfficeError`, not a `SimForgeError`, so it went
+    straight past Gate 8's handler and 503'd the provisioning API on any environment
+    without `SIMFORGE_TOKEN`. A Forge that cannot be reached must never stop a
+    provisioning run, and "cannot be reached" includes "we hold no credential for it".
+    """
+    monkeypatch.setattr("broker.simforge.write_event", lambda **k: _noop())
+
+    def handler(request: httpx.Request) -> httpx.Response:  # pragma: no cover
+        raise AssertionError("the call must not be attempted without a credential")
+
+    client = SimForgeClient(
+        FakeOffice(), http=_transport(handler), resolver=NoCredential()
+    )
+    with pytest.raises(SimForgeError, match="did not resolve"):
+        await client.submit_curriculum(
+            FakeConn(ROWS), scenario_pack_ref="run:abc",
+            payload={"scenario_count": 15}, actor=ACTOR, venture_id=VENTURE,
+        )

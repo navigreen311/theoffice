@@ -39,6 +39,7 @@ from psycopg.rows import dict_row
 from broker.audit import write_event
 from broker.config import get_settings
 from broker.credentials import Credential, build_resolver
+from broker.errors import CredentialUnavailable
 
 if TYPE_CHECKING:  # a broker module must not import the client at runtime
     from client.office_client import AgentContext, OfficeClient
@@ -299,6 +300,20 @@ class SimForgeClient:
     # ----------------------------------------------------------- internals
 
     async def _tenant_credential(self, conn: Any) -> Credential:
+        """The tenant credential, or a `SimForgeError` naming why there is none.
+
+        **The resolver raises `CredentialUnavailable`, not `SimForgeError`**, and that
+        difference escaped this class until CI ran without `SIMFORGE_TOKEN`: Gate 8
+        catches `SimForgeError` and records a failed hand-over, so an unresolvable
+        credential went straight past it and 503'd the whole provisioning API. A Forge
+        that cannot be reached must never stop a provisioning run - that is the entire
+        reason the hand-over is non-fatal - and "cannot be reached" includes "we hold no
+        credential for it".
+
+        So it is translated here rather than caught at the call site. The ref travels in
+        the message and the value never does, which is `CredentialUnavailable`'s own
+        rule.
+        """
         async with conn.cursor() as cur:
             await cur.execute(
                 "SELECT credential_ref FROM forge_tenant_credential WHERE forge_id = %s",
@@ -310,7 +325,12 @@ class SimForgeClient:
                 f"no tenant credential is registered for {self._forge_id!r}; "
                 "this Forge has not been onboarded"
             )
-        return await self._resolver.resolve(row[0])
+        try:
+            return await self._resolver.resolve(row[0])
+        except CredentialUnavailable as exc:
+            raise SimForgeError(
+                f"the tenant credential for {self._forge_id!r} did not resolve: {exc}"
+            ) from exc
 
     async def _registry(self, conn: Any) -> tuple[str, str]:
         async with conn.cursor() as cur:
