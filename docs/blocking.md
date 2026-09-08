@@ -1260,6 +1260,18 @@ existed; a credential is what lets anybody find out. **Do not put the placeholde
 do not read the fresh red as evidence the change was wrong** — the red is the first real
 answer this binding has ever produced.
 
+**There is a second reason to expect a surprise, and it is independent of `place_call`.
+B6 states it as a general rule:** *"Every rule that has only ever been NOT_RUN is untested
+where it matters."* **V32 has never resolved a single voiceforge binding — not once, on any
+Pack.** That comparison has never executed against this Forge, so nothing about it has been
+exercised beyond the branch that declines. B6's own evidence is V30, whose pass path had
+been wrong for its entire life and was found to be wrong on the day the Village came up and
+the code finally ran.
+
+So the first real answer here is two things at once: **probably a FAIL about `place_call`,
+and certainly a first execution** — which is exactly where B6 says the surprises live. Read
+whatever comes back as a first result, not as a regression.
+
 Written here rather than left to be discovered, for the same reason entry 25 records what
 returns `run_scenario_pack`: a future reader should meet reasoning where they would
 otherwise meet an absence.
