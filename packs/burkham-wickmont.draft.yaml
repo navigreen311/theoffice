@@ -398,42 +398,6 @@ positions_required:
     trust_tier_ceiling: propose
     lifecycle_stages_owned: [Stack management]
 
-  # ADDED 2026-09-09 by P-13, the FunnelForge binding.
-  #
-  # `trust_tier_ceiling: auto_execute` is the honest declaration and it is expected to
-  # FAIL V31 on seven of this position's nine modules. Read that before changing it.
-  #
-  # §4.5 calls these sends Village-autonomous: nobody in the path. `auto_execute` is the
-  # only tier that reaches a Forge at all - step 7 of the client library turns anything
-  # below it into a proposal and makes no HTTP call - so declaring `propose` here would
-  # not be a cautious version of autonomous send, it would be a different thing wearing
-  # its name, and V31 would pass vacuously over a surface that never calls anything.
-  #
-  # Six sends plus the booking are mutating and `at_most_once` (an email leaves the
-  # system and reaches a person; `EmailQueue` has no idempotency key that would
-  # recognise a repeat), and V31 refuses `auto_execute` over exactly that shape. That
-  # refusal is correct and must not be dodged by softening a declaration at either end.
-  # What would change it is an idempotency key on FunnelForge's send path.
-  # `capture_contact` (natural) and `read_funnel_analytics` (non-mutating) are the two
-  # V31 permits. See docs/plans/funnelforge-binding-RECORD.md.
-  - position_title: Marketing Operations Coordinator
-    reports_to: venture_operator
-    duties:
-      - Send approved marketing templates in a Pass compliance state
-      - Book Blueprint calls against the published appointment types
-      - Record newsletter and gated-download contacts, and read funnel analytics
-    forge_modules_operated:
-      [send_intake_acknowledgment, send_scheduling_confirmation,
-       send_deliverable_cover, send_followup_no_engagement,
-       send_brief_cover, distribute_referrer_briefing,
-       schedule_blueprint_call, capture_contact, read_funnel_analytics]
-    source_department: marketing        # Burkham calls this "Marketing Ops"
-    compliance_flags_in_scope: []
-    headcount: 1
-    trust_tier_ceiling: auto_execute
-    lifecycle_stages_owned: [Intake, Diagnostic, Placement]
-
-
 capacity_demand:
   agent_days_per_week: 40
   peak_concurrent_positions: 8
@@ -510,44 +474,6 @@ forge_dependencies:
       rate_limit_policy: {max_rps: 1, burst: 3, backoff: linear, on_429: queue}
       credential_mode: brokered
       cost_center: burkham-training
-
-    # ADDED 2026-09-09 by P-13. Nine modules, one per approved autonomous template plus
-    # scheduling, contact capture and analytics.
-    #
-    # criticality: soft, and deliberately not hard. A hard binding asserts the workflow
-    # cannot run without it; Burkham's capital work runs whether or not a marketing
-    # email goes out, and `fallback_behavior: queue` says what happens instead. The
-    # CapitalForge binding above was `hard` on two modules that do not exist, which is
-    # the failure this avoids from the other direction.
-    #
-    # The seventh §4.5 template - the engagement letter cover email - is NOT here and
-    # has no module. It is `human approve send` through Deliverable Approval Workflow
-    # (Console module 3.4), which is not connected to the bridge. Its absence from this
-    # list is the gate working, not an omission.
-    #
-    # SPELLING: every name below is a key in the adapter's dispatch map
-    # (`adapters/funnelforge/modules.py`). The adapter is the naming authority and V32
-    # resolves this list against it; a second spelling does not quietly work.
-    - forge: funnelforge
-      api_version: 1.0.0
-      criticality: soft
-      modules_expected:
-        [send_intake_acknowledgment, send_scheduling_confirmation,
-         send_deliverable_cover, send_followup_no_engagement,
-         send_brief_cover, distribute_referrer_briefing,
-         schedule_blueprint_call, capture_contact, read_funnel_analytics]
-      # EMPTY BY DECISION, not by oversight. §6.2 and §6.3 cap FunnelForge at anonymous
-      # browsing data and named-contact marketing PII - no credit data, no Plaid data,
-      # no financial statements, nothing FCRA-regulated, and it cannot query Console for
-      # credit data to segment sequences. None of this Pack's four runtime flags is
-      # about marketing contact. `broker/compliance_couplings.py` records what a
-      # plausible-but-wrong flag costs: it resolves, it passes every check, and it is
-      # the wrong framework.
-      compliance_flags_propagated: []
-      fallback_behavior: queue
-      rate_limit_policy: {max_rps: 2, burst: 5, backoff: exponential, on_429: queue}
-      credential_mode: brokered
-      cost_center: burkham-marketing
 
   external_software:
     - name: Plaid

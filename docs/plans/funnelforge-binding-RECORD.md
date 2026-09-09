@@ -248,3 +248,55 @@ capacity shortfall, which is entry 11's behaviour working, not failing.
   because P-13's scope is `theoffice`; the FunnelForge repository was read and not
   modified. V32 will report NOT_RUN for FunnelForge until it is deployed and reachable,
   and **NOT_RUN is the correct answer there, not a defect in the Pack.**
+
+---
+
+## The Pack edit was held back at merge — coordinator, 2026-09-09
+
+**The adapter, the generator, the registration script and every test merged. The position
+declaration did not.** It is preserved verbatim as
+`docs/plans/funnelforge-position-DEFERRED.patch` — `git apply` it and the position returns
+exactly as authored, comment and all.
+
+### Why, measured rather than argued
+
+Adding `Marketing Operations Coordinator` to the Pack moves **Burkham's Gate 2 from 0 FAIL to
+3 FAIL**:
+
+| | before | with the position |
+|---|---|---|
+| Burkham Gate 2 | **33 PASS / 0 FAIL / 1 NOT_RUN** | **28 PASS / 3 FAIL / 3 NOT_RUN** |
+
+- **V6** — the nine modules are not in `forge_module_registry`
+- **V11** — no Forge Operating Instructions authored for any of them
+- **V23** — no scenarios for `Marketing Operations Coordinator`
+- **V31 → NOT_RUN** — *"nothing verified is known about the shape of"* those modules. **The
+  rule this package's design condition is about does not even run**, which is worth saying
+  plainly: the expected V31 failure is not what happens. Something earlier stops first.
+- **V32 → NOT_RUN** — `funnelforge: not in forge_registry`
+
+### What this is, and what it is not
+
+**This is not a rejection of the package's judgement — it is the split the package itself
+argued for.** P-13 declined to generate nine manuals mechanically to clear
+`check_module_manuals.py`, on the grounds that doing so is *"exactly the `lender_match`
+pressure that check warns against"*. That was right. The consequence it did not have a way to
+avoid is that the Pack edit lands the **declaration** while the artifacts that satisfy it stay
+owed — so the venture stops passing a gate it was passing, for work that is correctly not
+done yet.
+
+**A declaration and its evidence have to land together.** That is the same rule the human-held
+obligation work arrived at from the other direction, and the same one B26 broke by tightening a
+schema in git without migrating what was in force.
+
+**Run `def65e4f` is unaffected** — it is past Gate 2 and pinned to pack `0.6.0`. What was at
+risk was the next run, which would not have reached Gate 4 at all.
+
+### What re-applies it
+
+**Steps 4, 5 and 6 for all nine modules** — operating instruction, curriculum, certification —
+plus the registry rows, which `generators/forge_module_rows.py` now derives rather than asking
+a human to type. Then `git apply docs/plans/funnelforge-position-DEFERRED.patch`, republish,
+and Gate 2 should return to 0 FAIL with V31 finally **running** — and, per this package's own
+finding, **failing on seven of the nine**, which is the honest declaration and must not be
+softened at either end.
