@@ -166,3 +166,161 @@ predicting the rest of the board.
 ## Scored
 
 *(filled in after the run, below this line, without editing anything above it)*
+
+*Nothing above this line was edited after the run. The prediction was committed in its own
+commit before any command was executed, so the ordering is a fact in the history rather
+than a claim in the prose.*
+
+### Q1 — CORRECT. Nothing moved, at either gate, for either venture
+
+Measured before and after, byte-identical both times:
+
+| venture | gate | message |
+|---|---|---|
+| Burkham | 2 | PASS · `160 of 432 review-minutes used` |
+| Greenstone | 2 | PASS · `100 of 360 review-minutes used` |
+| Burkham | 4.5 | PASS · `projected approvals fit within reviewer capacity` |
+| Greenstone | 4.5 | FAIL · compliance officer, 3 times over |
+
+**The strongest evidence is not the measurement, it is the diff.** The entire branch —
+five files, 611 insertions — deletes **exactly one line** across the whole repository, and
+that line is the prose string `"optimistic one.",` inside `LATER_GATE_REASONS`. No
+expression that produces a number was touched, so no verdict could move. The P-12
+treatment is not needed.
+
+### Q2 — CORRECT to the digit, all four numbers
+
+Predicted by hand before running: Burkham `160 of 432`, margin 272; Greenstone
+`100 of 360`, margin 260. Both exact, including the 45.714 approvals rounding to 46 and the
+8-headcount count of Burkham's positions below `auto_execute`.
+
+### Q3 — CORRECT, and the half marked ASSUMED became measured
+
+Greenstone FAILs Gate 4.5, as reasoned. Burkham PASSes at 420 against 432.
+
+The prediction said the 120 was **assumed** — taken from the Pack's own comment, with no
+run behind it — and promised to measure it if measuring was cheap. **It was cheap and it
+was measured:** Burkham's workflow generator emits **15 steps, none at `auto_execute`**, and
+`approval_projection` charges `DEFAULT_DAILY_VOLUME_PER_HEADCOUNT = 8` per step, giving
+`{'compliance_officer': 120}` — the whole projection, one role. 120 × the coverage-weighted
+3.5 = 420 against 432. **Twelve minutes**, now pinned by
+`test_burkhams_gate_4_5_margin_is_still_twelve_minutes` rather than by a YAML comment
+quoting itself.
+
+**One caveat that the prediction did not think to state.** That measurement uses an
+**unappointed** roster, which is what `approval_projection` falls back to when nobody is
+certified. Greenstone measured the same way gives 64 approvals to its compliance officer,
+not the 192 in `docs/generators.md` — that figure comes from the fully-certified world
+fixture, where appointed agents multiply the per-step count. Both are correct for their
+roster; **the number is a function of the appointment state, and neither the Pack comment
+nor the docs say which state theirs assumes.** Not this package's to fix; recorded because
+"120" and "192" look like properties of a venture and are not.
+
+### Q4 — CORRECT, AND MEASURED RATHER THAN LEFT AS AN ARGUMENT
+
+This was the load-bearing claim and the one that answers the card's compliance flag, so it
+was not left as reasoning. Gate 2 was switched to coverage-weighting experimentally and the
+new tests re-run:
+
+| | pooled unweighted (shipped) | coverage-weighted (the experiment) |
+|---|---|---|
+| Burkham Gate 2 | `160 of 432` | **`160 of 432` — unchanged** |
+| Greenstone Gate 2 | `100 of 360` | `96 of 360` |
+
+**Exactly as predicted: 100 → 96 for Greenstone, and Burkham does not move at all**, because
+its two officers declare equal coverage so the weighted and unweighted means are both 3.5
+and both are the same role. **Even the shared-helper fix B25 offered would have left
+Burkham's twelve minutes byte-identical.** The card's flag — that a Gate 2 change moving the
+pooled mean could move the twelve minutes — is answered: it could not, for two independent
+reasons, and both were checked rather than argued.
+
+Two of the six new tests fail under that experiment, which is the property that makes the
+stated choice enforceable.
+
+### Q5 — CORRECT, and it was the right call
+
+The prose says both directions. Pooling across roles errs optimistic and only optimistic;
+the unweighted mean errs either way and is bounded, and Greenstone is the worked example of
+it landing on the **more demanding** side. Had only the flattering direction been written,
+this document would have predicted a fix that reproduced the defect it was fixing.
+
+### Q6 — WRONG ON THE COUNT, RIGHT ON THE SHAPE
+
+Predicted **4** tests, `1049 → 1053`. Actual **6**, `1049 → 1055`. The two unforecast ones
+are `test_gate_2_pools_across_roles_even_when_the_roles_are_different` and
+`test_burkhams_gate_4_5_margin_is_still_twelve_minutes` — the second exists only because Q3
+promised to measure the 120 and a measurement worth making once is worth pinning.
+
+The prediction that **no existing test would break** held, and the reasoning behind it was
+right for the right reason: no test pinned `v13`'s message or the `LATER_GATE_REASONS`
+string, and both hits were read rather than counted.
+
+The self-conscious prediction that the docstring test "will look like over-reach" is
+recorded as neither right nor wrong — nobody has reviewed it yet. It stays because the
+argument for it survived writing the rest: **option 1 would have been enforced by the
+helper; option 2 is enforced by nothing else.**
+
+### Q7 — NOT MEASURED, and saying so rather than reporting the reasoning as a result
+
+Smoke needs a live console and two servers; it runs in CI and was not run here. What was
+done instead was to **read `scripts/console-smoke.sh`**: its V13 assertions are the Gate 4.5
+message's utilisation-factor clause (line 646) and the presence of the reviewer-capacity
+page (line 1801), neither of which this branch touches, and the only thing that reads
+`why_not_here` (line 1346) checks presence for **unevaluable** rules — V13 is evaluable at
+Gate 2, so the string this branch edited is not on that path.
+
+**That is a reading, not a run.** CI is the measurement. Recorded this way deliberately:
+Caveat 12 is about reporting a prediction as a measurement, and "Smoke is unaffected" would
+have been exactly that.
+
+### The thing the prediction had no way to foresee, and it cost an hour
+
+**The shared `theoffice_test` database is contended by the other package agents in this run,
+and a contended suite is indistinguishable from a broken branch.** Full-suite runs on this
+branch returned `118 failed / 80 errors`, then `91 failed / 86 errors` — against a clean
+pre-change baseline of **1049 passed** measured twenty minutes earlier with the same flags.
+Every failure was a DB test and the set differed between runs.
+
+**It was diagnosed by measurement, not by hope.** A pristine worktree at the branch's own
+merge-base was created and the same file run on both, back to back:
+
+| run | main `7ba5efc` | branch |
+|---|---|---|
+| first pair | **17 failed**, 11 passed | 28 passed |
+| second pair, minutes later | 28 passed | 28 passed |
+
+**Unmodified main was the redder of the two**, and both went green when the burst passed.
+`tasklist` showed four other pytest processes started within the same minute; the fixtures
+delete by `venture_id`, so concurrent agents delete each other's rows.
+
+Resolved by cloning `theoffice_test` into a private `theoffice_test_p09` and pointing
+`OFFICE_TEST_*_DSN` at it — the clone had to be retried in a loop because `CREATE DATABASE
+… TEMPLATE` refuses while another session is connected, which is the same contention seen
+from the other side. **The isolated result is the one reported in the PR.**
+
+This is a finding for the coordinator rather than for this package: **the merge gate is "no
+new failures against the recorded baseline", and on a shared database that gate cannot be
+evaluated by an agent working while others run.** Any package that measured its suite during
+a burst and reported the number would have reported a catastrophe that was not there — or,
+worse, run during a quiet window, seen green, and drawn a conclusion about a board it never
+actually tested.
+
+### The suite, measured on the isolated clone
+
+`1055 collected` (= 1049 + the six new), **1045 passed, 10 failed, 0 errors** in 93s.
+
+The ten are `tests/contract/test_approvals_api.py` (7) and `tests/contract/test_governance.py`
+(3), and **they are not this branch's.** The clone was taken from `theoffice_test` while
+another agent's run was in flight, so it inherited that run's rows. Established the same way
+as the contention above — run the same two files on the pristine merge-base worktree against
+the same database:
+
+| | main `7ba5efc` | branch |
+|---|---|---|
+| `test_approvals_api.py` + `test_governance.py` | **10 failed**, 31 passed | **10 failed**, 31 passed |
+
+**Identical, deterministic, and on unmodified main.** The delta this branch contributes is
+zero. None of the ten touches V13, the validator, or any file this package changed.
+
+The six new tests pass. `ruff check .` clean; `mypy broker client generators` clean —
+62 source files, CI's exact command.

@@ -1898,6 +1898,11 @@ Greenstone moving 100 → 96 and Burkham not moving at all. A stated choice is e
 nothing unless something reads it, which is the one respect in which the option B25
 preferred is weaker than the shared helper it declined.
 
+Suite: **1055 collected** (1049 + the six), **1045 passed, 10 failed, 0 errors** — and the
+ten fail identically on the unmodified merge-base against the same database, so the delta is
+zero. They are `test_approvals_api.py` and `test_governance.py`, none of them V13. The
+prediction file records why the shared test database made that comparison necessary.
+
 ## B26 — every published Pack in the database is unreadable, and its status column says `live`
 
 **`cross-cutting`** · Found 2026-09-08, attempting to republish Burkham after the
