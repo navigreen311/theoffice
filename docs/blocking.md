@@ -1857,6 +1857,47 @@ a difference somebody finds by reading both.
 verdict that B24 is not about, and B24's whole point was a verdict moving for a reason
 nobody declared.
 
+### Closed 2026-09-09 (P-09) — the second option, and no arithmetic
+
+Of the two fixes above, **the second**: Gate 2's pooling is now stated in `v13`'s docstring
+as a deliberate simplification, with the reason. **No expression that produces a number was
+edited.** The whole diff to `generators/validator.py` deletes exactly one line, and that
+line is a prose string.
+
+**The reason, which is the part that makes it a choice rather than an apology.** Gate 2 has
+no per-role demand figure to split against. `approvals` is one number off headcount and
+agent-days, and the thing that would attribute it to a reviewer role — the workflow, and
+the compliance flags on each step — is generator output that does not exist until Gate 3.
+**The split is not skipped because it is expensive; at this gate there is no other half of
+it.**
+
+**Which way it errs, in both directions, because writing only the flattering one would be
+this same item one level down.** *Pooling across roles errs optimistic and only optimistic*
+— a slack role's spare coverage absorbs a saturated one, so it can hide a bottleneck and
+never invent one, which agrees with the direction `LATER_GATE_REASONS` already declared.
+*The unweighted mean errs either way and is bounded* — for Greenstone the pooled mean is
+5.0 against a coverage-weighted 4.8, so here Gate 2 is the **more** demanding of the two;
+for Burkham, whose two officers declare equal coverage, they agree exactly at 3.5.
+
+`LATER_GATE_REASONS["V13"]` now carries the pooling to the editor too, so the sentence a
+reviewer reads on the screen says a role can be over capacity on its own and still pass
+here. The Gate 4.5 recheck body was not touched — B24 owns it, and the note works from the
+Gate 2 side.
+
+**Verdicts, measured before and after and byte-identical.** Gate 2: Burkham `160 of 432`
+PASS, Greenstone `100 of 360` PASS. Gate 4.5: Burkham PASS at 120 approvals × the
+coverage-weighted 3.5 = 420 against 432, **12 minutes**; Greenstone FAIL. Nothing flipped,
+which is the required outcome for a change that edited no arithmetic.
+
+**Tests: `tests/validator/test_v13_gate_2_aggregation.py`, six of them.** The one that
+carries the item exhibits the divergence with *demand held equal* — same people, 20
+approvals either way, Gate 2 PASS and Gate 4.5 FAIL — so the disagreement cannot be
+attributed to the documented demand difference. The rest pin the choice: switching Gate 2
+to coverage-weighting was applied experimentally and **two of the six fail**, with
+Greenstone moving 100 → 96 and Burkham not moving at all. A stated choice is enforced by
+nothing unless something reads it, which is the one respect in which the option B25
+preferred is weaker than the shared helper it declined.
+
 ## B26 — every published Pack in the database is unreadable, and its status column says `live`
 
 **`cross-cutting`** · Found 2026-09-08, attempting to republish Burkham after the

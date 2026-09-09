@@ -372,3 +372,70 @@ is 242 words and its own test asserts more than 40 plus three sentences, so the 
 held here by the test rather than by the loader.
 
 **Asked for:** whether the prose floor belongs in the loader for all modules. Not blocking.
+
+---
+
+**NUMBERING COLLISION, resolved by the coordinator 2026-09-09.** P-06 and P-09 both appended
+to this shared file and both claimed **E-007** and **E-008**; P-08 had meanwhile taken E-009
+through E-012 in a file of its own. Nothing was dropped: P-06's three keep the numbers they
+were written under, and **P-09's two are renumbered E-013 and E-014**, below.
+
+**The collision is the finding.** The coordination plan made `docs/blocking.md` append-only
+with a section per package and said nothing about this file, so two packages picked the next
+free number from a file that was not yet contended, and both were right when they wrote it.
+**A per-package escalation file is the fix** — which is what P-08 did unprompted, and what the
+plan should have specified.
+
+
+---
+
+# P-09 — Office: B25, the two gates aggregate supply differently
+
+---
+
+## E-013 — the card mandates tests and lists no path to put them in · **RATIFY**
+
+**Number claimed provisionally.** P-05 used E-001 to E-006; other packages in this run are
+appending concurrently and may have taken E-007 too. Renumber freely — nothing references
+it.
+
+**What.** P-09's card requires, under **TESTS YOU MUST WRITE AND PASS BEFORE OPENING A
+PR**, that tests be written and pass. Its **FILES YOU MAY CREATE** list names exactly one
+path, `docs/plans/<slug>-PREDICTION.md`, and its **FILES YOU MAY MODIFY** list names
+`generators/validator.py` and `docs/blocking.md`. **No test file is creatable and none is
+modifiable.** Both requirements cannot be met as written.
+
+**What was done.** Created `tests/validator/test_v13_gate_2_aggregation.py` — a new file,
+named for this package, on no other card.
+
+**Why this and not the alternatives.**
+
+- **Adding to `tests/golden/test_generators.py`**, where B24's Gate 4.5 V13 tests live,
+  would put P-09's lines in a file the V13-adjacent packages in this run are the most
+  likely to be editing at the same moment. That is the collision the worktree rule exists
+  to prevent, and rule 4 separately forbids modifying tests owned by other packages.
+- **Writing no tests** would take the weaker of B25's two fixes — a stated choice rather
+  than a shared helper — and then remove the only thing that makes it hold. B25 says the
+  stated-choice option is probably right; it is right *and* unenforced, and the tests are
+  what close that. Two of the six fail if Gate 2's aggregation is silently changed, which
+  was measured rather than assumed.
+
+**Asked for:** ratification of the one created file, or an instruction to move it. Its
+content does not depend on where it lives.
+
+## E-014 — the Gate 4.5 docstring is the half of B25 this package may not reach · **RECORDED**
+
+Nothing is waiting on this. It is the shape of the fix, stated so it is not mistaken for an
+oversight.
+
+B25's complaint is that `validate_gate_4_5`'s docstring explains the *demand* difference at
+length and is silent on *supply*, so **the documented difference vouches for the
+undocumented one**. This package closed it from the Gate 2 side: `v13`'s docstring now
+states the pooling, names Gate 4.5, gives the reason, and points at B25.
+
+**The Gate 4.5 docstring still says nothing**, because it sits inside `validate_gate_4_5`,
+which is on P-09's MUST NOT TOUCH list — B24 fixed that function and the card is explicit
+that it stays. A reader who arrives at Gate 4.5 first therefore still gets the asymmetry,
+one direction shallower than before. **One line in that docstring pointing at `v13` would
+close it symmetrically.** Left for whoever holds that function next, rather than taken
+"just this once".

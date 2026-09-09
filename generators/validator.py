@@ -186,6 +186,13 @@ def _join(items: Iterable[Any], limit: int = 5) -> str:
 #        two can disagree by an order of magnitude and **the Gate 2 estimate is the
 #        optimistic one** - Greenstone passes here and fails there.
 #
+#        The two gates also differ on the *supply* side, which for a long time nothing
+#        said: Gate 2 pools every human regardless of role, Gate 4.5 splits per role and
+#        weights by coverage share. That is a deliberate simplification rather than a
+#        second unstated divergence - `v13`'s docstring states it and says why, and
+#        blocking.md B25 is the item. Read them together; a difference between two gates
+#        that only one of them documents reads as an accident in the other.
+#
 # So a Pack with no failures at Gate 2 has not been shown to be provisionable. It has
 # been shown to have no failures *that Gate 2 can see*, which is a weaker statement and
 # the one the editor is entitled to make.
@@ -203,7 +210,9 @@ LATER_GATE_REASONS = {
         "4.5",
         "Estimated here from headcount and a conservative per-agent-day factor, and "
         "re-checked at Gate 4.5 against the real Task Ledger. The estimate here is the "
-        "optimistic one.",
+        "optimistic one. It also pools every reviewer together rather than checking each "
+        "role against its own workload, which it cannot do until the workflow exists - so "
+        "a role that is over capacity on its own can still pass here.",
     ),
 }
 
@@ -319,17 +328,68 @@ def v12(pack: BusinessPack) -> tuple[bool, str]:
 
 @rule("V13", Severity.FAIL, "Projected daily approvals <= capacity x 0.6")
 def v13(pack: BusinessPack) -> tuple[bool, str]:
+    """Gate 2's cheap capacity estimate. **It pools supply across roles, deliberately.**
+
+    Both sides of the comparison below are pooled over every human in the Pack, with no
+    role split at all: one unweighted mean review time, one total of all coverage. Gate
+    4.5 re-checks this same rule and does the opposite - it splits by role, sums coverage
+    within the role, and weights review minutes by each person's coverage share of it.
+
+    **The two gates do not compute the same quantity, and this is the note that says so.**
+    `validate_gate_4_5`'s docstring explains at length why the two see different *demand*
+    figures - Gate 2 estimates approvals from headcount, the Task Ledger computes them
+    from the real workflow, and the Gate 2 estimate is the optimistic one. It says nothing
+    about *supply*. That left a documented difference sitting next to an undocumented one,
+    which is worse than two undocumented ones because the first vouches for the second.
+    See blocking.md B25. **Pooling is the stated choice; the reason is below.**
+
+    WHY POOLING RATHER THAN GATE 4.5's SPLIT
+
+    Gate 2 has no per-role demand figure to split against. `approvals` below is a single
+    number off headcount and agent-days, and nothing in the Pack attributes any part of it
+    to a reviewer role - the thing that does the attributing is the workflow and the
+    compliance flags on each step, which are generator output that does not exist until
+    Gate 3. Split supply per role here and you get role buckets with nothing to set
+    against them. **The split is not skipped because it is expensive. It is skipped
+    because at this gate there is no other half of it.**
+
+    WHICH WAY THE SIMPLIFICATION ERRS - BOTH DIRECTIONS, NOT ONE
+
+    *Pooling across roles errs optimistic, and only optimistic.* A slack role's spare
+    coverage absorbs a saturated one, so pooling can hide a bottleneck and can never
+    invent one. That agrees with the direction `LATER_GATE_REASONS` already declares, and
+    it is why Greenstone passes here and fails at 4.5.
+
+    *The unweighted mean errs either way, and is bounded.* It can land on either side of
+    Gate 4.5's coverage-weighted figure: for Greenstone the pooled mean is 5.0 against a
+    coverage-weighted 4.8, so here it is the **more** demanding of the two; for Burkham,
+    whose two officers declare equal coverage, the two agree exactly at 3.5. It always
+    lies between the smallest and largest declared `median_review_minutes`, so unlike the
+    role split it cannot run away from the truth in either direction.
+
+    Writing only the first of those would be the same failure B25 is about, one level
+    down. Both are here so neither vouches for the other.
+
+    **A PASS here is therefore not a capacity finding.** It is "no shortfall a pooled
+    estimate can see", which is the weaker claim, and `GATE_45_RECHECKS` carries that to
+    the editor so the screen does not imply otherwise.
+    """
     # Every position below auto_execute produces approvals. One per headcount per
     # agent-day is the deliberately conservative estimate: under-estimating here
     # produces a green check on a reviewer who is already saturated.
+    #
+    # No role appears in this expression, and none can: see the docstring.
     approvals = sum(
         p.headcount for p in pack.positions_required if p.trust_tier_ceiling != "auto_execute"
     ) * max(1.0, pack.capacity_demand.agent_days_per_week / 7.0)
 
+    # Pooled and unweighted, by the choice stated above - not by oversight, and not the
+    # coverage-weighted per-role figure Gate 4.5 computes.
     minutes_needed = sum(
         h.median_review_minutes for h in pack.human_capacity
     ) / max(len(pack.human_capacity), 1) * approvals
 
+    # Every human's coverage, in one number, for the same reason.
     minutes_available = sum(
         h.coverage_hours * 60 * UTILISATION_FACTOR for h in pack.human_capacity
     )
