@@ -1362,3 +1362,47 @@ because `trust_tier_ceiling` is per position and not per module — which is als
 other 88 cannot be freed: each of those positions holds at least one write, and
 Compliance Reviewer's is `regulator_dossier_export`, `at_most_once`, on the artefact that
 goes to a regulator.
+
+### Coverage hours sum across people; review speed does not average
+
+`review_minutes_by_role` is built with `setdefault`, so **the first declared human of a
+role sets the per-review minutes for that entire role.** `coverage_by_role` accumulates
+with `+=`.
+
+Anyone picking staffing numbers would reasonably assume both averaged, **and would be
+wrong in the direction that makes the plan look feasible**: adding a fast second reviewer
+buys coverage hours and buys nothing on the multiplier. A 6-minute first reviewer and a
+2-minute second one is still a 6-minute role.
+
+### The multiplier is borrowed too — B20's shape on the other side of the equation
+
+**`median_review_minutes: 6` is not Burkham's either.** Burkham's entire `human_capacity`
+block is **byte-for-byte identical to Greenstone's** — same two people, same roles, same
+`coverage_hours` of 6 and 4, same `max_daily_approvals` of 60 and 30, same
+`median_review_minutes` of 4 and 6, same timezone, same backups.
+
+So V13's ratio for Burkham is **one real number over two borrowed ones**: 120 derived
+from Burkham's own structure, divided by a coverage figure and multiplied by a review-time
+figure, both of which are Greenstone's.
+
+**And Greenstone's own numbers have no recorded provenance.** Its `human_capacity` block
+carries no comment, and nothing in `docs/` records where 4 and 6 minutes came from. The
+Burkham copy is at least labelled INVENTED; the original is not labelled at all, which
+makes it the more dangerous of the two — **a number nobody flagged is one nobody
+re-examines.**
+
+### What the sensitivity actually shows, stated carefully
+
+**At 6 minutes a review, correcting only the coverage side does not clear V13 for any
+staffing anyone would plausibly declare**: two people at six hours each is still 1.7×
+over, and it takes roughly 20 coverage-hours a day to pass. On that reading the
+placeholder was **hiding a real shortfall rather than manufacturing one.**
+
+**But that conclusion rests on the 6, and the 6 is borrowed.** At 3 minutes a review, two
+people at six hours **passes**. The difference between failing and passing at plausible
+staffing is entirely inside a number nobody measured.
+
+**So the honest statement is narrower than "the shortfall is real":** the shortfall is
+real *if* six minutes is right, and nothing establishes that it is. **Both inputs to that
+judgement have to be declared before either can be trusted** — which is what makes this
+item about the verdict being undecidable rather than wrong, on both sides rather than one.
