@@ -43,6 +43,8 @@ from broker.simforge import (
     CurriculumRejectedError,
     SimForgeClient,
     SimForgeError,
+    mint_run_ref,
+    submission_unit,
 )
 from generators import pipeline as generator_pipeline
 from generators import runtime_config as runtime_gen
@@ -653,6 +655,9 @@ async def _submit_one_module(
     run_ref: str | None = None
     error: str | None = None
     violations: list[str] | None = None
+    module_level: str | None = None
+    gate_9_5_flag: Any = None
+    already_open: bool | None = None
 
     if instruction is None:
         # Not an error and NOT A SUBMISSION. SimForge binds a certification to an
@@ -674,11 +679,63 @@ async def _submit_one_module(
         modules_in_forge=modules_in_forge, modules_uncovered=modules_uncovered,
         venture_id=ctx.venture_id,
     )
+
+    # Minted HERE, before anything is sent. `OperationRunStartRequest.run_ref` is an
+    # input field, so this side owns the ref; deriving it from the submission's natural
+    # key is what makes a retry land on the run that is already open instead of opening
+    # a second one with a fresh window. See `mint_run_ref`.
+    minted_ref = mint_run_ref(
+        venture_id=ctx.venture_id, forge_id=forge_id, module_id=module_id,
+        content_hash=instruction.content_hash,
+    )
+    unit, rubric_kind = submission_unit(module_id)
     try:
-        run_ref = await client.submit_curriculum(
+        acceptance = await client.submit_curriculum(
             ctx.conn, scenario_pack_ref=f"{pack_ref}/{module_id}",
             payload=payload, actor=ctx.actor, venture_id=ctx.venture_id,
         )
+        # The per-module certification level SimForge just assigned - `certified`,
+        # `certified_with_declared_absence` or `demonstrated`. Kept because it is what
+        # the certification run needs and the old contract threw it away: this method
+        # read one field off the body, and it was the one field that was never there.
+        levels = acceptance.get("module_levels")
+        if isinstance(levels, dict):
+            module_level = levels.get(module_id)
+        gate_9_5_flag = acceptance.get("gate_9_5_flag")
+
+        # A' - the call that was declared, documented and never made. Without it
+        # SimForge holds no row between the curriculum and the verdict, so a hung
+        # battery produces nothing at all and TIMEOUT is unreachable from either side.
+        started = await client.run_start(
+            ctx.conn,
+            run_ref=minted_ref,
+            unit=unit,
+            forge_id=forge_id,
+            instruction_content_hash=instruction.content_hash,
+            rubric_kind=rubric_kind,
+            module_id=module_id,
+            # Sent only when the run covers exactly one candidate. A unit A run is
+            # agent x forge x module and `certification_units_requested` already named
+            # every candidate; picking one of several to put in this field would be a
+            # claim about which agent the run is for, made by whichever sort order
+            # `candidates` happened to arrive in.
+            agent_id=candidates[0]["office_agent_id"] if len(candidates) == 1 else None,
+            # Gate 8 submits per module, so every run it opens is unit A. A department
+            # id here would be a unit B assertion on a unit A run.
+            department_id=None,
+            scenario_count=len(scenarios),
+            coverage_denominator=max(modules_in_forge, 1),
+            # Omitted, not guessed. The window is SimForge's policy and The Office holds
+            # no opinion about how long an operation battery may take; sending a number
+            # would put an Office default in front of the Forge's own.
+            window_minutes=None,
+        )
+        already_open = bool(started.get("already_open"))
+        # Set last, and only once BOTH halves landed. A ref stored after a failed
+        # `run_start` names a run SimForge has never heard of: the sweep would poll
+        # `gate_result` and take a 404 forever, which is worse than the NULL it
+        # replaced because it looks like a hand-over that worked.
+        run_ref = minted_ref
     except CurriculumRejectedError as exc:
         # An answer, not an outage. Kept apart in the evidence because the response to
         # each is different: a rejection is scenarios somebody has to write, an outage
@@ -692,6 +749,9 @@ async def _submit_one_module(
         # allowed to be down.
         error = str(exc)
 
+    # `simforge_run_ref` is the whole point of this package: B8's retirement condition
+    # is a stored ref, not a call that returned one. It is NULL unless the curriculum
+    # was accepted AND the run was opened, which is what "handed over" now means.
     async with ctx.conn.cursor() as cur:
         await cur.execute(
             """
@@ -714,6 +774,18 @@ async def _submit_one_module(
         "scenario_count": len(scenarios),
         "run_ref": run_ref,
     }
+    if module_level is not None:
+        # The certification level SimForge assigned this module, carried into the
+        # gate's evidence so a reader of a provisioning run can see it without going
+        # back to SimForge for something it already said.
+        outcome["module_level"] = module_level
+    if gate_9_5_flag is not None:
+        outcome["gate_9_5_flag"] = gate_9_5_flag
+    if already_open is not None:
+        # True means the run was already open and its clock was NOT restarted - a
+        # re-run of Gate 8 against an unchanged instruction. Worth seeing: it is the
+        # difference between "opened a run" and "found the one that was hanging".
+        outcome["already_open"] = already_open
     if error is not None:
         outcome["error"] = error
     if violations is not None:

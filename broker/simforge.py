@@ -124,10 +124,65 @@ class GateResult:
     coverage_denominator: int
 
 
-class SimForgeClient:
-    """The only two calls The Office makes to SimForge.
+def submission_unit(module_id: str | None) -> tuple[str, str]:
+    """`(unit, rubric_kind)` for one curriculum submission. **The only place that decides.**
 
-    **They travel different paths, and that asymmetry is the design.**
+    A submission naming a module is a unit A - one agent, one Forge, one module, judged
+    against the operation rubric. One naming no module is a unit B - a department in a
+    Forge, judged against the domain rubric.
+
+    Extracted from `timeout_gate_result`, which has answered this exact question since
+    it was written and is now this function's second caller rather than a second rule.
+    `run_start` needs the same answer at the *start* of a run that the timeout sweep
+    needs at the end of one, and two spellings of one rule is how the sweep and the
+    hand-over would eventually disagree about what a run is - silently, because both
+    would look right beside their own call site.
+    """
+    return ("A", "operation") if module_id else ("B", "domain")
+
+
+def mint_run_ref(
+    *, venture_id: str, forge_id: str, module_id: str | None, content_hash: str
+) -> str:
+    """The run reference The Office mints, and SimForge opens a run under.
+
+    **The Office mints this, not SimForge.** `OperationRunStartRequest.run_ref` is an
+    input field, and its own docstring says why the unit travels with it: "The Office
+    reads one verdict per `run_ref`, and a run whose unit is only known once it finishes
+    cannot be asked about while it is hanging." A ref the receiving side invents cannot
+    be declared before the run exists, which is the whole point of the call.
+
+    DETERMINISTIC, DELIBERATELY
+    ===========================
+
+        Derived from the submission's natural key - venture, forge, module, and the
+        instruction content hash. That is the same key SimForge upserts the bound
+        instruction set on, so the two systems agree on what "the same submission"
+        means without either asserting it.
+
+        The consequence is the reason: `open_run` is idempotent on `run_ref` and
+        returns the existing row with its clock UNTOUCHED, so a re-run of Gate 8
+        against an unchanged instruction lands on the run that is already open rather
+        than starting a second window. Extending the window of a hanging run is the one
+        thing that hides a timeout, and a fresh uuid per attempt would do it from the
+        caller's side while SimForge's own guard read as satisfied.
+
+        A changed `content_hash` is a different instruction set and mints a different
+        ref. That is not a retry - it is a new submission, and it should be a new run.
+
+    Carries no scenario content: two ids, a module name and a hash prefix. The hash is
+    truncated because the full 64 characters buy nothing a reader wants and make the ref
+    unreadable in a log line, where its only job is to be recognised.
+    """
+    return ":".join(
+        ("office", venture_id, forge_id, module_id or "-", content_hash[:12])
+    )
+
+
+class SimForgeClient:
+    """The only three calls The Office makes to SimForge.
+
+    **They travel two different paths, and that asymmetry is the design.**
 
     `get_gate_result` is brokered. An agent reads a verdict about its own
     certification, so it goes through `OfficeClient.call` exactly like any other
@@ -136,9 +191,11 @@ class SimForgeClient:
     modifies that path - this class supplies the module name and narrows the
     answer.
 
-    `submit_curriculum` is not brokered. It is signed with The Office's own
-    tenant credential and audited as `curriculum_handed_over`, naming the human
-    who provisioned.
+    `submit_curriculum` and `run_start` are not brokered. Both are signed with
+    The Office's own tenant credential; the hand-over is audited as
+    `curriculum_handed_over`, naming the human who provisioned, and the
+    `run_start` that follows it is bookkeeping on that same act rather than a
+    second one.
 
     WHY GATE 8 DOES NOT GET AN AGENT
     ================================
@@ -217,8 +274,21 @@ class SimForgeClient:
         payload: dict[str, Any],
         actor: uuid.UUID,
         venture_id: str,
-    ) -> str:
-        """Hand a curriculum over. Returns SimForge's `run_ref`.
+    ) -> dict[str, Any]:
+        """Hand a curriculum over. Returns the acceptance body, validated.
+
+        **This used to return `run_ref` and raise when it did not get one, and that
+        expectation was never true.** The ref was never SimForge's to return: its
+        `OperationRunStartRequest` takes `run_ref` as an *input* field, so the caller
+        mints it and `run_start` opens the run under it. Nothing on
+        `POST /api/operation/curriculum` produces a ref, and P-01 measured ten of ten
+        Burkham modules ACCEPTED while this method raised on every one of them.
+
+        So the acceptance body is returned whole instead. What it carries is enumerated
+        in the manifest; the one worth naming here is **`module_levels`**, the
+        per-module certification level - `certified`,
+        `certified_with_declared_absence`, `demonstrated` - which is exactly what the
+        certification run needs and what this method was throwing away.
 
         Audited before the call and not after, for the reason `broker/audit.py`
         gives: a hand-over that reaches SimForge and then crashes this process
@@ -283,19 +353,136 @@ class SimForgeClient:
         except ValueError as exc:
             raise SimForgeError("submit_curriculum returned a non-JSON body") from exc
 
+        if not isinstance(body, dict):
+            raise SimForgeError(
+                f"submit_curriculum returned {type(body).__name__}, not an object"
+            )
+        # Unchanged, and deliberately so: a field the manifest does not name still
+        # fails here. The manifest became accurate about what arrives; the check did
+        # not become lenient about what may.
         validate_response("submit_curriculum", body)
         if not body.get("accepted"):
             raise SimForgeError(
                 f"SimForge refused the curriculum: {body.get('rejected_reason')!r}"
             )
-        run_ref = body.get("run_ref")
-        if not isinstance(run_ref, str) or not run_ref:
-            # An accepted hand-over with no ref is unusable: nothing correlates a
-            # verdict to it, and `overdue_submissions` cannot see it time out.
-            raise SimForgeError(
-                "SimForge accepted the curriculum without returning a run_ref"
+        # No `run_ref` check. There is nothing here to check for - see the docstring.
+        # The ref is minted on this side and travels on `run_start`.
+        return body
+
+    async def run_start(
+        self,
+        conn: Any,
+        *,
+        run_ref: str,
+        unit: str,
+        forge_id: str,
+        instruction_content_hash: str,
+        rubric_kind: str = "operation",
+        module_id: str | None = None,
+        agent_id: str | None = None,
+        department_id: str | None = None,
+        scenario_count: int = 0,
+        coverage_denominator: int = 0,
+        window_minutes: int | None = None,
+    ) -> dict[str, Any]:
+        """Open the `OperationRun` a verdict is later read by. **The caller mints the ref.**
+
+        `broker/forge_modules.py` has declared this module and its reason since the
+        adapter was bound - "opens the OperationRun a verdict is later read by,
+        bookkeeping between the two systems, on the same footing as the hand-over that
+        precedes it" - and nothing has ever called it. Without it SimForge holds no
+        record of a run between the curriculum and the gate result, so a battery that
+        hangs produces no row, no verdict and no error, and TIMEOUT is unreachable from
+        either side.
+
+        WHY THIS TRAVELS THE HAND-OVER'S PATH AND NOT THE BROKERED ONE
+        ==============================================================
+
+            Same reason, unchanged: Gate 8 runs during provisioning, the actor is a
+            human, and the agents that will hold grants for this venture do not exist
+            yet. `forge_modules.NOT_AGENT_FACING` records exactly that for this name.
+            So it is signed with the Office's own tenant credential and posted to
+            `{base_url}/run_start` - SimForge's Office adapter, the same surface
+            `submit_curriculum` already uses, dispatched from the same `MODULES` map
+            behind the same tenant-credential check.
+
+            **It is NOT `POST /api/operation/run/start`.** That route exists and is
+            behind `require_role("compliance_analyst")` - a *user* role verified from a
+            Clerk JWT. The Office holds no user identity in SimForge and has no business
+            acquiring one for a machine hand-over. Reaching for that route and then
+            reporting an authorization problem would have been a finding about a
+            question nobody had to ask.
+
+        WHY THE REF IS DETERMINISTIC AND NOT A FRESH UUID
+        =================================================
+
+            SimForge's `open_run` is idempotent on `run_ref` and answers
+            `already_open: true` with **the clock untouched**, so that a retried
+            hand-over cannot extend the window of a run that is already hanging
+            (its ADR-0044). A caller minting a fresh uuid on every attempt defeats
+            that control from the outside: two runs, two windows, and the second one
+            young. `mint_run_ref` derives the ref from the submission's natural key
+            instead - see its docstring.
+
+        Not audited separately. The `curriculum_handed_over` entry written moments
+        before names the same act, and the ref itself lands on
+        `curriculum_submission.simforge_run_ref`, which is the durable record
+        `overdue_submissions` actually reads. A second event for one hand-over would
+        make the log say a thing happened twice.
+        """
+        credential = await self._tenant_credential(conn)
+        base_url, api_version = await self._registry(conn)
+
+        payload: dict[str, Any] = {
+            "run_ref": run_ref,
+            "unit": unit,
+            "forge_id": forge_id,
+            "instruction_content_hash": instruction_content_hash,
+            "rubric_kind": rubric_kind,
+            "module_id": module_id,
+            "agent_id": agent_id,
+            "department_id": department_id,
+            "scenario_count": scenario_count,
+            "coverage_denominator": coverage_denominator,
+            "window_minutes": window_minutes,
+        }
+
+        url = f"{base_url.rstrip('/')}/run_start"
+        try:
+            response = await self._http.post(
+                url,
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {credential.reveal()}",
+                    "X-Office-Forge-Api-Version": api_version,
+                    "Content-Type": "application/json",
+                },
+                timeout=self._timeout,
             )
-        return run_ref
+        except httpx.HTTPError as exc:
+            # type(exc).__name__, never str(exc): the message can carry the URL, and
+            # this request carried a credential.
+            raise SimForgeError(
+                f"could not reach SimForge: {type(exc).__name__}"
+            ) from exc
+
+        if response.status_code >= 400:
+            # Not echoed, for the reason submit_curriculum does not echo one: an error
+            # body has not been through validate_response, and an exception message is
+            # the one place a leak would travel unchecked.
+            raise SimForgeError(
+                f"run_start for {run_ref!r} returned {response.status_code}"
+            )
+        try:
+            body = response.json()
+        except ValueError as exc:
+            raise SimForgeError("run_start returned a non-JSON body") from exc
+        if not isinstance(body, dict):
+            raise SimForgeError(
+                f"run_start returned {type(body).__name__}, not an object"
+            )
+        validate_response("run_start", body)
+        return body
 
     # ----------------------------------------------------------- internals
 
@@ -549,11 +736,15 @@ def timeout_gate_result(submission: dict[str, Any], *, rubric_version: str) -> G
     A `score` of 0.0 would have been the tempting default and is wrong — it says the
     agent scored zero, which is a claim about the agent rather than about the run.
     """
+    # One rule, one place. This function used to spell the A/B and operation/domain
+    # derivation inline; `run_start` needs the identical answer, and two copies of it
+    # would be two things to keep in step.
+    unit, rubric_kind = submission_unit(submission.get("module_id"))
     return GateResult(
         run_ref=submission.get("simforge_run_ref") or f"unanswered:{submission['submission_id']}",
-        unit="A" if submission.get("module_id") else "B",
+        unit=unit,
         verdict="TIMEOUT",
-        rubric_kind="operation" if submission.get("module_id") else "domain",
+        rubric_kind=rubric_kind,
         rubric_version=rubric_version,
         score=None,
         threshold=None,
