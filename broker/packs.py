@@ -75,14 +75,58 @@ class SchemaTightening:
         return head + "".join(f"[].{part}" for part in rest)
 
 
-#: Every v3 tightening, oldest first.
+@dataclass(frozen=True, slots=True)
+class SchemaRename:
+    """One occasion on which v3 began calling an existing field something else.
+
+    **A sibling of `SchemaTightening` rather than a flag on it, and the distinction is
+    load-bearing.** A tightening is v3 asking for *more*; a rename is v3 asking for the
+    *same value* under another name. B31 proposed a `renamed_from` field, and putting one
+    on a class called `SchemaTightening` would make the class name false for half its
+    rows - a name asserting more than the code does, which is B23's class appearing
+    inside the machinery built to fix B27. That is the specific trap B31 warns about, so
+    it is not repeated here in the fix for it.
+
+    The practical difference is the error signature. A tightening leaves **one** error per
+    entry; a rename leaves **two** - the new name missing and the old name refused - and
+    only the pair means "this row predates the rename". Either half alone means something
+    else, and both of those somethings are handled below.
+    """
+
+    #: The path under the CURRENT name. Same convention as `SchemaTightening.field_path`.
+    field_path: tuple[str, ...]
+
+    #: What the field used to be called. The last segment only; a rename moves a name,
+    #: not a field to another parent.
+    previous_name: str
+
+    landed: str
+    blocking_entry: str
+    requires: str
+
+    @property
+    def label(self) -> str:
+        head, *rest = self.field_path
+        return head + "".join(f"[].{part}" for part in rest)
+
+    @property
+    def previous_path(self) -> tuple[str, ...]:
+        """Where the old name is reported when a stale row still carries it."""
+        return (*self.field_path[:-1], self.previous_name)
+
+
+#: A change v3 made to what it accepts. Two kinds, because they fail differently.
+SchemaChange = SchemaTightening | SchemaRename
+
+
+#: Every v3 change, oldest first.
 #:
-#: **Appending here is the second half of adding a required field to
-#: `generators/pack.py`.** Without the entry, a row stored before the change is reported
-#: as *not a schema-v3 Business Pack* - which is false about the data and sends the
-#: reader to inspect a document that is fine. That is blocking-log B27, and it cost a
-#: run's worth of confusion once already.
-V3_TIGHTENINGS: tuple[SchemaTightening, ...] = (
+#: **Appending here is the second half of changing what `generators/pack.py` accepts.**
+#: Without the entry, a row stored before the change is reported as *not a schema-v3
+#: Business Pack* - false about the data, and it sends the reader to inspect a document
+#: that is fine. That is blocking-log B27; B31 is what it cost when a rename landed and
+#: the ledger could only describe tightenings.
+V3_SCHEMA_CHANGES: tuple[SchemaChange, ...] = (
     SchemaTightening(
         field_path=("human_capacity", "provenance"),
         landed="2026-09-08",
@@ -94,6 +138,31 @@ V3_TIGHTENINGS: tuple[SchemaTightening, ...] = (
             "naming what was copied or observed"
         ),
     ),
+    SchemaRename(
+        field_path=("human_capacity", "advisory_daily_approval_ceiling"),
+        previous_name="max_daily_approvals",
+        landed="2026-09-09",
+        blocking_entry="B23",
+        requires=(
+            "every `human_capacity` entry declares its daily approval figure as "
+            "`advisory_daily_approval_ceiling`. The value did not change and neither "
+            "did its effect - nothing enforces it, and nothing ever did. What could not "
+            "persist was a name that read as a cap"
+        ),
+    ),
+)
+
+
+#: The tightenings alone. Kept as its own name because it is still exactly true, and
+#: because a caller asking "what has v3 started requiring" is asking a narrower question
+#: than "what has v3 changed".
+V3_TIGHTENINGS: tuple[SchemaTightening, ...] = tuple(
+    change for change in V3_SCHEMA_CHANGES if isinstance(change, SchemaTightening)
+)
+
+#: The renames alone, for the same reason.
+V3_RENAMES: tuple[SchemaRename, ...] = tuple(
+    change for change in V3_SCHEMA_CHANGES if isinstance(change, SchemaRename)
 )
 
 
@@ -106,9 +175,11 @@ class PackPredatesTighteningError(PackStoreError):
     tell them apart should not have to read prose to do it.
     """
 
-    def __init__(self, message: str, *, predates: tuple[SchemaTightening, ...]) -> None:
+    def __init__(self, message: str, *, predates: tuple[SchemaChange, ...]) -> None:
         super().__init__(message)
-        #: The tightenings this document was stored before, oldest first.
+        #: The ledger changes this document was stored before, oldest first. A
+        #: `SchemaTightening` or a `SchemaRename`; the caller can tell them apart by
+        #: type rather than by reading the message.
         self.predates = predates
 
 
@@ -123,37 +194,96 @@ def _elide_indexes(loc: tuple[object, ...]) -> tuple[str, ...]:
 
 def _predated_tightenings(
     exc: ValidationError,
-) -> tuple[tuple[SchemaTightening, ...], dict[tuple[str, ...], int]] | None:
-    """Which tightenings explain this failure entirely, or `None` if any error does not.
+) -> tuple[tuple[SchemaChange, ...], dict[tuple[str, ...], int]] | None:
+    """Which ledger changes explain this failure ENTIRELY, or `None` if any error does not.
 
-    `None` does not mean *no tightenings*. It means at least one error is something
-    else - and a document with one unexplained error is malformed whatever else is true
-    of it. Reporting that one as merely old would be the same false confidence pointing
-    the other way, which is not an improvement on B27, it is B27 mirrored.
+    `None` does not mean *no changes*. It means at least one error is something else -
+    and a document with one unexplained error is malformed whatever else is true of it.
+    Reporting that one as merely old would be the same false confidence pointing the
+    other way, which is not an improvement on B27, it is B27 mirrored.
+
+    **A tightening leaves one error; a rename leaves a pair, and only the pair counts.**
+    That is B31. The guard used to reject the whole diagnosis on the first
+    `extra_forbidden`, which was right for every change the ledger could describe and
+    wrong for a rename - so a renamed field fell back to the generic sentence, on exactly
+    the class of row this machinery exists for.
+
+    Two rules keep the guard's teeth, and both are asserted in the tests:
+
+      * **An `extra_forbidden` is explained only as the old half of a ledgered rename
+        whose new half is missing at the SAME entry.** A refused key that is not that is
+        still a document disagreeing with the schema. **This is the whole value of the
+        guard and it is unchanged for every input that is not half of a pair.**
+      * **A `missing` at a rename's new name is explained only when the old name is
+        refused at that same entry.** A row carrying neither name never satisfied either
+        revision - the old field had no default - so it is malformed, not old.
+
+    Both halves are matched on the FULL location including the list index, not on the
+    elided path. A document carrying the old name in one entry and neither name in
+    another is not a row that predates the rename; it is a row somebody hand-edited, and
+    index-blind pairing would call it old and send the reader to a migration that will
+    not help.
     """
-    by_path = {t.field_path: t for t in V3_TIGHTENINGS}
-    ordered: list[SchemaTightening] = []
+    tightenings = {t.field_path: t for t in V3_TIGHTENINGS}
+    renames_by_new = {r.field_path: r for r in V3_RENAMES}
+    renames_by_old = {r.previous_path: r for r in V3_RENAMES}
+
+    errors = [
+        (str(error.get("type")), tuple(error.get("loc", ()))) for error in exc.errors()
+    ]
+    missing_at = {loc for kind, loc in errors if kind == "missing"}
+    refused_at = {loc for kind, loc in errors if kind == "extra_forbidden"}
+
+    ordered: list[SchemaChange] = []
     counts: dict[tuple[str, ...], int] = {}
-    for error in exc.errors():
-        # Only an absent field can be explained by "this predates the field". A wrong
-        # type, a refused extra key or a failed validator is a document that disagrees
-        # with the schema, not one that is older than it.
-        if error.get("type") != "missing":
+
+    def note(change: SchemaChange) -> None:
+        if change not in ordered:
+            ordered.append(change)
+        counts[change.field_path] = counts.get(change.field_path, 0) + 1
+
+    for kind, loc in errors:
+        path = _elide_indexes(loc)
+        if kind == "missing":
+            tightening = tightenings.get(path)
+            if tightening is not None:
+                note(tightening)
+                continue
+            rename = renames_by_new.get(path)
+            if rename is None:
+                return None
+            # The other half must be present at this same entry.
+            if (*loc[:-1], rename.previous_name) not in refused_at:
+                return None
+            note(rename)
+        elif kind == "extra_forbidden":
+            rename = renames_by_old.get(path)
+            if rename is None:
+                # The guard, unchanged: a refused key that is not the old half of a
+                # ledgered rename disqualifies the whole diagnosis.
+                return None
+            if (*loc[:-1], rename.field_path[-1]) not in missing_at:
+                # The old name AND the new name both present, or the old name refused
+                # somewhere the new one is not missing. Neither is an unmigrated row.
+                return None
+            # Counted on the `missing` half only, so a pair is one change, not two.
+        else:
+            # A wrong type or a failed validator is a document that disagrees with the
+            # schema, not one that is older than it.
             return None
-        path = _elide_indexes(tuple(error.get("loc", ())))
-        tightening = by_path.get(path)
-        if tightening is None:
-            return None
-        if tightening not in ordered:
-            ordered.append(tightening)
-        counts[path] = counts.get(path, 0) + 1
+
     if not ordered:
         return None
+    # Ledger order, not the order pydantic happened to report the errors in.
+    # `PackPredatesTighteningError.predates` says "oldest first", and a docstring that
+    # says so while the code sorts by whichever error pydantic emitted first is a name
+    # asserting more than the code does - the defect this whole ledger exists to remove.
+    ordered.sort(key=V3_SCHEMA_CHANGES.index)
     return tuple(ordered), counts
 
 
 def _predates_message(
-    predates: tuple[SchemaTightening, ...],
+    predates: tuple[SchemaChange, ...],
     counts: dict[tuple[str, ...], int],
     stored_as: str | None,
 ) -> str:
@@ -161,38 +291,47 @@ def _predates_message(
 
     Three things it has to carry, because the old sentence carried none of them: that
     the document IS schema-v3, which revision of v3 it was stored under, and what this
-    build's revision requires instead.
+    build's revision requires instead. A rename gets its own bullet wording - *this used
+    to be called that* is the sentence a reader needs, and "field required" is not it.
     """
     subject = f"{stored_as} is" if stored_as else "this document is"
-    newest = max(t.landed for t in V3_TIGHTENINGS)
+    newest = max(c.landed for c in V3_SCHEMA_CHANGES)
     lines = [
         f"{subject} a schema-v3 Business Pack stored under an EARLIER REVISION of v3. "
         "It is not malformed. `schema_version` says 3 and that is correct - every "
-        "field v3 required when this was written is present. What the column cannot "
-        "say is WHICH revision of v3, and this one was stored before "
-        + ("this tightening:" if len(predates) == 1 else f"these {len(predates)} tightenings:"),
+        "field v3 required when this was written is present, under the name it had "
+        "then. What the column cannot say is WHICH revision of v3, and this one was "
+        "stored before "
+        + ("this change:" if len(predates) == 1 else f"these {len(predates)} changes:"),
     ]
-    for tightening in predates:
-        absent = counts.get(tightening.field_path, 0)
-        where = "1 entry" if absent == 1 else f"{absent} entries"
-        lines.append(
-            f"  * `{tightening.label}` - required since {tightening.landed} "
-            f"(blocking-log {tightening.blocking_entry}), absent from {where} here. "
-            f"This build requires that {tightening.requires}."
-        )
+    for change in predates:
+        affected = counts.get(change.field_path, 0)
+        where = "1 entry" if affected == 1 else f"{affected} entries"
+        if isinstance(change, SchemaRename):
+            lines.append(
+                f"  * `{change.label}` - renamed from `{change.previous_name}` on "
+                f"{change.landed} (blocking-log {change.blocking_entry}); {where} here "
+                f"still carry the old name. This build requires that {change.requires}."
+            )
+        else:
+            lines.append(
+                f"  * `{change.label}` - required since {change.landed} "
+                f"(blocking-log {change.blocking_entry}), absent from {where} here. "
+                f"This build requires that {change.requires}."
+            )
     lines.append(f"This build reads v3 as of {newest}.")
     if stored_as:
         lines.append(
             "Do not go and inspect the Pack source; there is nothing wrong with it. "
-            "This is a stored row that was never migrated when the schema tightened. "
-            "Republish the venture's Pack at a new version - see docs/blocking.md B26 "
-            "and B28."
+            "This is a stored row that was never migrated when the schema changed. "
+            "Republish the venture's Pack at a new version - see docs/blocking.md B26, "
+            "B28 and B31."
         )
     else:
         lines.append(
-            "The source you supplied predates the tightening. Fill the field in before "
-            "storing it - the stored form is re-parsed on every read, so storing it as "
-            "it stands would create the row B26 describes."
+            "The source you supplied predates the change. Bring it up to the current "
+            "revision before storing it - the stored form is re-parsed on every read, "
+            "so storing it as it stands would create the row B26 describes."
         )
     return "\n".join(lines)
 
