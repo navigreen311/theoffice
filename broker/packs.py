@@ -29,6 +29,7 @@ import yaml
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
+from pydantic import ValidationError
 
 from broker import audit
 from generators.pack import BusinessPack, PackLoadError
@@ -37,6 +38,163 @@ from generators.validator import GATE_45_RULES, all_rule_ids, validate
 
 class PackStoreError(Exception):
     """The Pack could not be stored or retrieved as asked."""
+
+
+@dataclass(frozen=True, slots=True)
+class SchemaTightening:
+    """One occasion on which v3 began requiring something v3 had not required before.
+
+    `schema_version` did not move for any of these, and could not have: they are not a
+    new schema, they are the same schema asking for more. That is precisely why the
+    column cannot answer *is this row stale* - it carries the coarse half of the answer
+    (which schema) and this ledger carries the fine half (which revision of it).
+
+    There is no revision number here on purpose. A number would be a name asserting more
+    than the code knows - the exact class of defect this change exists to remove - so a
+    revision is identified by the requirement it added, the date it landed, and the
+    blocking-log entry that argued for it. All three are things a reader can go and
+    check.
+    """
+
+    #: Where pydantic reports the field, with list indexes elided:
+    #: ``("human_capacity", "provenance")`` matches loc ``("human_capacity", 3,
+    #: "provenance")``.
+    field_path: tuple[str, ...]
+
+    #: The date the tightening landed, and the blocking-log entry behind it.
+    landed: str
+    blocking_entry: str
+
+    #: What this build requires now, in one sentence and in the schema's own words.
+    requires: str
+
+    @property
+    def label(self) -> str:
+        """How the field is written when a human talks about it."""
+        head, *rest = self.field_path
+        return head + "".join(f"[].{part}" for part in rest)
+
+
+#: Every v3 tightening, oldest first.
+#:
+#: **Appending here is the second half of adding a required field to
+#: `generators/pack.py`.** Without the entry, a row stored before the change is reported
+#: as *not a schema-v3 Business Pack* - which is false about the data and sends the
+#: reader to inspect a document that is fine. That is blocking-log B27, and it cost a
+#: run's worth of confusion once already.
+V3_TIGHTENINGS: tuple[SchemaTightening, ...] = (
+    SchemaTightening(
+        field_path=("human_capacity", "provenance"),
+        landed="2026-09-08",
+        blocking_entry="B21",
+        requires=(
+            "every `human_capacity` entry carries a `provenance` block: `basis` "
+            "(declared / inherited / measured), `established_by` naming a person, a "
+            "`detail` sentence, and - when the basis is not `declared` - a `source` "
+            "naming what was copied or observed"
+        ),
+    ),
+)
+
+
+class PackPredatesTighteningError(PackStoreError):
+    """A valid Pack of an EARLIER revision of its own schema. Not a malformed document.
+
+    A subclass rather than a different sentence, because the two need different actions
+    and until now got the same one. A malformed document is a document to inspect; this
+    is a row to migrate, and the document it points at is fine. A caller that wants to
+    tell them apart should not have to read prose to do it.
+    """
+
+    def __init__(self, message: str, *, predates: tuple[SchemaTightening, ...]) -> None:
+        super().__init__(message)
+        #: The tightenings this document was stored before, oldest first.
+        self.predates = predates
+
+
+def _elide_indexes(loc: tuple[object, ...]) -> tuple[str, ...]:
+    """A pydantic error location with list positions dropped.
+
+    The ledger names a field, not an entry. Four entries missing `provenance` are one
+    tightening reported four times, not four tightenings.
+    """
+    return tuple(part for part in loc if isinstance(part, str))
+
+
+def _predated_tightenings(
+    exc: ValidationError,
+) -> tuple[tuple[SchemaTightening, ...], dict[tuple[str, ...], int]] | None:
+    """Which tightenings explain this failure entirely, or `None` if any error does not.
+
+    `None` does not mean *no tightenings*. It means at least one error is something
+    else - and a document with one unexplained error is malformed whatever else is true
+    of it. Reporting that one as merely old would be the same false confidence pointing
+    the other way, which is not an improvement on B27, it is B27 mirrored.
+    """
+    by_path = {t.field_path: t for t in V3_TIGHTENINGS}
+    ordered: list[SchemaTightening] = []
+    counts: dict[tuple[str, ...], int] = {}
+    for error in exc.errors():
+        # Only an absent field can be explained by "this predates the field". A wrong
+        # type, a refused extra key or a failed validator is a document that disagrees
+        # with the schema, not one that is older than it.
+        if error.get("type") != "missing":
+            return None
+        path = _elide_indexes(tuple(error.get("loc", ())))
+        tightening = by_path.get(path)
+        if tightening is None:
+            return None
+        if tightening not in ordered:
+            ordered.append(tightening)
+        counts[path] = counts.get(path, 0) + 1
+    if not ordered:
+        return None
+    return tuple(ordered), counts
+
+
+def _predates_message(
+    predates: tuple[SchemaTightening, ...],
+    counts: dict[tuple[str, ...], int],
+    stored_as: str | None,
+) -> str:
+    """The honest version of what B27 found the reader being told.
+
+    Three things it has to carry, because the old sentence carried none of them: that
+    the document IS schema-v3, which revision of v3 it was stored under, and what this
+    build's revision requires instead.
+    """
+    subject = f"{stored_as} is" if stored_as else "this document is"
+    newest = max(t.landed for t in V3_TIGHTENINGS)
+    lines = [
+        f"{subject} a schema-v3 Business Pack stored under an EARLIER REVISION of v3. "
+        "It is not malformed. `schema_version` says 3 and that is correct - every "
+        "field v3 required when this was written is present. What the column cannot "
+        "say is WHICH revision of v3, and this one was stored before "
+        + ("this tightening:" if len(predates) == 1 else f"these {len(predates)} tightenings:"),
+    ]
+    for tightening in predates:
+        absent = counts.get(tightening.field_path, 0)
+        where = "1 entry" if absent == 1 else f"{absent} entries"
+        lines.append(
+            f"  * `{tightening.label}` - required since {tightening.landed} "
+            f"(blocking-log {tightening.blocking_entry}), absent from {where} here. "
+            f"This build requires that {tightening.requires}."
+        )
+    lines.append(f"This build reads v3 as of {newest}.")
+    if stored_as:
+        lines.append(
+            "Do not go and inspect the Pack source; there is nothing wrong with it. "
+            "This is a stored row that was never migrated when the schema tightened. "
+            "Republish the venture's Pack at a new version - see docs/blocking.md B26 "
+            "and B28."
+        )
+    else:
+        lines.append(
+            "The source you supplied predates the tightening. Fill the field in before "
+            "storing it - the stored form is re-parsed on every read, so storing it as "
+            "it stands would create the row B26 describes."
+        )
+    return "\n".join(lines)
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,12 +220,19 @@ class StoredPack:
         return len(self.changed_lines)
 
 
-def parse_only(yaml_source: str) -> BusinessPack:
-    """Shape-validate before storing.
+def parse_only(yaml_source: str, *, stored_as: str | None = None) -> BusinessPack:
+    """Shape-validate before storing, or after reading.
 
     Storing a Pack that does not parse would let a venture hold something that reads
     like a Pack, passes a glance, and fails the moment a run tries to generate from it -
     at Gate 3, after Gates 0 to 2 have already reported healthy.
+
+    `stored_as` is the row's identity when this is a READ rather than a store, and it
+    changes the diagnosis rather than decorating it. A source a caller just handed us
+    that predates a tightening is a source to fix; a row already in `business_pack` that
+    predates one is a migration nobody ran, and the document it names is fine. Those are
+    different problems with different fixes, and B27 is what it costs to give them the
+    same sentence.
     """
     try:
         raw = yaml.safe_load(yaml_source)
@@ -77,6 +242,21 @@ def parse_only(yaml_source: str) -> BusinessPack:
         raise PackStoreError("Pack does not contain a mapping at the top level")
     try:
         return BusinessPack.model_validate(raw)
+    except ValidationError as exc:
+        # B27. The old message said "not a schema-v3 Business Pack" for both of the
+        # cases below, and for one of them that is FALSE ABOUT THE DATA: the row's
+        # `schema_version` says 3, it was published as 3, and it was valid 3 on the day
+        # it was written. Saying otherwise sends the reader to inspect a Pack that has
+        # nothing wrong with it while the actual fault is a row nobody migrated.
+        aged = _predated_tightenings(exc)
+        if aged is not None:
+            predates, counts = aged
+            raise PackPredatesTighteningError(
+                _predates_message(predates, counts, stored_as), predates=predates
+            ) from exc
+        # Nothing here is explained by a tightening, so the original sentence is the
+        # true one and stays exactly as it was.
+        raise PackStoreError(f"not a schema-v3 Business Pack: {exc}") from exc
     except Exception as exc:
         raise PackStoreError(f"not a schema-v3 Business Pack: {exc}") from exc
 
@@ -307,7 +487,10 @@ async def live(conn: AsyncConnection, venture_id: str) -> StoredPack | None:
         pack_version=row["pack_version"],
         content_hash=row["content_hash"],
         yaml_source=row["yaml_source"],
-        pack=parse_only(row["yaml_source"]),
+        pack=parse_only(
+            row["yaml_source"],
+            stored_as=f'{row["venture_id"]}@{row["pack_version"]}',
+        ),
     )
 
 
@@ -334,7 +517,10 @@ async def get_version(
         pack_version=row["pack_version"],
         content_hash=row["content_hash"],
         yaml_source=row["yaml_source"],
-        pack=parse_only(row["yaml_source"]),
+        pack=parse_only(
+            row["yaml_source"],
+            stored_as=f'{row["venture_id"]}@{row["pack_version"]}',
+        ),
     )
 
 
@@ -354,7 +540,10 @@ async def draft(conn: AsyncConnection, venture_id: str) -> StoredPack | None:
         pack_version=row["pack_version"],
         content_hash=row["content_hash"],
         yaml_source=row["yaml_source"],
-        pack=parse_only(row["yaml_source"]),
+        pack=parse_only(
+            row["yaml_source"],
+            stored_as=f'{row["venture_id"]}@{row["pack_version"]}',
+        ),
     )
 
 

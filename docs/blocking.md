@@ -1963,6 +1963,60 @@ to reveal a change refuse to run precisely when the change was largest.
 Regression test: `test_a_publish_can_replace_a_row_the_current_schema_cannot_parse`.
 Confirmed to fail against the pre-fix code with B26's own error, and to pass after.
 
+### Closed 2026-09-09 by P-07 — the round trip now exists, and it is not a tautology
+
+`tests/contract/test_pack_round_trip.py`. **The suite now reads a published Pack back out
+of `business_pack` and parses it**, which nothing did across all 1049 tests.
+
+The check is one helper, `read_back_and_parse`, and it is deliberately pointed at *two*
+kinds of row rather than one:
+
+| the row | what the helper must do |
+|---|---|
+| published by this build through `store()` | **parse** |
+| written before `provenance` existed | **raise** |
+
+**The second is the test, not a scenario.** B26 named the way this gets written badly —
+*"a version that publishes and re-reads within one transaction proves only that `store`
+and `live` agree in the same process, which is not the property"* — and that version
+would have passed on the provenance commit exactly as loudly as it passes now. So the
+failing direction is asserted too, in CI, permanently: if someone loosens `parse_only` to
+"fix" an old row,
+`test_the_round_trip_fails_against_a_row_from_an_earlier_build` goes red and says why.
+
+**The earlier-build row is constructed, not transcribed.** `packs/greenstone.yaml` with
+the `provenance` keys removed — which is what the revision before the tightening would
+have written, and differs from today's file in nothing else. A hand-written old Pack could
+drift into something the earlier revision would *also* have refused, and the test would
+then be demonstrating the wrong failure. The construction is checked rather than trusted:
+the diagnosis must name `human_capacity[].provenance` **and nothing else**.
+
+It is inserted with a raw `INSERT`, not through `store()`. `store()` is this build and
+this build refuses the document — which is correct, and is exactly why the twelve stale
+rows could only have been written by a build that did not.
+
+**Demonstrated before it was committed.** The round-trip assertion, unwrapped, pointed at
+the earlier-build row:
+
+```
+FAILED test_ROUNDTRIP_ASSERTION_AGAINST_AN_EARLIER_BUILD_ROW
+broker.packs.PackPredatesTighteningError: greenstone@1.3.0 is a schema-v3 Business Pack
+stored under an EARLIER REVISION of v3 ...
+```
+
+and the same row against the pre-change `broker/packs.py`, which is B27 verbatim:
+
+```
+broker.packs.PackStoreError: not a schema-v3 Business Pack: 2 validation errors for
+BusinessPack
+```
+
+**What still is not covered, said plainly.** This asserts the round trip for a row this
+suite writes. **It does not look at the twelve rows in the real database** — B28 is still
+open, and `greenstone@1.3.0` in the development database is still `status = 'live'` and
+still unreadable. The round trip is the forcing function for the *next* tightening; it is
+not a migration for the last one.
+
 ## B27 — an unparseable old row is reported as "not a schema-v3 Business Pack", and it is schema-v3
 
 **`cross-cutting`** · Found 2026-09-08, as the second half of B26. **The fix for B26
@@ -2003,6 +2057,73 @@ deciding what that marker is is a design question rather than a message rewrite.
 
 **Left standing deliberately.** Changing it changes what a run does when it meets an old
 Pack, which is a larger decision than unblocking a publish, and B26 was the blocking half.
+
+### Closed 2026-09-09 by P-07 — the finer marker is a ledger of tightenings
+
+The design question this entry left open was *what the finer marker is*. **It is not a
+revision number.** A number would have to be stamped by something, nothing stamps one, and
+inventing one would put a name in the message asserting more than the code knows — which
+is the class of defect this entry belongs to. Adding a column would say when a row was
+written and still not say what the schema required that day.
+
+`broker.packs.V3_TIGHTENINGS` instead: an ordered ledger of **the occasions on which v3
+began requiring something v3 had not required before.** Each entry carries the field, the
+date it landed, the blocking entry that argued for it, and one sentence of what this build
+requires — four things a reader can go and check, and none of them a number nobody writes.
+A revision is identified by what it added.
+
+**The distinction is a type, not a turn of phrase.** `PackPredatesTighteningError`
+subclasses `PackStoreError`, so nothing that catches the base narrows, and a caller
+choosing between *halt this run* and *route somebody to a migration* no longer has to grep
+an error string. `.predates` carries the machine-readable half of what the message says in
+words.
+
+Before, for `greenstone@1.3.0`:
+
+```
+PackStoreError: not a schema-v3 Business Pack: 2 validation errors for BusinessPack
+```
+
+After:
+
+```
+PackPredatesTighteningError: greenstone@1.3.0 is a schema-v3 Business Pack stored under an
+EARLIER REVISION of v3. It is not malformed. `schema_version` says 3 and that is correct -
+every field v3 required when this was written is present. What the column cannot say is
+WHICH revision of v3, and this one was stored before this tightening:
+  * `human_capacity[].provenance` - required since 2026-09-08 (blocking-log B21), absent
+    from 2 entries here. This build requires that every `human_capacity` entry carries a
+    `provenance` block: `basis` (declared / inherited / measured), `established_by` naming
+    a person, a `detail` sentence, and - when the basis is not `declared` - a `source`
+    naming what was copied or observed.
+This build reads v3 as of 2026-09-08.
+Do not go and inspect the Pack source; there is nothing wrong with it. This is a stored row
+that was never migrated when the schema tightened. Republish the venture's Pack at a new
+version - see docs/blocking.md B26 and B28.
+```
+
+**The other direction was the easy half to get wrong.** Reporting a broken document as
+*merely old* would be this entry mirrored: the same false confidence, pointing the reader
+at a migration that will not help. So `_predated_tightenings` returns nothing unless
+**every** error is a `missing` at a ledgered path. One error no tightening explains and the
+document is malformed whatever else is true of it — and it keeps the original sentence,
+which for a genuinely malformed document was always the true one.
+`test_a_genuinely_malformed_document_is_still_called_malformed` pins that half, and
+`tests/provisioning/test_pack_store.py` still asserts the old wording for `venture_id:
+nope`, unchanged and correct.
+
+**Behaviour is otherwise unchanged, deliberately.** `live()` and `get_version()` still
+raise on a row they cannot parse. This entry asked for an honest diagnosis, not for a read
+that returns a Pack it could not parse — and B28 is the decision about the actual rows,
+still Ivan's.
+
+**The forcing function for the next tightening.** Appending to `V3_TIGHTENINGS` is now the
+second half of adding a required field to `generators/pack.py`; without the entry, an old
+row goes straight back to being reported as malformed.
+`test_every_required_field_added_since_v3_has_a_ledger_entry` catches a rename that leaves
+a ledger entry pointing at nothing. It cannot catch a tightening whose author never
+appended at all — nothing inside one build can, which is the same boundary B26 found, and
+it is written down here rather than papered over.
 
 ## B28 — Greenstone's live Pack is in the state B26 describes, and nothing has been done about it
 
