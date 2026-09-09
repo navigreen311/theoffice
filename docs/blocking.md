@@ -1499,3 +1499,95 @@ measurement* — and it is one, of a different quantity than the one V13 multipl
 
 A number that is honest, well-built, full, and about something else is harder to catch
 than a missing one.
+
+---
+
+## B22 — a venture can clear every gate to 10 with a reviewer who has no account
+
+**`cross-cutting`** · Found 2026-09-08 while establishing what a real `human_capacity`
+declaration would take. **Larger than the capacity question that surfaced it.**
+
+`office_human` holds **one** non-fixture row: Ivan. Every other row is
+`origin = 'test_fixture'`. **Dana is not a person in this system.** She is a string in two
+Pack files — named as `compliance_officer` in Greenstone's `human_capacity` and, since
+Burkham's block was copied wholesale, in Burkham's too.
+
+### The join is a display-name string match
+
+`broker/proposals.py` says so, in a comment that is honest and is the problem:
+
+> *"The Pack names a reviewer; `decided_by` names an `office_human`. **The only link
+> between them is the display name**, and when it does not match the page says the
+> reviewer has no decisions rather than inventing a join."*
+
+Refusing to invent a join is right. **The consequence is that a Pack can name anybody.**
+"Dana" resolves to nothing, and the system reports that as *no decisions* — which is
+indistinguishable from a real reviewer who has not decided anything today.
+
+### What that costs, and it is not a display problem
+
+**Nothing between Gate 0 and Gate 10 checks that a named reviewer exists.** V13 divides by
+their `coverage_hours`; V15 and `separation_of_duties` reason about *distinct humans*;
+the approval projection routes work to their `role`. **All of it runs on a name.**
+
+`docs/console.md` already records where it ends:
+
+> *"Greenstone's Pack names her as compliance officer under `separation_of_duties:
+> distinct_humans`, and **she has no account, so Gate 10 cannot be signed.** Nothing said
+> so — a run that cannot be finished looked exactly like one nobody had got to."*
+
+So the failure is real, known, and **arrives at the last gate** — after provisioning has
+issued grants, appointed agents and generated a manifest. A venture is carried nine gates
+on the strength of a reviewer who cannot sign the tenth.
+
+**It is in a docstring and a console page. It is not a tracked item, and it needed to be
+one** — which is why this exists.
+
+### Why it is cross-cutting rather than venture-scoped
+
+It reaches Greenstone (Dana is named there first), Burkham (copied), and **any Pack
+authored from here**: `pack_templates.py` emits `human_name: REPLACE_ME`, and nothing
+refuses a Pack whose reviewer was never replaced with somebody real.
+
+### What retires this
+
+A check that every `human_capacity.human_name` resolves to an `office_human` row, at a
+gate early enough to matter — **Gate 1 or Gate 2, not Gate 10**. And a decision about what
+the link should be: a name match is what exists, and an id would be a schema change with a
+migration behind it.
+
+**Not built here.** Recorded so that the next reader meets it before a run does.
+
+---
+
+## B23 — `max_daily_approvals` is decoration
+
+**`cross-cutting`** · Found 2026-09-08.
+
+**No gate and no validator reads it.** It appears in three places: the schema
+(`generators/pack.py`), a template that sets it to `0`, and `broker/proposals.py`, which
+uses it for a **display** — `remaining_today = max(0, max_daily_approvals - decisions)` on
+a reviewer page.
+
+**V13 does not use it.** The capacity check is
+`approvals × median_review_minutes ≤ coverage_hours × 60 × 0.6`. `max_daily_approvals`
+appears nowhere in it.
+
+So Burkham declares Dana at **30** while the approval projection sends her **120 a day**,
+and nothing anywhere notices. **A number that looks like a limit and is not one.**
+
+### The fourth instance of a name asserting more than the code does
+
+Alongside `produced_not_yet_certified` (a field name that reads as a fact about a venture
+and is a fact about an appointment run), `live` on a Pack (publication state read as
+validation state), and `review_seconds` (queue latency that will read as review effort the
+moment it is populated — B21).
+
+**Each is a name that is more specific than the thing behind it.** None is a lie; each
+invites a reader to conclude something the code never claimed.
+
+### What retires this
+
+Either a rule reads it — a per-reviewer daily cap is a reasonable control and V13 does not
+express one — or it comes off the schema. **What should not persist is a cap that looks
+enforced and is not**, sitting in the same block as the numbers B20 and B21 are about.
