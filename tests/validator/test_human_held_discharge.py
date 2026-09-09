@@ -314,17 +314,57 @@ def test_every_capacity_entry_declares_where_its_numbers_came_from():
             assert len(h.provenance.detail.strip()) >= 20
 
 
-def test_burkham_declares_its_numbers_inherited_and_names_the_source():
-    """The claim B20 rests on, made checkable.
+def test_burkham_no_longer_borrows_greenstone_capacity():
+    """B20's condition, from the other side.
 
-    "Copied from Greenstone's human_capacity block" can be verified by reading two files.
-    "Historical" cannot, which is why `source` is required rather than encouraged.
+    Burkham's block used to be `inherited`, byte-for-byte Greenstone's, and this test
+    asserted that the borrowing was at least recorded. On 2026-09-08 Ivan Green declared
+    Burkham's own two reviewers, so the thing being guarded flipped: the assertion is no
+    longer that the copy is labelled, it is that there is no copy left to label.
+
+    Kept rather than deleted because a removed test is a guard nobody misses. If somebody
+    reintroduces a borrowed capacity block, this fails and names B20.
     """
     pack = load_pack(BURKHAM)
     for h in pack.human_capacity:
-        assert h.provenance.basis == "inherited", h.human_name
-        assert h.provenance.source is not None
-        assert "greenstone" in h.provenance.source.lower()
+        assert h.provenance.basis == "declared", (
+            f"{h.human_name}: Burkham declares its own reviewers now - an `inherited` "
+            f"basis here means somebody re-borrowed a capacity block. See B20."
+        )
+        assert h.provenance.source is None
+        assert "greenstone" not in h.provenance.detail.lower()
+
+
+def test_burkham_states_its_v13_margin_where_a_reader_meets_it_first():
+    """A pass with twelve minutes in it should not read like capacity.
+
+    120 projected daily approvals x the coverage-weighted 3.5 minutes is 420 review
+    minutes against 432 available. One more workflow step, or one more position below
+    `auto_execute`, and V13 fails. Nothing in the rule output says how close it is - a
+    PASS looks identical at 12 minutes of margin and at 12 hours - so the Pack says it,
+    above the entries rather than buried under them.
+    """
+    text = BURKHAM.read_text(encoding="utf-8")
+    block = text.split("human_capacity:", 1)[1].split("- human_name:", 1)[0]
+    assert "twelve minutes" in block.lower()
+    assert "420" in block and "432" in block
+
+
+def test_burkham_names_the_v14_weakness_it_satisfies():
+    """The Pack should know its own weak point.
+
+    Two compliance officers naming each other satisfies V14 - which checks only that
+    `backup_human` is non-empty - while making both critical-role backups the same two
+    people. That is the arrangement V14 looks like it exists to catch, and it is stated
+    in the provenance rather than left for a reader to notice.
+    """
+    pack = load_pack(BURKHAM)
+    names = [h.human_name for h in pack.human_capacity]
+    assert [h.backup_human for h in pack.human_capacity] == list(reversed(names)), (
+        "the two reviewers back each other up, which is the arrangement being disclosed"
+    )
+    disclosure = " ".join(h.provenance.detail.lower() for h in pack.human_capacity)
+    assert "v14" in disclosure and "b24" in disclosure
 
 
 def test_greenstone_declares_its_numbers_declared_not_measured():
