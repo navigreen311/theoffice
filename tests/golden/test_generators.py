@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import psycopg
 import pytest
@@ -593,3 +594,129 @@ async def test_hard_dependency_on_a_module_gap_cannot_provision(artifacts):
     assert config.blocked_reason is not None
     assert "MODULE GAP" in config.blocked_reason
     assert config.grants == []
+
+
+# --------------------------------------------- Gate 4.5 V13: weighting by coverage share
+#
+# blocking.md B24. The Gate 4.5 recheck used to take whichever entry of a role came first
+# in the YAML as the review time for everyone in that role. With two compliance officers
+# at six hours each, four minutes and three, V13 came out FAIL or PASS depending on line
+# order alone - and nothing in the Pack, the message or the code said the order was
+# deciding it. These tests fix the aggregation as coverage-weighted and, more importantly,
+# pin the property that makes it a fix rather than a different arbitrary choice: the same
+# people in a different order give the same answer.
+
+def _officers(pack, *entries):
+    """Replace human_capacity with compliance officers at (hours, minutes) each."""
+    base = next(h for h in pack.human_capacity if h.role == "compliance_officer")
+    return pack.model_copy(
+        update={
+            "human_capacity": [
+                base.model_copy(
+                    update={
+                        "human_name": f"Officer {n}",
+                        "coverage_hours": hours,
+                        "median_review_minutes": minutes,
+                    }
+                )
+                for n, (hours, minutes) in enumerate(entries, start=1)
+            ]
+        }
+    )
+
+
+def _projection(approvals):
+    return SimpleNamespace(
+        projected_daily_approvals={"compliance_officer": float(approvals)}
+    )
+
+
+_ALL_FILLED = SimpleNamespace(appointments=[])
+
+
+async def test_v13_review_minutes_do_not_depend_on_list_order():
+    """The B24 case itself: two officers, six hours each, four minutes and three.
+
+    Coverage is 12h -> 432 review-minutes at the 0.6 utilisation factor. 120 approvals
+    at the weighted 3.5 minutes is 420, which fits. Under the old first-wins rule the
+    same two people gave 480 (FAIL) or 360 (PASS) depending on which line was on top.
+
+    The verdicts matching is the point; the messages matching is the stronger claim,
+    because it means the number the reviewer reads did not move either.
+    """
+    from generators.validator import validate_gate_4_5
+
+    pack = load_pack(PACK_PATH)
+    forward = await validate_gate_4_5(
+        _officers(pack, (6.0, 4.0), (6.0, 3.0)), _projection(120), _ALL_FILLED
+    )
+    reverse = await validate_gate_4_5(
+        _officers(pack, (6.0, 3.0), (6.0, 4.0)), _projection(120), _ALL_FILLED
+    )
+
+    assert forward.get("V13").verdict == reverse.get("V13").verdict
+    assert forward.get("V13").message == reverse.get("V13").message
+    assert forward.get("V13").verdict.value == "PASS", (
+        "120 approvals at the coverage-weighted 3.5 minutes is 420 against 432 available"
+    )
+
+
+async def test_v13_weights_by_coverage_share_not_by_headcount():
+    """Unequal coverage separates weighted from mean, first and last.
+
+    Nine hours at four minutes and three hours at eight gives a weighted 5.0. The plain
+    mean is 6.0, the first entry is 4.0, the last is 8.0 - so asserting the minutes the
+    message prints distinguishes the weighting from every other aggregation that was on
+    the table.
+    """
+    from generators.validator import validate_gate_4_5
+
+    pack = load_pack(PACK_PATH)
+    report = await validate_gate_4_5(
+        _officers(pack, (9.0, 4.0), (3.0, 8.0)), _projection(90), _ALL_FILLED
+    )
+
+    v13 = report.get("V13")
+    assert v13.verdict.value == "FAIL", "90 x 5.0 = 450 against 432 available"
+    assert "At 5 minutes each" in v13.message, (
+        f"expected the coverage-weighted 5.0, got: {v13.message}"
+    )
+
+
+async def test_v13_is_unchanged_for_a_role_with_one_person():
+    """A weighted average of one value is that value.
+
+    Both real Packs declare one person per role, so this change must be invisible to
+    them. If it is not, the arithmetic is wrong rather than the Pack.
+    """
+    from generators.validator import validate_gate_4_5
+
+    pack = load_pack(PACK_PATH)
+    report = await validate_gate_4_5(
+        _officers(pack, (4.0, 6.0)), _projection(192), _ALL_FILLED
+    )
+
+    v13 = report.get("V13")
+    assert v13.verdict.value == "FAIL"
+    assert "At 6 minutes each" in v13.message
+    assert "192" in v13.message and "1,152" in v13.message
+
+
+async def test_v13_states_the_answer_when_a_role_has_no_coverage_at_all():
+    """Zero coverage hours leaves no share to weight by, and must not divide by zero.
+
+    The review times are still declared - it is the coverage that is missing - so the
+    fallback is their plain mean, and the rule then fails on the thing that is actually
+    wrong: nobody is covering the role.
+    """
+    from generators.validator import validate_gate_4_5
+
+    pack = load_pack(PACK_PATH)
+    report = await validate_gate_4_5(
+        _officers(pack, (0.0, 4.0), (0.0, 3.0)), _projection(10), _ALL_FILLED
+    )
+
+    v13 = report.get("V13")
+    assert v13.verdict.value == "FAIL"
+    assert "with no reviewer coverage at all" in v13.message
+    assert "At 3.5 minutes each" in v13.message
