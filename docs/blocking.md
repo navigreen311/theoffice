@@ -1482,3 +1482,20 @@ same sentence Burkham's copy already has.
 If they turn out to be a stand-in too, then **every V13 verdict this system has ever
 produced, for both ventures, has compared a derived demand to an undocumented supply**,
 and the two Gate 4.5 halts on record are undecidable rather than settled.
+
+### The trap for whoever returns to this
+
+**A populated `review_seconds` must not be dropped into `median_review_minutes`.**
+
+Once proposals start being decided that column will exist, be full, and look exactly like
+the measured answer — while measuring **queue latency, not review effort**. It is
+wall-clock from `created_at` to the decision; a proposal raised overnight and approved
+next morning records ~50,000 seconds of "review", of which the review was a minute.
+
+**The column's own quality is what makes it convincing.** It is computed in the database
+rather than accepted from the caller, precisely so nobody can report a time they did not
+take, and it carries a rubber-stamp guard. Everything about it says *trustworthy
+measurement* — and it is one, of a different quantity than the one V13 multiplies by.
+
+A number that is honest, well-built, full, and about something else is harder to catch
+than a missing one.
