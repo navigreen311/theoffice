@@ -1591,3 +1591,75 @@ invites a reader to conclude something the code never claimed.
 Either a rule reads it — a per-reviewer daily cap is a reasonable control and V13 does not
 express one — or it comes off the schema. **What should not persist is a cap that looks
 enforced and is not**, sitting in the same block as the numbers B20 and B21 are about.
+
+---
+
+## B24 — the order of two lines in a YAML file decides a gate verdict
+
+**`cross-cutting`** · Found 2026-09-08, while establishing what declaring a second real
+reviewer would take. **Recorded before any declaration, because the declaration cannot be
+made honestly until this is settled.**
+
+Two `compliance_officer` entries, same two people, same six coverage-hours each, same
+**432** review-minutes available. V13's verdict depends on **which one is listed first**:
+
+| listed first | min/review used | demand | available | V13 |
+|---|---|---|---|---|
+| Ivan (4 min) | 4 | 480 | 432 | **1.1× over — FAILS** |
+| Ira (3 min) | 3 | 360 | 432 | **PASSES** |
+
+`coverage_by_role` accumulates with `+=`. `review_minutes_by_role` uses `setdefault`, so
+**the first entry of a role sets the multiplier for every person in it.**
+
+### Its own class, and the opposite of B23's
+
+B23 collects four names asserting more than the code does — `produced_not_yet_certified`,
+`live` on a Pack, `review_seconds`, `max_daily_approvals`. Each is a name **more specific
+than the thing behind it**.
+
+**This one asserts nothing at all.** There is no field, no message, no name, and no
+surface of any kind. **The order carries a decision nobody knows they are making** — and
+the person who reorders that list for readability, or alphabetises it, or moves the
+founder to the top out of courtesy, will be changing a gate outcome with nothing anywhere
+telling them so.
+
+A wrong name can at least be read and doubted. **An ordering cannot be doubted, because it
+does not look like a claim.**
+
+### `setdefault` almost certainly meant "do not overwrite"
+
+That is the idiom's normal use in a dict-building loop, and it is a reasonable thing to
+write. **It is not a reasonable policy**, and nothing marks the moment it became one. No
+comment, no test, no docstring says *the first person decides for everyone* — which is
+exactly what it does.
+
+### What would fix it — not built here
+
+**Either** `median_review_minutes` becomes a property of the **role** rather than of
+whoever happens to be listed first — one declared value per role, and a per-person field
+that no longer silently stands in for it.
+
+**Or** the aggregation is **explicit and stated**: `min`, `max`, `mean`, or weighted by
+each person's coverage share. Any of those can be argued with, and all of them are visible.
+
+**Silently taking the first is the one option that cannot be right, because nothing chose
+it.** A defensible aggregation is a decision somebody made; this is an artifact of a dict
+idiom.
+
+### Two adjacent facts, recorded here because the same declaration surfaces them
+
+**The second compliance officer exists only through the first account.** `ROLE_RANK` is
+`{venture_operator: 1, compliance_officer: 2, ivan: 3}`, and `assert_may_grant` requires
+**strictly stronger** — *"not 'stronger or equal', which would let a compliance officer
+mint another compliance officer and make the role self-propagating."* So `ivan` can grant
+`compliance_officer`; a `compliance_officer` cannot grant one back. **Correct, and not
+symmetric** — a two-officer arrangement is reachable only from the top role, and only the
+top role can restore it if one is removed.
+
+**V14 passes on the arrangement it exists to catch.** It fails a critical role with no
+`backup_human` and checks nothing else: not that the backup is a different person, not
+that they exist, not that they are not themselves a critical role, not that they have any
+capacity. **Two compliance officers naming each other satisfy it** — while making both
+critical-role backups the same two people, which is the concentration the rule was
+presumably written to detect. And `backup_human` is a free string like `human_name`, so it
+carries B22's problem too: it can name somebody with no account.
