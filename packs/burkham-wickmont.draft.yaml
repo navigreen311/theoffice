@@ -213,6 +213,20 @@ market:
       applies_when: Any payout to a partner or referrer
       runtime_flag: referral_fee_permitted_in_state
       library_gap: true
+      # Declared human-held 2026-09-08, ruling T-080. The reasoning is stated at
+      # length below, above the scenario set - this is the same finding in the one
+      # place a rule can read it. V22 now counts this flag as accounted for; whether
+      # the obligation was actually discharged is V34's question and V34 fails until
+      # a named human files a discharge. Gate 2 does not clear because of this line.
+      human_held:
+        why: >
+          No position in this Pack has a duty that touches a payout. Intake captures
+          agreements; Diagnostic pulls and computes; Placement matches, assembles and
+          submits; Compliance scans, records and assembles; Stack monitors, recommends
+          and tracks. None of them pays anybody. Writing a scenario would mean
+          inventing a duty no role has and teaching an agent to perform an act no
+          position authorizes. The obligation is real - partner payouts happen and
+          something governs them - and it is a venture-operator act, held by a human.
     # Both of these were already in scope on a position and declared by no framework.
     # The Compliance Reviewer and the Stack Manager carry
     # trigger_term_disclosure_required, the Diagnostic Analyst carries

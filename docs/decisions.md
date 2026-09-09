@@ -2414,3 +2414,86 @@ what the Pack does. A reader who finds it and not this entry would conclude the 
 drifted from its own decision record. **Entry 5 carries a pointer here for that reason** —
 the same failure entry 4 was amended to prevent on 4 September, one link further along the
 chain.
+
+---
+
+## 26. Some declared obligations are held by humans — and The Office cannot enforce this one at all
+
+**Decided 2026-09-08**, ruling T-080, implementing what entry 24 recorded as a gap.
+
+`referral_fee_permitted_in_state` is real for Burkham — partner payouts happen and
+something governs them — and **no position in the Pack has a duty that touches one.**
+Intake captures agreements; Diagnostic pulls and computes; Placement matches, assembles
+and submits; Compliance scans, records and assembles; Stack monitors, recommends and
+tracks. **None of them pays anybody.**
+
+V22 demanded a scenario exercising the flag. The two available answers were both false:
+invent a scenario for a duty no role has, or delete a real obligation. So the absence is
+declared instead — `HumanHeld(why=...)` — and a second rule, V34, asks whether the
+obligation was actually discharged.
+
+### THE OFFICE CANNOT ENFORCE THE PAYOUT. READ THIS BEFORE READING `HumanHeld`.
+
+**The Office mediates agent-to-Forge calls. No module pays a referral fee. No position
+holds the duty. So there is no call to intercept, and the enforcement point for this
+obligation lives outside this system entirely.**
+
+Anyone who meets `HumanHeld` and assumes a payout is now gated has read it exactly
+backwards. Declaring an obligation human-held records **who it belongs to and whether
+they have discharged it**. It places no control anywhere near the act. The act happens
+wherever Burkham actually pays partners, which is not here, and nothing in this codebase
+observes it.
+
+That is not a defect in this design — it is the honest boundary of what The Office is.
+Building a control here that appeared to gate a payout would be B1's shape: an approved
+record with no path to the act it describes.
+
+### Why the two halves ship together, demonstrated rather than argued
+
+**`HumanHeld` alone is a cheap escape**: any flag nobody wants to write a scenario for
+could be marked human-held, and V22 would go quiet.
+
+This was produced deliberately. With the type landed and V34 not yet written, Burkham
+validated at **32 PASS / 0 FAIL / 1 NOT_RUN of 33** — the one NOT_RUN being V24, which
+never runs at Gate 2 by construction. **Gate 2 cleared, for a venture whose referral-fee
+obligation nobody had verified, on the strength of one YAML key.** That tree was never
+merged. It is recorded in `docs/plans/human-held-obligations-PREDICTION.md`.
+
+Today V22 fails **loudly and wrongly** — it names a missing scenario when the truth is
+that no agent holds the duty. `HumanHeld` without V34 passes **silently and wrongly**,
+which is worse: a loud wrong answer is at least read.
+
+### The third application of one pattern
+
+**A schema that cannot express an honest absence gets a false value written into it.**
+
+1. `validate_sections` refused an empty compliance coupling, so SimForge's two modules
+   carried `tsr_disclosure_required` — **Greenstone's flag, on a Forge whose Packs
+   declare `[]`.**
+2. `compliance_couplings.NoFramework(why=...)` fixed that, and its docstring says why an
+   empty list was not enough: *nothing can tell an accidental empty from a considered
+   one, and four of the nine rows were accidental.*
+3. ADR-0049 is the same shape for scenario classes — a declared `not_applicable` with a
+   required reason, because a module that cannot supply a class was otherwise capped
+   silently and permanently.
+
+`HumanHeld` is the third. In each, the fix is not "allow empty" — it is **a distinct type
+that carries a reason**, so a considered absence and an accidental one cannot be
+confused.
+
+### What this does not do, stated so nobody has to infer it
+
+**It does not unblock Gate 2.** No discharge record exists, and none can until a named
+human files one. The block moves from V22 to V34 and becomes honest: the failure stops
+saying *somebody forgot a scenario* and starts saying *a real obligation is held by a
+human and has not been verified.*
+
+**It does not catalogue the founder, CRB or outside-counsel obligations.** That is real
+work and each needs somebody who knows which duty it is — the same reason the six
+orphaned flags of B15 stayed unassigned rather than guessed at. It follows this; it does
+not gate it.
+
+### What retires this entry
+
+A position that pays, or a discharge that is filed, current, and covers the venture's
+actual jurisdictional footprint. **Neither is code.**
