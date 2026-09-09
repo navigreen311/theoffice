@@ -270,10 +270,44 @@ Adding `Marketing Operations Coordinator` to the Pack moves **Burkham's Gate 2 f
 - **V6** — the nine modules are not in `forge_module_registry`
 - **V11** — no Forge Operating Instructions authored for any of them
 - **V23** — no scenarios for `Marketing Operations Coordinator`
-- **V31 → NOT_RUN** — *"nothing verified is known about the shape of"* those modules. **The
-  rule this package's design condition is about does not even run**, which is worth saying
-  plainly: the expected V31 failure is not what happens. Something earlier stops first.
+- **V31 → NOT_RUN** — *"nothing verified is known about the shape of"* those modules.
 - **V32 → NOT_RUN** — `funnelforge: not in forge_registry`
+
+### Correction — "something earlier stops first" was wrong
+
+**Written by the coordinator, corrected by P-13 on measurement. The wrong sentence is removed
+above rather than left standing, and the reason it was wrong is here.**
+
+The first version of this note said the V31 failure *"is not what happens; something earlier
+stops first"* — reasoning from the fact that three other rules fail and V31 reports NOT_RUN.
+
+**That is not why V31 is silent.** P-13 measured it rather than arguing it: same seeded world,
+bound Pack, `validate()` before and after applying the nine registry rows its own generator
+produces.
+
+**V31 was mute because it had nothing to read.** With no `funnelforge` rows in
+`forge_module_registry`, `unattended_writes` returns all nine as *unresolved*. Apply the rows
+and **V31 goes NOT_RUN → FAIL**, naming `distribute_referrer_briefing` at `auto_execute` as a
+mutating `at_most_once` module — exactly as the package predicted from the start.
+
+**This sharpens the case for holding the Pack edit rather than weakening it.** The state the
+edit would have created is not "declaration without evidence"; it is *declaration plus a
+generator nobody ran* — **the one combination where the rule this package exists to satisfy is
+silent.** Worse than declaration-plus-rows, and worse than neither.
+
+### And the owed work is two items, not three
+
+**V6 is closable today, by a command this PR already ships.** P-13 measured V6's list shrinking
+by exactly nine when the rows land (`+15 more` → `+6 more`). That is **step 2** — the step this
+package moved off the not-automatable list — not steps 4 and 5.
+
+**The genuinely-owed authoring is V11 and V23. Two, not three.** One has a script; the other
+two have an author. That difference matters to whoever picks this up, and the coordinator's
+original phrasing — *"the artifacts that satisfy it stay owed"* — flattened it.
+
+**Ordering, which the original note did not state:** the registry rows must land **before or
+with** the patch, never after. Apply the patch alone and V31 goes mute again, which is the
+state this whole correction is about.
 
 ### What this is, and what it is not
 
@@ -294,9 +328,7 @@ risk was the next run, which would not have reached Gate 4 at all.
 
 ### What re-applies it
 
-**Steps 4, 5 and 6 for all nine modules** — operating instruction, curriculum, certification —
-plus the registry rows, which `generators/forge_module_rows.py` now derives rather than asking
-a human to type. Then `git apply docs/plans/funnelforge-position-DEFERRED.patch`, republish,
+**The registry rows first** — `scripts/register_funnelforge_modules.py`, which this package ships, closing V6. **Then V11 and V23: operating instructions and scenarios, the two that need an author.** Then certification. The rows must land before or with the patch, never after. Then `git apply docs/plans/funnelforge-position-DEFERRED.patch`, republish,
 and Gate 2 should return to 0 FAIL with V31 finally **running** — and, per this package's own
 finding, **failing on seven of the nine**, which is the honest declaration and must not be
 softened at either end.
