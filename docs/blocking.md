@@ -1299,3 +1299,110 @@ The same misreading, three times, at three depths, on the same Forge. It is not 
 attention by three people — **it is what a one-word verdict does to a reader when the
 finding lives in the sentence underneath it.** That is why each of these is written down
 with its clause rather than its verdict.
+
+---
+
+## B20 — V13's verdict is unactionable: real demand against a placeholder supply
+
+**`venture-scoped: burkham-wickmont`** · Found 2026-09-08, at Gate 4.5 of run `6a97fbe1`.
+
+V13 fails on Burkham: *"The compliance officer would receive 120 approvals a day. At 6
+minutes each that is 720 minutes of review against 144 minutes available - 5 times over."*
+It names three fixes — raise a trust-tier ceiling, add reviewer coverage, or cut scope.
+
+**None of them can be chosen yet, because only one side of that ratio is Burkham's.**
+
+| side | where it comes from |
+|---|---|
+| **120 approvals** | **Burkham's own structure.** 15 generated workflow steps × 8 decisions/day, every position at `trust_tier_ceiling: propose`, so nothing is skipped |
+| **144 minutes** | **Greenstone's staffing, borrowed.** The Pack says so: *"INVENTED, and modelled on Greenstone's staffing so the Gate 4.5 comparison in the report is like for like. Burkham names no reviewer anywhere."* |
+
+**Choosing between raise-a-tier, add-coverage and cut-scope on those numbers would be
+deciding against a stand-in.** Cutting scope because a placeholder reviewer is overloaded
+changes a real venture to fit an invented denominator.
+
+### The same class as entry 15, one layer in
+
+Entry 15 recorded that **every capacity number in this system is Greenstone's** — Burkham
+has never been provisioned. That was about the numbers themselves. This is the same
+borrowing surviving into a **verdict**: the Pack's comment is honest, and by the time it
+reaches V13's message the provenance is gone. What the reviewer reads is *"144 minutes
+available"*, stated as flatly as the 120 beside it, and nothing in the sentence says one
+was measured and the other assumed.
+
+**A rule that mixes a derived number and a placeholder in one comparison produces a
+verdict with no honest reading.** It is not wrong — it is unactionable, which is a
+different thing and needs saying differently.
+
+### What retires this
+
+Burkham's real reviewer coverage, declared in `human_capacity`: for each reviewer,
+`human_name`, `role`, `coverage_hours`, `median_review_minutes`, `max_daily_approvals`,
+`timezone`, `auth_method`, and a `backup_human`. **`role` is the field that matters most**
+— `_reviewer_for` routes by it, and it is what decides whether a second reviewer relieves
+anybody.
+
+**Not code.** Until then V13's verdict should be read as *"this venture has more approval
+demand than its declared reviewers can absorb, and its reviewers are not declared."*
+
+### Two facts that hold whatever the supply side turns out to be
+
+Both are levers that cost nothing and are currently unused. **Neither is a fix on its own.**
+
+**1. 360 reviewer-minutes exist and 60% of them are idle.** `_reviewer_for` routes all five
+positions to `compliance_officer`. Dana has 144 min/day; Ivan, as `venture_operator`, has
+216 min/day and receives **nothing**. Moving the two all-read positions to Ivan gives
+Dana 528 vs 144 and Ivan 128 vs 216 — Ivan fits, Dana is still 3.7× over. It does not
+solve it and it is free.
+
+**2. 32 of 120 approvals are pure reads.** Diagnostic Analyst (`statement_pull`) and Stack
+Manager (`portfolio_health`, `restack_recommend`) operate nothing that writes. A human
+approving them is approving a lookup. **They are freeable only as whole positions**,
+because `trust_tier_ceiling` is per position and not per module — which is also why the
+other 88 cannot be freed: each of those positions holds at least one write, and
+Compliance Reviewer's is `regulator_dossier_export`, `at_most_once`, on the artefact that
+goes to a regulator.
+
+### Coverage hours sum across people; review speed does not average
+
+`review_minutes_by_role` is built with `setdefault`, so **the first declared human of a
+role sets the per-review minutes for that entire role.** `coverage_by_role` accumulates
+with `+=`.
+
+Anyone picking staffing numbers would reasonably assume both averaged, **and would be
+wrong in the direction that makes the plan look feasible**: adding a fast second reviewer
+buys coverage hours and buys nothing on the multiplier. A 6-minute first reviewer and a
+2-minute second one is still a 6-minute role.
+
+### The multiplier is borrowed too — B20's shape on the other side of the equation
+
+**`median_review_minutes: 6` is not Burkham's either.** Burkham's entire `human_capacity`
+block is **byte-for-byte identical to Greenstone's** — same two people, same roles, same
+`coverage_hours` of 6 and 4, same `max_daily_approvals` of 60 and 30, same
+`median_review_minutes` of 4 and 6, same timezone, same backups.
+
+So V13's ratio for Burkham is **one real number over two borrowed ones**: 120 derived
+from Burkham's own structure, divided by a coverage figure and multiplied by a review-time
+figure, both of which are Greenstone's.
+
+**And Greenstone's own numbers have no recorded provenance.** Its `human_capacity` block
+carries no comment, and nothing in `docs/` records where 4 and 6 minutes came from. The
+Burkham copy is at least labelled INVENTED; the original is not labelled at all, which
+makes it the more dangerous of the two — **a number nobody flagged is one nobody
+re-examines.**
+
+### What the sensitivity actually shows, stated carefully
+
+**At 6 minutes a review, correcting only the coverage side does not clear V13 for any
+staffing anyone would plausibly declare**: two people at six hours each is still 1.7×
+over, and it takes roughly 20 coverage-hours a day to pass. On that reading the
+placeholder was **hiding a real shortfall rather than manufacturing one.**
+
+**But that conclusion rests on the 6, and the 6 is borrowed.** At 3 minutes a review, two
+people at six hours **passes**. The difference between failing and passing at plausible
+staffing is entirely inside a number nobody measured.
+
+**So the honest statement is narrower than "the shortfall is real":** the shortfall is
+real *if* six minutes is right, and nothing establishes that it is. **Both inputs to that
+judgement have to be declared before either can be trusted** — which is what makes this
+item about the verdict being undecidable rather than wrong, on both sides rather than one.
