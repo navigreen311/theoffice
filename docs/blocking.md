@@ -2171,6 +2171,22 @@ a ledger entry pointing at nothing. It cannot catch a tightening whose author ne
 appended at all — nothing inside one build can, which is the same boundary B26 found, and
 it is written down here rather than papered over.
 
+**Corrected 2026-09-09 by P-07, after B31.** Two sentences above were wrong within three
+hours of being written, and they are corrected here rather than edited away.
+
+**The ledger to append to is `V3_SCHEMA_CHANGES`, not `V3_TIGHTENINGS`.** The latter still
+exists and still means exactly what it says — the tightenings — but it is now derived, and
+appending to it is no longer the whole of the second half.
+
+**And "catches a rename that leaves a ledger entry pointing at nothing" claimed more than
+the code did.** The test walked `V3_TIGHTENINGS` checking that each named a field the model
+still has. That catches a *tightening's* field being renamed out from under it. It could not
+catch what actually happened — a rename arriving with **no ledger entry at all**, in a model
+that had no way to express one — because a ledger nobody appended to is exactly what nothing
+inside one build can check, which the paragraph above says correctly one sentence later and
+then contradicts. **The claim was read off the test's name.** Caveat 14, in the closure note
+of the item about names asserting more than the code does.
+
 ## B28 — Greenstone's live Pack is in the state B26 describes, and nothing has been done about it
 
 **`greenstone`** · Found 2026-09-08, immediately after fixing B26 for Burkham.
@@ -2396,6 +2412,81 @@ acting on its own judgement inside someone else's work.
 `missing(new) + extra_forbidden(old)` pair at the same path as one explained change rather than
 two disqualifying errors. Then `get_version` on `0.6.0` says what is actually true: **this row
 predates the rename, and the document it names is fine.**
+
+### Closed 2026-09-09 by P-07 — a sibling type, not a flag, and the pair is matched per entry
+
+**`renamed_from` on `SchemaTightening` was not taken, and the reason is this item's own
+finding.** A tightening is v3 asking for *more*; a rename is v3 asking for the *same value*
+under another name. A `renamed_from` field on a class called `SchemaTightening` would make the
+class name false for half its rows — **a name asserting more than the code does, which is B23's
+class, appearing inside the machinery built to fix B27.** That is precisely the trap this item
+warns about, and repeating it in the fix for it would have been the joke writing itself.
+
+So `SchemaRename` is a sibling of `SchemaTightening`, and `SchemaChange` is the union. The
+ledger is `V3_SCHEMA_CHANGES`. **`V3_TIGHTENINGS` keeps its old spelling and its old meaning** —
+it is now derived, holding the tightenings and nothing else — because a public name that
+silently grows a wider meaning is how the callers of one become the callers of the other.
+`V3_RENAMES` is its counterpart.
+
+### The pair is matched on the full location, list index included
+
+Not on the field path. Five ways a document can carry a refused key without being an
+unmigrated row, and only the first is the one anybody pictures:
+
+| the document | verdict | why |
+|---|---|---|
+| a key the ledger has never heard of | **malformed** | the guard, unchanged |
+| a real rename **plus** an unknown key | **malformed** | one unexplained error is enough; a diagnosis is all-or-nothing |
+| **both** names present in one entry | **malformed** | no `missing` half — two migrations that half-ran, or a hand edit |
+| **neither** name present | **malformed** | the field had no default under either revision; the value was never there |
+| old name at entry 0, neither name at entry 1 | **malformed** | counted across the document the halves look like a pair; per entry, neither entry is unmigrated |
+| old name at entry 0, entry 1 already migrated | **predates** | every failing entry fails as a complete pair — a half-fixed row is still an old row |
+
+The fifth row is why the index is in the match. A path-only rule calls it *old* and sends the
+reader to a migration that will not help, which is B27's false confidence pointing the other
+way.
+
+### Measured, on the row this item was found on
+
+`packs.get_version(conn, "burkham-wickmont", "0.6.0")`, against the real row in the development
+database, left exactly as it was because it is the evidence:
+
+```
+PackPredatesTighteningError: burkham-wickmont@0.6.0 is a schema-v3 Business Pack stored under
+an EARLIER REVISION of v3. It is not malformed. `schema_version` says 3 and that is correct -
+every field v3 required when this was written is present, under the name it had then. What the
+column cannot say is WHICH revision of v3, and this one was stored before this change:
+  * `human_capacity[].advisory_daily_approval_ceiling` - renamed from `max_daily_approvals` on
+    2026-09-09 (blocking-log B23); 2 entries here still carry the old name. This build requires
+    that every `human_capacity` entry declares its daily approval figure as
+    `advisory_daily_approval_ceiling`. The value did not change and neither did its effect -
+    nothing enforces it, and nothing ever did. What could not persist was a name that read as
+    a cap.
+This build reads v3 as of 2026-09-09.
+Do not go and inspect the Pack source; there is nothing wrong with it. This is a stored row
+that was never migrated when the schema changed. Republish the venture's Pack at a new version
+- see docs/blocking.md B26, B28 and B31.
+```
+
+### The reverted attempt, reproduced rather than taken on trust
+
+This item says the ledger entry alone does nothing. That was re-run rather than believed:
+the `SchemaRename` entry left in place and **only** the guard's first line restored to its
+pre-B31 form.
+
+**Seven tests fail, and `test_the_ledger_entry_is_not_decoration` is one of them.** The other
+**nine pass** — every one of the disqualifying cases above. That is the measurement that
+matters in both directions at once: it confirms the entry is unreachable without the pair
+rule, *and* it shows the guard's teeth are not what changed, because the cases that test them
+never moved.
+
+### What this does NOT do
+
+**Nothing is republished and no Pack is edited.** `burkham-wickmont@0.6.0` is still stale and
+`provisioning_run def65e4f` still cannot generate from it — it was `blocked` on V24 with zero
+certified candidates before this and it is blocked on V24 now. **What is fixed is the message,
+not the row.** B28's decision — which rows get migrated, and by whom — is still open and still
+Ivan's.
 
 ## B32 — GAP-5: no `DeptCert` has ever existed, and SimForge holds a stale department copy
 
