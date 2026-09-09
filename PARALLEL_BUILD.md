@@ -924,6 +924,34 @@ neighbour's wreckage as its own and "fix" it.
 3. **A package reporting a large failure count states whether other agents were running.**
    An unqualified count is not a measurement.
 
+**Caveat 16 — a stamped `alembic_version` is not a migrated schema, and the suite does it to
+itself.** Found by P-08 as E-012; **confirmed by the coordinator within the hour, on itself.**
+
+`tests/deployment/test_probes.py` sets `alembic_version` directly as its restore step. A
+migration-adding branch therefore leaves a database **stamped at the new revision with the old
+schema underneath** — and `alembic upgrade head` then reports `0033 (head)` and does nothing,
+because the stamp says the work is done.
+
+Measured on `theoffice_test` during P-08's merge window: stamped `0033`, `review_seconds`
+present, `queue_to_decision_seconds` absent. Eleven tests failed with
+`UndefinedColumn: column "queue_to_decision_seconds" does not exist` **against a migration
+alembic said was applied.** The remedy is `alembic stamp 0032` then `upgrade head`.
+
+**Two separate traps in one window, and the coordinator hit both:**
+
+1. **`alembic` migrates `OFFICE_ADMIN_DSN`; the suite runs against `OFFICE_TEST_ADMIN_DSN`.**
+   Migrating the dev database and running the tests is not the same act, and the failure
+   arrives as eleven red contract tests rather than as "you migrated the wrong database".
+2. **Then the stamp hid the second half**, so the obvious fix reported success and changed
+   nothing.
+
+**The lesson is the one this file already carries in another form:** a status field is not a
+measurement of the thing it describes. `alembic current` reports what was *written to a table*,
+not what is *in the schema* — the same shape as B26's `status = 'live'` on twelve unreadable
+rows, and as the polled `in_progress` P-07 mistook for a hung job.
+
+**Check the column, not the version.** Both are one query.
+
 **What would fix it properly, not built here:** a per-worktree database, cloned from a
 template at session start and dropped at the end — which is what P-09 did by hand under the
 name `theoffice_test_p09`. The plan should have specified it. **File isolation was designed
