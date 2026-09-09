@@ -1624,6 +1624,63 @@ Either a rule reads it — a per-reviewer daily cap is a reasonable control and 
 express one — or it comes off the schema. **What should not persist is a cap that looks
 enforced and is not**, sitting in the same block as the numbers B20 and B21 are about.
 
+**Half closed 2026-09-09 by P-08. Two of the four names renamed; two escalated, and the
+escalations are the finding.**
+
+| name | disposition |
+|---|---|
+| `max_daily_approvals` | **renamed** `advisory_daily_approval_ceiling` |
+| `review_seconds` | **renamed** `queue_to_decision_seconds` (migration `0033`) |
+| `produced_not_yet_certified` | **escalated** — E-010 |
+| `live` on a Pack | **escalated** — E-009 |
+
+**The third option B23 did not offer, and it is the one taken.** This entry says a rule
+must read `max_daily_approvals` or it must come off the schema. Neither happened. The
+number is now called `advisory_daily_approval_ceiling`, which says what it is: a figure a
+venture declares, that nothing enforces, whose only consumer is a display. **A declared
+ceiling nobody checks is still worth having in a Pack** — it is the reviewer's own
+statement of what they can absorb, and a rule that reads it later is a smaller change than
+authoring the number from scratch. What could not persist was a name claiming enforcement,
+and that is what changed.
+
+`tests/golden/test_generators.py::test_no_rule_reads_the_advisory_daily_approval_ceiling`
+keeps the name true from the other side: it varies the value across five orders of
+magnitude and asserts **every rule's verdict and message is byte-identical**, not just
+V13's. If a rule ever does read it, that test fails and its message says to rename the
+field rather than delete the test — because at that point `advisory_` is the part that
+has become the lie.
+
+**`review_seconds` is renamed rather than fixed, and the distinction matters.** B21's trap
+is that the column measures queue latency and will read as review effort the moment it is
+populated. **Separating the two is still unbuilt.** `queue_to_decision_seconds` does not
+measure review effort any better than `review_seconds` did; it stops claiming to. Part 14
+rubber-stamp detection reads the same column and is unaffected — an approval landing
+under five seconds of wall clock from being raised is a rubber stamp under either name,
+and that check never needed the distinction. `median_seconds` in the queue payload moved
+with it (`median_queue_to_decision_seconds`), because it sat in the same dict as
+`median_review_minutes` and was the trap in its most reachable form.
+
+**What is left, and why neither was attempted.** Both remaining names change a serialized
+artifact, which the package card separates from a rename that does not:
+
+- **`produced_not_yet_certified`** is in `greenstone_appointment.json` and in
+  `artifacts_hash`, which Gate 4.5 signatures are taken against. `decisions.md` reached
+  this conclusion in September and declined the rename for the same reason.
+- **`live`** is a `business_pack.status` value under a `CHECK` constraint and a partial
+  unique index, and every write of it is in a file this package may not touch.
+
+**And a fifth instance, found in the call sites of the first.** There are **two**
+`produced_not_yet_certified`, counting different populations: the artifact field counts
+candidates one appointment run examined, and `GET /api/ventures/{id}/capacity` counts every
+active identity with no certified unit-A row, across every department. **The endpoint's
+number is what the name says; the artifact's is not.** Both are now documented at their
+definitions, and
+`test_produced_not_yet_certified_counts_examined_candidates_only` pins the divergence with
+the experiment that separates the two readings — an uncertified identity in a
+department no position draws on. **Whoever takes the rename takes both**, because renaming
+one leaves two numbers that no longer look related and are still consulted for the same
+question.
+
 ---
 
 ## B24 — the order of two lines in a YAML file decides a gate verdict

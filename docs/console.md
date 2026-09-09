@@ -91,7 +91,7 @@ So `/proposals`:
   seconds. Showing the number they are about to be measured against gives them a reason
   to read.
 
-None of this is enforcement. The API decides, and it computes `review_seconds` from
+None of this is enforcement. The API decides, and it computes `queue_to_decision_seconds` from
 `created_at` in the database so a client cannot report a review time it did not take.
 This is the difference between a screen that cooperates with a control and one that
 quietly erodes it.
@@ -810,7 +810,7 @@ list. A reviewer is matched to their decisions by display name; where the two do
 it reports no decisions rather than inventing a join.
 
 **The five-second threshold is measured.** It was stated in copy with no data against it.
-`review_seconds` was already computed in the database from `created_at` - so a client
+`queue_to_decision_seconds` was already computed in the database from `created_at` - so a client
 cannot report a review it did not perform - and sub-threshold approvals already raised an
 incident. What was missing was the surface: decisions today, median, count under the
 threshold, approval rate, and the reviewers responsible. Flagged and recorded; nothing is

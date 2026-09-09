@@ -19,7 +19,7 @@ why it does not exist. The task fails, and both facts are audited.
 **There is no bulk approve.** Bulk approval is the rubber-stamp mechanism this page's own
 copy warns about, industrialised. Bulk deny is fine - denying is the safe direction.
 
-**Time to decision is measured, not asserted.** `review_seconds` is computed in the
+**Time to decision is measured, not asserted.** `queue_to_decision_seconds` is computed in the
 database from `created_at`, so a client cannot report a review it did not perform.
 """
 
@@ -179,8 +179,8 @@ async def test_reviewer_capacity_comes_from_the_pack(api, world):
 
     assert body["reviewers"], "no reviewer capacity is reported"
     for reviewer in body["reviewers"]:
-        assert reviewer["max_daily_approvals"] > 0
-        assert reviewer["remaining_today"] <= reviewer["max_daily_approvals"]
+        assert reviewer["advisory_daily_approval_ceiling"] > 0
+        assert reviewer["remaining_today"] <= reviewer["advisory_daily_approval_ceiling"]
         assert "coverage_hours" in reviewer
         assert "timezone" in reviewer
 
@@ -255,7 +255,7 @@ async def test_no_route_approves_in_bulk():
 async def test_a_decision_records_how_long_it_took(api, world):
     """Q6 - the threshold in the copy is unenforceable without this.
 
-    `review_seconds` is computed in the database from `created_at`, so a client cannot
+    `queue_to_decision_seconds` is computed in the database from `created_at`, so a client cannot
     report a review it did not perform.
     """
     agent = await _agent(world.admin)
@@ -275,8 +275,8 @@ async def test_a_decision_records_how_long_it_took(api, world):
         decided = await proposals.get(conn, proposal_id)
 
     assert decided is not None
-    assert decided["review_seconds"] is not None
-    assert float(decided["review_seconds"]) >= 0
+    assert decided["queue_to_decision_seconds"] is not None
+    assert float(decided["queue_to_decision_seconds"]) >= 0
 
 
 # ==================================== Q7-Q10 - what the queue renders
@@ -348,7 +348,7 @@ async def test_history_carries_the_payload_as_it_stood(api, world):
     assert decided["decision_reason"] == "wrong number"
     assert decided["reviewer"] == "Ivan"
     assert decided["payload"]["to"] == "+15559999999"
-    assert decided["review_seconds"] is not None
+    assert decided["queue_to_decision_seconds"] is not None
 
 
 async def test_capacity_reports_when_pending_exceeds_what_is_left(api, world):

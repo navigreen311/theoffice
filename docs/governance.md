@@ -106,7 +106,7 @@ proposal. ⚠ That column inherits the venture's retention and PHI obligations. 
 `propose`-tier grant on a PHI-touching module puts PHI in `proposal.payload`, and the
 venture's `data_retention` policy must cover it. Not yet enforced — Phase 3.
 
-**Rubber-stamp detection** (Part 14): `review_seconds` is computed in the database from
+**Rubber-stamp detection** (Part 14): `queue_to_decision_seconds` is computed in the database from
 `created_at`, so a caller cannot report a review time it did not take. Approvals under
 five seconds raise a MEDIUM `rubber_stamp_approval` incident. A human clicking approve
 in three seconds has not read a bank-statement payload, and a trust tier that is really

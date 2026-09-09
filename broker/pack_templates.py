@@ -180,7 +180,7 @@ def skeleton(
                 "role": PLACEHOLDER,
                 "coverage_hours": 0,
                 "timezone": PLACEHOLDER,
-                "max_daily_approvals": 0,
+                "advisory_daily_approval_ceiling": 0,
                 "auth_method": "sso_mfa",
                 # A template's numbers are placeholders, and the provenance says so
                 # rather than leaving the next author to inherit silence. This is the

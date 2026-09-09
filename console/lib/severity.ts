@@ -156,9 +156,9 @@ export const SEVERITY_CLASS: Record<Severity, string> = {
 export const RUBBER_STAMP_SECONDS = 5;
 
 /** Whether a decision was fast enough to be flagged as a rubber stamp. */
-export function isRubberStamp(reviewSeconds: number | null | undefined): boolean {
-  return reviewSeconds !== null && reviewSeconds !== undefined
-    ? reviewSeconds < RUBBER_STAMP_SECONDS
+export function isRubberStamp(queueToDecisionSeconds: number | null | undefined): boolean {
+  return queueToDecisionSeconds !== null && queueToDecisionSeconds !== undefined
+    ? queueToDecisionSeconds < RUBBER_STAMP_SECONDS
     : false;
 }
 
