@@ -2159,7 +2159,7 @@ FILES YOU MAY CREATE:
   - nothing
 
 FILES YOU MAY MODIFY:
-  - docs/decisions.md   (at the number P-00 allocated to you)
+  - docs/decisions.md   (ENTRY 29 — allocated to you by P-00; do not choose your own)
 
 FILES YOU MUST NOT TOUCH:
   - any code file at all
