@@ -895,6 +895,69 @@ New this run. The coordination plan's own premise was wrong twice, and both time
 doing the reasoning: *"unit B"* looked like it needed domain scenarios and does not, and
 *"no new code expected"* described a path with no writer at all.
 
+**Caveat 15 — file-atomic is not test-atomic. The packages share one database, and a
+contended suite is indistinguishable from a broken branch.** Found by P-09 mid-run, and it is
+a defect in this plan rather than in any package.
+
+Every package works in its own worktree on its own files — and every one of them runs pytest
+against the **same** `OFFICE_ADMIN_DSN`, a single `theoffice` database. The suite's fixtures
+delete `office_human`, the Forge registry and every venture-scoped table, which is correct in
+isolation and is exactly what makes it uninhabitable by two agents at once.
+
+P-09 measured full-suite runs at **118 failed / 80 errors**, then **91 failed / 86 errors**,
+against a 1049-passed baseline recorded twenty minutes earlier. It diagnosed the cause by
+running the same file on a **pristine merge-base worktree** back to back — **unmodified main
+came back redder than the branch under test** — and worked around it by cloning the database.
+
+**The consequence for this run: a package's local suite result is not evidence while other
+packages are running.** The merge gate — *no new failures against the recorded baseline* —
+cannot be evaluated from a contended run, and a package that measures during a burst will
+report a catastrophe that is not there. Worse in the other direction, a package could read a
+neighbour's wreckage as its own and "fix" it.
+
+**What the coordinator does about it, starting now:**
+
+1. **CI is the arbiter, not a local run.** CI provisions its own database per job. A PR's
+   `Tests` job is the measurement; a local count is a hint.
+2. **The coordinator re-runs the suite serially before each merge**, with no agents working,
+   and that run is what the ledger records.
+3. **A package reporting a large failure count states whether other agents were running.**
+   An unqualified count is not a measurement.
+
+**Caveat 16 — a stamped `alembic_version` is not a migrated schema, and the suite does it to
+itself.** Found by P-08 as E-012; **confirmed by the coordinator within the hour, on itself.**
+
+`tests/deployment/test_probes.py` sets `alembic_version` directly as its restore step. A
+migration-adding branch therefore leaves a database **stamped at the new revision with the old
+schema underneath** — and `alembic upgrade head` then reports `0033 (head)` and does nothing,
+because the stamp says the work is done.
+
+Measured on `theoffice_test` during P-08's merge window: stamped `0033`, `review_seconds`
+present, `queue_to_decision_seconds` absent. Eleven tests failed with
+`UndefinedColumn: column "queue_to_decision_seconds" does not exist` **against a migration
+alembic said was applied.** The remedy is `alembic stamp 0032` then `upgrade head`.
+
+**Two separate traps in one window, and the coordinator hit both:**
+
+1. **`alembic` migrates `OFFICE_ADMIN_DSN`; the suite runs against `OFFICE_TEST_ADMIN_DSN`.**
+   Migrating the dev database and running the tests is not the same act, and the failure
+   arrives as eleven red contract tests rather than as "you migrated the wrong database".
+2. **Then the stamp hid the second half**, so the obvious fix reported success and changed
+   nothing.
+
+**The lesson is the one this file already carries in another form:** a status field is not a
+measurement of the thing it describes. `alembic current` reports what was *written to a table*,
+not what is *in the schema* — the same shape as B26's `status = 'live'` on twelve unreadable
+rows, and as the polled `in_progress` P-07 mistook for a hung job.
+
+**Check the column, not the version.** Both are one query.
+
+**What would fix it properly, not built here:** a per-worktree database, cloned from a
+template at session start and dropped at the end — which is what P-09 did by hand under the
+name `theoffice_test_p09`. The plan should have specified it. **File isolation was designed
+carefully and database isolation was not designed at all**, which is the same class of miss
+as B26: the thing in git was made atomic and the thing in force was not.
+
 **Every agent gets its own git worktree.** `git checkout -b` in a shared checkout collides
 with whatever another agent has uncommitted. This cost a recovery on the previous run.
 
@@ -995,7 +1058,9 @@ Every merge gets a row: package, PR, merge SHA, test result, timestamp.
 | P-11 | | | | | |
 | P-12 | | | | | |
 | P-13 | | | | | |
-| P-14 | | | | | |
+| **P-14** | [#73](https://github.com/navigreen311/theoffice/pull/73) | `a334e6b` | 1049 pass, count unchanged | 10 lines, identical | 2026-09-09 |
+
+**P-14 merged out of numeric order, deliberately.** Its card puts it fifteenth, but that number is a merge-order slot, not a dependency. P-14 depends only on P-00, touches exactly one file (`docs/decisions.md`, +84/-0), and no other package in this wave writes to that file. Holding a records-only package behind an unscoped one (P-13) would have bought nothing and risked the entry going stale against a ruling made the same day. **Verified by the coordinator rather than taken from the agent's report:** file scope from the PR's own file list, and the Smoke capture re-pulled from run `34383553084` and diffed byte-for-byte — ten lines, non-empty, identical.
 
 *(#69 and #70 predate P-00 and are listed because they changed `docs/blocking.md`, which
 every package appends to. #69 is T-015.)*
