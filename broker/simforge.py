@@ -180,9 +180,9 @@ def mint_run_ref(
 
 
 class SimForgeClient:
-    """The only two calls The Office makes to SimForge.
+    """The only three calls The Office makes to SimForge.
 
-    **They travel different paths, and that asymmetry is the design.**
+    **They travel two different paths, and that asymmetry is the design.**
 
     `get_gate_result` is brokered. An agent reads a verdict about its own
     certification, so it goes through `OfficeClient.call` exactly like any other
@@ -191,9 +191,11 @@ class SimForgeClient:
     modifies that path - this class supplies the module name and narrows the
     answer.
 
-    `submit_curriculum` is not brokered. It is signed with The Office's own
-    tenant credential and audited as `curriculum_handed_over`, naming the human
-    who provisioned.
+    `submit_curriculum` and `run_start` are not brokered. Both are signed with
+    The Office's own tenant credential; the hand-over is audited as
+    `curriculum_handed_over`, naming the human who provisioned, and the
+    `run_start` that follows it is bookkeeping on that same act rather than a
+    second one.
 
     WHY GATE 8 DOES NOT GET AN AGENT
     ================================
