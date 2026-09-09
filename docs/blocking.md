@@ -1017,6 +1017,54 @@ path at all — which is also an answer, and a different one to size against.
 Recorded rather than left as a stalled task, because "we were going to read eleven
 modules" reads afterwards as forgotten rather than deferred.
 
+**Closed 2026-09-09, P-06.** The ruling B16 waited for went SimForge's way and it is
+ADR-0049: **a mandatory class admits a declared `not_applicable` carrying a reason in
+prose.** `capitalforge/portfolio_health` now declares `escalation_required` absent in
+`scenarios/portfolio_health.yaml`, in 242 words that give the three facts the argument
+rests on — it takes no identifier, it writes nothing, and its RETRY VS ESCALATE section
+reads *"Retry freely."* in full. **The item is closed by a declaration, not by a
+scenario.** Authoring one would have certified an agent for handling an escalation this
+module cannot produce, which is the outcome B16 was written to avoid rather than a way
+to clear it.
+
+**Measured against SimForge's own validator, not predicted from the shape.** The real
+payload The Office builds for this module was run through
+`validate_curriculum_submission` in the `simforge` checkout:
+
+| submission | violations | `module_levels` |
+|---|---|---|
+| with the declaration | **`[]`** | `demonstrated` |
+| declaration stripped | **1** — *"module portfolio_health: no escalation_required scenario (mandatory)"* | `demonstrated` |
+| with the declaration, empty reason | **3** — *"declared not_applicable with no reason"* | — |
+
+The first row is B16 closed: the submission this module could not make is now accepted.
+The second is the counterfactual it rests on. The third is the required prose refusing a
+declaration without one, which is the property that keeps the first row from being a
+loophole.
+
+**The level is `demonstrated` today and that is the honest answer, not a shortfall.**
+`classify_certification_level` reaches `certified_with_declared_absence` when supplied
+and declared classes together cover all nine, and it strikes the held-out pair from the
+declarations first — so `never_do_violation` and `silent_failure` must be *supplied*,
+and only SimForge can supply them. Run with that pair present, the same function returns
+**`certified_with_declared_absence`**. `certified` is unreachable in either state and
+must stay so: it means all nine were exercised, and a declaration does not buy it. That
+is §1.1's ceiling, structural, and it is the reason the third level exists at all.
+
+**Two things were found on the way and neither is B16.** First, the declaration prose had
+already landed in `37ede70` on 8 September — B16 stayed open for a day after the thing
+that closes it was committed, because nothing tested it and nobody came back to the item.
+**A blocker is closed by evidence, not by a commit that happens to satisfy it.** Second,
+the required-prose rule is implemented on both sides as *non-empty after stripping*, so a
+one-word reason passes. The four accidental empties that motivated the rule are caught;
+a lazy sentence is not. Recorded here rather than fixed, because tightening either side's
+refusal is a change to the mechanism and this item's scope was the declaration.
+
+**What this unparks.** The eleven module reads were parked because at least one of them
+would be refused regardless of how well it was authored. That is no longer true — a module
+that genuinely cannot supply a class may say so and be accepted — so the sizing they exist
+to produce is now a number for a target that has stopped moving.
+
 ## B17 — `--no-merged` reports a squash-merged branch forever, and a reader hears a backlog
 
 **Found 2026-09-07**, taking an inventory of unmerged work before deciding what to merge.

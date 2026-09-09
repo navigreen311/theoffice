@@ -306,3 +306,69 @@ the observation is filed.
 **Asked for:** confirmation that A1.4's intent was the *fact*, not the literal key — which
 is how it has been implemented. If the key itself was meant to go, that is a dataclass
 change and a different package's ruling.
+
+---
+
+# P-06 (Run 2) — declare `portfolio_health`'s `escalation_required` not-applicable
+
+---
+
+## E-007 — the card allows no new files and requires new tests · **RATIFY**
+
+> **DISPOSITION:** *(coordinator)*
+
+**FILES YOU MAY CREATE: nothing.** **TESTS YOU MUST WRITE AND PASS BEFORE OPENING A PR:**
+three of them, named. Both are on the same card and they cannot both be obeyed: no
+existing test file is P-06's, and adding these to one that belongs to another package is
+the collision the worktree rule exists to prevent.
+
+**Taken:** one new file, `tests/golden/test_portfolio_health_declaration.py`, named after
+this package's module so it is disjoint from every other package's by construction. Eight
+tests. Nothing else is created and nothing existing is edited except the B16 closure in
+`docs/blocking.md`, which the card allows.
+
+**Why this rather than escalating and stopping:** the card's "create nothing" reads as
+*do not add source*, and it was written on the premise that only the YAML declaration
+remained. The tests it then demands have to live somewhere. Declared rather than done
+quietly.
+
+---
+
+## E-008 — the card's premise had already been satisfied, a day early · **RECORDED**
+
+> **DISPOSITION:** *(coordinator)*
+
+The card describes the declaration as the remaining work. **It was already committed** —
+`37ede70`, 8 September, Run 1's authoring of the three modules that take no identifier.
+`scenarios/portfolio_health.yaml` has carried the `escalation_required` declaration, in
+242 words, since before Run 2 opened.
+
+**What was actually missing was evidence.** No test anywhere named `portfolio_health`, and
+B16 sat open for a day beside a commit that satisfied it. This package therefore delivers
+the proof and the closure rather than the prose: the declaration is unchanged, and the
+YAML is not touched at all.
+
+**Recorded because the shape is Caveat 14's again** — the plan's premise read out of a name
+("the declaration remains") rather than out of the file. Nothing is waiting on this; it is
+a note for whoever writes the next plan.
+
+---
+
+## E-009 — the required prose is enforced as "non-empty", so one word passes · **RECORDED**
+
+> **DISPOSITION:** *(coordinator)*
+
+The card says *"a one-word reason is refused by machinery that already exists."* **Read on
+both sides, it is not.** The Office's loader refuses `not isinstance(reason, str) or not
+reason.strip()`; SimForge's `NotApplicableDeclaration.__post_init__` refuses
+`not self.why.strip()`. Both refuse an empty or whitespace reason — measured, three
+violations on a `'   '` reason — and both accept `"N/A"`.
+
+**Nothing was weakened and nothing was strengthened.** The refusal that exists is the one
+the four accidental `compliance_couplings` empties motivated, and it works. Tightening it
+into a real prose test is a change to the mechanism, which this card puts off limits, and
+it would land on every module rather than this one. The declaration this package certifies
+is 242 words and its own test asserts more than 40 plus three sentences, so the standard is
+held here by the test rather than by the loader.
+
+**Asked for:** whether the prose floor belongs in the loader for all modules. Not blocking.
