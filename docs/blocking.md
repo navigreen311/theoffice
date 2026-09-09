@@ -2333,3 +2333,66 @@ with the first rather than behind it.
 **A useful side effect for P-11 to keep:** report `missing_unit_b` refusals separately from
 unit-A refusals. They are different failures with different owners, and collapsing them is
 how this stayed hidden.
+
+## B31 — a renamed Pack field reads as a malformed document, not an older one
+
+**`theoffice`** · Found 2026-09-09 by the coordinator, merging P-07 and P-08 in the same
+wave. **Neither package could have found it: each is correct alone, and the gap is between
+them.**
+
+P-07 closed B27 by giving `broker/packs.py` a ledger of **schema tightenings** — the occasions
+on which v3 began requiring something v3 had not required before — so a row stored under an
+earlier revision raises `PackPredatesTighteningError` and says *which* tightening it predates,
+rather than the false *"not a schema-v3 Business Pack"*.
+
+Its guard is deliberate and its docstring says why:
+
+> *"Only an absent field can be explained by 'this predates the field'. A wrong type, a
+> refused extra key or a failed validator is a document that disagrees with the schema, not
+> one that is older than it."*
+
+**That is right for every tightening except a rename.** P-08 renamed
+`max_daily_approvals` to `advisory_daily_approval_ceiling`, and a rename produces **two** error
+kinds per entry:
+
+```
+missing          human_capacity.0.advisory_daily_approval_ceiling
+extra_forbidden  human_capacity.0.max_daily_approvals
+```
+
+The `extra_forbidden` disqualifies the whole diagnosis, so the message falls back to the
+generic sentence — **the exact sentence B27 exists to eliminate**, on the exact class of row it
+was built for.
+
+### Measured, on a row that matters
+
+`provisioning_run def65e4f` is halted at Gate 4.5 and pinned to pack `0.6.0`.
+`packs.get_version(conn, "burkham-wickmont", "0.6.0")` now raises the generic
+`PackStoreError`. **The run cannot read its own Pack version**, and the message points a reader
+at a document that is fine.
+
+The run was already `blocked` on V24 with zero certified candidates, so nothing was advancing
+and no work was lost. **What was lost is the honest message**, three hours after it was built.
+
+### Why it is worth an item rather than a quick fix
+
+**The obvious fix is to add the rename to `V3_TIGHTENINGS`, and it does not work.** That was
+tried and reverted: the entry is true, and it never fires, because the `extra_forbidden` guard
+rejects the diagnosis before the ledger is consulted. A ledger entry that can never fire is
+decoration — B23's class, in the machinery built to fix B27.
+
+**The real fix is that `SchemaTightening` does not model a rename.** A rename is one change
+that presents as two errors, and the pair has to be recognised together: *the new name is
+missing AND the old name is present*. That is a small extension to a model P-07 reasoned about
+carefully, and it belongs to whoever owns that model rather than to a coordinator patching
+around it mid-merge.
+
+**Not built here, deliberately.** The coordinator already broke a package's tests today by
+acting on its own judgement inside someone else's work.
+
+### What retires it
+
+`SchemaTightening` gains a `renamed_from`, and `_predated_tightenings` treats a
+`missing(new) + extra_forbidden(old)` pair at the same path as one explained change rather than
+two disqualifying errors. Then `get_version` on `0.6.0` says what is actually true: **this row
+predates the rename, and the document it names is fine.**
