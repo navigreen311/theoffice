@@ -2397,76 +2397,99 @@ acting on its own judgement inside someone else's work.
 two disqualifying errors. Then `get_version` on `0.6.0` says what is actually true: **this row
 predates the rename, and the document it names is fine.**
 
-## B32 — GAP-5 answered: SimForge holds no domain certification for anything, and two of Burkham's three departments do not exist there
+## B32 — GAP-5: SimForge holds no domain certification for anything, and its department roster is stale
 
-**`cross-cutting`** · Answered 2026-09-09 by the coordinator, read-only, out of the two
-databases. **This was P-04's first task and Ivan asked for it the day it was known rather than
-at P-11.** It is worse than the question assumed.
+**`cross-cutting`** · Answered 2026-09-09 by the coordinator, read-only. **This was P-04's
+first task and Ivan asked for it the day it was known rather than at P-11.**
 
-### The three facts
+**CORRECTED THE SAME DAY. The first version of this item was wrong about half of what it
+claimed, and Ivan issued a ruling on the wrong half before the error was found.** The
+correction is below, under its own heading, with the original claim quoted rather than
+deleted — an item that silently changes what it said is worse than one that was wrong out
+loud.
 
-**1. `DeptCert` holds zero rows.** Not zero for Burkham's departments — **zero for any
-department, including Engineering.** No domain certification exists in SimForge at all.
+### What is true
 
-**2. Two of Burkham's three departments are not SimForge departments.**
+**`DeptCert` holds zero rows.** Not zero for Burkham's departments — **zero for any department,
+including Engineering.** No domain certification has ever existed in SimForge.
 
-| | |
-|---|---|
-| The Office's departments | `administration`, `banking`, `engineering`, `marketing`, `operations` |
-| SimForge's `Department.villageKey` (13) | Clinical, Compliance, CustomerSuccess, Data, **Engineering**, Executive, Finance, Legal, **Marketing**, **Operations**, Payroll, Recruitment, Sales |
+**The Office's three `certified` unit-B rows are all `engineering`, all `attested_by='bootstrap'`
+— *"a grant issued against no scenario run"* — and correspond to nothing in SimForge.** The one
+department that carries unit-B certification in The Office is the one Burkham does not use.
 
-Burkham declares **`administration`, `banking`, `operations`**. Case-insensitively,
-`operations` maps to `Operations`. **`administration` and `banking` have no counterpart of any
-spelling.** `Finance` is the nearest thing to banking, and choosing it is a decision, not a
-lookup.
+**So unit B is blocked, and it is blocked harder than B30 said.** B30 recorded that unit B has
+no submitter. The implicit assumption was that building one would let the certification be
+earned. **There is nothing on the other side to earn it from.** P-04 would ship a correct
+submitter that cannot succeed — still worth building, because a submitter reporting three
+uncertified departments is a true statement and better than B30's silence, but it must be built
+knowing this.
 
-**3. The Office's three `certified` unit-B rows are all `engineering`, all bootstrap-issued,
-and correspond to nothing in SimForge.** They are `attested_by='bootstrap'` — *"a grant issued
-against no scenario run"* — and the row says so. **The one department that has unit-B
-certification in The Office is the one Burkham does not use.**
+### What was wrong, and it was the load-bearing half
 
-### Why this is worse than B30's unit-B half
+The first version said:
 
-B30 said unit B has no submitter and Burkham's departments hold no certification. **The
-implicit assumption was that building the submitter would let the certification be earned.**
-It would not. There is nothing on the other side to earn it from: no `DeptCert` row has ever
-existed, and for two of the three departments there is not even a department to hang one on.
+> *"Two of Burkham's three departments are not SimForge departments … `administration` and
+> `banking` have no counterpart of any spelling. `Finance` is the nearest thing to banking, and
+> choosing it is a decision, not a lookup."*
 
-**P-04 would ship a correct submitter that cannot succeed**, and it would be right to. That is
-still worth building — a submitter reporting three uncertified departments is a true statement
-and better than the silence B30 describes — but it must be built knowing this, not discovering
-it.
+**That is false.** It put two questions to Ivan — *which Village department is `banking`?* and
+*which is `administration`?* — and he ruled **banking → Finance, administration → Executive**.
+**No mapping was needed and that ruling should not be applied.** It is recorded here so it is
+not later mistaken for a live decision.
 
-### The decision nobody has made, arriving
+**The Village's twelve departments, read live from `broker.departments` at the moment of
+correction:**
 
-`packs/burkham-wickmont.draft.yaml`'s own header says it, from 8 September:
+```
+Administration, AI_Data, Banking, Engineering, Executive, Infrastructure,
+Marketing, Media_Production, Music_Production, Operations, Publishing, Research
+```
 
-> *"`source_department` must name a department the Village actually has. Burkham's ten
-> departments … intersect the Village's twelve at ZERO. Every position below therefore names a
-> Village department chosen as the nearest fit, and each choice is marked. **That mapping is a
-> decision nobody has made.**"*
+**`Administration`, `Banking` and `Operations` are all real Village departments.** Burkham's
+three names are correct exactly as the Pack has them. V29 and V30 validate against this list
+and pass.
 
-**That decision is now the thing blocking unit-B certification.** It was recorded as a caveat
-on invented values and it has become load-bearing: `administration` and `banking` are two of
-the "nearest fit" choices, and neither fits anything.
+### Why the coordinator got it wrong
 
-### A trap sitting underneath it
+**It compared The Office's departments against SimForge's `Department` table and treated that
+table as the standard.** It is not the standard. The Office reads the list **live from the
+Village**, and `generators/pack.py` says why, in a comment that describes this exact failure:
 
-**`operations` and `Operations` differ in case.** The one department that does map, maps only
-if the comparison normalises. A lookup that does not would return nothing for all three and
-read exactly like the other two — **a mapping failure and a spelling failure producing the
-same silence.** Whoever builds P-04 should establish which comparison is used before
-concluding a department is absent.
+> *"There is deliberately no `VILLAGE_DEPARTMENTS` here any more. This module held twelve
+> department names. The Village was rebuilt and nine of them stopped existing —
+> `Research & Market Intelligence` became `research`, **`Finance & Administration` became
+> `banking`** — and nothing failed, because **a copy cannot know it has gone stale.** Packs
+> naming departments that had not existed for two days validated cleanly."*
+
+**The field is called `villageKey`, and the coordinator took the name at its word instead of
+asking what wrote it.** That is Caveat 14 — *read a claim out of the schema or the receiving
+side, not out of the names* — committed by the person who wrote Caveat 14, one day after
+writing it.
+
+### The finding that replaces the wrong one, and it is worse
+
+**SimForge is carrying the stale roster the Pack comment warns about.** Its thirteen
+`Department.villageKey` values — Clinical, Compliance, CustomerSuccess, Data, Engineering,
+Executive, Finance, Legal, Marketing, Operations, Payroll, Recruitment, Sales — include nine
+that are not current Village departments, and omit `Administration`, `Banking`,
+`Infrastructure`, `Media_Production`, `Music_Production`, `Publishing` and `AI_Data`.
+
+**The Office solved this problem for itself and SimForge has not.** The Office deleted its copy
+and reads the Village live, precisely because *a copy cannot know it has gone stale*. SimForge
+holds a copy, and nothing tells it.
+
+**The consequence for P-04:** a unit-B submission for `Administration` will find no such
+department in SimForge — **not because the mapping is wrong, but because SimForge's roster
+predates a Village rebuild.** Those two failures look identical from The Office's side, and the
+first version of this item is the proof: it mistook one for the other and cost a ruling.
 
 ### What retires it
 
-**Not code.** Three answers, in this order:
+1. **SimForge stops holding a department copy**, or refreshes it from the Village and can say
+   when it last did. This is `simforge`'s, and it is the same fix The Office already made.
+2. **A `DeptCert` is actually earned for a Burkham department.** Nothing has ever produced one,
+   so that path is unexercised in exactly the way the Gate 8 handover was until P-01 ran it.
 
-1. **Which Village department is `banking`?** `Finance` is the candidate. This is Ivan's, not
-   a lookup.
-2. **Which is `administration`?** `Executive` and `Operations` are both arguable. Also Ivan's.
-3. **Then a `DeptCert` has to be earned for each**, by whatever produces one — and **nothing
-   has ever produced one**, so that path is unexercised in exactly the way the Gate 8 handover
-   was until P-01 ran it.
+**Neither is a decision for Ivan.** The two questions this item originally asked him are
+withdrawn.
 
-**Until 1 and 2 are answered, P-04 can be built but not satisfied.**
