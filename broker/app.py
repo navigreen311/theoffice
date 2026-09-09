@@ -86,7 +86,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0032"
+EXPECTED_SCHEMA_REVISION = "0033"
 
 
 @asynccontextmanager
@@ -647,6 +647,16 @@ async def venture_capacity(venture_id: str, conn: DB, _me: ME) -> dict[str, Any]
     certification row fell into none of the three, because `bool_or` over zero rows is
     NULL and `NOT NULL` is NULL rather than TRUE. Three numbers that quietly omit
     somebody are a worse version of the single number this exists to replace.
+
+    **`produced_not_yet_certified` here is not the field of that name on the appointment
+    artifact.** This one is what the name says: every active row in
+    `office_agent_identity` with no certified unit-A row, across every department,
+    examined by an appointment run or not. `generators.artifacts.CapacityNumbers` has the
+    same key and counts **candidates one appointment run examined and refused** - a
+    strictly smaller population, and a different question. They are not required to agree
+    and routinely will not; a reader comparing this endpoint against a Gate 4.5 artifact
+    is comparing two answers to two questions. See that field's own docstring, and
+    `blocking.md` B23.
     """
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
@@ -980,7 +990,7 @@ async def list_proposals(
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
             "SELECT proposal_id, office_agent_id, venture_id, forge_id, module_id, "
-            "       task_id, trust_tier, payload, status, created_at, review_seconds "
+            "       task_id, trust_tier, payload, status, created_at, queue_to_decision_seconds "
             "FROM proposal WHERE status = %s "
             "  AND (%s::text IS NULL OR venture_id = %s) "
             "ORDER BY created_at",

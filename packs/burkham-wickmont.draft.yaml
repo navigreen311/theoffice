@@ -526,7 +526,7 @@ human_capacity:
     coverage_hours: 6
     timezone: America/Los_Angeles
     backup_human: Ira Green
-    max_daily_approvals: 60
+    advisory_daily_approval_ceiling: 60
     median_review_minutes: 4
     auth_method: sso_mfa
     provenance:
@@ -547,7 +547,7 @@ human_capacity:
     coverage_hours: 6
     timezone: America/Los_Angeles
     backup_human: Ivan Green
-    max_daily_approvals: 60
+    advisory_daily_approval_ceiling: 60
     median_review_minutes: 3
     auth_method: sso_mfa
     provenance:
@@ -567,8 +567,10 @@ human_capacity:
         to notice, because a Pack that does not know its own weak point reads as one that
         does not have one. See blocking.md B24 and B22.
 
-        max_daily_approvals is decoration: no rule reads it, and V13 computes from
-        coverage_hours and median_review_minutes alone. See blocking.md B23.
+        advisory_daily_approval_ceiling was max_daily_approvals, a name that read as an
+        enforced cap. Nothing enforces it: no rule reads it, and V13 computes from
+        coverage_hours and median_review_minutes alone. The name now says so. See
+        blocking.md B23.
       source: null
 
 

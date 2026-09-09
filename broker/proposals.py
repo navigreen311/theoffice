@@ -108,7 +108,7 @@ async def decide(
 ) -> Proposal:
     """Approve or reject. Records how long the human took.
 
-    `review_seconds` is computed from `created_at` in the database rather than
+    `queue_to_decision_seconds` is computed from `created_at` in the database rather than
     passed in, so a caller cannot report a review time it did not take.
     """
     # APPROVING DOES NOT EXECUTE, and the record says so.
@@ -136,9 +136,9 @@ async def decide(
                 decided_at = now(),
                 decided_by = %s,
                 decision_reason = %s,
-                review_seconds = EXTRACT(EPOCH FROM (now() - created_at))
+                queue_to_decision_seconds = EXTRACT(EPOCH FROM (now() - created_at))
             WHERE proposal_id = %s AND status = 'pending'
-            RETURNING proposal_id, status, trust_tier, review_seconds,
+            RETURNING proposal_id, status, trust_tier, queue_to_decision_seconds,
                       venture_id, office_agent_id
             """,
             (status, decided_by, reason, proposal_id),
@@ -149,7 +149,7 @@ async def decide(
     if row is None:
         raise LookupError(f"no pending proposal {proposal_id}")
 
-    if approve and float(row["review_seconds"]) < RUBBER_STAMP_SECONDS:
+    if approve and float(row["queue_to_decision_seconds"]) < RUBBER_STAMP_SECONDS:
         await incidents.raise_incident(
             severity="MEDIUM",
             kind="rubber_stamp_approval",
@@ -158,7 +158,7 @@ async def decide(
             detail={
                 "proposal_id": str(proposal_id),
                 "decided_by": str(decided_by),
-                "review_seconds": float(row["review_seconds"]),
+                "queue_to_decision_seconds": float(row["queue_to_decision_seconds"]),
                 "threshold_seconds": RUBBER_STAMP_SECONDS,
             },
         )
@@ -284,7 +284,7 @@ async def queue(conn: AsyncConnection) -> dict[str, Any]:
         await cur.execute(
             """
             SELECT p.proposal_id::text AS proposal_id, p.venture_id, p.forge_id,
-                   p.module_id, p.status, p.decision_reason, p.review_seconds,
+                   p.module_id, p.status, p.decision_reason, p.queue_to_decision_seconds,
                    p.decided_at, p.payload, p.payload_hash,
                    p.office_agent_id::text AS office_agent_id,
                    i.agent_name, h.display_name AS reviewer
@@ -307,11 +307,12 @@ async def queue(conn: AsyncConnection) -> dict[str, Any]:
                    count(*) FILTER (WHERE p.status = 'approved')   AS approvals,
                    count(*) FILTER (
                      WHERE p.status = 'approved'
-                       AND p.review_seconds < %s
+                       AND p.queue_to_decision_seconds < %s
                    )                                                AS fast_approvals,
                    percentile_cont(0.5) WITHIN GROUP (
-                     ORDER BY p.review_seconds
-                   )                                                AS median_seconds
+                     ORDER BY p.queue_to_decision_seconds
+                   )
+                     AS median_queue_to_decision_seconds
             FROM proposal p
             LEFT JOIN office_human h ON h.human_id = p.decided_by
             WHERE p.decided_at >= date_trunc('day', now())
@@ -362,13 +363,13 @@ async def queue(conn: AsyncConnection) -> dict[str, Any]:
                 "coverage_hours": human.coverage_hours,
                 "timezone": human.timezone,
                 "backup_human": human.backup_human,
-                "max_daily_approvals": human.max_daily_approvals,
+                "advisory_daily_approval_ceiling": human.advisory_daily_approval_ceiling,
                 "median_review_minutes": human.median_review_minutes,
                 "decisions_today": decisions,
-                "remaining_today": max(0, human.max_daily_approvals - decisions),
-                "median_seconds_today": (
-                    float(done["median_seconds"])
-                    if done.get("median_seconds") is not None else None
+                "remaining_today": max(0, human.advisory_daily_approval_ceiling - decisions),
+                "median_queue_to_decision_seconds_today": (
+                    float(done["median_queue_to_decision_seconds"])
+                    if done.get("median_queue_to_decision_seconds") is not None else None
                 ),
                 # The Pack names a reviewer; `decided_by` names an office_human. The
                 # only link between them is the display name, and when it does not match
@@ -381,8 +382,8 @@ async def queue(conn: AsyncConnection) -> dict[str, Any]:
     approvals_today = sum(int(r["approvals"] or 0) for r in today_by_reviewer)
     fast_today = sum(int(r["fast_approvals"] or 0) for r in today_by_reviewer)
     medians = [
-        float(r["median_seconds"]) for r in today_by_reviewer
-        if r["median_seconds"] is not None
+        float(r["median_queue_to_decision_seconds"]) for r in today_by_reviewer
+        if r["median_queue_to_decision_seconds"] is not None
     ]
 
     capacity_remaining = sum(int(r["remaining_today"]) for r in reviewers)
@@ -397,7 +398,7 @@ async def queue(conn: AsyncConnection) -> dict[str, Any]:
             "approval_rate": (
                 approvals_today / decisions_today if decisions_today else None
             ),
-            "median_seconds": (sum(medians) / len(medians)) if medians else None,
+            "median_queue_to_decision_seconds": (sum(medians) / len(medians)) if medians else None,
             "under_threshold": fast_today,
             "threshold_seconds": RUBBER_STAMP_SECONDS,
             "by_reviewer": today_by_reviewer,

@@ -297,7 +297,7 @@ export function DecisionHistory({ history }: { history: DecidedApproval[] }) {
   const visible = history.filter((row) => {
     if (reviewer && row.reviewer !== reviewer) return false;
     if (decision && row.status !== decision) return false;
-    if (fastOnly && !(Number(row.review_seconds) < 5 && row.status === "approved")) {
+    if (fastOnly && !(Number(row.queue_to_decision_seconds) < 5 && row.status === "approved")) {
       return false;
     }
     return true;
@@ -361,7 +361,7 @@ export function DecisionHistory({ history }: { history: DecidedApproval[] }) {
 
           <ul className="mt-3">
             {visible.map((row) => {
-              const seconds = Number(row.review_seconds);
+              const seconds = Number(row.queue_to_decision_seconds);
               const fast = row.status === "approved" && seconds < 5;
               return (
                 <li key={row.proposal_id} className="border-t border-line py-2">
@@ -391,7 +391,7 @@ export function DecisionHistory({ history }: { history: DecidedApproval[] }) {
                         no reviewer — expired
                       </span>
                     )}
-                    {row.review_seconds !== null ? (
+                    {row.queue_to_decision_seconds !== null ? (
                       <span
                         className={`text-meta ${fast ? "text-warn" : "text-ink-muted"}`}
                       >

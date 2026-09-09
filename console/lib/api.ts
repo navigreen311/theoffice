@@ -312,7 +312,7 @@ export type Proposal = {
   payload: Record<string, unknown>;
   status: string;
   created_at: string;
-  review_seconds: string | null;
+  queue_to_decision_seconds: string | null;
 };
 
 export type PackTemplateCategory = {
@@ -779,7 +779,7 @@ export type DecidedApproval = {
   module_id: string;
   status: string;
   decision_reason: string | null;
-  review_seconds: string | number | null;
+  queue_to_decision_seconds: string | number | null;
   decided_at: string | null;
   reviewer: string | null;
   /** The payload as it stood at decision time — the row is never rewritten. */
@@ -794,11 +794,11 @@ export type Reviewer = {
   coverage_hours: number;
   timezone: string;
   backup_human: string | null;
-  max_daily_approvals: number;
+  advisory_daily_approval_ceiling: number;
   median_review_minutes: number | null;
   decisions_today: number;
   remaining_today: number;
-  median_seconds_today: number | null;
+  median_queue_to_decision_seconds_today: number | null;
   matched_to_a_human: boolean;
 };
 
@@ -811,7 +811,7 @@ export type ApprovalQueue = {
     decisions_today: number;
     approvals_today: number;
     approval_rate: number | null;
-    median_seconds: number | null;
+    median_queue_to_decision_seconds: number | null;
     under_threshold: number;
     threshold_seconds: number;
     by_reviewer: {
@@ -819,7 +819,7 @@ export type ApprovalQueue = {
       decisions: number;
       approvals: number;
       fast_approvals: number;
-      median_seconds: string | number | null;
+      median_queue_to_decision_seconds: string | number | null;
     }[];
   };
   capacity: {

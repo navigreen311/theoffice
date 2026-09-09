@@ -124,11 +124,11 @@ function Capacity({
               backup {reviewer.backup_human ?? "none named"}
             </span>
             <span className="text-desc text-ink-secondary">
-              {reviewer.decisions_today} of {reviewer.max_daily_approvals} today
+              {reviewer.decisions_today} of {reviewer.advisory_daily_approval_ceiling} today
             </span>
             <span className="ml-auto text-meta text-ink-muted">
-              {reviewer.median_seconds_today !== null
-                ? `median ${reviewer.median_seconds_today.toFixed(0)}s`
+              {reviewer.median_queue_to_decision_seconds_today !== null
+                ? `median ${reviewer.median_queue_to_decision_seconds_today.toFixed(0)}s`
                 : "no data"}
             </span>
           </li>
@@ -208,8 +208,8 @@ export default async function ProposalsPage() {
         <Metric
           label="Median decision time"
           value={
-            metrics.median_seconds !== null
-              ? `${metrics.median_seconds.toFixed(0)}s`
+            metrics.median_queue_to_decision_seconds !== null
+              ? `${metrics.median_queue_to_decision_seconds.toFixed(0)}s`
               : "no data"
           }
           note={`Flagged under ${metrics.threshold_seconds}s`}

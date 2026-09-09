@@ -399,7 +399,7 @@ class CapacityProvenance(Strict):
                  because "copied from Greenstone's human_capacity block" is checkable and
                  "historical" is the cheap escape wearing a third costume.
       measured   derived from observation, and `source` names what was observed. **Note
-                 `proposal.review_seconds` is NOT this** for `median_review_minutes`: it
+                 `proposal.queue_to_decision_seconds` is NOT this** for `median_review_minutes`: it
                  is wall-clock including queue time, not review effort. See B21.
 
     **Every entry must carry one, including the ones that existed before this field.** A
@@ -444,7 +444,18 @@ class HumanCapacity(Strict):
     coverage_hours: float
     timezone: str
     backup_human: str | None = None
-    max_daily_approvals: int
+
+    #: A declared daily figure that **nothing enforces**. It was `max_daily_approvals`,
+    #: which reads as a cap; no gate, rule or validator reads it, and V13 computes its
+    #: capacity verdict from `coverage_hours` and `median_review_minutes` alone. Its only
+    #: consumer is a display: `broker.proposals.queue` subtracts today's decisions from
+    #: it to show "N approvals left today". A reviewer may exceed it and nothing notices.
+    #:
+    #: Renamed rather than dropped because a per-reviewer daily cap is a reasonable
+    #: control to declare and may become one; what could not persist was a number that
+    #: looked enforced and was not. See `blocking.md` B23.
+    advisory_daily_approval_ceiling: int
+
     median_review_minutes: float = 5.0
     auth_method: Literal["sso_mfa", "mfa_only"]
     #: Required. See `CapacityProvenance` - no default, because a default is how the

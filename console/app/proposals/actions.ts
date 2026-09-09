@@ -11,7 +11,7 @@ import { ApiError, api } from "@/lib/api";
  * agent, which turns a trust tier into a coin flip the agent cannot learn from - and the
  * whole point of `propose` is that a human's judgment reaches the work.
  *
- * The review timer is not enforced here. The API computes `review_seconds` from
+ * The review timer is not enforced here. The API computes `queue_to_decision_seconds` from
  * `created_at` in the database precisely so a client cannot report a review time it did
  * not take, and re-implementing the check in the console would just be a second opinion
  * that eventually disagrees.

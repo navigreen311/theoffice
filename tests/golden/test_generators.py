@@ -203,6 +203,87 @@ async def test_shortfall_reports_all_three_capacity_numbers(greenstone_world, ad
     assert "NOT auto-rejected" in escalation
 
 
+async def test_produced_not_yet_certified_counts_examined_candidates_only(
+    greenstone_world, admin
+):
+    """B23 / T-010 — the name says "in the venture"; the loop says `for row in candidates`.
+
+    `produced_not_yet_certified` increments inside the per-position candidate loop in
+    `generators.appointment`, once per candidate that loop examined and refused. An
+    uncertified identity in a department no Greenstone position draws on is never
+    examined, so it never lands in this number — while it is unambiguously an agent that
+    has been produced and is not yet certified.
+
+    **This is the experiment that separates the two readings, and only this one does.**
+    Adding an identity to `research`, `banking` or `operations` moves the counter under
+    both readings, because Greenstone has a position in each — every new identity is also
+    a candidate. `marketing` has no position, and the two readings disagree there.
+
+    That is the round dismissed in advance as the weaker test in
+    `docs/plans/operations-identity-issuance-PREDICTION.md`; a department with no position
+    was the only thing that could discriminate. Pinned here because the rename that would
+    have carried the meaning is escalated, not made — see `PARALLEL_BUILD_ESCALATION.md`
+    — so the docstring and this test are what stop the next reader believing the name.
+    """
+    unexamined = "88888888-8888-5888-8888-888888888888"
+    pack = load_pack(PACK_PATH)
+
+    async with connection() as conn:
+        before = (await pipeline.run_all(pack, conn)).appointment.capacity
+
+    try:
+        with admin.cursor() as cur:
+            # `marketing`: a real seeded department, and one no Greenstone position
+            # sources from. Uncertified and active — the exact thing the name describes.
+            cur.execute(
+                """
+                INSERT INTO office_agent_identity
+                  (office_agent_id, village_agent_ref, agent_name, department, status)
+                VALUES (%s, 'village::Unexamined Mara', 'Unexamined Mara',
+                        'marketing', 'active')
+                """,
+                (unexamined,),
+            )
+        admin.commit()
+
+        async with connection() as conn:
+            after = (await pipeline.run_all(pack, conn)).appointment.capacity
+
+        assert after.produced_not_yet_certified == before.produced_not_yet_certified, (
+            "an uncertified identity in a department with no position moved the "
+            "counter — it counts candidates examined for positions being appointed, "
+            "and nothing examined this one"
+        )
+
+        # The other half of the claim: it really is an uncertified active identity. The
+        # venture-wide population — which is what `GET /api/ventures/{id}/capacity`
+        # counts under the same key — did move. Two numbers, one name, different answers.
+        with admin.cursor() as cur:
+            cur.execute(
+                """
+                SELECT count(*) FROM office_agent_identity i
+                WHERE i.status = 'active'
+                  AND NOT EXISTS (
+                    SELECT 1 FROM certification c
+                    WHERE c.unit = 'A' AND c.office_agent_id = i.office_agent_id
+                      AND c.state = 'certified'
+                  )
+                """
+            )
+            roster_uncertified = cur.fetchone()[0]
+        assert roster_uncertified > after.produced_not_yet_certified, (
+            "the venture-wide count of uncertified active identities must exceed the "
+            "artifact's number; if they are equal this test is not discriminating"
+        )
+    finally:
+        with admin.cursor() as cur:
+            cur.execute(
+                "DELETE FROM office_agent_identity WHERE office_agent_id = %s",
+                (unexamined,),
+            )
+        admin.commit()
+
+
 async def test_every_workflow_step_names_a_module_a_flag_and_an_escalation(artifacts):
     """G7 — 5.3. A blank compliance flag is ambiguous between 'none applies' and
     'nobody checked', so NONE is spelled out."""
@@ -720,3 +801,55 @@ async def test_v13_states_the_answer_when_a_role_has_no_coverage_at_all():
     assert v13.verdict.value == "FAIL"
     assert "with no reviewer coverage at all" in v13.message
     assert "At 3.5 minutes each" in v13.message
+
+
+# ------------------------------------- B23: the ceiling nothing enforces, pinned as such
+#
+# `max_daily_approvals` read as a per-reviewer daily cap. No gate, rule or validator read
+# it; its only consumer was a display. Burkham declared Dana at 30 while the approval
+# projection sent her 120 a day and nothing anywhere noticed. It is now
+# `advisory_daily_approval_ceiling`, and this test is what keeps the name true: if a rule
+# ever starts reading it, this fails, and whoever wires it up has to take `advisory_` off
+# the front rather than leave a name that has quietly become wrong in the other direction.
+
+async def test_no_rule_reads_the_advisory_daily_approval_ceiling():
+    """B23. Vary it across four orders of magnitude; every verdict and message holds.
+
+    Asserting the whole report rather than V13 alone is deliberate. V13 is the rule the
+    number *looks* like it belongs to, and checking only V13 would leave "some other rule
+    reads it" untested — which is the claim being made.
+    """
+    from generators.validator import validate_gate_4_5
+
+    pack = load_pack(PACK_PATH)
+    base = _officers(pack, (6.0, 4.0), (6.0, 3.0))
+
+    def _ceiling(value):
+        return base.model_copy(
+            update={
+                "human_capacity": [
+                    h.model_copy(update={"advisory_daily_approval_ceiling": value})
+                    for h in base.human_capacity
+                ]
+            }
+        )
+
+    # One approval a day each, against a projection of 120. If anything enforced this,
+    # 1 could not produce the same answer as 100,000.
+    tight = await validate_gate_4_5(_ceiling(1), _projection(120), _ALL_FILLED)
+    loose = await validate_gate_4_5(_ceiling(100_000), _projection(120), _ALL_FILLED)
+
+    tight_rules = {r.rule_id: (r.verdict, r.message) for r in tight.results}
+    loose_rules = {r.rule_id: (r.verdict, r.message) for r in loose.results}
+
+    assert tight_rules == loose_rules, (
+        "a rule read advisory_daily_approval_ceiling. That is a good thing to have "
+        "built and it makes this name wrong: the number is no longer advisory, and "
+        "B23's other half - 'either a rule reads it or it comes off the schema' - has "
+        "been answered. Rename it, do not delete this test."
+    )
+    assert tight_rules["V13"][0].value == "PASS", (
+        "the ceiling of 1 must not change V13: 120 approvals at the coverage-weighted "
+        "3.5 minutes is 420 against 432 available, computed from coverage_hours and "
+        "median_review_minutes alone"
+    )

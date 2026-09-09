@@ -160,7 +160,35 @@ class CapacityNumbers:
 
     certified_and_free: int
     certified_but_allocated: int
+
     produced_not_yet_certified: int
+    """**Counts candidates EXAMINED FOR POSITIONS BEING APPOINTED. Not uncertified
+    identities in the venture.**
+
+    The name reads as a fact about the venture - *how many agents have been produced and
+    are not yet certified*. It is a fact about **one appointment run**. It increments
+    inside the per-position candidate loop in `generators.appointment`, once per candidate
+    that loop examined and refused, and only for `never_certified`, `in_training` and
+    `missing_unit_b`. An uncertified identity in a department no position draws on is
+    never counted, because it is never examined.
+
+    How the two readings were separated, since both survive most evidence: issuing 12
+    operations identities moved it 14 -> 26, which **both** readings predict, because
+    operations feeds a Greenstone position - every new identity was also a candidate.
+    Issuing 25 administration and marketing identities moved it **26 -> 26**. Greenstone
+    has no position in either department, so nothing examined them. See `docs/decisions.md`
+    entry 27 and `blocking.md` B23.
+
+    **The identically-named number on `GET /api/ventures/{id}/capacity` is a different
+    population.** That one counts every active row in `office_agent_identity` with no
+    certified unit-A row, across all departments, examined or not. Two numbers, one name,
+    and they do not have to agree. `tests/golden/test_generators.py` pins the divergence.
+
+    **Not renamed. Escalated.** The field is serialized into
+    `tests/golden/snapshots/greenstone_appointment.json` and into `artifacts_hash`, which
+    Gate 4.5 signatures are taken against, and one of its call sites is off-limits to the
+    package that found this. See `PARALLEL_BUILD_ESCALATION.md`.
+    """
 
     @property
     def total_considered(self) -> int:

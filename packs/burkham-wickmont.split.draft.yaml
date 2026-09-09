@@ -440,7 +440,7 @@ human_capacity:
     coverage_hours: 6
     timezone: America/Los_Angeles
     backup_human: Dana
-    max_daily_approvals: 60
+    advisory_daily_approval_ceiling: 60
     median_review_minutes: 4
     auth_method: sso_mfa
   - human_name: Dana
@@ -448,7 +448,7 @@ human_capacity:
     coverage_hours: 4
     timezone: America/Los_Angeles
     backup_human: Ivan
-    max_daily_approvals: 30
+    advisory_daily_approval_ceiling: 30
     median_review_minutes: 6
     auth_method: sso_mfa
 
