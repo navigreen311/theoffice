@@ -1345,6 +1345,38 @@ anybody.
 **Not code.** Until then V13's verdict should be read as *"this venture has more approval
 demand than its declared reviewers can absorb, and its reviewers are not declared."*
 
+### Is a real `median_review_minutes` measurable, or must it be declared?
+
+**Measurable in principle, unmeasured in fact, and the column that looks like the answer
+measures something adjacent.**
+
+`proposal.review_seconds` exists and is well built: `proposals.decide` computes it **in
+the database** as `EXTRACT(EPOCH FROM (now() - created_at))` rather than accepting it from
+the caller, *"so a caller cannot report a review time it did not take."* There is even a
+`RUBBER_STAMP_SECONDS = 5.0` guard on approvals below it.
+
+**But it is null on every row that exists.** The `proposal` table holds two rows, both
+`pending`, created 3 September and never decided. **No human has ever decided a proposal
+in this system**, so there is not one observation to take a median of.
+
+**And when it is populated it will not be `median_review_minutes` as V13 means it.**
+`review_seconds` is wall-clock from `created_at` to the decision — it includes queue time.
+A proposal raised overnight and approved next morning records ~50,000 seconds of "review",
+of which the review was a minute. V13's multiplier is **how long a review takes**;
+`review_seconds` is **how long a proposal waits**. They coincide only when a reviewer is
+sitting on the queue.
+
+That gap is structural rather than incidental: B1 records that approving a proposal
+executes nothing and `mark_executed` has no production caller, so proposals are not
+decided in any normal flow — which is also why there are two of them, pending, from five
+days ago.
+
+**So `median_review_minutes` is a declaration, like the coverage hours.** It can become
+measured later, and the honest path to that is: decided proposals accumulate, and
+something separates review effort from queue latency. Until both, it is asserted — and it
+should be asserted by a named person on a stated basis rather than inherited.
+
+
 ### Two facts that hold whatever the supply side turns out to be
 
 Both are levers that cost nothing and are currently unused. **Neither is a fix on its own.**
@@ -1406,3 +1438,47 @@ staffing is entirely inside a number nobody measured.
 real *if* six minutes is right, and nothing establishes that it is. **Both inputs to that
 judgement have to be declared before either can be trusted** — which is what makes this
 item about the verdict being undecidable rather than wrong, on both sides rather than one.
+
+---
+
+## B21 — Greenstone's capacity numbers carry no provenance, and it has been failing on them since it was authored
+
+**`venture-scoped: greenstone`** · Found 2026-09-08 while writing B20.
+
+B20 records that Burkham's `human_capacity` is invented and borrowed. **This is the item
+about where it was borrowed from, and it is the worse of the two.**
+
+`packs/greenstone.yaml` declares Ivan at 6 coverage-hours / 4 median review minutes and
+Dana at 4 / 6. **The block carries no comment.** Nothing in `docs/` records where any of
+those four numbers came from — not the decision record, not the validator docs, not the
+plans. They are asserted and unattributed.
+
+**Burkham's copy is byte-for-byte identical and is labelled `INVENTED`.**
+
+### The copy is more honest than the source
+
+That is the finding. A reader of the Burkham Pack is told, in the file, that the numbers
+are a stand-in modelled on Greenstone so the Gate 4.5 comparison is like for like. **A
+reader of the Greenstone Pack is told nothing**, and there is nothing to find elsewhere.
+
+**A number nobody flagged is one nobody re-examines.** Greenstone has been failing V13 at
+Gate 4.5 on these figures since it was authored — 192 approvals against 144 reviewer
+minutes, recorded in `decisions.md` entry 15 and in the Gate 4.5 finding that Greenstone
+as authored is not staffable. **Every one of those verdicts was computed against a
+denominator and a multiplier whose origin nobody wrote down**, and the failure has been
+read as a fact about Greenstone's scope rather than as a fact about two unattributed
+numbers.
+
+That is not a claim the scope is fine. It is a claim that **nobody can currently tell**,
+and that the not-staffable conclusion has been carrying more weight than its inputs
+support.
+
+### What retires this
+
+Provenance for Greenstone's four numbers: measured, estimated by a named person on a
+stated basis, or replaced. **A comment in the Pack saying which would retire it** — the
+same sentence Burkham's copy already has.
+
+If they turn out to be a stand-in too, then **every V13 verdict this system has ever
+produced, for both ventures, has compared a derived demand to an undocumented supply**,
+and the two Gate 4.5 halts on record are undecidable rather than settled.
