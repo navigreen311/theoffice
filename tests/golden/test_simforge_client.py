@@ -2,8 +2,14 @@
 
 The asymmetry is the point of these tests. `get_gate_result` must go through the
 brokered path and must not let an unvalidated body reach a caller; `submit_curriculum`
-must sign with the tenant credential, audit against a human, and refuse an acceptance
-it cannot correlate.
+and `run_start` must sign with the tenant credential and audit against a human.
+
+**Two tests here used to assert that an acceptance without a `run_ref` is refused.**
+That was the contract being wrong in test form: `OperationRunStartRequest.run_ref` is an
+INPUT field, so the ref was never SimForge's to return, and P-01 measured ten of ten
+modules accepted while the client raised on every one of them. They now assert the
+opposite, and `run_start` - declared in `forge_modules.NOT_AGENT_FACING` and never once
+called - has tests for the first time.
 
 `tests/golden/stub_simforge.py` is deliberately not used here. Its routes were invented
 before there was a client, and SimForge serves neither of them - it proves
@@ -159,12 +165,16 @@ def _transport(handler):
     return httpx.AsyncClient(transport=httpx.MockTransport(handler))
 
 
-async def test_a_handover_returns_the_run_ref_and_audits_the_human(monkeypatch):
+async def test_a_handover_returns_the_acceptance_body_and_audits_the_human(monkeypatch):
     """The audit entry names the provisioner, and no agent appears anywhere.
 
     That is the whole reason this call is not brokered: there is no agent behind a
     curriculum hand-over, and naming one would put a name in the record for a call it
     never made.
+
+    The return value is the acceptance body now, not a ref. `module_levels` is the
+    field worth having - the per-module certification level - and the old contract
+    discarded the entire body to read one key that was never in it.
     """
     written: list[dict] = []
 
@@ -177,25 +187,37 @@ async def test_a_handover_returns_the_run_ref_and_audits_the_human(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path.endswith("/submit_curriculum")
         assert request.headers["Authorization"].startswith("Bearer ")
+        # SimForge's real acceptance shape, read off
+        # `apps/api/src/routers/operation.py::submit_curriculum` rather than off the
+        # name of anything. No `run_ref` anywhere in it.
         return httpx.Response(
             200,
             json={
-                "run_ref": "sf-run-9", "accepted": True,
-                "scenario_count": 15, "coverage_denominator": 15,
-                "rejected_reason": None,
+                "accepted": True,
+                "module_levels": {"parse_document": "certified"},
+                "module_declared_absences": {},
+                "never_do_obligations": [],
+                "coverage_declaration": {
+                    "modules_in_forge": 4, "modules_covered": 3,
+                    "modules_uncovered": ["settle_trade"],
+                    "functions_in_module": 0, "functions_covered": 0,
+                },
+                "gate_9_5_flag": False,
             },
         )
 
     client = SimForgeClient(
         FakeOffice(), http=_transport(handler), resolver=FakeResolver()
     )
-    run_ref = await client.submit_curriculum(
+    body = await client.submit_curriculum(
         FakeConn(ROWS), scenario_pack_ref="run:abc",
         payload={"scenario_count": 15, "coverage_denominator": 15},
         actor=ACTOR, venture_id=VENTURE,
     )
 
-    assert run_ref == "sf-run-9"
+    assert body["accepted"] is True
+    # The reason the whole body is returned rather than narrowed to a ref.
+    assert body["module_levels"] == {"parse_document": "certified"}
     assert len(written) == 1
     assert written[0]["event_type"] == "curriculum_handed_over"
     assert written[0]["actor_type"] == "human"
@@ -234,11 +256,20 @@ async def test_the_audit_entry_is_written_before_the_call(monkeypatch):
     assert len(written) == 1, "the intent entry did not survive a failed call"
 
 
-async def test_an_acceptance_without_a_run_ref_is_refused(monkeypatch):
-    """The failure B8 was made of.
+async def test_an_acceptance_without_a_run_ref_is_not_refused(monkeypatch):
+    """The inversion of a test that asserted the bug.
 
-    An accepted hand-over with no ref cannot be correlated to a verdict and cannot be
-    seen to time out. Treating it as success is how a submission becomes invisible.
+    This file used to say "an accepted hand-over with no ref cannot be correlated to a
+    verdict", and that reasoning was sound about a premise that was false. **The ref
+    was never SimForge's to return.** `OperationRunStartRequest.run_ref` is an input
+    field, and its own docstring gives the reason: The Office reads one verdict per
+    `run_ref`, so a run whose identity is only known once it finishes cannot be asked
+    about while it is hanging. The correlation the old test was protecting is real; it
+    is established by `run_start`, from this side.
+
+    So an acceptance carrying no ref - which is every acceptance SimForge has ever
+    sent - returns normally, and the ten-of-ten Burkham modules P-01 measured stop
+    raising.
     """
     monkeypatch.setattr(
         "broker.simforge.write_event", lambda **k: _noop()
@@ -248,19 +279,28 @@ async def test_an_acceptance_without_a_run_ref_is_refused(monkeypatch):
         return httpx.Response(
             200,
             json={
-                "run_ref": "", "accepted": True, "scenario_count": 15,
-                "coverage_denominator": 15, "rejected_reason": None,
+                "accepted": True,
+                "module_levels": {"parse_document": "demonstrated"},
+                "module_declared_absences": {},
+                "never_do_obligations": [],
+                "coverage_declaration": {
+                    "modules_in_forge": 1, "modules_covered": 1,
+                    "modules_uncovered": [],
+                    "functions_in_module": 0, "functions_covered": 0,
+                },
+                "gate_9_5_flag": False,
             },
         )
 
     client = SimForgeClient(
         FakeOffice(), http=_transport(handler), resolver=FakeResolver()
     )
-    with pytest.raises(SimForgeError, match="without returning a run_ref"):
-        await client.submit_curriculum(
-            FakeConn(ROWS), scenario_pack_ref="run:abc",
-            payload={"scenario_count": 15}, actor=ACTOR, venture_id=VENTURE,
-        )
+    body = await client.submit_curriculum(
+        FakeConn(ROWS), scenario_pack_ref="run:abc",
+        payload={"scenario_count": 15}, actor=ACTOR, venture_id=VENTURE,
+    )
+    assert "run_ref" not in body
+    assert body["module_levels"]["parse_document"] == "demonstrated"
 
 
 async def test_an_undeclared_field_in_an_acceptance_fails_the_call(monkeypatch):

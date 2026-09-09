@@ -19,13 +19,29 @@
   ],
 
   "submit_curriculum": {
-    "purpose": "Acknowledge receipt of a Scenario Pack and return a run reference.",
+    "purpose": "Acknowledge receipt of a curriculum, and echo the per-module certification levels, the declared absences and the Gate 9.5 flag. It does NOT open a run - see run_start.",
     "fields": {
-      "run_ref": "Opaque SimForge run identifier. Correlation only.",
-      "accepted": "Boolean. Whether the pack was accepted for execution.",
+      "run_ref": "NOT RETURNED, and kept here only as an allowance. This entry once said 'the run reference SimForge returns' and the client raised without it; the ref was never SimForge's to mint - `OperationRunStartRequest.run_ref` is an INPUT field. Listed so a deployment that does emit one is not refused mid-provisioning; nothing reads it.",
+      "accepted": "Boolean. Whether the curriculum passed the Batch-3 rules. Always true on a 200 - a refusal is a 422 carrying its violations.",
+      "module_levels": "module_id -> certified | certified_with_declared_absence | demonstrated. THE FIELD WORTH HAVING: the per-module certification level, which is what the certification run needs and what the old contract discarded by returning only a ref.",
+      "module_declared_absences": "module_id -> scenario_class -> the reason that class cannot exist for that module. Echoed because a level alone cannot surface a cap (ADR-0049). Office-authored reasons coming back; carries no held-out content.",
+      "never_do_obligations": "The declared never-do entries, acknowledged as received and not yet exercised. A submitter may not author the scenarios that test them (ADR-0048), so the echo is what replaces silence.",
+      "coverage_declaration": "The coverage block echoed back: modules_in_forge, modules_covered, modules_uncovered, functions_in_module, functions_covered. Counts and module ids The Office itself sent.",
+      "gate_9_5_flag": "Whether this submission trips the Gate 9.5 condition. A flag, never the reasoning behind one.",
       "scenario_count": "How many scenarios were accepted. A count, never content.",
       "coverage_denominator": "The denominator. Required: a count without one is not coverage.",
       "rejected_reason": "Short enum-like reason if not accepted. Never scenario text."
+    }
+  },
+
+  "run_start": {
+    "purpose": "Open the OperationRun a verdict is later read by. The Office mints the run_ref and declares the unit; SimForge records the run and fixes its window.",
+    "fields": {
+      "run_ref": "Echo of the ref The Office minted. Correlation only.",
+      "unit": "'A' or 'B', echoed back. Declared at the start because a hanging run must be askable about before it finishes.",
+      "started_at": "When SimForge opened the run. A timestamp carries no scenario content.",
+      "window_minutes": "The window this run is judged against, fixed at start so a run is never re-judged against a default that changed while it ran.",
+      "already_open": "True when this ref was already open and the clock was NOT restarted. The signal that a retried hand-over did not extend a hanging run's window."
     }
   },
 

@@ -504,6 +504,62 @@ row was written.
 resolve a submission, and no timer invokes it. That is a separate gap and it is not
 closed here.
 
+### CLOSED 2026-09-09 (P-15) — and the 2026-09-07 fix above was fixing the wrong thing
+
+The paragraph beginning *"Fixed in the same change"* is **false**, and it stayed false
+for two days while reading as a closure note. Gate 8 did start naming
+`simforge_run_ref` in its INSERT, and the value it named was
+`SimForgeClient.submit_curriculum`'s return — which was **`None` on every single row**,
+because SimForge does not return a ref and never did. The column went on being NULL. The
+INSERT was no longer missing a column; it was writing a nothing.
+
+P-01 measured it end to end on 2026-09-08 (simforge #135): ten of ten Burkham modules
+ACCEPTED, `accepted: true` read off the response body, and
+`curriculum_submission.simforge_run_ref` NULL on all ten rows.
+
+**The ref was never SimForge's to return.** `OperationRunStartRequest.run_ref` is an
+*input* field, and its own docstring gives the reason: *"The Office reads one verdict per
+`run_ref`, and a run whose unit is only known once it finishes cannot be asked about
+while it is hanging."* The caller mints the ref, declares the unit with it, and SimForge
+opens a run under it. `submit_curriculum` answers a different question entirely — it
+validates a curriculum and echoes back the per-module certification levels — and it has
+no ref to give anybody.
+
+So the closure has two halves and neither is shippable alone:
+
+  * **`run_start` is now called.** It has been declared in
+    `broker.forge_modules.NOT_AGENT_FACING` with a written reason since the adapter was
+    bound — *"opens the OperationRun a verdict is later read by"* — and nothing had ever
+    invoked it. Gate 8 mints a ref, hands the curriculum over, opens the run under that
+    ref, and stores it. The ref is stored only when **both** halves land: a ref naming a
+    run SimForge never opened correlates to nothing, and reads as a hand-over that
+    worked.
+  * **The response manifest now says what arrives.** It declared `run_ref` as a
+    `submit_curriculum` field and omitted the five SimForge actually sends
+    (`coverage_declaration`, `gate_9_5_flag`, `module_declared_absences`,
+    `module_levels`, `never_do_obligations`), so `validate_response` raised on every
+    acceptance. `validate_response` itself is unchanged — no wildcard, no warning path,
+    no relaxation. The manifest became accurate; the check did not become lenient.
+    `tests/contract/test_run_ref_contract.py::test_a_sixth_undeclared_field_still_fails_the_check`
+    is what holds that line.
+
+`module_levels` was the quiet cost. It is the per-module certification level —
+`certified`, `certified_with_declared_absence`, `demonstrated` — arriving on every
+accepted submission and thrown away ten times out of ten, because the client narrowed
+the whole body to one key that was never in it.
+
+**The shape, added to the one this entry already names.** The original entry says: *ask
+of any control what populates the field it keys on, and has that code ever run.* The
+2026-09-07 fix answered that question and got the answer wrong, because it asked it of
+the *name* rather than of the schema. `submit_curriculum` returning a `run_ref` was
+inferred from The Office expecting one. **Check who writes a thing before concluding who
+owes it** — the receiving side's schema is the answer, and it was one file away the whole
+time.
+
+**Still open, unchanged**: nothing calls `overdue_submissions()` on a schedule. A run
+can now be opened, correlated and timed out; no timer invokes the sweep that would do
+it. That is P-03's sweep, and it is not closed here.
+
 ## B9 — SimForge's never-do rule has no correct submission
 
 **Found 2026-09-07**, building the Gate 8 hand-over against SimForge's validator.
