@@ -1558,6 +1558,38 @@ migration behind it.
 
 **Not built here.** Recorded so that the next reader meets it before a run does.
 
+### The second half of the same gap, and it was never written down
+
+Everything above is one direction: **the Pack can name a reviewer the system has never
+heard of.** The mirror is equally true and has been sitting beside it unrecorded — **the
+system will accept a review from someone the Pack never named.**
+
+`record_human_review` asks `authorize(human, required_role="venture_operator",
+venture_id=...)`. That question is *is this role strong enough, and does it reach this
+venture*. It is **not** *is this person one of the reviewers this venture declared*, and
+nothing else in the Gate 4 path asks that either.
+
+So Burkham's Pack now names Ivan Green and Ira Green, and **any** human holding
+`venture_operator` or stronger with scope over the venture — or with a global role, which
+`strongest_role` treats as applying everywhere — can record the Gate 4 review. The Pack's
+`human_capacity` has no say in who reviews. It is read by V13's arithmetic and by
+`_reviewer_for`'s routing, and by nothing that gates the act.
+
+**The two halves are one defect with two ends**, and either alone reads as smaller than it
+is. A name in the Pack that reaches no account, and an account that reaches no name in the
+Pack: the list of declared reviewers and the set of people who can actually review are
+**two unconnected collections that both look authoritative.** Declaring real reviewers, as
+Burkham now has, closes neither end — it makes the first end *look* closed, which is worse
+than the state before, because the Pack now names two people who genuinely exist and still
+does not mean they are the ones who signed.
+
+**What retires it is the same join, used in both directions.** Once
+`human_capacity.human_name` resolves to an `office_human`, the reverse check is available
+for free: Gate 4 can ask whether the reviewer is among the declared ones. Whether it should
+*refuse* a review from an undeclared human or *record* that it was undeclared is a separate
+decision — an `ivan` doing an emergency review is a real case — but the current state does
+not offer that choice, because it never knows.
+
 ---
 
 ## B23 — `max_daily_approvals` is decoration
@@ -1913,3 +1945,58 @@ job: a positional count plus a real text diff, read before publishing rather tha
 
 **Ivan's call, deliberately, rather than discovered mid-run.** It is being left open only
 so the decision is made rather than inherited.
+
+## B29 — Gate 4 computes the role the reviewer acted as, then throws it away
+
+**`cross-cutting`** · Found 2026-09-08, answering *"which role is the signature attesting
+under"* before a Gate 4 review. **A one-line loss, not a schema question** — which is what
+separates it from B22.
+
+`authorize()` does not return `None`. Its docstring says so:
+
+> *"Check role strength AND venture scope. **Returns the role acted as.**"*
+
+Two callers, two fates:
+
+| caller | what it does with the return |
+|---|---|
+| `humans.sign_off` | `role_signed_as = authorize(...)` → written to `signoff_record.role_signed_as` |
+| `provisioning.record_human_review` | **discards it** |
+
+`record_human_review` writes `provisioning_gate_result` with verdict `passed`, a reason
+reading `reviewed by {display_name}: {note}`, and evidence `{human_id, note}`. **The role
+is computed one line earlier and never referenced.**
+
+### Why this is not the same item as B22
+
+B22 is about a **link that does not exist** — no join between a Pack's named reviewers and
+`office_human`, in either direction. Building it is a schema decision with a migration
+behind it.
+
+This is about a value that **is already computed, already correct, and already has a home
+on a sibling table.** Nothing needs designing. The column exists on `signoff_record`; the
+concept is named; the function that produces it is called on the line above.
+
+### What it costs
+
+A Gate 4 review records *who* and *what they said*, and not *what authority they had when
+they said it*. Reconstructing that later means reading `office_human_role` **as it is now**
+and assuming it has not changed — and roles are grantable and revocable, so the assumption
+is exactly the thing an audit record exists to avoid making.
+
+It matters more now than it did last week. Burkham's Pack names Ivan Green as
+`compliance_officer`; his account holds `ivan` with global scope; the review authorises
+against `venture_operator`. **Three role names in three places for one act**, and the
+record keeps none of them. A reader six months from now cannot tell whether the reviewer
+signed as the venture's declared compliance officer or as an administrator who could have
+signed for any venture — and those are different attestations.
+
+### What retires it
+
+Carry the return value. `provisioning_gate_result.evidence` is `jsonb` and already carries
+`human_id` and `note`, so `role_acted_as` can join them **without a migration**.
+
+**Whether Gate 4 should also write a `signoff_record` row is the larger question and is
+deliberately not this item.** Gate 4 is a review, Gate 10 is a signature, and collapsing
+them because one field is missing would be the wrong fix in the same shape as the
+utilisation factor: the easiest change that makes the symptom go away.
