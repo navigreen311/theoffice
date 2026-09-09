@@ -1045,22 +1045,49 @@ Every merge gets a row: package, PR, merge SHA, test result, timestamp.
 | — | [#69](https://github.com/navigreen311/theoffice/pull/69) | `c4671fa` | 1049 pass | 10 lines, identical | 2026-09-09 |
 | — | [#70](https://github.com/navigreen311/theoffice/pull/70) | `5e39956` | 1049 pass | 10 lines, identical | 2026-09-09 |
 | **P-00** | [#71](https://github.com/navigreen311/theoffice/pull/71) | `1063802` | 1049 pass | 10 lines, identical | 2026-09-09 |
-| P-01 | | | | | |
-| P-02 | | | | | |
-| P-03 | | | | | |
-| P-04 | | | | | |
-| P-05 | | | | | |
-| P-06 | | | | | |
-| P-07 | | | | | |
-| P-08 | | | | | |
-| P-09 | | | | | |
-| P-10 | | | | | |
-| P-11 | | | | | |
-| P-12 | | | | | |
-| P-13 | | | | | |
+| **P-01** | [simforge#135](https://github.com/navigreen311/simforge/pull/135) | `64ed5c3` | 769 -> 774, all pass | n/a (simforge) | 2026-09-09 |
+| P-02 | — | — | — | — | **not dispatched in wave 1** |
+| P-03 | — | — | — | — | **not dispatched in wave 1** |
+| P-04 | — | — | — | — | **not dispatched in wave 1** |
+| P-05 | — | — | — | — | **not dispatched in wave 1** |
+| **P-06** | [#75](https://github.com/navigreen311/theoffice/pull/75) | `ee5d68f` | 1059 pass, 0 fail | 10 lines, identical | 2026-09-09 |
+| **P-07** | [#74](https://github.com/navigreen311/theoffice/pull/74) | `8be82a1` | 1068 pass, 0 fail | 10 lines, identical | 2026-09-09 |
+| **P-08** | [#77](https://github.com/navigreen311/theoffice/pull/77) | `6ff33c0` | 1051 pass, 0 fail | 10 lines, identical | 2026-09-09 |
+| **P-09** | [#76](https://github.com/navigreen311/theoffice/pull/76) | `c252e9f` | 1074 pass, 0 fail | 10 lines, identical | 2026-09-09 |
+| P-10 | — | — | — | — | **not dispatched in wave 1** |
+| P-11 | — | — | — | — | **not dispatched in wave 1** |
+| P-12 | — | — | — | — | **not dispatched in wave 1** |
+| **P-13** | [#78](https://github.com/navigreen311/theoffice/pull/78) | **HANDED BACK** | — | — | see below |
 | **P-14** | [#73](https://github.com/navigreen311/theoffice/pull/73) | `a334e6b` | 1049 pass, count unchanged | 10 lines, identical | 2026-09-09 |
 
 **P-14 merged out of numeric order, deliberately.** Its card puts it fifteenth, but that number is a merge-order slot, not a dependency. P-14 depends only on P-00, touches exactly one file (`docs/decisions.md`, +84/-0), and no other package in this wave writes to that file. Holding a records-only package behind an unscoped one (P-13) would have bought nothing and risked the entry going stale against a ruling made the same day. **Verified by the coordinator rather than taken from the agent's report:** file scope from the PR's own file list, and the Smoke capture re-pulled from run `34383553084` and diffed byte-for-byte — ten lines, non-empty, identical.
+
+### Wave 1 closed — seven dispatched, six merged, one handed back
+
+**Seven packages ran in parallel with zero file collisions.** Every card's MUST NOT TOUCH list
+held; no package modified a file another package owned. The merge queue ran one at a time,
+each rebased onto current main, each with a byte-identical ten-line Smoke capture and a full
+suite run **serially, with nothing else working** — which after Caveat 15 is the only run that
+counts.
+
+**Test count across the wave: 1049 -> 1074**, every step green.
+
+**What the wave found, beyond what it built.** Five packages independently diagnosed Caveat
+15. P-08 reported Caveat 16 and the coordinator hit it within the hour. P-01 established that
+the Gate 8 handover works and that **no `run_ref` comes back**, which is what actually blocks
+P-02/03/04 — a thing the plan assumed working and nobody had tested. P-06 found its own card's
+premise had been satisfied a day early, in Run 1, and delivered the evidence instead of the
+prose. **Four of the seven corrected something in the plan that dispatched them.**
+
+**Two coordinator errors, both recorded rather than absorbed:** `PARALLEL_BUILD.md` was
+overwritten instead of appended to and restored from `5e39956` (245 added, 0 deleted); and the
+wrong database was migrated during P-08's window, then Caveat 16 hid the fix.
+
+**P-13 was split by Ivan's ruling** — adapter merged, Pack edit held, because the declaration
+would have taken Burkham's Gate 2 from 0 FAIL to 3 FAIL for work that is correctly not done
+yet. The revert broke the package's own tests, which read the binding from the Pack file.
+**That breakage is the coordinator's, not the package's**, and it was handed back rather than
+repaired by someone who did not write the tests.
 
 *(#69 and #70 predate P-00 and are listed because they changed `docs/blocking.md`, which
 every package appends to. #69 is T-015.)*
