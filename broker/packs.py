@@ -161,7 +161,17 @@ async def store(
 
     # What this replaces, read before anything is written so the comparison is against
     # the version actually in force at this moment.
-    previous = await live(conn, venture_id) if publish else await draft(conn, venture_id)
+    #
+    # Read as RAW SOURCE rather than through `live()`/`draft()`, which parse. The diff is
+    # textual - `_changed_lines` compares two strings and has never needed the previous
+    # Pack to satisfy the current schema. Parsing it here meant that adding a required
+    # field made every already-published row unreadable and so unreplaceable: the control
+    # that exists to make a change visible refused to run precisely when the change was
+    # big enough to alter the shape of the file. See blocking.md B26.
+    #
+    # This weakens nothing about what is being WRITTEN. `parse_only` above still refuses
+    # any Pack that does not satisfy the current schema, and it runs before this line.
+    previous = await _previous_source(conn, venture_id, "live" if publish else "draft")
     changed = (
         _changed_lines(previous.yaml_source, yaml_source) if previous is not None else ()
     )
@@ -248,6 +258,36 @@ async def store(
         pack=pack,
         changed_lines=changed,
         replaced_version=previous.pack_version if previous else None,
+    )
+
+
+@dataclass(frozen=True)
+class _PriorVersion:
+    """The bytes of the version being replaced, and nothing parsed.
+
+    Deliberately not a `StoredPack`: the whole point is that this row may have been
+    stored under a schema this build cannot parse, and the publish diff does not care.
+    """
+
+    pack_version: str
+    yaml_source: str
+
+
+async def _previous_source(
+    conn: AsyncConnection, venture_id: str, status: str
+) -> _PriorVersion | None:
+    """The row a publish or a draft-store is about to replace, unparsed."""
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT pack_version, yaml_source FROM business_pack "
+            "WHERE venture_id = %s AND status = %s",
+            (venture_id, status),
+        )
+        row = await cur.fetchone()
+    if row is None:
+        return None
+    return _PriorVersion(
+        pack_version=row["pack_version"], yaml_source=row["yaml_source"]
     )
 
 

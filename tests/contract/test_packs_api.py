@@ -778,3 +778,44 @@ async def test_the_publish_is_audited_with_what_it_changed(world, base_yaml, adm
     assert subject["changed_line_count"] == 1
     assert subject["declared_change_count"] == 1
     assert "banking" in subject["changed_lines"][0]["after"]
+
+
+async def test_a_publish_can_replace_a_row_the_current_schema_cannot_parse(
+    world, base_yaml
+):
+    """B26. The diff is textual, so an old row must not be able to block its own fix.
+
+    Adding a required field to the Pack schema left twelve published rows unparseable.
+    `store()` read the previous version through `live()`, which parses - so the control
+    that exists to make a change visible refused to run precisely when the change was
+    big enough to alter the shape of the file, and the only path that could replace the
+    stale rows was the path the stale rows blocked.
+
+    What is being WRITTEN is still validated: `parse_only` runs first and this test
+    publishes a Pack that satisfies the current schema. It is the previous version that
+    is allowed to be unreadable, because nothing here reads it - `_changed_lines`
+    compares two strings.
+    """
+    actor = world.human_id
+    async with connection() as conn:
+        await _publish(conn, base_yaml, "9.6.0", actor)
+
+        # Make the live row unparseable the way the provenance field did: strip a
+        # required block out of the stored source directly, behind store()'s back.
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "UPDATE business_pack SET yaml_source = replace(yaml_source, "
+                "'      basis: declared\n', '') "
+                "WHERE venture_id = 'greenstone' AND pack_version = '9.6.0'"
+            )
+        await conn.commit()
+
+        with pytest.raises(packs.PackStoreError):
+            await packs.live(conn, "greenstone")  # the state B26 found
+
+        # And the republish goes through anyway.
+        stored = await _publish(conn, base_yaml, "9.6.1", actor)
+        current = await packs.live(conn, "greenstone")
+
+    assert stored.replaced_version == "9.6.0"
+    assert current.pack_version == "9.6.1", "the stale row no longer blocks its own fix"

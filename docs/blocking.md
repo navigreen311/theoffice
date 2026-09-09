@@ -1719,3 +1719,197 @@ a difference somebody finds by reading both.
 **Not fixed alongside B24 deliberately.** Changing Gate 2's aggregation would move a
 verdict that B24 is not about, and B24's whole point was a verdict moving for a reason
 nobody declared.
+
+## B26 — every published Pack in the database is unreadable, and its status column says `live`
+
+**`cross-cutting`** · Found 2026-09-08, attempting to republish Burkham after the
+reviewer declaration. **This blocks the republish, blocks every new run for both
+ventures, and blocks advancing the run currently sitting at Gate 4.**
+
+Making `provenance` a required field on `HumanCapacity` was a schema change to the
+**database**, and nothing treated it as one. The two on-disk Pack files were updated. The
+twelve rows in `business_pack` were not:
+
+```
+burkham-wickmont  0.5.0  live        provenance: absent
+greenstone        1.3.0  live        provenance: absent
+(and ten superseded rows, all the same)
+```
+
+`parse_only` refuses both, so:
+
+| call | result |
+|---|---|
+| `packs.live(conn, "burkham-wickmont")` | **raises** `PackStoreError` |
+| `packs.live(conn, "greenstone")` | **raises** `PackStoreError` |
+| `packs.get_version(conn, "burkham-wickmont", "0.5.0")` | **raises** |
+| `provisioning.start_run` — *"against the venture's live Pack"* | **cannot start** |
+| `provisioning.advance` on run `6a97fbe1` | **cannot advance** |
+| `packs.store(...)` — reads `live()` first to compute its diff | **cannot republish** |
+
+**The last row is the one that makes this a trap rather than a chore.** The publish-diff
+control reads the previous Pack through `live()`, which parses it. So the schema change
+disabled the only path that could fix the schema change — and it did so precisely in the
+case the diff exists for, a change big enough to alter the shape of the file.
+
+### The status column is the dishonest part
+
+`status` still reads `live` on both rows. Nothing is flagged, nothing logged, no sweep
+reports it. **A Pack that the parser says does not exist is recorded as the one in force**,
+and the discrepancy surfaces only when somebody starts a run — the most expensive moment
+to find out, and the one where the message will read as *this run failed* rather than
+*this Pack was never migrated*.
+
+### 1048 tests pass, and could not have caught it
+
+Every test loads Packs from `packs/*.yaml` on disk. **Nothing in the suite reads a
+published Pack back out of `business_pack` and parses it.** The capacity-provenance
+prediction said *"making it required breaks Pack loading until every entry is filled"* and
+scored that CORRECT — against the files. The same sentence was true of the rows and
+nobody checked them, because the forcing function forces what is in git and the rows are
+what is in force.
+
+### The part that generalises, which is the finding
+
+**A required field forces what is in git, not what is in force.**
+
+Adding `provenance` with no default was designed as a forcing function, and it worked
+exactly as designed on the two files in the repository — both Packs refused to load until
+all four entries were filled, which is what the prediction called *"the difference between
+a field that documents and a field that decorates."* That prediction was **scored CORRECT**,
+and it was correct.
+
+It was also, word for word, true of **ten published rows nobody looked at**. The same
+sentence — *"making it required breaks Pack loading until every entry is filled"* —
+described the database, and the database was never in anyone's view. **The forcing function
+reached the source and stopped at the boundary of the repository**, and that boundary is
+invisible from inside a diff.
+
+Any schema tightening on a persisted document has this shape. The Pack is stored as text
+and re-parsed on read, so a change that is a one-line schema edit in the code is a data
+migration everywhere the text already exists — and unlike a column migration, **nothing
+runs, nothing is stamped, and no version number moves.** Alembic knows about tables. It
+does not know that `business_pack.yaml_source` is a document with a schema of its own.
+
+### The check that does not exist
+
+**Nothing reads a published Pack back out of `business_pack` and parses it.** Every one of
+the 1048 tests loads from `packs/*.yaml` on disk. The suite verifies that the files satisfy
+the schema and never asks whether the rows do.
+
+**A round-trip test would have caught this on the provenance commit**: publish a Pack, read
+the stored row back through `live()`, parse it, and assert it still loads. It fails the
+moment a required field is added without republishing, and it names the right cause
+because the failure arrives at the publish that broke it rather than at the run that
+found it weeks later.
+
+**Named here rather than built.** It is a small test and an easy one to write badly — a
+version that publishes and re-reads within one transaction proves only that `store` and
+`live` agree in the same process, which is not the property. The property is that rows
+written by *an earlier build* still parse under this one, and that is a fixture problem
+worth thinking about rather than a line to add today.
+
+### Fixed 2026-09-08 — the minimum, and only the minimum
+
+`store()` now reads the previous version's **raw `yaml_source`** through a small
+`_previous_source` helper instead of through `live()`/`draft()`. The diff is textual —
+`_changed_lines` compares two strings and never needed the previous Pack parsed.
+
+**Nothing about what is being written is weaker.** `parse_only` still refuses any Pack that
+does not satisfy the current schema, and it runs before the diff. What changed is only that
+**the version being replaced is no longer required to satisfy a schema written after it was
+stored** — which was never a coherent requirement, and which made the control that exists
+to reveal a change refuse to run precisely when the change was largest.
+
+`live()` and `get_version()` are untouched and still parse. That half is B27.
+
+Regression test: `test_a_publish_can_replace_a_row_the_current_schema_cannot_parse`.
+Confirmed to fail against the pre-fix code with B26's own error, and to pass after.
+
+## B27 — an unparseable old row is reported as "not a schema-v3 Business Pack", and it is schema-v3
+
+**`cross-cutting`** · Found 2026-09-08, as the second half of B26. **The fix for B26
+unblocked publishing and deliberately left this standing.**
+
+`live()` and `get_version()` still call `parse_only` on the stored source, and when a row
+was written under an earlier schema the caller gets:
+
+```
+PackStoreError: not a schema-v3 Business Pack: 2 validation errors for BusinessPack
+```
+
+The row **is** schema-v3. Its `schema_version` column says `3`, it was published as v3, and
+it was valid v3 on the day it was written. What is actually true is narrower and more
+useful: *stored under an earlier revision of the v3 schema, before `provenance` was
+required.*
+
+### This is B23's class, arriving in an exception — the fifth instance
+
+B23 collects **names that assert more than the code does**: `max_daily_approvals` reads as
+a limit and limits nothing, and the other three the same way. **This is the same defect in
+a different surface.** The message asserts something false *about the data* — and unlike a
+misleading field name, which sits still and can be read sceptically, **an exception message
+is read at the exact moment the reader has least context and most urgency**, and it points
+them at the file rather than at the migration.
+
+It is worse than silence in the way entry 22's class is worse: it does not fail to explain,
+**it explains incorrectly and confidently.** A reader who trusts it goes and inspects a Pack
+that is fine.
+
+### What would fix it — not built
+
+A read that meets a row it cannot parse should say **which** revision it was stored under
+and **what** the current one requires, and should distinguish *this document is malformed*
+from *this document predates a tightening*. The `schema_version` column is already there and
+already carries the coarse half of the answer; what is missing is a finer marker, and
+deciding what that marker is is a design question rather than a message rewrite.
+
+**Left standing deliberately.** Changing it changes what a run does when it meets an old
+Pack, which is a larger decision than unblocking a publish, and B26 was the blocking half.
+
+## B28 — Greenstone's live Pack is in the state B26 describes, and nothing has been done about it
+
+**`greenstone`** · Found 2026-09-08, immediately after fixing B26 for Burkham.
+
+`greenstone@1.3.0` is `status = 'live'` and was published before `provenance` existed, so
+`parse_only` refuses it. **The next Greenstone run cannot start**: `start_run` reads the
+venture's live Pack, and that read raises.
+
+**And whoever hits it meets B27's message**, which will tell them the Pack is *not a
+schema-v3 Business Pack*. It is schema-v3, and `packs/greenstone.yaml` on disk is fine.
+The message sends the reader to inspect a file that has nothing wrong with it while the
+actual fault is a row nobody migrated.
+
+Burkham was in exactly this state and is out of it because it was republished as 0.6.0.
+Greenstone was not, and this item exists so that is a recorded decision rather than an
+oversight that surfaces at a run.
+
+### Correction: the reason first given for leaving it was wrong
+
+It was reported to Ivan that republishing *"voids Gate 10 signatures taken against 1.3.0's
+artifacts, so the fix is currently worse than the fault."* **That is not true here.** It
+is `store()`'s general warning, quoted without checking whether the situation it warns
+about exists. Checked afterwards:
+
+- **`signoff_record` holds zero rows.** No signature exists for any venture, at any gate.
+- **No Greenstone run has ever used 1.3.0.** Every run is against 1.0.0 or 1.2.0.
+- **No Greenstone run has ever passed Gate 4.** The highest gate any of them recorded is
+  4; `provisioning_gate_result` has nothing above it.
+
+So there is nothing to void. **The real reason it was not fixed is that it was not asked
+for and was outside the request** — a fine reason to leave something, and not the reason
+that was given. Recorded because a wrong reason in the record is worse than no reason: the
+next reader would have weighed a risk that does not exist and left it alone again.
+
+### What retires it
+
+**A republish of `packs/greenstone.yaml` as 1.4.0, and nothing else.** The diff against the
+live row is **two hunks, eighteen lines, pure addition** — the two `provenance` blocks the
+capacity-provenance change added and never published. No other drift. No value changes, no
+rule changes, no re-signing implied, because nothing is signed.
+
+The check that made that statement safe to write is the publish-diff control doing its
+job: a positional count plus a real text diff, read before publishing rather than after.
+
+**Ivan's call, deliberately, rather than discovered mid-run.** It is being left open only
+so the decision is made rather than inherited.

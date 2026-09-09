@@ -513,46 +513,64 @@ budget:
   cost_alert_recipients: [ivan@greencompanies.example]
 
 human_capacity:
-  # INVENTED, and modelled on Greenstone's staffing so the Gate 4.5 comparison in the
-  # report is like for like. Burkham names no reviewer anywhere.
-  - human_name: Ivan
-    role: venture_operator
+  # DECLARED 2026-09-08 by Ivan Green. This block was previously Greenstone's, copied
+  # wholesale (B20, B21). It is now Burkham's own, and both entries are real people.
+  #
+  # READ THIS BEFORE YOU READ THE V13 PASS: the margin is twelve minutes.
+  # 120 projected daily approvals x 3.5 weighted minutes = 420 review-minutes demanded,
+  # against 432 available (12 coverage-hours x 60 x the 0.6 utilisation factor). One more
+  # workflow step, or one more position below auto_execute, and V13 fails. This is a pass
+  # with no room in it, and it should be met as that rather than as capacity.
+  - human_name: Ivan Green
+    role: compliance_officer
     coverage_hours: 6
     timezone: America/Los_Angeles
-    backup_human: Dana
+    backup_human: Ira Green
     max_daily_approvals: 60
     median_review_minutes: 4
     auth_method: sso_mfa
     provenance:
-      basis: inherited
-      established_by: Ivan
+      basis: declared
+      established_by: Ivan Green
       detail: >
-        Copied wholesale when this Pack was authored so the Gate 4.5 comparison would be
-        like for like. Burkham names no reviewer of its own, and V13's verdict for this
-        venture divides a demand derived from Burkham's own structure by a supply that is
-        somebody else's. See blocking.md B20.
-      source: >
-        packs/greenstone.yaml human_capacity - byte-for-byte identical, same two people,
-        same coverage_hours, same max_daily_approvals, same median_review_minutes.
-  - human_name: Dana
+        Co-founder and co-managing partner of Green Companies LLC, Burkham Wickmont's
+        parent. This is a declaration rather than a guess because the venture's own
+        operating model already named him: governance section 2.3 puts both founders on
+        marketing claim approvals, and the Gardner control routes transfers at or above
+        $50K to the founders. The reviewer role was already his; what was missing was the
+        Pack saying so. Coverage hours and review minutes are asserted from how the work
+        is actually done, not measured - no review-duration telemetry exists yet, and
+        B21 stays open until it does.
+      source: null
+  - human_name: Ira Green
     role: compliance_officer
-    coverage_hours: 4
+    coverage_hours: 6
     timezone: America/Los_Angeles
-    backup_human: Ivan
-    max_daily_approvals: 30
-    median_review_minutes: 6
+    backup_human: Ivan Green
+    max_daily_approvals: 60
+    median_review_minutes: 3
     auth_method: sso_mfa
     provenance:
-      basis: inherited
-      established_by: Ivan
+      basis: declared
+      established_by: Ivan Green
       detail: >
-        Copied wholesale when this Pack was authored so the Gate 4.5 comparison would be
-        like for like. Burkham names no reviewer of its own, and V13's verdict for this
-        venture divides a demand derived from Burkham's own structure by a supply that is
-        somebody else's. See blocking.md B20.
-      source: >
-        packs/greenstone.yaml human_capacity - byte-for-byte identical, same two people,
-        same coverage_hours, same max_daily_approvals, same median_review_minutes.
+        Co-founder and co-managing partner of Green Companies LLC, named by the same
+        governance that names Ivan: section 2.3 puts BOTH founders on marketing claim
+        approvals, and Gardner routes $50K transfers to the founders jointly. Declared,
+        not measured, for the same reason as the entry above.
+
+        The two entries name each other as backup_human, and that satisfies V14 while
+        making both critical-role backups the same two people. V14 checks only that the
+        field is non-empty - not that the backup is a different person, exists, has an
+        account, or has any capacity - so it passes here on exactly the arrangement it
+        looks like it exists to catch. Stated in the Pack rather than left for a reader
+        to notice, because a Pack that does not know its own weak point reads as one that
+        does not have one. See blocking.md B24 and B22.
+
+        max_daily_approvals is decoration: no rule reads it, and V13 computes from
+        coverage_hours and median_review_minutes alone. See blocking.md B23.
+      source: null
+
 
 separation_of_duties:
   gate_signoff_policy: distinct_humans
