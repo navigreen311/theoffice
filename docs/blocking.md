@@ -198,7 +198,13 @@ one (`simforge/docs/adr/ADR-0045`), and this is the first requirement that a com
 on a developer's laptop cannot satisfy.
 
 **Until then:** the row says `bootstrap` and carries its reason. A reader who filters
-`attested_by = 'simforge'` will not find it, which is the whole point of that column.
+`attested_by = 'simforge'` will not find it, which is the whole point of that distinction.
+
+> **Corrected 2026-09-09: `attested_by` is not a column.** This sentence said *"that column"*
+> from 3 September onward and it was wrong the whole time — `certification` has no
+> `attested_by` column, verified against `information_schema`. The filter it describes cannot
+> be written. **The queryable expression is `simforge_verdict IS NOT NULL`.** See B34.
+
 
 **Blocks:** nothing today — the bridge is proved, and a bootstrap was the right call to
 prove plumbing, exactly as B3 says. It blocks **any claim that SimForge is certified**, and
@@ -2933,3 +2939,59 @@ PROVENANCE. `docs/forge-adapter.md` trap #4 is about exactly that gap and this m
 the wrong side of it.
 
 ---
+
+
+## B34 — `attested_by` reads as recorded provenance and is an argument that is thrown away
+
+**`theoffice`** · Found 2026-09-09 by P-03, building the unit-A verdict ingest. **Verified by
+the coordinator against `information_schema`: `certification` has ZERO columns named
+`attested_by`.**
+
+`certification.record_result` takes `attested_by`, validates it hard — only `'simforge'` or
+`'bootstrap'`, with `bootstrap_reason` required for one and refused for the other — and then
+**does not store it**. The parameter shapes the guards and never reaches a row.
+
+### Why that is a defect and not just a shape
+
+**Three separate places in this record tell a reader to query it**, and the query cannot be
+written:
+
+| where | what it says | since |
+|---|---|---|
+| **B3** | *"A reader who filters `attested_by = 'simforge'` will not find it, which is the whole point of **that column**"* | 3 September |
+| **B30** | *"The string `attested_by="simforge"` appears nowhere in this codebase"* | 9 September |
+| **decisions entry 27** | same sentence, as evidence that unit A has no writer | 9 September |
+
+Each is *literally* true and each invites the same wrong next step. **`SELECT ... WHERE
+attested_by = 'simforge'` returns nothing forever** — not because no such certification
+exists, but because the column does not. On the day B3 was written those two readings
+happened to agree. **They stop agreeing the moment the verdict-ingest sweep writes its first
+row**, and the reader who trusted the phrasing concludes the sweep never ran.
+
+**This is B23's class, in the record rather than in the code**: a name asserting more than the
+thing behind it. B23 collects four field names that promise more than they hold;
+`attested_by` promises to *be* held and is not.
+
+### What is actually queryable
+
+**`simforge_verdict IS NOT NULL`.** It is a real column, it is written only from a parsed
+`GateResult`, and a bootstrap row cannot have one — `record_result` refuses
+`bootstrap_reason` alongside a real verdict and refuses a certified state without the basis
+fields. So the structural claim *"this certification came from a SimForge run"* is
+expressible; it just is not spelled the way three documents say it is.
+
+### What retires it
+
+**Either** `attested_by` becomes a column — a migration, and then the phrasing everywhere
+becomes true — **or** it is renamed to something that does not read as stored state and the
+three documents above are corrected to name `simforge_verdict`.
+
+**The first is probably right**, because provenance that shapes a guard and then vanishes is
+provenance a later reader cannot audit: today you can prove a row's basis only by inferring
+it from which other columns are populated. But it is a schema decision and it is not being
+taken mid-run.
+
+**The three documents are corrected now regardless** — B3 and entry 27 in the same commit as
+this item. **B30 carries the same sentence and is deliberately left for after P-04 merges**,
+because P-04 is appending its unit-B closure note to B30 and two writers in one section is
+the thing the append-only rule exists to prevent.
