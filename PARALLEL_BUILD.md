@@ -1057,7 +1057,7 @@ Every merge gets a row: package, PR, merge SHA, test result, timestamp.
 | P-10 | — | — | — | — | **not dispatched in wave 1** |
 | P-11 | — | — | — | — | **not dispatched in wave 1** |
 | P-12 | — | — | — | — | **not dispatched in wave 1** |
-| **P-13** | [#78](https://github.com/navigreen311/theoffice/pull/78) | **HANDED BACK** | — | — | see below |
+| **P-13** | [#78](https://github.com/navigreen311/theoffice/pull/78) | `ac6475c` | 1170 pass, 0 fail | 10 lines, identical | 2026-09-09 |
 | **P-14** | [#73](https://github.com/navigreen311/theoffice/pull/73) | `a334e6b` | 1049 pass, count unchanged | 10 lines, identical | 2026-09-09 |
 
 **P-14 merged out of numeric order, deliberately.** Its card puts it fifteenth, but that number is a merge-order slot, not a dependency. P-14 depends only on P-00, touches exactly one file (`docs/decisions.md`, +84/-0), and no other package in this wave writes to that file. Holding a records-only package behind an unscoped one (P-13) would have bought nothing and risked the entry going stale against a ruling made the same day. **Verified by the coordinator rather than taken from the agent's report:** file scope from the PR's own file list, and the Smoke capture re-pulled from run `34383553084` and diffed byte-for-byte — ten lines, non-empty, identical.
@@ -1088,6 +1088,38 @@ would have taken Burkham's Gate 2 from 0 FAIL to 3 FAIL for work that is correct
 yet. The revert broke the package's own tests, which read the binding from the Pack file.
 **That breakage is the coordinator's, not the package's**, and it was handed back rather than
 repaired by someone who did not write the tests.
+
+### The hand-back, closed — and it found something the coordinator could not
+
+**P-13 was the wave's only hand-back, and the breakage was the coordinator's**: reverting the
+Pack edit removed the forge binding as well as the position, and the package's tests read both
+from the file. Ten went red — one assertion plus nine fixture errors.
+
+**P-13 found an eleventh that was green.**
+`test_the_manifest_generator_reports_no_new_reconciliation_finding` was passing while asserting
+nothing: with no binding in the Pack, no module could appear in either reconciliation list.
+**The worse half of the same bug, and invisible from the merge queue.**
+
+Its fix is better than what the hand-back suggested. `declaration()` **resolves** rather than
+locates — Pack when the deferred edit is applied, deferred patch while it is held, and
+**raises when neither carries it**, because an empty declared set makes every intersection
+assertion trivially true. That is the exact failure shape being fixed, refused by construction
+rather than avoided by care.
+
+**And it corrected the coordinator on the record.** The note said V31's silence meant *"something
+earlier stops first"* — reasoned from three other rules failing. P-13 measured instead:
+**V31 was mute because it had nothing to read.** Apply the nine registry rows and it goes
+NOT_RUN → FAIL, naming `distribute_referrer_briefing` exactly as predicted. **The state the
+Pack edit would have created is declaration plus a generator nobody ran — the one combination
+where the rule this package exists to satisfy is silent.** Worse than both alternatives, which
+strengthens the split rather than undermining it.
+
+**The owed work is two items, not three.** V6 closes today with a script this package ships —
+measured, its list shrank by exactly nine. **V11 and V23 are the ones that need an author**, and
+the rows must land **before or with** the patch, never after.
+
+**Five of seven packages corrected something in the plan that dispatched them.** That is the
+number worth keeping from wave 1.
 
 *(#69 and #70 predate P-00 and are listed because they changed `docs/blocking.md`, which
 every package appends to. #69 is T-015.)*
