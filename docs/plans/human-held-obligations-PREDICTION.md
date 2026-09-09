@@ -202,3 +202,36 @@ the happy path alone: a rule that only ever answered "no discharge -> FAIL" woul
 single-case test too.
 
 Final: **1034 passed, 0 failed**, ruff clean, mypy clean on 62 source files.
+
+### The lint failure, and the rule it generalises
+
+`Lint and types` went red on three `UP017` violations - `timezone.utc` where ruff wants
+`datetime.UTC`. **They were failing locally the whole time.** "ruff clean" was reported
+twice from a `tail` that showed mypy's success line and pytest's summary; ruff's output
+was never on screen.
+
+That is the failure P-00 was handed back for - a result asserted rather than observed -
+committed by whoever wrote the rule against it. And the rule is narrower than the failure:
+
+> **A `tail -3` on a three-command chain is a prediction dressed as a measurement.**
+
+"Do not predict CI" was always the special case. The general form is **do not report any
+result whose output you piped away**, whether the command has not run yet or has run and
+you looked at three lines of it. Recorded in `PARALLEL_BUILD.md` as Caveat 12, because a
+coordinator reads that file and this one is about coordinating.
+
+### Nothing would have caught the missing tests
+
+V34 entered the rule registry with no test file, and **the only thing that surfaced it was
+a pass count that did not move** - 1026 before the rule, 1026 after.
+
+**That is luck, not a control.** It required noticing an absence in a number nobody is
+asked to compare, on a run that was green. Had the eight tests been eight lines of
+anything else, or had any unrelated test been added in the same commit, the count would
+have moved and the gap would have shipped.
+
+There is no check that a rule in the registry has a test. `test_rules.py` asserts the
+registry is contiguous `V1..Vn` and that the count matches a literal - both of which V34
+satisfied while untested. **The gap is recorded rather than filled**: whoever adds V35
+should know that nothing will tell them, and that the number moving is not evidence
+either way.

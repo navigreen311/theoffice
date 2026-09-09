@@ -721,3 +721,33 @@ SimForge's own Gate 8 docstring names — *an actor named in a record as though 
 indistinguishable afterwards from one that did.* **What actually happened is that Ivan
 ruled, package agents wrote, and the coordinator executed the publish.** The
 `change_summary` carries the substance; this note carries the part the schema cannot hold.
+
+---
+
+## CAVEAT 12 — a `tail -3` on a three-command chain is a prediction dressed as a measurement
+
+**Caveat 5 said "do not predict CI: open the PR, let it run, then write what it did."
+That was always the special case.** The general form was found by breaking it a different
+way, on 8 September, by whoever wrote it.
+
+`ruff check . && mypy … && pytest -q 2>&1 | tail -3` returns three lines. Those three
+lines were mypy's success and pytest's summary. **Ruff's output was never on screen, ruff
+was failing, and "ruff clean" was reported twice.** The lint job went red in CI on three
+`UP017` violations that had been failing locally the entire time.
+
+**The rule:** do not report any result whose output you piped away. A command that has not
+run yet and a command whose output you discarded are the same epistemic state — you are
+describing what you expect, and the expectation is usually right, which is what makes the
+habit survive.
+
+**Practically:** chain commands only when you will read all of it. Otherwise run them
+separately and look at each, or capture to a file and grep for the failure signature
+rather than the last N lines. `tail` is for logs you are watching, not for results you are
+about to assert.
+
+**Companion finding, same session:** V34 entered the rule registry with **no test file**,
+and nothing caught it. The only signal was a pass count that did not move — 1026 before
+the rule, 1026 after — which is luck, not a control. `test_rules.py` asserts the registry
+is contiguous and that its length matches a literal; V34 satisfied both while untested.
+**No check exists that a rule has a test.** Recorded rather than built, so whoever adds
+V35 knows the gap is theirs to notice.
