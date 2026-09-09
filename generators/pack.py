@@ -204,6 +204,51 @@ class HumanHeld(Strict):
 
     why: str = Field(min_length=1)
 
+    #: Set when the obligation is real but its trigger has not fired, so no
+    #: verification is due yet. See `PendingActivation`. Absent means the obligation is
+    #: LIVE: V34 requires a current discharge and fails without one.
+    pending_activation: PendingActivation | None = None
+
+
+class PendingActivation(Strict):
+    """The obligation is real, its trigger has not fired, and no verification is due.
+
+    **This is the one state of the four that passes V34 without a discharge, so it is
+    the one that could become the escape in a fourth costume.** What stops it is that it
+    must carry a condition somebody can check.
+
+    Burkham's is real: no referral fee has ever been paid, no partner relationship
+    exists, and Partner Agreement & Payout Center is deferred to V1.5. **"Module 8.2
+    activates and a referral relationship is being structured" is a condition a person
+    can check. "When it becomes relevant" is not.**
+
+    **What the schema enforces and what it cannot.** `activates_when` must exist and be
+    substantial - a `min_length` catches the empty string and the one-word placeholder.
+    **It cannot judge whether the condition is checkable**, because that is a semantic
+    question about the world, and a validator that pretended to answer it would be
+    asserting something it cannot know. **That check is a reviewer's, and this docstring
+    is where they are told it is theirs.**
+
+    The four states of a human-held obligation, of which this is one:
+
+      pending_activation    real, trigger has not fired, no verification due  -> PASSES
+      live_unverified       trigger fired, no current discharge               -> FAILS
+      live_verified         current discharge covering the jurisdictions      -> PASSES
+      verification_expired  lapsed, or scope no longer reaches                -> FAILS
+
+    The bottom two are derived from `obligation_discharge`. **The distinction this type
+    adds is "not yet due" versus "due and nobody has done it"** - and it is declared on
+    the Pack rather than stored or derived, because **a clock cannot know whether a
+    partner exists.**
+    """
+
+    #: The trigger. A reviewer must be able to check whether it has fired.
+    activates_when: str = Field(min_length=20)
+
+    #: What is deferred until then, and to whom. Kept beside the trigger so a reader
+    #: asking "who does this become due for?" finds the answer in the same place.
+    deferred_to: str = Field(min_length=1)
+
 
 class ComplianceSurface(Strict):
     framework: ComplianceFramework

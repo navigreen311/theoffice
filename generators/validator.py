@@ -1296,8 +1296,11 @@ async def _v34_human_held_discharged(
     week as "not checked yet"; a fourth that actually meant "no discharge required"
     would be the worst of them, because it would read as permission.
     """
+    # Pairs rather than entries, so the declaration's type is carried instead of
+    # re-asserted at each use. mypy refused the comprehension-narrowed version, and it
+    # was right to: the filter and the access were two separate claims.
     held = [
-        c for c in pack.market.compliance_surface
+        (c, c.human_held) for c in pack.market.compliance_surface
         if c.runtime_flag.strip() and c.human_held is not None
     ]
     if not held:
@@ -1306,10 +1309,19 @@ async def _v34_human_held_discharged(
         # vacuous PASS a rule gives when its table happens to be empty.
         return True, "no obligation is declared human-held in this Pack - nothing to discharge"
 
+    # pending_activation is the one state that passes without a discharge, because no
+    # verification is due yet. It is declared on the Pack rather than derived: a clock
+    # cannot know whether a partner exists. What keeps it from being an escape hatch is
+    # that it carries a condition a reviewer can check - and the reviewer, not this
+    # rule, is who checks it.
+    pending = [(c, hh.pending_activation) for c, hh in held
+               if hh is not None and hh.pending_activation is not None]
+    live = [c for c, hh in held if hh is not None and hh.pending_activation is None]
+
     geographies = {g.strip() for g in pack.market.target_geographies if g.strip()}
     problems: list[str] = []
     async with conn.cursor(row_factory=dict_row) as cur:
-        for entry in held:
+        for entry in live:
             await cur.execute(
                 """
                 SELECT jurisdiction_scope, expires_at, discharged_by, verified_at
@@ -1352,10 +1364,23 @@ async def _v34_human_held_discharged(
 
     if problems:
         return False, "; ".join(problems)
-    return True, (
-        f"all {len(held)} human-held obligation(s) carry a current discharge covering "
-        "the venture's jurisdictions"
-    )
+
+    # Say which of the two passing states each obligation is in. A pass that cannot
+    # distinguish "verified" from "not yet due" is the shape this rule exists to refuse
+    # one level up.
+    parts = []
+    if live:
+        parts.append(
+            f"{len(live)} live obligation(s) carry a current discharge covering the "
+            "venture's jurisdictions"
+        )
+    for entry, pa in pending:
+        assert pa is not None
+        parts.append(
+            f"{entry.runtime_flag}: pending_activation - no verification is due until "
+            f"{pa.activates_when} (deferred to {pa.deferred_to})"
+        )
+    return True, "; ".join(parts)
 
 
 _WORLD_RULES = {
