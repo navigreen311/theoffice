@@ -86,7 +86,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0033"
+EXPECTED_SCHEMA_REVISION = "0034"
 
 
 @asynccontextmanager
@@ -2938,6 +2938,19 @@ CONTROL_COPY: dict[str, dict[str, str]] = {
         "consequence": "undeclared Forge use goes unflagged",
         "blocking": "false",
     },
+    "verdict_ingest": {
+        "name": "Certification verdict ingest",
+        "cadence": "Expected daily",
+        "checks": (
+            "Polls SimForge for the verdicts it owes on curricula The Office has "
+            "handed over, and records each one as a certification. The Office asks; "
+            "SimForge is never allowed to announce a result unprompted, because a "
+            "value that grants an agent production authority must not arrive over a "
+            "path that goes silent exactly when SimForge is what broke."
+        ),
+        "consequence": "certifications never arrive, and a revoked one is never read",
+        "blocking": "true",
+    },
     "restore_drill": {
         "name": "Backup restore drill",
         "cadence": "Expected quarterly",
@@ -2954,7 +2967,18 @@ CONTROL_COPY: dict[str, dict[str, str]] = {
 # The API deliberately does not hold them - it runs as office_app, which cannot even
 # read a persona body - so this control cannot be triggered from a request. Saying so,
 # with the command that does work, is more useful than a button that always fails.
-RUNNABLE_FROM_THE_API = ("audit_chain", "certification_staleness", "manifest_reconciliation")
+#
+# `verdict_ingest` belongs here because it already runs: it is in `run_all`'s
+# unconditional tuple, so `POST /api/controls/run` executes it whatever this tuple says.
+# Leaving it out would have made `runnable_from_here` report false about a control the
+# same request had just run - a status field disagreeing with the thing it describes,
+# which is the defect this file has been bitten by twice.
+RUNNABLE_FROM_THE_API = (
+    "audit_chain",
+    "certification_staleness",
+    "manifest_reconciliation",
+    "verdict_ingest",
+)
 
 
 @app.get("/api/compliance")

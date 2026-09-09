@@ -484,6 +484,103 @@ class SimForgeClient:
         validate_response("run_start", body)
         return body
 
+    async def office_gate_result(self, conn: Any, *, run_ref: str) -> GateResult:
+        """Read one verdict as an Office act, for the sweep that polls for it.
+
+        **This is not a second copy of `get_gate_result` and it must not become one.**
+        They answer two different questions and the difference is who is asking.
+
+        WHY THE SWEEP CANNOT USE THE BROKERED READ
+        ==========================================
+
+            `get_gate_result` goes through `OfficeClient.call`, which resolves a grant
+            for `(agent, simforge, gate_result)`, enforces a shift, checks a budget and
+            writes a ledger row naming that agent. That is exactly right for the call it
+            models - an agent reading the verdict about its own certification - and it
+            is unreachable from a background sweep, which has no agent, no shift and no
+            task.
+
+            The obvious workaround is refused two hundred lines above, in this class's
+            own docstring, and it is refused for this exact shape: "Minting one to
+            satisfy the signature is `origin='human'` again ... a name in a ledger row
+            for a call it did not make, indistinguishable afterwards from one it did."
+            A sweep that invented an agent to read a verdict would put a fabricated
+            actor on the record that GRANTS that agent production authority. The whole
+            point of polling rather than receiving is that nobody gets to announce their
+            own certification; forging the reader would give it back.
+
+            **So the sweep does not pretend to be an agent. It is The Office, and it
+            signs as The Office** - the same footing as `submit_curriculum` and
+            `run_start`, which are Office acts for the same reason: no agent performs
+            them.
+
+        WHY THIS WORKS ON THE RECEIVING SIDE
+        ====================================
+
+            Read out of SimForge rather than assumed. Its Office adapter dispatches
+            `gate_result` from the same `MODULES` map as `submit_curriculum` and
+            `run_start`, `call_module` gates all three on `_require_tenant_credential`,
+            and `x_office_agent_id` is an optional header there. There is one surface
+            and one credential check; the brokered/unbrokered distinction is entirely
+            The Office's own governance and does not exist on the wire.
+
+        WHAT IS NOT WEAKENED
+        ====================
+
+            The leak protection is `parse_gate_result`, not the brokered path: it runs
+            `validate_response`, which refuses a field the manifest does not name and
+            refuses prose anywhere in the body. This read goes through the identical
+            function, so a SimForge that started returning scenario content raises here
+            exactly as it would there.
+
+            A 404 stays a named refusal rather than an empty verdict, for the reason
+            SimForge gives for returning one: a `NOT_RUN` body would have to invent a
+            `unit` and a `rubric_version` for a run it never received. The sweep turns
+            that refusal into a TIMEOUT only when its own deadline has passed, which is
+            a statement about the deadline and not about the run.
+        """
+        credential = await self._tenant_credential(conn)
+        base_url, api_version = await self._registry(conn)
+
+        url = f"{base_url.rstrip('/')}/gate_result"
+        try:
+            response = await self._http.post(
+                url,
+                json={"run_ref": run_ref},
+                headers={
+                    "Authorization": f"Bearer {credential.reveal()}",
+                    "X-Office-Forge-Api-Version": api_version,
+                    "Content-Type": "application/json",
+                },
+                timeout=self._timeout,
+            )
+        except httpx.HTTPError as exc:
+            # type(exc).__name__, never str(exc): the message can carry the URL, and
+            # this request carried a credential.
+            raise SimForgeError(
+                f"could not reach SimForge: {type(exc).__name__}"
+            ) from exc
+
+        if response.status_code == 404:
+            raise SimForgeError(f"SimForge has no record of run_ref {run_ref!r}")
+        if response.status_code >= 400:
+            # Not echoed. Same rule as the two calls above: an error body has not been
+            # through validate_response, and an exception message is the one place a
+            # leak would travel unchecked.
+            raise SimForgeError(
+                f"gate_result for {run_ref!r} returned {response.status_code}"
+            )
+        try:
+            body = response.json()
+        except ValueError as exc:
+            raise SimForgeError("gate_result returned a non-JSON body") from exc
+        if not isinstance(body, dict):
+            raise SimForgeError(
+                f"gate_result for {run_ref!r} returned "
+                f"{type(body).__name__}, not an object"
+            )
+        return parse_gate_result(body)
+
     # ----------------------------------------------------------- internals
 
     async def _tenant_credential(self, conn: Any) -> Credential:
@@ -674,6 +771,16 @@ def _rejection(response: Any) -> SimForgeError:
 #: resolving one too eagerly churns certifications.
 DEFAULT_RUN_DEADLINE_HOURS = 24
 
+#: The `rubric_version` a TIMEOUT carries. `certification.rubric_version` is NOT NULL,
+#: and a run that never answered was judged against no rubric at all.
+#:
+#: **Not a version number.** Any plausible semver here - "0.0.0", the last rubric the
+#: Forge used - would be a claim that a rubric was applied, sitting in the column a
+#: reader consults to find out which one. This says what happened instead, and it sorts
+#: nowhere near a real version, so a query that groups by rubric cannot silently fold
+#: these rows in with runs that were actually scored.
+TIMEOUT_RUBRIC_VERSION = "none: the run did not answer"
+
 
 async def overdue_submissions(
     conn: Any,
@@ -752,6 +859,44 @@ def timeout_gate_result(submission: dict[str, Any], *, rubric_version: str) -> G
         scenario_count=0,
         coverage_denominator=0,
     )
+
+
+#: The verdicts SimForge has STORED on the run, and will not revise.
+#:
+#: Read off the receiving side rather than off the verdict vocabulary.
+#: `run_registry.gate_result_for` returns `run.verdict` when the run carries one, and
+#: otherwise DERIVES the answer from the window - TIMEOUT past it, IN_PROGRESS inside
+#: it - "even before the sweep has stamped it: the answer must not depend on how
+#: recently a background job ran."
+#:
+#: So TIMEOUT and IN_PROGRESS are computed answers about a run that is still open, and
+#: NOT_RUN is an answer about a run SimForge does not hold. None of the three is final,
+#: and a late result replaces all of them: SimForge records a verdict arriving after a
+#: TIMEOUT and leaves `timedOutAt` in place, "because a result that ARRIVED is better
+#: evidence than a deadline that passed."
+#:
+#: This is the set `result_received_at` is stamped on, and nothing else. **A stamp on a
+#: TIMEOUT would close the submission against the verdict SimForge is still holding
+#: open** - The Office would have thrown away better evidence and left a certification
+#: at `in_training` forever on a battery that finished five minutes late.
+TERMINAL_VERDICTS = frozenset({"PASS", "PROVISIONAL", "FAIL", "REVOKED"})
+
+
+async def mark_result_received(conn: Any, submission_id: uuid.UUID) -> None:
+    """Close one submission: a real verdict was recorded against it.
+
+    `result_received_at` means "a verdict SimForge stands behind was written into a
+    certification", NOT "we stopped asking". `overdue_submissions` is the only reader
+    and it treats a NULL as "still owed an answer", which is the correct reading of a
+    run that timed out and might yet finish.
+    """
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "UPDATE curriculum_submission SET result_received_at = now() "
+            "WHERE submission_id = %s AND result_received_at IS NULL",
+            (submission_id,),
+        )
+    await conn.commit()
 
 
 async def record_submission(

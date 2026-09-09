@@ -35,24 +35,36 @@ from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from broker import certification, incidents
+from broker import certification, incidents, simforge
 from broker.db import connection
+from broker.simforge import SimForgeError
 
 AUDIT_CHAIN = "audit_chain"
 CERTIFICATION_STALENESS = "certification_staleness"
 MANIFEST_RECONCILIATION = "manifest_reconciliation"
 RESTORE_DRILL = "restore_drill"
+VERDICT_INGEST = "verdict_ingest"
 
 # How long a passing result stays meaningful. Beyond this the sweep reports `stale`,
 # which is not green. Intervals come from the source: Part 15 makes reconciliation
 # monthly, Part 13 makes the restore drill quarterly. The two daily ones are ours -
 # a chain that could have been tampered with 29 days ago and nobody looked is not a
 # tamper-evident chain in any useful sense.
+#
+# `verdict_ingest` is daily, and the argument for it runs in the direction people do
+# not expect. A missed PASS is loud: the agent stays uncertified, `resolve_grant`
+# refuses every call it makes, and somebody asks why within a shift. **A missed REVOKED
+# is silent** - SimForge withdrew a certification, The Office never read the verdict,
+# and the agent goes on holding production authority it has lost, with the call path
+# happily enforcing a `certified` row that is no longer true. That is the same failure
+# shape as an unverified hash chain, so it gets the same interval as the two daily ones
+# rather than the monthly reconciliation's.
 MAX_AGE = {
     AUDIT_CHAIN: timedelta(days=1),
     CERTIFICATION_STALENESS: timedelta(days=1),
     MANIFEST_RECONCILIATION: timedelta(days=31),
     RESTORE_DRILL: timedelta(days=92),
+    VERDICT_INGEST: timedelta(days=1),
 }
 
 
@@ -337,6 +349,281 @@ async def sweep_manifest_reconciliation(conn: AsyncConnection) -> SweepResult:
     return SweepResult(run_id, MANIFEST_RECONCILIATION, status, in_use_total, findings)
 
 
+# ------------------------------------------------------------------ verdict ingest
+
+
+async def _grant_holders(
+    conn: AsyncConnection, *, venture_id: str, forge_id: str, module_id: str
+) -> list[uuid.UUID]:
+    """Which agents a unit-A verdict for this module is about.
+
+    **Read off the receiving side, which is the only place this question has an
+    answer.** `curriculum_submission` records a venture, a Forge and a module and names
+    no agent; `GateResult` names none either. What The Office submitted was
+    `certification_units_requested`, computed from the Pack at Gate 8 and never
+    persisted.
+
+    `agent_forge_grant` is where that population lives by the time a verdict comes back.
+    Gate 7 blocks unless grants for the venture already exist, inactive
+    (`broker/provisioning.py::_gate_7`), and Gate 8 runs after it - so every agent the
+    curriculum was submitted for holds a grant row before the run is even opened.
+
+    It is also the exact key the call path uses: `broker/grants.py` joins
+    `certification` on `(office_agent_id, forge_id, module_id)`, so a row written for
+    this population is a row the enforcement path will find. **Not** `operation_cert_ref`
+    - that pointer is written at grant issuance and only tested for NULL there, and
+    `_gate_9` reading certification through it rather than through the natural key is a
+    second spelling of one question - see B30's closure note in docs/blocking.md.
+    """
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "SELECT DISTINCT office_agent_id FROM agent_forge_grant "
+            "WHERE venture_id = %s AND forge_id = %s AND module_id = %s "
+            "  AND revoked_at IS NULL "
+            "ORDER BY office_agent_id",
+            (venture_id, forge_id, module_id),
+        )
+        return [r[0] for r in await cur.fetchall()]
+
+
+async def sweep_verdict_ingest(
+    conn: AsyncConnection, *, client: Any | None = None
+) -> SweepResult:
+    """Poll SimForge for the verdicts it owes, and record them as certifications.
+
+    **This is the writer that turns a SimForge verdict into a certification row**, and
+    until it existed `record_result` had exactly one non-test caller - the Phase 0.8
+    bootstrap, which issues grants nobody earned. Every `attested_by='simforge'` row in
+    this system comes from here.
+
+    A SWEEP, NOT AN INBOUND ROUTE
+    =============================
+
+        Ruled, and the reasoning is `overdue_submissions`' own: "a control that depends
+        on the failing component to announce its own failure is not a control." An
+        inbound route would have SimForge announcing the value that grants an agent
+        production authority, on a path that goes silent exactly when SimForge is the
+        thing that broke. The Office asks; nothing is accepted unasked.
+
+    WHAT ONE PASS DOES
+    ==================
+
+        Every submission with no result yet is EXAMINED - that is the denominator, and
+        it counts submissions looked at rather than certifications written, for the same
+        reason Gate 8 sends `functions_in_module` as 0 rather than a guess.
+
+        For each: read the verdict from SimForge; resolve it through `VERDICT_TO_STATE`;
+        write one `certification` row per agent holding a live grant on that module.
+        A run that cannot be read stays open until The Office's own deadline has passed,
+        and only then resolves to TIMEOUT - which is `timeout_gate_result`'s existing
+        path, unchanged, and reached now by a caller instead of only by a test.
+
+    WHY A TIMEOUT DOES NOT CLOSE THE SUBMISSION
+    ===========================================
+
+        `result_received_at` is stamped only on a verdict SimForge has stored -
+        `simforge.TERMINAL_VERDICTS`. TIMEOUT and IN_PROGRESS are computed by SimForge
+        from the run window and are replaced the moment a result lands: its
+        `run_registry` records a late verdict against an already-timed-out run because
+        "a result that ARRIVED is better evidence than a deadline that passed."
+
+        If The Office stamped on TIMEOUT it would stop asking while SimForge was still
+        answering, and the certification would sit at `in_training` forever because a
+        battery finished five minutes late. So a timed-out submission stays in the
+        candidate set, the next pass reads the real verdict, and the upsert on
+        `(office_agent_id, forge_id, module_id)` replaces the state rather than adding a
+        row. **The arriving verdict wins.**
+
+    WHAT IS REFUSED RATHER THAN GUESSED
+    ===================================
+
+        A `certified` row must record the instruction hash, the Forge api_version and
+        the certified tier. The hash is on the submission; the api_version is recovered
+        by `certification.forge_api_version_in_force`, which refuses when the hash
+        matches no instruction or is ambiguous at the moment of submission. Nothing here
+        supplies a placeholder to get past `record_result`: the refusal is caught,
+        counted and reported as a finding, and the submission stays open. A
+        certification whose basis is unknown is permanent by accident, which is the
+        whole reason that guard exists.
+
+        A unit-B submission is handled by the same code path and will hit the same
+        refusal, because a department certification has no module and therefore no
+        instruction row to recover an api_version from. That is the honest state today -
+        `DeptCert` holds no rows for any department, so no unit-B verdict can be earned
+        (docs/blocking.md B32) - and it is a refusal rather than a crash.
+    """
+    run_id = await _start(conn, VERDICT_INGEST)
+
+    findings: dict[str, Any] = {
+        "examined": 0,
+        "ingested": 0,
+        "rows_written": 0,
+        "still_open": 0,
+        "timed_out": 0,
+        "by_verdict": {},
+        # Two different findings, kept apart on purpose. `basis_unrecoverable` is a
+        # verdict whose Forge api_version could not be recovered - which is fatal to a
+        # PASS and irrelevant to a FAIL, so it is reported and does not decide the
+        # sweep's status. `refused` is a write `record_result` actually rejected, and
+        # that IS this sweep failing at its one job. Merging them would make every
+        # recorded failure look like an outage.
+        "basis_unrecoverable": [],
+        "refused": [],
+        "no_grant_holders": [],
+        "unreadable": [],
+    }
+
+    # `deadline_hours=0` makes this "every submission still owed an answer", which is
+    # the candidate set: a run that answers in five minutes must be ingested in five
+    # minutes, not held until the timeout deadline it never reached.
+    submissions = await simforge.overdue_submissions(conn, deadline_hours=0)
+    findings["examined"] = len(submissions)
+
+    owns_client = client is None
+    if submissions and client is None:
+        # Built only when there is something to ask about, and imported here rather
+        # than at module scope: `broker.sweeps` is imported by the health probes, and
+        # the call stack behind `OfficeClient` is a heavier import than a readiness
+        # check needs on a system with no verdict outstanding.
+        from client.office_client import OfficeClient
+
+        client = simforge.SimForgeClient(OfficeClient())
+
+    try:
+        for sub in submissions:
+            await _ingest_one(conn, client, sub, findings)
+    finally:
+        if owns_client and client is not None:
+            await client.aclose()
+
+    # A refusal is this sweep failing at its one job: a verdict arrived and no
+    # certification could be written for it. Everything else - a run still in flight, a
+    # module nobody holds a grant on, a FAIL whose basis was never recoverable - is the
+    # sweep working and reporting.
+    status = "failed" if findings["refused"] else "passed"
+    examined = int(findings["examined"])
+    await _finish(
+        conn, run_id, status=status, denominator=examined, findings=findings,
+    )
+    return SweepResult(run_id, VERDICT_INGEST, status, examined, findings)
+
+
+async def _ingest_one(
+    conn: AsyncConnection, client: Any, sub: dict[str, Any], findings: dict[str, Any]
+) -> None:
+    """One submission. Mutates `findings` rather than returning a verdict about itself."""
+    submission_id = sub["submission_id"]
+    run_ref = sub.get("simforge_run_ref")
+    hours_waiting = float(sub["hours_waiting"])
+    result = None
+
+    if run_ref:
+        try:
+            result = await client.office_gate_result(conn, run_ref=run_ref)
+        except SimForgeError as exc:
+            findings["unreadable"].append(
+                {"submission_id": str(submission_id), "reason": str(exc)}
+            )
+
+    if result is None:
+        if hours_waiting < simforge.DEFAULT_RUN_DEADLINE_HOURS:
+            # Still inside the window. Not an answer and not a timeout; the run is
+            # allowed to be running.
+            findings["still_open"] += 1
+            return
+        # The Office's own deadline, held by the party that is waiting. Unchanged path.
+        result = simforge.timeout_gate_result(
+            sub, rubric_version=simforge.TIMEOUT_RUBRIC_VERSION
+        )
+        findings["timed_out"] += 1
+
+    by_verdict = findings["by_verdict"]
+    by_verdict[result.verdict] = by_verdict.get(result.verdict, 0) + 1
+
+    unit, _rubric_kind = simforge.submission_unit(sub["module_id"])
+
+    api_version: str | None = None
+    if unit == "A":
+        try:
+            api_version = await certification.forge_api_version_in_force(
+                conn,
+                forge_id=sub["forge_id"],
+                module_id=sub["module_id"],
+                content_hash=sub["instruction_content_hash"],
+                at=sub["submitted_at"],
+            )
+        except certification.CertificationError as exc:
+            # Not fatal here, and NOT substituted. A verdict whose basis cannot be
+            # recovered may still be recordable - a FAIL records that an agent was
+            # tested and did not pass, a claim that cannot go stale and therefore needs
+            # no basis - so the write is attempted and `record_result`'s guard decides.
+            findings["basis_unrecoverable"].append(
+                {"submission_id": str(submission_id), "reason": str(exc)}
+            )
+
+    if unit == "A":
+        holders = await _grant_holders(
+            conn,
+            venture_id=sub["venture_id"],
+            forge_id=sub["forge_id"],
+            module_id=sub["module_id"],
+        )
+        if not holders:
+            # Nothing to certify. Gate 7 requires grants before Gate 8 submits, so this
+            # is a provisioning-order finding rather than a verdict problem - and the
+            # submission stays open, because the verdict is still owed to somebody.
+            findings["no_grant_holders"].append(str(submission_id))
+            return
+        targets: list[dict[str, Any]] = [
+            {"office_agent_id": h, "department": None} for h in holders
+        ]
+    else:
+        targets = [{"office_agent_id": None, "department": sub["department"]}]
+
+    written = 0
+    for target in targets:
+        try:
+            await certification.record_result(
+                conn,
+                unit=unit,
+                forge_id=sub["forge_id"],
+                module_id=sub["module_id"],
+                office_agent_id=target["office_agent_id"],
+                department=target["department"],
+                verdict=result.verdict,
+                rubric_version=result.rubric_version,
+                certified_tier=result.certified_tier,
+                instruction_content_hash=sub["instruction_content_hash"],
+                forge_api_version=api_version,
+                score=result.score,
+                threshold=result.threshold,
+                scenario_pack_ref=sub["scenario_pack_ref"],
+                attested_by="simforge",
+            )
+        except certification.CertificationError as exc:
+            # The guard did its job. Reported, never worked around.
+            findings["refused"].append(
+                {
+                    "submission_id": str(submission_id),
+                    "office_agent_id": str(target["office_agent_id"]),
+                    "verdict": result.verdict,
+                    "reason": str(exc),
+                }
+            )
+            continue
+        written += 1
+
+    findings["rows_written"] += written
+    if not written:
+        return
+
+    findings["ingested"] += 1
+    if result.verdict in simforge.TERMINAL_VERDICTS:
+        # Only now. See the module docstring: a stamp on a TIMEOUT would close the
+        # submission against a verdict SimForge is still holding open.
+        await simforge.mark_result_received(conn, submission_id)
+
+
 async def disposition(
     conn: AsyncConnection,
     *,
@@ -520,6 +807,7 @@ async def run_all(*, include_restore_drill: bool = False) -> dict[str, SweepResu
             (AUDIT_CHAIN, sweep_audit_chain),
             (CERTIFICATION_STALENESS, sweep_certification_staleness),
             (MANIFEST_RECONCILIATION, sweep_manifest_reconciliation),
+            (VERDICT_INGEST, sweep_verdict_ingest),
         ):
             async with _sweep_lock(conn, kind) as acquired:
                 if acquired:
