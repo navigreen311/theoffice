@@ -751,3 +751,33 @@ the rule, 1026 after — which is luck, not a control. `test_rules.py` asserts t
 is contiguous and that its length matches a literal; V34 satisfied both while untested.
 **No check exists that a rule has a test.** Recorded rather than built, so whoever adds
 V35 knows the gap is theirs to notice.
+
+---
+
+## CAVEAT 13 — a grep finds mentions, not construction
+
+**Caveat 12's habit in a second form, found the same way: by doing it.**
+
+`human_capacity` was made a required field, and the prediction named **four construction
+sites** that would break, taken from a grep's hit list. **One broke.** The failure
+surfaced in a fifth file the prediction never named.
+
+| hit | predicted | actual | what it really was |
+|---|---|---|---|
+| `broker/pack_templates.py` | breaks | **broke** | a literal dict — a real construction site |
+| `tests/provisioning/conftest.py` | breaks | fine | **a copy** of a loaded entry, `dict(officers[0])` |
+| `tests/validator/test_rules.py` | breaks | fine | **a mutation** of a loaded pack |
+| `tests/contract/test_approvals_api.py` | breaks | fine | **a docstring** |
+| `tests/contract/test_packs_api.py` | not named | **broke** | where the template's failure surfaces |
+
+**Three of four hits were a copy, a mutation and prose.** The grep found the string; the
+prediction read the count as a list of places that build the object.
+
+**The shared habit.** Caveat 12 is reporting a result whose output you piped away.
+This is reasoning from a hit count without reading what each hit does. **Both substitute
+a cheap proxy for the thing itself, and both are held confidently** — the proxy is
+usually close enough, which is exactly why the habit survives.
+
+**Practically:** a grep tells you where to look. It does not tell you what you will find,
+and a prediction built on the count rather than on the reading is a guess wearing
+evidence's clothes. Read each hit, or say the number is unread.

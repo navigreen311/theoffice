@@ -182,6 +182,18 @@ def skeleton(
                 "timezone": PLACEHOLDER,
                 "max_daily_approvals": 0,
                 "auth_method": "sso_mfa",
+                # A template's numbers are placeholders, and the provenance says so
+                # rather than leaving the next author to inherit silence. This is the
+                # one place an unfilled value is correct - and it is still required to
+                # declare that it is unfilled.
+                "provenance": {
+                    "basis": "declared",
+                    "established_by": PLACEHOLDER,
+                    "detail": (
+                        "Template placeholder. Replace with who established these "
+                        "numbers and on what basis before this Pack is published."
+                    ),
+                },
             }
         ],
         "separation_of_duties": {"gate_signoff_policy": "distinct_humans"},
