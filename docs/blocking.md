@@ -2406,6 +2406,84 @@ with the first rather than behind it.
 unit-A refusals. They are different failures with different owners, and collapsing them is
 how this stayed hidden.
 
+### CLOSED for unit A — 9 September 2026, P-03
+
+**The unit-A half is built. B30 stays open on unit B, which is P-04's and is blocked
+behind B32 rather than behind code.**
+
+`broker/sweeps.py::sweep_verdict_ingest` is the fifth sweep kind. It polls SimForge for
+the verdicts it is owed, resolves each through `VERDICT_TO_STATE`, and writes a
+`certification` row per agent holding a live grant on the module. `attested_by="simforge"`
+now appears in this codebase exactly once, at the one call site that has a SimForge verdict
+in hand.
+
+**A sweep, not an inbound route**, on the ruling and on `overdue_submissions`' own
+reasoning: a value that grants an agent production authority must not arrive over a path
+that goes silent exactly when SimForge is the thing that broke. `overdue_submissions` and
+`timeout_gate_result` now have a caller and not only a test.
+
+### Four things this item, and the briefs built on it, had wrong
+
+Recorded because each was inferred from a name and answered by one file — Caveat 14, on an
+item that already carries two retractions of the same class.
+
+**1. `SimForgeClient.gate_result(run_ref)` does not exist, and the method that does could
+not be used.** It is `get_gate_result`, and it is the **brokered** path: `OfficeClient.call`
+resolves a grant for `(agent, simforge, gate_result)`, enforces a shift, checks a budget and
+writes a ledger row naming that agent. A sweep has no agent. The workaround was already
+refused by `SimForgeClient`'s own docstring — "minting one to satisfy the signature is
+`origin='human'` again … a name in a ledger row for a call it did not make" — and forging
+the reader of a verdict that grants authority is the same defect the polling design exists
+to avoid. So `office_gate_result` was added beside it: the Office's own tenant credential,
+the same footing as `submit_curriculum` and `run_start`, attributed to nobody it was not.
+**The brokered method is unchanged and its golden test is untouched**, because an agent
+reading a verdict about itself really is an agent act.
+
+**2. `curriculum_submission` has no `forge_api_version`,** so a `certified` row's basis
+cannot come from the submission. It is recovered from `forge_operating_instruction` by
+content hash — and `content_hash` is **not unique per `(forge_id, module_id)`**: the primary
+key is `(forge_id, module_id, instruction_version)`, so republishing unchanged text against
+a bumped Forge API legally produces two rows with one hash and two answers. The sweep takes
+the row **in force at `submitted_at`**, which is a reconstruction rather than a tie-break:
+Gate 8 puts the live instruction's `forge_api_version` on the wire in the curriculum it
+hands over, so that row is the version SimForge was actually told about. No match, or an
+ambiguous one, is **refused** — never filled in.
+
+**3. `attested_by` is a parameter, not a column.** There is no `certification.attested_by`,
+and a query looking for one finds nothing. The structural expression is
+`simforge_verdict IS NOT NULL`, which `record_result` maintains precisely so the question
+survives a naming convention. Anything asserting on `attested_by` should assert on that.
+
+**4. Nothing wrote `result_received_at`** — two references in the whole repository, the
+migration that creates it and `overdue_submissions`' own `WHERE`. It is now the idempotence
+latch, and it means **"a verdict SimForge stands behind was recorded"**, not "we stopped
+asking". A TIMEOUT deliberately does not stamp it: SimForge records a result arriving for an
+already-timed-out run and leaves `timedOutAt` in place, because "a result that ARRIVED is
+better evidence than a deadline that passed". A stamp on TIMEOUT would have The Office stop
+asking while SimForge was still answering, and leave a certification at `in_training`
+forever because a battery finished five minutes late.
+
+### Still open, and named rather than fixed here
+
+**Two joins ask the same question and only one of them is the enforcement.**
+`broker/grants.py` — the call path, run on every request — finds a unit-A certification on
+the natural key `(office_agent_id, forge_id, module_id)`. `_gate_9` finds it through
+`agent_forge_grant.operation_cert_ref`, a pointer written only at grant issuance
+(`bootstrap_phase0`, `generators/runtime_config`, and test fixtures — the provisioning
+ladder never writes it). **So a certification this sweep writes is enforced immediately by
+the call path and is invisible to Gate 9 until somebody sets the pointer.**
+
+This package writes the natural key and deliberately does not write the pointer: setting
+`operation_cert_ref` is what makes a grant assignable, it belongs to grant issuance, and
+`broker/provisioning.py` is out of scope here. **Flagged rather than closed** — the unit-A
+verdict path is real and enforced, and Gate 9 will still under-report until whoever owns
+grant issuance reconciles the two spellings.
+
+**Also unbuilt: nothing in the provisioning ladder creates `agent_forge_grant` rows.**
+Gate 7 asserts they exist and are inactive; only the bootstrap, the runtime-config
+generator and test fixtures ever create one. The sweep reports a submission with no grant
+holders as a finding rather than inventing an agent to certify.
+
 ## B31 — a renamed Pack field reads as a malformed document, not an older one
 
 **`theoffice`** · Found 2026-09-09 by the coordinator, merging P-07 and P-08 in the same

@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
@@ -151,6 +152,92 @@ def is_forge_version_stale(
     b = _parse_semver(current)
     depth = {"major": 1, "major.minor": 2, "major.minor.patch": 3}[sensitivity]
     return a[:depth] != b[:depth]
+
+
+async def forge_api_version_in_force(
+    conn: AsyncConnection,
+    *,
+    forge_id: str,
+    module_id: str,
+    content_hash: str,
+    at: datetime,
+) -> str:
+    """The `forge_api_version` a certification was actually earned against.
+
+    `record_result` refuses a `certified` row without one and `curriculum_submission`
+    does not have the column - it stores `instruction_content_hash` and nothing about
+    the Forge's version. So the value has to be recovered from
+    `forge_operating_instruction`, and recovering it correctly is not a lookup.
+
+    WHY THE HASH IS NOT ENOUGH ON ITS OWN
+    =====================================
+
+        `forge_operating_instruction`'s primary key is
+        `(forge_id, module_id, instruction_version)` and its only other unique index is
+        `ux_instruction_live ... WHERE superseded_at IS NULL`. **`content_hash` is not
+        unique per module.** Republishing an unchanged instruction under a new version
+        against a bumped Forge API produces two rows with one hash and two different
+        api_versions - which is precisely the case `version_sensitivity` and
+        `sensitivity_rationale` exist to describe, so it is expected rather than
+        pathological.
+
+        A query keyed on the hash alone therefore has two answers, and taking the first
+        would be a certification basis decided by whatever order the planner returned.
+
+    WHY "IN FORCE AT `at`" IS NOT A TIE-BREAK
+    =========================================
+
+        It is a reconstruction, not a preference. Gate 8 builds `instruction_set_ref`
+        from the LIVE instruction at submit time and puts
+        `instruction.forge_api_version` on the wire in the curriculum it hands over
+        (`broker/provisioning.py::_curriculum_payload`). So the row in force when the
+        submission was made is not the most plausible of two candidates - it is the one
+        whose api_version SimForge was told about and judged against.
+
+        `at` is the submission's `submitted_at` for that reason, and passing anything
+        else here answers a different question.
+
+    Refuses rather than guesses in both directions: no row carrying that hash, and more
+    than one in force at that moment. A certification whose basis has two answers has no
+    basis, and one supplied to satisfy the guard is the permanent-by-accident row the
+    guard exists to prevent.
+    """
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            """
+            SELECT instruction_version, forge_api_version, authored_at, superseded_at
+            FROM forge_operating_instruction
+            WHERE forge_id = %s AND module_id = %s AND content_hash = %s
+            ORDER BY authored_at, instruction_version
+            """,
+            (forge_id, module_id, content_hash),
+        )
+        rows = [dict(r) for r in await cur.fetchall()]
+
+    if not rows:
+        raise CertificationError(
+            f"no forge_operating_instruction for {forge_id}/{module_id} carries "
+            f"content hash {content_hash[:12]}...; the Forge api_version this run was "
+            "judged against cannot be recovered, and supplying one would make the "
+            "certification's basis a guess"
+        )
+
+    in_force = [
+        r for r in rows
+        if r["authored_at"] <= at
+        and (r["superseded_at"] is None or r["superseded_at"] > at)
+    ]
+    if len(in_force) != 1:
+        versions = sorted(
+            f"{r['instruction_version']}@{r['forge_api_version']}" for r in rows
+        )
+        raise CertificationError(
+            f"{len(in_force)} instruction version(s) for {forge_id}/{module_id} carry "
+            f"content hash {content_hash[:12]}... and were in force at "
+            f"{at.isoformat()}; candidates were {versions}. A certification basis with "
+            f"{'no' if not in_force else 'two'} answers is not a basis"
+        )
+    return str(in_force[0]["forge_api_version"])
 
 
 async def record_result(

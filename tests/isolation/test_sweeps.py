@@ -395,16 +395,24 @@ async def test_one_sweep_kind_runs_at_a_time(admin):
 
 
 async def test_run_all_records_a_run_per_kind(admin):
+    """The count moves with the tuple, deliberately.
+
+    It was three and is four: `verdict_ingest` joined the unconditional tuple in
+    `run_all`. This assertion is the only thing that notices a sweep silently dropping
+    out of the list, so it is written as an exact set and an exact count rather than a
+    `>=`.
+    """
     results = await sweeps.run_all()
     assert set(results) == {
         sweeps.AUDIT_CHAIN,
         sweeps.CERTIFICATION_STALENESS,
         sweeps.MANIFEST_RECONCILIATION,
+        sweeps.VERDICT_INGEST,
     }
     with admin.cursor() as cur:
         cur.execute("SELECT count(*) FROM sweep_run WHERE status <> 'running'")
         row = cur.fetchone()
-    assert row is not None and row[0] == 3
+    assert row is not None and row[0] == 4
 
 
 # -------------------------------------------------------------- restore drill (Gate 13)
