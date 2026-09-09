@@ -2647,3 +2647,211 @@ each time. The consequences did not.
 had this record it would have been handed back; the coordinator's own gets the same standard
 written down instead.
 
+
+## B33 — P-16: what V11 and V23 now have for FunnelForge, and four things found while authoring them
+
+**Written by P-16, 9 September 2026.** P-16 is the authoring half of the FunnelForge binding,
+split out of P-13 by Ivan's ruling: P-13 kept the adapter, the registry-row generator and the
+refusal behaviour, and this package took the nine operating instructions and their scenarios.
+It gates nothing and nothing gates it.
+
+**If another package has already claimed B33 on a concurrent branch, renumber this one. The
+content does not depend on the number.**
+
+### V11 and V23 are partially satisfied. Five of nine.
+
+**Delivered — manual and scenarios both, to the standard of the eleven CapitalForge manuals:**
+
+| module | manual | scenarios |
+|---|---|---|
+| `send_intake_acknowledgment` | `funnelforge-send-intake-acknowledgment.md` | 6 authored, 1 declared |
+| `distribute_referrer_briefing` | `funnelforge-distribute-referrer-briefing.md` | 7 authored, 0 declared |
+| `schedule_blueprint_call` | `funnelforge-schedule-blueprint-call.md` | 7 authored, 0 declared |
+| `capture_contact` | `funnelforge-capture-contact.md` | 7 authored, 0 declared |
+| `read_funnel_analytics` | `funnelforge-read-funnel-analytics.md` | 5 authored, 2 declared |
+
+Plus `docs/instructions/funnelforge-approved-send-rules.md`, the shared rules the six sends
+depend on, in the shape `foi-shared-rules.md` has for the eleven.
+
+**Outstanding — four, and they are named rather than counted:**
+
+`send_scheduling_confirmation`, `send_deliverable_cover`, `send_followup_no_engagement`,
+`send_brief_cover`.
+
+All four are approved autonomous sends binding one template each. **They share a request
+shape, both refusals, the whole adapter failure table and the retry rule with
+`send_intake_acknowledgment`, which is written**, and everything they have in common with each
+other is in the shared rules, which is written. **What is owed per module is four things: the
+occasion, the recipient and what that recipient believes when the message arrives, the
+approved copy quoted in full, and the compliance entries that copy touches.** Two of them —
+`send_deliverable_cover` and `send_brief_cover` — must also carry the attachment finding
+below, because their copy is among the three that promises one.
+
+**This was the split P-16 chose rather than a shortfall.** Nine manuals plus nine scenario
+sets is the eleven-CapitalForge shape, and producing nine thin ones to clear
+`scripts/check_module_manuals.py` is the `lender_match` pressure that check is documented as
+applying and documented as warning against. P-13 refused to do it mechanically and that
+refusal is why P-16 exists; doing it badly here would have thrown away the reason for the
+split.
+
+**The gap is asserted, not implied.** `tests/test_funnelforge_manuals.py` holds the four
+outstanding module ids in an `OUTSTANDING` tuple and **fails the moment a manual or a scenario
+file appears for one of them**, so completing the work forces the name into `DELIVERED` and
+brings every other assertion in that file to bear on it. A partial delivery that fails loudly
+when it is completed is one nobody can lose track of.
+
+**What this does not close.** V11 and V23 stay FAIL for the Marketing Operations Coordinator
+until all nine exist. **P-16 did not apply `docs/plans/funnelforge-position-DEFERRED.patch`,
+did not edit any Pack, and did not run `scripts/register_funnelforge_modules.py`.** Burkham's
+Gate 2 is unchanged at 0 FAIL. The ordering P-13 measured still stands: the registry rows land
+before or with the patch, never after, or V31 goes mute.
+
+### Finding 1 — the adapter reports its own execution as the outcome
+
+**`sent`, `booked` and `captured` are literals.** `adapters/funnelforge/modules.py` returns
+`{"sent": True, ...}` from the send handlers whatever the upstream answered, and `app.py`
+wraps the handler's return in a 200 without consulting it. So the adapter answers:
+
+```json
+{"template_id": "intake_acknowledgment", "sent": true,
+ "upstream": {"status": 500, "body": {"success": false,
+   "error": {"code": "SEND_FAILED", "message": "No email provider configured. ..."}}}}
+```
+
+**An agent that reads the flag rather than `upstream.status` reports an email that does not
+exist**, and the response is shaped to invite exactly that. Every manual in this set leads
+with it; the shared rules make it rule 1.
+
+**Not fixed here.** The fix is the handler reading the status, and `adapters/funnelforge/` is
+P-13's. Raised, sized at "small", not taken.
+
+### Finding 2 — no email provider is configured, and the log says `console`
+
+**Measured on the running `funnelforge-api` container, not inferred.** `docker inspect` reports
+`RESEND_API_KEY=` — present and empty — `NODE_ENV=production`, no `EMAIL_CONSOLE_MODE`, and no
+SendGrid, SES or SMTP variable. An empty string is falsy in JavaScript, so
+`EmailSender.initializeProviders()` enables nothing and the console fallback is not added
+either. `send()` finds an empty provider list and returns
+`No email provider configured. Set RESEND_API_KEY, ...`, which `POST /api/emails/send` turns
+into `500 SEND_FAILED`.
+
+**So all six approved sends fail today, and Finding 1 reports each as `sent: true`.**
+
+**The container's own startup log is the part worth keeping:**
+
+```
+EmailSender: Primary provider: console
+EmailSender: Available providers:
+```
+
+`primaryProvider` is `this.providers.find(p => p.enabled)?.provider || 'console'`, so the
+first line is what the field falls back to when there is nothing to find, and the send loop
+iterates the empty list and never reaches console. **A reader debugging a missing email is
+told mail is being printed to stdout, goes looking in the container output, and finds
+nothing — because nothing was printed either.** It is a false green in one log line.
+
+This is a configuration state and it changes the moment somebody sets a variable and restarts.
+Nothing in The Office can see that it changed.
+
+### Finding 3 — three of the six approved templates promise an attachment the transport cannot carry
+
+**The send path has no attachment support at any layer.** `sendEmailSchema` accepts `to`,
+`from`, `subject`, `html`, `text`, `preheader`, `tags` and `leadId`. `SendEmailOptions` carries
+`to`, `from`, `content`, `tags` and `metadata`. Every provider call builds a message from
+`from`, `to`, `subject`, `html` and `text`. **The string "attachment" does not occur, in any
+case, in the route, the sender or its types.**
+
+Three approved autonomous templates say otherwise, and so does the unbound seventh:
+
+| template | module | the sentence |
+|---|---|---|
+| `deliverable_cover` | `send_deliverable_cover` | *"Your Blueprint is attached."* |
+| `brief_cover` | `send_brief_cover` | *"This quarter's Capital Command Brief is attached."* |
+| `referrer_briefing` | `distribute_referrer_briefing` | *"The quarterly briefing ... is attached"* |
+| `engagement_letter_cover` | none — human-approve | *"Your engagement letter is attached for signature."* |
+
+**A successful send of any of those three delivers a cover note for a missing enclosure, and
+nothing on either side reports a problem.** The route answers 200, the adapter answers
+`sent: true`, and the recipient — a client told their Blueprint is on the way, or a bank told
+its quarterly briefing has gone out — is the first to notice.
+
+**Nobody owns this yet, and P-16 cannot.** The copy sits behind the §4.5 two-founder review
+gate, which this package does not sit on, and the fix is one of three decisions: the copy
+changes and goes back through that gate, the transport grows an attachment path, or those
+three templates are not autonomous sends at all. **What retires this item is that decision
+being made**, and it should be made before somebody configures a provider, because today the
+defect is invisible behind Finding 2.
+
+### Finding 4 — a second send that no module gates, and it is unconditional
+
+`docs/plans/funnelforge-binding-RECORD.md` records one hole of this shape: `capture_contact`
+auto-enrolling a new lead in the business's active `WELCOME` sequence. **There is a second.**
+
+**`POST /api/scheduling/public/:businessId/:slug/book` calls `sendAppointmentConfirmationEmail`
+on every successful booking.** The copy is FunnelForge's own `templates.appointmentConfirmation`
+— not on the approved list, not reviewed under §4.5, and not reachable by either refusal in
+`adapters/funnelforge/gate.py`. **It is worse than the first in one specific way: the welcome
+enrolment is conditional on a sequence existing, and this one is guarded only by
+`if (clientEmail)`, which the route's schema requires.** It fires every time.
+
+**And it fails silently.** Same absent provider, so it returns `success: false`; the route logs
+`emailSent: false` and answers 200 regardless. **The booking succeeds, the confirmation does
+not go out, and nothing in the response says so** — so an agent can neither report the client
+was emailed nor report that they were not.
+
+**Two consequences carried into the manuals rather than left here.** If a provider is ever
+configured, an agent that books and then calls `send_scheduling_confirmation` sends a client
+two confirmations for one appointment, one of them unreviewed. And nobody has read
+FunnelForge's confirmation copy against `compliance/own-claims-and-pricing-v1`, though it goes
+out over Burkham's engagement.
+
+**Neither hole is closable from The Office**, and that is the same conclusion the RECORD
+reached about the first one. What closes them is somebody at FunnelForge deciding what those
+two paths send.
+
+### One correction to a portfolio-wide ruling, measured rather than argued
+
+**`docs/scenario-generation.md` §3 rules that `rate_limited` has no source anywhere and that
+every module declares it `not_applicable`** — *"no manual describes a rate limit, a quota, a
+429 or a backoff, because with one exception none of these modules has one."* The exception
+named there is `voiceforge/transcribe_call`.
+
+**FunnelForge is a second exception.** `apps/api/src/index.ts` registers a global `preHandler`
+that rate-limits every route but `/health`, and all four routes these nine modules reach fall
+in one category. Five rapid probes from inside `ff-docker_funnelforge-network` returned
+`500 500 500 429 429`, and the refusal body carries a code, a tier, a limit and a `retryAfter`:
+
+```json
+{"success":false,"error":{"code":"RATE_LIMIT_EXCEEDED",
+ "message":"Rate limit exceeded. Please retry after 1 seconds.",
+ "tier":"FREE","category":"general","limit":3,"retryAfter":1}}
+```
+
+**So `rate_limited` is authored on all five delivered modules rather than declared absent**,
+and the material is real: two budgets behind one error code, a `limit` header that changes
+meaning between a permitted response and a refusal, and — the part that matters for an agent —
+**one bucket for the whole Village**, because the key is the brokered user id and there is only
+one FunnelForge user token. An agent refused on its first call may have been called once.
+
+**The ruling is not wrong and does not need reversing.** It was made over the eleven
+CapitalForge modules and is right about them; what it needs is the second exception recorded
+beside the first, which is what this paragraph is. The two codes a reader might expect —
+`BURST_LIMIT_EXCEEDED` and `DAILY_QUOTA_EXCEEDED` — live in `distributedRateLimitHook`, which
+is imported by `index.ts` and never registered, and **cannot occur**; the daily-quota helpers
+are exported and called from nowhere, so no daily allowance is in force.
+
+### A note on this item's reliability
+
+**Everything above marked "measured" was read out of a response body, a container's
+environment, or a container's own log, on 9 September 2026, and the transcripts are in
+`docs/instructions/funnelforge-approved-send-rules.md`.** Everything else was read out of the
+handler or the schema and is labelled as such in the manual that carries it.
+
+**One limit, stated rather than glossed.** `read_funnel_analytics` has never been called
+successfully — a `200` from `GET /api/analytics/dashboard` needs a valid FunnelForge user JWT
+and there is no tenant credential to mint one from. Its field list, its thirty-day window and
+its ten-minute cache are read from the handler, not from a response, and its manual says so in
+PROVENANCE. `docs/forge-adapter.md` trap #4 is about exactly that gap and this module is on
+the wrong side of it.
+
+---
