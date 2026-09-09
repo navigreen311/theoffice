@@ -2613,3 +2613,87 @@ unit B never asks for the join.
 unit B and reopen entry 23 as a side effect — a ruling reversed by consequence, which is
 precisely what entry 23's written condition exists to make impossible. If the bridge is ever
 wanted, it is wanted on its own terms, with all three conditions answered deliberately.
+
+---
+
+## 29. AnimaForge is zero for V1 — a ruling now, where the same number used to be an inference
+
+**Ruled 2026-09-09 by Ivan (T-024), as part of the Gate 4.5 parallel build. The count did not
+change. Its standing did, and that is the whole entry.**
+
+**AnimaForge gets zero agent-facing modules in V1.** No act in
+`docs/reference/burkham-wickmont-marketing-plan-intake.md` produces video or generated
+creative. Everything creative in V1 is human-authored — Dream 100 outreach is *"human-authored
+per contact"* (§3.3, §4.5), the newsletter and the founder essay are *"Human-authored"* (§4.5),
+the briefing webinar is *"Human-run"* (§3.3). **The worker's share of every one of them is
+distribution of content a human produced.** There is nothing in the plan for a video Forge to
+be asked to do, so nothing asks it.
+
+### The number did not change; the standing did
+
+`docs/plans/funnelforge-animaforge-surface-PROPOSAL.md` already proposed zero. It also said,
+correctly, that its own zero was weak:
+
+> *"Zero here is inferred from what the intake does not say, and absence of an act is weaker
+> evidence than a stated prohibition. … This is a scoping question, not something to settle
+> from the absence."*
+
+That was the right thing to write and the wrong thing to leave standing. Compare §3.4, which
+bans a worker from initiating an outbound phone call as principal: explicit, reasoned from the
+FTC Telemarketing Sales Rule and the TCPA, with a named V1.5 revisit condition. **A ban and an
+absence are not the same artefact even when they produce the same number.**
+
+**So this entry is not a summary of the proposal. It is the decision the proposal asked for.**
+An inference and a ruling are indistinguishable from the outside — both are a zero in a table —
+and they behave completely differently the moment a reader asks *who decided this*. An
+inference answers "nobody; it fell out of a document that was silent on the subject", and the
+honest next move is to go and ask. A ruling answers "Ivan, on 9 September 2026, for these
+reasons", and the next move is to check the reopening condition. **The zero was load-bearing
+for a scope nobody had signed. It is signed now.**
+
+### What reopens it
+
+**The day a marketing act produces generated video or creative.** Not a plan to; not an
+AnimaForge bridge landing; not a V1.5 wishlist item. **The condition is an act in a marketing
+plan whose output is generated creative** — at which point this ruling's premise (every
+creative artefact is human-authored and the worker's share is distribution) has failed, and
+the count is open again on its merits.
+
+The condition is written down for the reason entry 23 writes down three of its own: **a closed
+question with no reopening condition becomes a thing nobody remembers was deliberate.** This
+project has the worked example already — entry 3 recorded an exit criterion, the criterion went
+stale while the entry stayed, and it took a separate correction to notice. A zero that is
+nobody's decision decays into a zero that is nobody's business.
+
+### What this does not mean
+
+**AnimaForge is in the first wave, by founder decision.** It is named in blueprint §4.5
+Marketing Ops as a content-production dependency alongside SelfPublisherForge and
+VideoEditForge, and it has been in `broker/forge_map.ESTATE` since 4 September, which entry 7
+is about. Nothing here removes it from either.
+
+**Both facts are true, and this entry keeps them side by side rather than resolving one into
+the other.** Not *"AnimaForge is out of the first wave"* — the founder decision says otherwise.
+Not *"AnimaForge needs modules"* — the plan names no act for one. **V1's marketing plan giving
+AnimaForge nothing to do is a fact about V1's marketing plan.** It is not a judgement about the
+Forge, not a demotion, and not evidence that the first-wave decision needs revisiting. The two
+sit together the way entry 27 keeps *"the ladder is not wrong"* beside *"both of its writers
+are missing"*.
+
+The reading to refuse is the tidy one — that a ruling of zero has settled AnimaForge's place in
+the estate. It has settled one venture's V1 module count, and that is all it has settled.
+
+### Recorded and deliberately not fixed: it cannot be started as committed
+
+If anybody ever does start AnimaForge — for the bridge, for a recon, to watch it come up —
+**its committed compose wants host ports 4000, 3001, 3002, 5432 and 8001, and `5432` is the
+native PostgreSQL serving The Office's own development and test databases.** Starting it
+as-committed takes that port out from under The Office, and The Office's databases go with it.
+It needs an override before it runs at all. `docs/port-allocation.md` already carries this and
+names the fix — copy CRE Forge's override rather than re-deriving it, including the `!override`
+merge trap a plain value falls into.
+
+**This is recorded, not fixed, and the two are different on purpose.** Writing an override for
+a Forge with no bridge, no operating instructions and — as of today's ruling — no V1 work is
+building against a start nobody has scheduled. **The note is here so that whoever does schedule
+it reads this before `docker compose up`, rather than after.**
