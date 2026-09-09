@@ -1663,3 +1663,59 @@ capacity. **Two compliance officers naming each other satisfy it** — while mak
 critical-role backups the same two people, which is the concentration the rule was
 presumably written to detect. And `backup_human` is a free string like `human_name`, so it
 carries B22's problem too: it can name somebody with no account.
+
+**Closed 2026-09-08.** `median_review_minutes` at Gate 4.5 is now **weighted by each
+person's share of their role's coverage hours**. Two officers at six hours each, four
+minutes and three, give **3.5** — the same answer in either order, which is the property
+that matters more than the number. Where a role has no coverage hours at all there is no
+share to weight by, so the fallback is the plain mean of the declared times and the rule
+then fails on the thing that is actually wrong: nobody covers the role.
+
+**Nothing flipped.** Both Packs declare one person per role, and a weighted average of one
+value is that value, so Burkham and Greenstone are unchanged at every gate — Greenstone
+still fails V13 at Gate 4.5 on the same arithmetic. **The fix is invisible until the
+declaration that motivates it**, which is the right shape: it is not a verdict moving while
+nothing got better.
+
+**The survey the fix was worth doing for.** Six `setdefault` calls in the validator; five
+are counter-init or `setdefault(k, set()).add(...)` collection builds, and the sixth
+(`out.setdefault(rule_id, blocks)`) is a deliberate fallback for rules whose source cannot
+be introspected. **B24 was one instance, not a family.**
+
+**And the tests were checked against the old code, not just the new.** Three of the four
+fail without the fix; the fourth — one person in a role — passes, because its whole claim
+is that nothing should change.
+
+## B25 — Gate 2 and Gate 4.5 aggregate review minutes differently, and nothing says so
+
+**`cross-cutting`** · Found 2026-09-08, while fixing B24. **Not a defect on its own; a
+divergence that was invisible until one half of it was written down.**
+
+The two V13 implementations do not compute the same quantity:
+
+| | roles | review minutes | coverage |
+|---|---|---|---|
+| **Gate 2** (`v13`) | **pooled — no role split at all** | unweighted mean across every human | sum of all coverage |
+| **Gate 4.5** (recheck) | split per role | **coverage-weighted** within the role (B24) | sum per role |
+
+The Gate 4.5 docstring explains at length why the two gates see **different approval
+counts** — Gate 2 estimates from headcount, the Task Ledger computes from the real
+workflow, *"and the Gate 2 estimate is the optimistic one."* That is deliberate and
+documented. **It says nothing about the two aggregating their inputs differently**, and
+that part is not deliberate — it is two authors, two moments, and no note.
+
+**Why this is worth an item rather than a commit.** A reader who has read the docstring
+comes away believing the difference between the gates is *which demand figure they use*.
+It is also *which supply figure they use*, and that second difference has no explanation
+anywhere. **A documented difference next to an undocumented one is worse than two
+undocumented ones**, because the first one vouches for the second.
+
+**What would fix it — not built here.** Either the two share one aggregation helper, or
+Gate 2's docstring states its pooling as a deliberate simplification and says why. **The
+second is probably right**: Gate 2 is explicitly the cheap estimate, and pooling is a
+defensible thing for a cheap estimate to do. It just has to be a stated choice rather than
+a difference somebody finds by reading both.
+
+**Not fixed alongside B24 deliberately.** Changing Gate 2's aggregation would move a
+verdict that B24 is not about, and B24's whole point was a verdict moving for a reason
+nobody declared.

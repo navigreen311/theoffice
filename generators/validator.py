@@ -1561,13 +1561,48 @@ async def validate_gate_4_5(
     )
 
     coverage_by_role: dict[str, float] = {}
-    review_minutes_by_role: dict[str, float] = {}
+    # Review minutes are weighted by each person's share of their role's coverage.
+    #
+    # This used to be a setdefault, which meant the FIRST entry of a role set the
+    # multiplier for everyone in it. Two compliance officers at six hours each, one at
+    # four minutes a review and one at three, gave 480 review-minutes or 360 against 432
+    # available depending purely on which line came first in the YAML - FAIL or PASS with
+    # nothing on the page saying the order was the reason. Whoever alphabetised that list,
+    # or moved a founder to the top out of courtesy, would have changed a gate outcome and
+    # had no way to know. See blocking.md B24.
+    #
+    # Weighted by coverage share is what "how long does a review take here" means when two
+    # people share the load, and unlike first-in-the-list it is the same answer in any
+    # order. A plain mean would also be defensible; taking the first was the one option
+    # nobody chose.
+    weighted_minutes_by_role: dict[str, float] = {}
+    coverage_weight_by_role: dict[str, float] = {}
     for human in pack.human_capacity:
         coverage_by_role[human.role] = (
             coverage_by_role.get(human.role, 0.0)
             + human.coverage_hours * 60 * UTILISATION_FACTOR
         )
-        review_minutes_by_role.setdefault(human.role, human.median_review_minutes)
+        weighted_minutes_by_role[human.role] = (
+            weighted_minutes_by_role.get(human.role, 0.0)
+            + human.coverage_hours * human.median_review_minutes
+        )
+        coverage_weight_by_role[human.role] = (
+            coverage_weight_by_role.get(human.role, 0.0) + human.coverage_hours
+        )
+
+    review_minutes_by_role: dict[str, float] = {}
+    for role, weight in coverage_weight_by_role.items():
+        if weight > 0:
+            review_minutes_by_role[role] = weighted_minutes_by_role[role] / weight
+        else:
+            # Nobody in the role declared any coverage hours, so there is no share to
+            # weight by. Fall back to the plain mean of their declared review times rather
+            # than to a default: the review times are declared, it is the coverage that is
+            # missing, and zero coverage is what the rule fails on below anyway.
+            times = [
+                h.median_review_minutes for h in pack.human_capacity if h.role == role
+            ]
+            review_minutes_by_role[role] = sum(times) / len(times)
 
     # Written as sentences rather than as a formula. The reviewer this message is for is
     # the person whose day it describes, and "192 x 6 = 1152 against 144" asks them to
