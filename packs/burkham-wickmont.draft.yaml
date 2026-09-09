@@ -523,6 +523,17 @@ human_capacity:
     max_daily_approvals: 60
     median_review_minutes: 4
     auth_method: sso_mfa
+    provenance:
+      basis: inherited
+      established_by: Ivan
+      detail: >
+        Copied wholesale when this Pack was authored so the Gate 4.5 comparison would be
+        like for like. Burkham names no reviewer of its own, and V13's verdict for this
+        venture divides a demand derived from Burkham's own structure by a supply that is
+        somebody else's. See blocking.md B20.
+      source: >
+        packs/greenstone.yaml human_capacity - byte-for-byte identical, same two people,
+        same coverage_hours, same max_daily_approvals, same median_review_minutes.
   - human_name: Dana
     role: compliance_officer
     coverage_hours: 4
@@ -531,6 +542,17 @@ human_capacity:
     max_daily_approvals: 30
     median_review_minutes: 6
     auth_method: sso_mfa
+    provenance:
+      basis: inherited
+      established_by: Ivan
+      detail: >
+        Copied wholesale when this Pack was authored so the Gate 4.5 comparison would be
+        like for like. Burkham names no reviewer of its own, and V13's verdict for this
+        venture divides a demand derived from Burkham's own structure by a supply that is
+        somebody else's. See blocking.md B20.
+      source: >
+        packs/greenstone.yaml human_capacity - byte-for-byte identical, same two people,
+        same coverage_hours, same max_daily_approvals, same median_review_minutes.
 
 separation_of_duties:
   gate_signoff_policy: distinct_humans

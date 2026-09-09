@@ -296,6 +296,15 @@ human_capacity:
     max_daily_approvals: 60
     median_review_minutes: 4
     auth_method: sso_mfa
+    provenance:
+      basis: declared
+      established_by: Ivan
+      detail: >
+        Asserted when this Pack was authored and never attributed until now. Nothing
+        measured these hours or this review time; no decision entry, validator doc or
+        plan records where they came from. Recorded as declared rather than measured
+        because that is what they are, and as the ORIGINAL rather than inherited because
+        Burkham's identical block was copied from here. See blocking.md B21.
   - human_name: Dana
     role: compliance_officer
     coverage_hours: 4
@@ -304,6 +313,15 @@ human_capacity:
     max_daily_approvals: 30
     median_review_minutes: 6
     auth_method: sso_mfa
+    provenance:
+      basis: declared
+      established_by: Ivan
+      detail: >
+        Asserted when this Pack was authored and never attributed until now. Nothing
+        measured these hours or this review time; no decision entry, validator doc or
+        plan records where they came from. Recorded as declared rather than measured
+        because that is what they are, and as the ORIGINAL rather than inherited because
+        Burkham's identical block was copied from here. See blocking.md B21.
 
 separation_of_duties:
   gate_signoff_policy: distinct_humans

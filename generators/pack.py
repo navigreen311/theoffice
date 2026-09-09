@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 SCHEMA_VERSION = 3
 
@@ -374,6 +374,70 @@ class Budget(Strict):
     cost_alert_recipients: list[str] = Field(min_length=1)
 
 
+class CapacityProvenance(Strict):
+    """Where a reviewer's numbers came from. Required, and refused when it says nothing.
+
+    **The third application of one pattern.** `compliance_couplings.NoFramework(why=...)`
+    exists because a schema that could not express an honest absence got a false value
+    written into it. ADR-0049's declared `not_applicable` is the same shape for scenario
+    classes. `HumanHeld.why` is the same shape for an obligation no agent holds. In each,
+    the fix is not "allow it to be empty" - it is **a distinct type that carries a
+    reason**, so a considered value and an inherited one cannot be confused.
+
+    This is that shape for capacity numbers, and it exists because they were confused.
+    `blocking.md` B20 and B21: Burkham's `human_capacity` is byte-for-byte identical to
+    Greenstone's, Burkham's copy is labelled INVENTED in a YAML comment that no schema
+    requires and no rule reads, and **Greenstone's original carries no comment at all** -
+    which made the unlabelled one the more dangerous of the two. V13 has been failing
+    both ventures on those numbers, comparing a derived demand to an undocumented supply.
+
+    **`basis` is the distinction that did not exist:**
+
+      declared   a named person asserted it on a stated basis. Not measured, and honest
+                 about that.
+      inherited  copied from somewhere else. **`source` is required and must name where**,
+                 because "copied from Greenstone's human_capacity block" is checkable and
+                 "historical" is the cheap escape wearing a third costume.
+      measured   derived from observation, and `source` names what was observed. **Note
+                 `proposal.review_seconds` is NOT this** for `median_review_minutes`: it
+                 is wall-clock including queue time, not review effort. See B21.
+
+    **Every entry must carry one, including the ones that existed before this field.** A
+    field new entries must fill while old ones sit exempt is a field that documents
+    nothing - and filling the four that already exist is what retires B20 and B21 by
+    construction rather than by trust.
+    """
+
+    basis: Literal["declared", "inherited", "measured"]
+
+    #: Who established it. A person, not a role - "the compliance team" names nobody.
+    established_by: str = Field(min_length=2)
+
+    #: What it rests on. Long enough to be a sentence rather than a label.
+    detail: str = Field(min_length=20)
+
+    #: Required for `inherited` and `measured`; refused as a bare word. What was copied
+    #: from, or what was observed.
+    source: str | None = None
+
+    @model_validator(mode="after")
+    def _source_required_when_not_declared(self) -> CapacityProvenance:
+        if self.basis in ("inherited", "measured"):
+            # A bare word is refused regardless of length. The first cut used a
+            # `< 10` threshold and "historical" - the exact example this field exists
+            # to refuse - is ten characters, so it passed. A source names something,
+            # which takes more than one token.
+            src = (self.source or "").strip()
+            if len(src) < 10 or len(src.split()) < 2:
+                raise ValueError(
+                    f"basis={self.basis!r} needs a `source` naming where the value came "
+                    "from. 'Copied from Greenstone's human_capacity block' is checkable; "
+                    "'historical' is not, and an unnamed source is the thing this field "
+                    "exists to refuse."
+                )
+        return self
+
+
 class HumanCapacity(Strict):
     human_name: str
     role: str
@@ -383,6 +447,9 @@ class HumanCapacity(Strict):
     max_daily_approvals: int
     median_review_minutes: float = 5.0
     auth_method: Literal["sso_mfa", "mfa_only"]
+    #: Required. See `CapacityProvenance` - no default, because a default is how the
+    #: four numbers this field exists for became unattributed in the first place.
+    provenance: CapacityProvenance
 
 
 class SeparationOfDuties(Strict):

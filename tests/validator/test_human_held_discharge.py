@@ -293,3 +293,75 @@ def test_the_schema_refuses_a_trigger_nobody_could_check():
     with pytest.raises(pydantic.ValidationError):
         PendingActivation(activates_when="Module 8.2 activates and a relationship forms",
                           deferred_to="")
+
+
+# ------------------------------------------------- capacity provenance (B20/B21)
+
+def test_every_capacity_entry_declares_where_its_numbers_came_from():
+    """Both Packs, all four entries. **The old entries are not exempt.**
+
+    A field that new entries must fill while existing ones sit exempt documents nothing,
+    and filling the four that already existed is what retires B20 and B21 by construction
+    rather than by trust.
+    """
+    for path in (BURKHAM, GREENSTONE):
+        pack = load_pack(path)
+        assert pack.human_capacity, path
+        for h in pack.human_capacity:
+            assert h.provenance is not None, f"{path} {h.human_name}"
+            assert h.provenance.basis in ("declared", "inherited", "measured")
+            assert h.provenance.established_by.strip()
+            assert len(h.provenance.detail.strip()) >= 20
+
+
+def test_burkham_declares_its_numbers_inherited_and_names_the_source():
+    """The claim B20 rests on, made checkable.
+
+    "Copied from Greenstone's human_capacity block" can be verified by reading two files.
+    "Historical" cannot, which is why `source` is required rather than encouraged.
+    """
+    pack = load_pack(BURKHAM)
+    for h in pack.human_capacity:
+        assert h.provenance.basis == "inherited", h.human_name
+        assert h.provenance.source is not None
+        assert "greenstone" in h.provenance.source.lower()
+
+
+def test_greenstone_declares_its_numbers_declared_not_measured():
+    """B21's finding, in the file rather than only in the record.
+
+    Nothing measured them. Recording them as `measured` would be the false value a
+    schema that cannot express an honest absence invites - which is the pattern this
+    field is the third application of.
+    """
+    pack = load_pack(GREENSTONE)
+    for h in pack.human_capacity:
+        assert h.provenance.basis == "declared", h.human_name
+
+
+def test_inherited_without_a_named_source_is_refused():
+    """`historical` is the cheap escape wearing a third costume."""
+    import pydantic
+
+    from generators.pack import CapacityProvenance
+
+    ok = dict(established_by="Ivan",
+              detail="Copied when the Pack was authored so the comparison was like for like.")
+    for bad in (None, "historical", "legacy"):
+        with pytest.raises(pydantic.ValidationError):
+            CapacityProvenance(basis="inherited", source=bad, **ok)
+    # A named, checkable source is accepted.
+    CapacityProvenance(basis="inherited",
+                       source="packs/greenstone.yaml human_capacity block", **ok)
+
+
+def test_a_provenance_that_says_nothing_is_refused():
+    """The field exists to refuse this, not to hold it."""
+    import pydantic
+
+    from generators.pack import CapacityProvenance
+
+    with pytest.raises(pydantic.ValidationError):
+        CapacityProvenance(basis="declared", established_by="I", detail="x" * 25)
+    with pytest.raises(pydantic.ValidationError):
+        CapacityProvenance(basis="declared", established_by="Ivan", detail="asserted")

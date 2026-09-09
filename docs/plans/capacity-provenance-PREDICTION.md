@@ -110,3 +110,60 @@ what was reasoned about, name what was not.**
 ## Scored
 
 *(filled in after the run, below the line, without editing anything above it)*
+
+*Nothing above this line was edited after the run.*
+
+### P1 — CORRECT
+
+Both Packs refused, two validation errors each, one per entry:
+`human_capacity.0.provenance  Field required`. The forcing function works, and it works
+by making the Pack unloadable rather than by making a rule complain.
+
+### P3, P4, P5 — CORRECT
+
+Burkham **33 PASS / 0 FAIL / 1 NOT_RUN of 34**; Greenstone **30 PASS / 0 FAIL / 4
+NOT_RUN of 34**; rule count unchanged at 34. Goldens: **`0 0`, no snapshot moved.**
+
+The four entries read as predicted — Greenstone's two `declared` (nothing measured them,
+and they are the source), Burkham's two `inherited` naming
+`packs/greenstone.yaml human_capacity`.
+
+### P2 — WRONG IN BOTH DIRECTIONS, and the error has a name
+
+Predicted four construction sites would break. **One did**, and the failure surfaced in a
+file I never named.
+
+| site | predicted | actual | what it really does |
+|---|---|---|---|
+| `broker/pack_templates.py` | breaks | **broke** | builds a literal dict — a real construction site |
+| `tests/provisioning/conftest.py` | breaks | fine | **copies** an entry from a loaded doc: `dict(officers[0])`, inherits provenance automatically |
+| `tests/validator/test_rules.py` | breaks | fine | **mutates** a loaded pack, constructs nothing |
+| `tests/contract/test_approvals_api.py` | breaks | fine | a **docstring** mentioning the field |
+| `tests/contract/test_packs_api.py` | not named | **broke** | where the template's failure surfaces |
+
+**The error: I grepped for a string and predicted breakage from the hit count.** Three of
+four hits were a copy, a mutation and prose. A grep finds mentions; it does not find
+construction, and I read one as the other.
+
+**Cousin of Caveat 12.** There the failure was reporting a result whose output was piped
+away; here it is reasoning from a count without reading what each hit does. Both are
+**substituting a cheap proxy for the thing itself** — and both were confident.
+
+### P6 — CORRECT as far as it went, and it went exactly as far as it claimed
+
+`Tests` failed before the template was updated and passed after: **2 failed, 1035 passed**
+→ green. Smoke was explicitly not predicted and remains so until CI runs.
+
+### The test caught the validator, and the word it caught was the example
+
+`test_inherited_without_a_named_source_is_refused` failed on `"legacy"`… no — on
+**`"historical"`**, which is **exactly ten characters**, and the first cut refused
+`len(source) < 10`.
+
+**The precise word used to justify the field passed the check meant to refuse it.** Fixed
+by refusing a single token regardless of length: a source names something, and naming
+takes more than one word.
+
+Worth keeping because the test that caught it was written from the docstring's own
+example — **the argument for the field was specific enough to become a test, and the test
+was specific enough to catch the implementation.**
