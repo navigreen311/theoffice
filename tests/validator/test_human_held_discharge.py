@@ -42,7 +42,27 @@ HUMAN = uuid.UUID("00000000-0000-5000-8000-0000000d1c04")
 
 @pytest.fixture
 def burkham() -> BusinessPack:
+    """Burkham as authored: its obligation is `pending_activation`."""
     return load_pack(BURKHAM)
+
+
+@pytest.fixture
+def burkham_live() -> BusinessPack:
+    """Burkham with the obligation moved to `live_unverified`.
+
+    The Pack declares `pending_activation`, so the tests about a DUE obligation have to
+    say which state they are about rather than inherit it. Stripping the declaration
+    here is what "the trigger fired" looks like from the validator's side: the
+    obligation is live, and a discharge is now required.
+    """
+    pack = load_pack(BURKHAM)
+    entry = next(
+        c for c in pack.market.compliance_surface
+        if c.runtime_flag == FLAG and c.human_held is not None
+    )
+    assert entry.human_held is not None
+    object.__setattr__(entry.human_held, "pending_activation", None)
+    return pack
 
 
 @pytest.fixture
@@ -97,7 +117,7 @@ def _file_discharge(
     admin.commit()
 
 
-async def test_v34_fails_when_no_discharge_exists(burkham, no_discharges):
+async def test_v34_fails_when_no_discharge_exists(burkham_live, no_discharges):
     """Burkham today. The obligation is declared human-held and nobody has verified it.
 
     **This is a FAIL, not a NOT_RUN.** An absent row is an answer. Three NOT_RUNs were
@@ -105,7 +125,7 @@ async def test_v34_fails_when_no_discharge_exists(burkham, no_discharges):
     discharge required" would read as permission.
     """
     async with connection() as conn:
-        report = await validate(burkham, conn)
+        report = await validate(burkham_live, conn)
 
     result = report.get("V34")
     assert result.verdict is Verdict.FAIL, result.message
@@ -113,15 +133,15 @@ async def test_v34_fails_when_no_discharge_exists(burkham, no_discharges):
     assert "no discharge record exists" in result.message
 
 
-async def test_v34_does_not_report_not_run_when_it_could_ask(burkham, no_discharges):
+async def test_v34_does_not_report_not_run_when_it_could_ask(burkham_live, no_discharges):
     """The distinction the rule's docstring is about, asserted rather than described."""
     async with connection() as conn:
-        report = await validate(burkham, conn)
+        report = await validate(burkham_live, conn)
 
     assert report.get("V34").verdict is not Verdict.NOT_RUN
 
 
-async def test_v22_still_passes_while_v34_fails(burkham, no_discharges):
+async def test_v22_still_passes_while_v34_fails(burkham_live, no_discharges):
     """The split, and the reason for it.
 
     A missing discharge must never arrive as "a flag no scenario exercises" — that is
@@ -129,7 +149,7 @@ async def test_v22_still_passes_while_v34_fails(burkham, no_discharges):
     sent to a person, not to an author.
     """
     async with connection() as conn:
-        report = await validate(burkham, conn)
+        report = await validate(burkham_live, conn)
 
     assert report.get("V22").verdict is Verdict.PASS
     assert report.get("V34").verdict is Verdict.FAIL
@@ -137,27 +157,27 @@ async def test_v22_still_passes_while_v34_fails(burkham, no_discharges):
 
 
 async def test_v34_passes_with_a_current_discharge_covering_the_footprint(
-    burkham, no_discharges, admin
+    burkham_live, no_discharges, admin
 ):
     """The only state that clears it, and it is a human act rather than a code change."""
-    geographies = [g.strip() for g in burkham.market.target_geographies if g.strip()]
+    geographies = [g.strip() for g in burkham_live.market.target_geographies if g.strip()]
     _file_discharge(admin, scope=geographies, expires_in_days=180)
 
     async with connection() as conn:
-        report = await validate(burkham, conn)
+        report = await validate(burkham_live, conn)
 
     result = report.get("V34")
     assert result.verdict is Verdict.PASS, result.message
 
 
-async def test_v34_fails_on_an_expired_discharge(burkham, no_discharges, admin):
+async def test_v34_fails_on_an_expired_discharge(burkham_live, no_discharges, admin):
     """"Verified in 2026" and "verified" are different claims, and `expires_at` is what
     keeps them apart."""
-    geographies = [g.strip() for g in burkham.market.target_geographies if g.strip()]
+    geographies = [g.strip() for g in burkham_live.market.target_geographies if g.strip()]
     _file_discharge(admin, scope=geographies, verified_days_ago=400, expires_in_days=-1)
 
     async with connection() as conn:
-        report = await validate(burkham, conn)
+        report = await validate(burkham_live, conn)
 
     result = report.get("V34")
     assert result.verdict is Verdict.FAIL, result.message
@@ -165,7 +185,7 @@ async def test_v34_fails_on_an_expired_discharge(burkham, no_discharges, admin):
 
 
 async def test_v34_fails_when_the_discharge_does_not_reach_the_venture(
-    burkham, no_discharges, admin
+    burkham_live, no_discharges, admin
 ):
     """The "new state" trigger, which is the one that is not time-based.
 
@@ -175,7 +195,7 @@ async def test_v34_fails_when_the_discharge_does_not_reach_the_venture(
     _file_discharge(admin, scope=["Nevada"], expires_in_days=180)
 
     async with connection() as conn:
-        report = await validate(burkham, conn)
+        report = await validate(burkham_live, conn)
 
     result = report.get("V34")
     assert result.verdict is Verdict.FAIL, result.message
@@ -210,3 +230,66 @@ async def test_a_blank_basis_is_refused_by_the_schema(admin, no_discharges):
     with pytest.raises(psycopg.errors.CheckViolation):
         _file_discharge(admin, scope=["Nevada"], expires_in_days=180, basis="   ")
     admin.rollback()
+
+
+# --------------------------------------------------------- pending_activation
+
+async def test_v34_passes_on_pending_activation_without_any_discharge(
+    burkham, no_discharges
+):
+    """The one state that passes without a discharge, and the one that could become
+    the escape in a fourth costume.
+
+    It passes because no verification is DUE - not because the obligation was
+    discharged. The message has to carry that difference, since a pass that cannot
+    distinguish "verified" from "not yet due" is the shape V34 exists to refuse one
+    level up.
+    """
+    async with connection() as conn:
+        report = await validate(burkham, conn)
+
+    result = report.get("V34")
+    assert result.verdict is Verdict.PASS, result.message
+    assert "pending_activation" in result.message
+    assert "no verification is due until" in result.message
+    # The trigger itself, not a summary of it: a reviewer checks the condition, and
+    # they can only do that if the verdict tells them what it is.
+    assert "Module 8.2" in result.message
+
+
+async def test_v34_still_fails_when_a_live_obligation_has_no_discharge(
+    burkham_live, no_discharges
+):
+    """The regression guard for `pending_activation`.
+
+    The new state must not make every human-held obligation pass. The same Pack with
+    the declaration stripped - which is what "the trigger fired" looks like from the
+    validator's side - must fail exactly as it did before the state existed.
+    """
+    async with connection() as conn:
+        report = await validate(burkham_live, conn)
+
+    result = report.get("V34")
+    assert result.verdict is Verdict.FAIL, result.message
+    assert "no discharge record exists" in result.message
+
+
+def test_the_schema_refuses_a_trigger_nobody_could_check():
+    """`min_length` catches the empty string and the one-word placeholder.
+
+    It cannot judge whether a condition is checkable - that is a semantic question
+    about the world, and a validator pretending to answer it would assert something it
+    cannot know. The reviewer does that, and `PendingActivation`'s docstring says so.
+    What the schema can refuse is a trigger that is not a sentence at all.
+    """
+    import pydantic
+
+    from generators.pack import PendingActivation
+
+    with pytest.raises(pydantic.ValidationError):
+        PendingActivation(activates_when="", deferred_to="V1.5")
+    with pytest.raises(pydantic.ValidationError):
+        PendingActivation(activates_when="soon", deferred_to="V1.5")
+    with pytest.raises(pydantic.ValidationError):
+        PendingActivation(activates_when="Module 8.2 activates and a relationship forms",
+                          deferred_to="")

@@ -227,6 +227,26 @@ market:
           inventing a duty no role has and teaching an agent to perform an act no
           position authorizes. The obligation is real - partner payouts happen and
           something governs them - and it is a venture-operator act, held by a human.
+        # Declared pending_activation 2026-09-08. The trigger is checkable, which is the
+        # whole condition on this state: no referral fee has ever been paid, no partner
+        # relationship exists, and Partner Agreement & Payout Center is deferred to V1.5.
+        # A person can check whether that is still true. "When it becomes relevant" is
+        # not a condition and would not be accepted here.
+        #
+        # V34 passes on this and says why. It does NOT say the obligation is discharged -
+        # it says no verification is due yet. The moment the trigger fires this becomes
+        # live_unverified and V34 fails until a named human files a discharge.
+        pending_activation:
+          activates_when: >
+            Module 8.2 (Partner Agreement & Payout Center) activates and a referral
+            relationship is being structured - whichever comes first. Until then no
+            payout to a partner or referrer is possible, so no state's referral-fee
+            rule has anything to attach to.
+          deferred_to: >
+            V1.5. Statutory analysis is scoped to state-activation counsel at the point
+            the first referral relationship is structured, not before: the question is
+            which states' rules apply to a payout that does not yet exist, and it cannot
+            be answered until the relationship's shape is known.
     # Both of these were already in scope on a position and declared by no framework.
     # The Compliance Reviewer and the Stack Manager carry
     # trigger_term_disclosure_required, the Diagnostic Analyst carries
