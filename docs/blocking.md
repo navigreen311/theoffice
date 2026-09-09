@@ -1719,3 +1719,69 @@ a difference somebody finds by reading both.
 **Not fixed alongside B24 deliberately.** Changing Gate 2's aggregation would move a
 verdict that B24 is not about, and B24's whole point was a verdict moving for a reason
 nobody declared.
+
+## B26 — every published Pack in the database is unreadable, and its status column says `live`
+
+**`cross-cutting`** · Found 2026-09-08, attempting to republish Burkham after the
+reviewer declaration. **This blocks the republish, blocks every new run for both
+ventures, and blocks advancing the run currently sitting at Gate 4.**
+
+Making `provenance` a required field on `HumanCapacity` was a schema change to the
+**database**, and nothing treated it as one. The two on-disk Pack files were updated. The
+twelve rows in `business_pack` were not:
+
+```
+burkham-wickmont  0.5.0  live        provenance: absent
+greenstone        1.3.0  live        provenance: absent
+(and ten superseded rows, all the same)
+```
+
+`parse_only` refuses both, so:
+
+| call | result |
+|---|---|
+| `packs.live(conn, "burkham-wickmont")` | **raises** `PackStoreError` |
+| `packs.live(conn, "greenstone")` | **raises** `PackStoreError` |
+| `packs.get_version(conn, "burkham-wickmont", "0.5.0")` | **raises** |
+| `provisioning.start_run` — *"against the venture's live Pack"* | **cannot start** |
+| `provisioning.advance` on run `6a97fbe1` | **cannot advance** |
+| `packs.store(...)` — reads `live()` first to compute its diff | **cannot republish** |
+
+**The last row is the one that makes this a trap rather than a chore.** The publish-diff
+control reads the previous Pack through `live()`, which parses it. So the schema change
+disabled the only path that could fix the schema change — and it did so precisely in the
+case the diff exists for, a change big enough to alter the shape of the file.
+
+### The status column is the dishonest part
+
+`status` still reads `live` on both rows. Nothing is flagged, nothing logged, no sweep
+reports it. **A Pack that the parser says does not exist is recorded as the one in force**,
+and the discrepancy surfaces only when somebody starts a run — the most expensive moment
+to find out, and the one where the message will read as *this run failed* rather than
+*this Pack was never migrated*.
+
+### 1048 tests pass, and could not have caught it
+
+Every test loads Packs from `packs/*.yaml` on disk. **Nothing in the suite reads a
+published Pack back out of `business_pack` and parses it.** The capacity-provenance
+prediction said *"making it required breaks Pack loading until every entry is filled"* and
+scored that CORRECT — against the files. The same sentence was true of the rows and
+nobody checked them, because the forcing function forces what is in git and the rows are
+what is in force.
+
+### What would fix it
+
+**Minimum, and it unblocks everything above:** the publish diff is textual —
+`_changed_lines` compares `yaml_source` strings and never needed the previous Pack parsed.
+Reading the previous version's raw source for the diff, instead of a parsed `StoredPack`,
+lets a republish proceed without weakening any validation of what is being *written*.
+
+**The larger question, which is not the same one:** reading back a Pack stored under an
+earlier schema should be a **stated condition**, not an exception that reads like
+corruption. A row carries `schema_version` already. "Stored under a schema this build
+cannot parse" is a fact the system can report; `PackStoreError: not a schema-v3 Business
+Pack` on a row that *is* schema-v3 is a message that sends the reader to the wrong place.
+
+**Not fixed unilaterally.** The first change touches the publish-diff control, which is
+deliberate machinery, and the second changes what a run does when it meets an old Pack.
+Both are Ivan's call.
