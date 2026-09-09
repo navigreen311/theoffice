@@ -2497,3 +2497,119 @@ not gate it.
 
 A position that pays, or a discharge that is filed, current, and covers the venture's
 actual jurisdictional footprint. **Neither is code.**
+
+---
+
+## 27. Certification is out of band by design — and both of its producers are missing
+
+**Recorded 2026-09-09 by P-00, opening the Gate 4.5 parallel build. Not a ruling: a finding,
+written down because the plan it corrects was built on its opposite.**
+
+The question was A0: *Gate 4.5 requires certified candidates, the curriculum handover is
+Gate 8, and Gate 8 comes after Gate 5 — so how does anyone get certified at all?* Three
+answers were on the table: certification is a flow outside the ladder, the first run
+bootstraps somehow, or the ordering means something not yet understood.
+
+**The ordering is fine, and it says so in its own docstring.** `_gate_9`:
+
+> *"Readiness Gate per role per domain — read from the certification record. **Not a live
+> call to SimForge, deliberately.** A Readiness Gate verdict reaches The Office by being
+> recorded as a certification."*
+
+So certification is **out of band**. Gate 8 hands over a curriculum; Gate 9 reads rows;
+Gate 4.5 reads the same table. Rows may arrive at any time and no gate produces them. **There
+is no deadlock and there never was.**
+
+### What is actually missing is both writers
+
+**Unit A has no writer.** `certification.record_result` has exactly one non-test caller —
+`broker/bootstrap_phase0.py` — and `attested_by` accepts only `'simforge'` or `'bootstrap'`.
+**The string `attested_by="simforge"` appears nowhere in this codebase.**
+`SimForgeClient.gate_result(run_ref)` exists, fetches a verdict, and is called by nothing
+outside its own test.
+
+**Unit B has no submitter.** Two constraints decide what each unit is:
+
+```
+unit_targets_match:   A → office_agent_id AND module_id NOT NULL
+                      B → department NOT NULL
+rubric_matches_unit:  (A AND rubric_kind='operation') OR (B AND rubric_kind='domain')
+```
+
+A submission is one or the other, keyed on `module_id` — `timeout_gate_result` already
+derives it exactly that way. **Gate 8 submits one curriculum per module, so it produces
+unit-A submissions exclusively:** `curriculum_submission` holds ten rows, ten with
+`module_id`, zero with `department`.
+
+**And unit B gates appointment.** `generators/appointment.py` refuses any candidate whose
+forges lack a certified unit-B row for the position's department. The only unit-B rows that
+exist are three bootstrap rows, all `department='engineering'`. **Burkham declares
+`administration`, `banking` and `operations`.**
+
+### Why this is worth an entry rather than two blocking items
+
+**The brief for this build said of the certification run: *"Repo: theoffice. Downstream of A
+and B. No new code expected."*** That was the plan's premise, and it was wrong twice over. A
+perfect held-out authoring pipeline — the work everything else was aimed at — produces a
+unit-A verdict nothing ingests, for agents that would be refused on unit B anyway.
+
+**The useful consequence is a re-ordering, not just a correction.** Neither writer is blocked
+by the authoring pipeline. Both can be built and exercised against a verdict for any module
+with no never-do list. **The two last miles can be built in parallel with the first**, which
+is what the coordination plan now does.
+
+### What this does not mean
+
+**It does not mean the ladder is wrong.** Gate 9 reading a record rather than the wire is
+deliberate and correct — it asserts the thing that actually gates work, and it keeps
+asserting it after the call that produced it is long over.
+
+**It does not license a certification written by hand.** `attested_by='bootstrap'` requires a
+reason precisely because it is *"a grant issued against no scenario run"*. The fix is to
+build the two writers, not to widen the one that exists.
+
+---
+
+## 28. Unit B does not require executable domain scenarios — entry 23 stands, unreopened
+
+**Recorded 2026-09-09 by P-00. Written because the opposite finding would have reversed a
+ruling, and a ruling that survives a check is worth more than one nobody tested.**
+
+Entry 23 closed workstream C: **domain scenarios are Pack-validation-only**, and it named
+three concrete conditions, *all three* of which must exist before it reopens — a source for
+`testedAgentVillageId`, a source for `seed` and `yamlPath`, and a decision to touch the
+domain cert tables taken as its own decision.
+
+**Unit B looked like it might have fired all three.** `rubric_matches_unit` binds unit B to
+`rubric_kind='domain'`, and if a unit-B verdict were computed from executable domain
+scenarios, then certifying Burkham's departments would have required exactly the bridge
+entry 23 declined to build — and the reopening condition would have fired by consequence
+rather than by decision, which is the shape entry 23 was written to prevent.
+
+**It does not.** `simforge/apps/api/src/services/operation/run_registry.py`:
+
+```python
+own_states = agent_states if run.unit == "A" else department_states
+state = weakest_state(own_states)
+```
+
+**A unit-B run closes on department certification *states*, supplied as a parameter — not on
+scenario execution of Office-submitted content.** The domain view reads `cert.status` and
+`cert.tier` from a SimForge-side record carrying its own `DOMAIN_RUBRIC_VERSION`, and
+`dimensions_passed` is `None`, *"not stored per-cert; shown as unknown, never faked as a
+number."* `OperationRunStart` already accepts `unit="B"` with `rubric_kind="domain"` and
+`department_id`.
+
+**So none of entry 23's three conditions is required, and none has been met.** The Office's
+domain scenario is prose — `{scenario_id, role, domain, summary}` — and SimForge's is hashed
+YAML with a seed and a target agent. They still *"share `scenario_id` and nothing else"*, and
+unit B never asks for the join.
+
+**What unit B needs is a submitter, not a bridge.** That is a package, not a reversal.
+
+### The instruction this leaves for whoever builds it
+
+**Do not build an executable-domain-scenario bridge on the way to unit B.** It would satisfy
+unit B and reopen entry 23 as a side effect — a ruling reversed by consequence, which is
+precisely what entry 23's written condition exists to make impossible. If the bridge is ever
+wanted, it is wanted on its own terms, with all three conditions answered deliberately.

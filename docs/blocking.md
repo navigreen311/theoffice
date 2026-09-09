@@ -2000,3 +2000,64 @@ Carry the return value. `provisioning_gate_result.evidence` is `jsonb` and alrea
 deliberately not this item.** Gate 4 is a review, Gate 10 is a signature, and collapsing
 them because one field is missing would be the wrong fix in the same shape as the
 utilisation factor: the easiest change that makes the symptom go away.
+
+## B30 — certification has two producers and neither exists
+
+**`cross-cutting`** · Found 2026-09-09 by P-00, opening the Gate 4.5 parallel build.
+**This is what actually blocks run `def65e4f` at Gate 4.5, and it is not what the brief for
+that build said it was.**
+
+Gate 4.5 refuses Burkham on V24: eight seats across five positions, zero certified
+candidates. The assumed cause was held-out authoring — SimForge cannot grade a curriculum,
+so nobody gets certified. **That is one of two causes and it is the smaller one.**
+
+### Unit A — nothing writes a SimForge verdict into a certification row
+
+`certification.record_result` has exactly one non-test caller, `broker/bootstrap_phase0.py`,
+and `attested_by` accepts only `'simforge'` or `'bootstrap'`. **The string
+`attested_by="simforge"` appears nowhere in this codebase.**
+`SimForgeClient.gate_result(run_ref)` exists, fetches a verdict, and is called by nothing
+outside its own test.
+
+**So a perfect held-out authoring pipeline would produce a verdict nothing ingests.**
+
+### Unit B — nothing submits a department curriculum at all
+
+```
+unit_targets_match:   A → office_agent_id AND module_id NOT NULL
+                      B → department NOT NULL
+```
+
+A submission is one or the other, keyed on `module_id`. **Gate 8 submits one curriculum per
+module, so it produces unit-A submissions exclusively** — `curriculum_submission` holds ten
+rows, ten with `module_id`, zero with `department`.
+
+**And unit B gates appointment.** `generators/appointment.py` refuses any candidate whose
+forges lack a certified unit-B row for the position's department. The only unit-B rows in
+existence are three bootstrap rows, all `department='engineering'`. **Burkham declares
+`administration`, `banking` and `operations`, and holds none.**
+
+**Every Burkham candidate is refused `missing_unit_b` even after the unit-A path is built.**
+
+### Why this was invisible
+
+Nothing reports it. The appointment generator folds both refusals into one shortfall count,
+and `produced_not_yet_certified` — which B23 already flags as a name asserting more than the
+code does — reads the same whether a candidate failed on unit A, on unit B, or was never
+examined. **A run stops at Gate 4.5 saying "zero certified candidates", which is true and
+names neither cause.**
+
+### What retires it
+
+**P-03** builds the unit-A ingester (the sweep, not an inbound route — see the reasoning in
+`overdue_submissions`' own docstring). **P-04** builds the unit-B submitter, and its first
+task is to establish whether SimForge holds domain certifications for Burkham's three
+departments at all.
+
+**Neither is blocked by held-out authoring.** Both can be exercised against a verdict for any
+module with no never-do list, which is why this run builds the two last miles in parallel
+with the first rather than behind it.
+
+**A useful side effect for P-11 to keep:** report `missing_unit_b` refusals separately from
+unit-A refusals. They are different failures with different owners, and collapsing them is
+how this stayed hidden.
