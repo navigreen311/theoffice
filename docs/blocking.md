@@ -2333,3 +2333,140 @@ with the first rather than behind it.
 **A useful side effect for P-11 to keep:** report `missing_unit_b` refusals separately from
 unit-A refusals. They are different failures with different owners, and collapsing them is
 how this stayed hidden.
+
+## B31 — a renamed Pack field reads as a malformed document, not an older one
+
+**`theoffice`** · Found 2026-09-09 by the coordinator, merging P-07 and P-08 in the same
+wave. **Neither package could have found it: each is correct alone, and the gap is between
+them.**
+
+P-07 closed B27 by giving `broker/packs.py` a ledger of **schema tightenings** — the occasions
+on which v3 began requiring something v3 had not required before — so a row stored under an
+earlier revision raises `PackPredatesTighteningError` and says *which* tightening it predates,
+rather than the false *"not a schema-v3 Business Pack"*.
+
+Its guard is deliberate and its docstring says why:
+
+> *"Only an absent field can be explained by 'this predates the field'. A wrong type, a
+> refused extra key or a failed validator is a document that disagrees with the schema, not
+> one that is older than it."*
+
+**That is right for every tightening except a rename.** P-08 renamed
+`max_daily_approvals` to `advisory_daily_approval_ceiling`, and a rename produces **two** error
+kinds per entry:
+
+```
+missing          human_capacity.0.advisory_daily_approval_ceiling
+extra_forbidden  human_capacity.0.max_daily_approvals
+```
+
+The `extra_forbidden` disqualifies the whole diagnosis, so the message falls back to the
+generic sentence — **the exact sentence B27 exists to eliminate**, on the exact class of row it
+was built for.
+
+### Measured, on a row that matters
+
+`provisioning_run def65e4f` is halted at Gate 4.5 and pinned to pack `0.6.0`.
+`packs.get_version(conn, "burkham-wickmont", "0.6.0")` now raises the generic
+`PackStoreError`. **The run cannot read its own Pack version**, and the message points a reader
+at a document that is fine.
+
+The run was already `blocked` on V24 with zero certified candidates, so nothing was advancing
+and no work was lost. **What was lost is the honest message**, three hours after it was built.
+
+### Why it is worth an item rather than a quick fix
+
+**The obvious fix is to add the rename to `V3_TIGHTENINGS`, and it does not work.** That was
+tried and reverted: the entry is true, and it never fires, because the `extra_forbidden` guard
+rejects the diagnosis before the ledger is consulted. A ledger entry that can never fire is
+decoration — B23's class, in the machinery built to fix B27.
+
+**The real fix is that `SchemaTightening` does not model a rename.** A rename is one change
+that presents as two errors, and the pair has to be recognised together: *the new name is
+missing AND the old name is present*. That is a small extension to a model P-07 reasoned about
+carefully, and it belongs to whoever owns that model rather than to a coordinator patching
+around it mid-merge.
+
+**Not built here, deliberately.** The coordinator already broke a package's tests today by
+acting on its own judgement inside someone else's work.
+
+### What retires it
+
+`SchemaTightening` gains a `renamed_from`, and `_predated_tightenings` treats a
+`missing(new) + extra_forbidden(old)` pair at the same path as one explained change rather than
+two disqualifying errors. Then `get_version` on `0.6.0` says what is actually true: **this row
+predates the rename, and the document it names is fine.**
+
+## B32 — GAP-5 answered: SimForge holds no domain certification for anything, and two of Burkham's three departments do not exist there
+
+**`cross-cutting`** · Answered 2026-09-09 by the coordinator, read-only, out of the two
+databases. **This was P-04's first task and Ivan asked for it the day it was known rather than
+at P-11.** It is worse than the question assumed.
+
+### The three facts
+
+**1. `DeptCert` holds zero rows.** Not zero for Burkham's departments — **zero for any
+department, including Engineering.** No domain certification exists in SimForge at all.
+
+**2. Two of Burkham's three departments are not SimForge departments.**
+
+| | |
+|---|---|
+| The Office's departments | `administration`, `banking`, `engineering`, `marketing`, `operations` |
+| SimForge's `Department.villageKey` (13) | Clinical, Compliance, CustomerSuccess, Data, **Engineering**, Executive, Finance, Legal, **Marketing**, **Operations**, Payroll, Recruitment, Sales |
+
+Burkham declares **`administration`, `banking`, `operations`**. Case-insensitively,
+`operations` maps to `Operations`. **`administration` and `banking` have no counterpart of any
+spelling.** `Finance` is the nearest thing to banking, and choosing it is a decision, not a
+lookup.
+
+**3. The Office's three `certified` unit-B rows are all `engineering`, all bootstrap-issued,
+and correspond to nothing in SimForge.** They are `attested_by='bootstrap'` — *"a grant issued
+against no scenario run"* — and the row says so. **The one department that has unit-B
+certification in The Office is the one Burkham does not use.**
+
+### Why this is worse than B30's unit-B half
+
+B30 said unit B has no submitter and Burkham's departments hold no certification. **The
+implicit assumption was that building the submitter would let the certification be earned.**
+It would not. There is nothing on the other side to earn it from: no `DeptCert` row has ever
+existed, and for two of the three departments there is not even a department to hang one on.
+
+**P-04 would ship a correct submitter that cannot succeed**, and it would be right to. That is
+still worth building — a submitter reporting three uncertified departments is a true statement
+and better than the silence B30 describes — but it must be built knowing this, not discovering
+it.
+
+### The decision nobody has made, arriving
+
+`packs/burkham-wickmont.draft.yaml`'s own header says it, from 8 September:
+
+> *"`source_department` must name a department the Village actually has. Burkham's ten
+> departments … intersect the Village's twelve at ZERO. Every position below therefore names a
+> Village department chosen as the nearest fit, and each choice is marked. **That mapping is a
+> decision nobody has made.**"*
+
+**That decision is now the thing blocking unit-B certification.** It was recorded as a caveat
+on invented values and it has become load-bearing: `administration` and `banking` are two of
+the "nearest fit" choices, and neither fits anything.
+
+### A trap sitting underneath it
+
+**`operations` and `Operations` differ in case.** The one department that does map, maps only
+if the comparison normalises. A lookup that does not would return nothing for all three and
+read exactly like the other two — **a mapping failure and a spelling failure producing the
+same silence.** Whoever builds P-04 should establish which comparison is used before
+concluding a department is absent.
+
+### What retires it
+
+**Not code.** Three answers, in this order:
+
+1. **Which Village department is `banking`?** `Finance` is the candidate. This is Ivan's, not
+   a lookup.
+2. **Which is `administration`?** `Executive` and `Operations` are both arguable. Also Ivan's.
+3. **Then a `DeptCert` has to be earned for each**, by whatever produces one — and **nothing
+   has ever produced one**, so that path is unexercised in exactly the way the Gate 8 handover
+   was until P-01 ran it.
+
+**Until 1 and 2 are answered, P-04 can be built but not satisfied.**
