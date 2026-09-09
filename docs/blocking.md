@@ -1299,3 +1299,66 @@ The same misreading, three times, at three depths, on the same Forge. It is not 
 attention by three people — **it is what a one-word verdict does to a reader when the
 finding lives in the sentence underneath it.** That is why each of these is written down
 with its clause rather than its verdict.
+
+---
+
+## B20 — V13's verdict is unactionable: real demand against a placeholder supply
+
+**`venture-scoped: burkham-wickmont`** · Found 2026-09-08, at Gate 4.5 of run `6a97fbe1`.
+
+V13 fails on Burkham: *"The compliance officer would receive 120 approvals a day. At 6
+minutes each that is 720 minutes of review against 144 minutes available - 5 times over."*
+It names three fixes — raise a trust-tier ceiling, add reviewer coverage, or cut scope.
+
+**None of them can be chosen yet, because only one side of that ratio is Burkham's.**
+
+| side | where it comes from |
+|---|---|
+| **120 approvals** | **Burkham's own structure.** 15 generated workflow steps × 8 decisions/day, every position at `trust_tier_ceiling: propose`, so nothing is skipped |
+| **144 minutes** | **Greenstone's staffing, borrowed.** The Pack says so: *"INVENTED, and modelled on Greenstone's staffing so the Gate 4.5 comparison in the report is like for like. Burkham names no reviewer anywhere."* |
+
+**Choosing between raise-a-tier, add-coverage and cut-scope on those numbers would be
+deciding against a stand-in.** Cutting scope because a placeholder reviewer is overloaded
+changes a real venture to fit an invented denominator.
+
+### The same class as entry 15, one layer in
+
+Entry 15 recorded that **every capacity number in this system is Greenstone's** — Burkham
+has never been provisioned. That was about the numbers themselves. This is the same
+borrowing surviving into a **verdict**: the Pack's comment is honest, and by the time it
+reaches V13's message the provenance is gone. What the reviewer reads is *"144 minutes
+available"*, stated as flatly as the 120 beside it, and nothing in the sentence says one
+was measured and the other assumed.
+
+**A rule that mixes a derived number and a placeholder in one comparison produces a
+verdict with no honest reading.** It is not wrong — it is unactionable, which is a
+different thing and needs saying differently.
+
+### What retires this
+
+Burkham's real reviewer coverage, declared in `human_capacity`: for each reviewer,
+`human_name`, `role`, `coverage_hours`, `median_review_minutes`, `max_daily_approvals`,
+`timezone`, `auth_method`, and a `backup_human`. **`role` is the field that matters most**
+— `_reviewer_for` routes by it, and it is what decides whether a second reviewer relieves
+anybody.
+
+**Not code.** Until then V13's verdict should be read as *"this venture has more approval
+demand than its declared reviewers can absorb, and its reviewers are not declared."*
+
+### Two facts that hold whatever the supply side turns out to be
+
+Both are levers that cost nothing and are currently unused. **Neither is a fix on its own.**
+
+**1. 360 reviewer-minutes exist and 60% of them are idle.** `_reviewer_for` routes all five
+positions to `compliance_officer`. Dana has 144 min/day; Ivan, as `venture_operator`, has
+216 min/day and receives **nothing**. Moving the two all-read positions to Ivan gives
+Dana 528 vs 144 and Ivan 128 vs 216 — Ivan fits, Dana is still 3.7× over. It does not
+solve it and it is free.
+
+**2. 32 of 120 approvals are pure reads.** Diagnostic Analyst (`statement_pull`) and Stack
+Manager (`portfolio_health`, `restack_recommend`) operate nothing that writes. A human
+approving them is approving a lookup. **They are freeable only as whole positions**,
+because `trust_tier_ceiling` is per position and not per module — which is also why the
+other 88 cannot be freed: each of those positions holds at least one write, and
+Compliance Reviewer's is `regulator_dossier_export`, `at_most_once`, on the artefact that
+goes to a regulator.
