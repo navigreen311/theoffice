@@ -2397,99 +2397,106 @@ acting on its own judgement inside someone else's work.
 two disqualifying errors. Then `get_version` on `0.6.0` says what is actually true: **this row
 predates the rename, and the document it names is fine.**
 
-## B32 — GAP-5: SimForge holds no domain certification for anything, and its department roster is stale
+## B32 — GAP-5: no `DeptCert` has ever existed, and SimForge holds a stale department copy
 
 **`cross-cutting`** · Answered 2026-09-09 by the coordinator, read-only. **This was P-04's
 first task and Ivan asked for it the day it was known rather than at P-11.**
 
-**CORRECTED THE SAME DAY. The first version of this item was wrong about half of what it
-claimed, and Ivan issued a ruling on the wrong half before the error was found.** The
-correction is below, under its own heading, with the original claim quoted rather than
-deleted — an item that silently changes what it said is worse than one that was wrong out
-loud.
+**CORRECTED TWICE, THE SAME DAY. Both corrections were to the same kind of error: a true fact
+with a wrong consequence hung on it.** The retracted claims are quoted rather than deleted.
+This item is the least reliable thing in this file, and the third version says so at the top
+rather than presenting itself as settled.
 
-### What is true
+### What has been true throughout, and is the actual finding
 
 **`DeptCert` holds zero rows.** Not zero for Burkham's departments — **zero for any department,
 including Engineering.** No domain certification has ever existed in SimForge.
 
-**The Office's three `certified` unit-B rows are all `engineering`, all `attested_by='bootstrap'`
-— *"a grant issued against no scenario run"* — and correspond to nothing in SimForge.** The one
-department that carries unit-B certification in The Office is the one Burkham does not use.
+**The Office's three `certified` unit-B rows are all `engineering`, all
+`attested_by='bootstrap'`** — *"a grant issued against no scenario run"* — **and correspond to
+nothing in SimForge.** The one department carrying unit-B certification in The Office is the
+one Burkham does not use.
 
-**So unit B is blocked, and it is blocked harder than B30 said.** B30 recorded that unit B has
-no submitter. The implicit assumption was that building one would let the certification be
-earned. **There is nothing on the other side to earn it from.** P-04 would ship a correct
-submitter that cannot succeed — still worth building, because a submitter reporting three
-uncertified departments is a true statement and better than B30's silence, but it must be built
-knowing this.
+**Unit B is therefore blocked harder than B30 said.** B30 recorded that unit B has no
+submitter, with the implicit assumption that building one would let certification be earned.
+**There is nothing on the other side to earn it from.**
 
-### What was wrong, and it was the load-bearing half
+### Correction 1 — the department mapping was never missing
 
-The first version said:
+The first version said `administration` and `banking` *"have no counterpart of any spelling"*
+in SimForge, and put two questions to Ivan. He ruled **banking → Finance, administration →
+Executive**. **No mapping was needed and that ruling must not be applied.**
 
-> *"Two of Burkham's three departments are not SimForge departments … `administration` and
-> `banking` have no counterpart of any spelling. `Finance` is the nearest thing to banking, and
-> choosing it is a decision, not a lookup."*
-
-**That is false.** It put two questions to Ivan — *which Village department is `banking`?* and
-*which is `administration`?* — and he ruled **banking → Finance, administration → Executive**.
-**No mapping was needed and that ruling should not be applied.** It is recorded here so it is
-not later mistaken for a live decision.
-
-**The Village's twelve departments, read live from `broker.departments` at the moment of
-correction:**
+The Village's twelve, read live from `broker.departments`:
 
 ```
 Administration, AI_Data, Banking, Engineering, Executive, Infrastructure,
 Marketing, Media_Production, Music_Production, Operations, Publishing, Research
 ```
 
-**`Administration`, `Banking` and `Operations` are all real Village departments.** Burkham's
-three names are correct exactly as the Pack has them. V29 and V30 validate against this list
-and pass.
+`Administration`, `Banking` and `Operations` are all real Village departments. **Burkham's
+three names are correct exactly as the Pack has them**, and V29/V30 validate against this live
+list and pass.
 
-### Why the coordinator got it wrong
+**The error:** the coordinator compared The Office's departments against SimForge's
+`Department` table and treated that table as the standard. The Office reads the list **live
+from the Village**, and `generators/pack.py` says why, describing this exact failure —
+*"a copy cannot know it has gone stale."* **The field is called `villageKey` and the name was
+taken at its word instead of asking what wrote it.** Caveat 14.
 
-**It compared The Office's departments against SimForge's `Department` table and treated that
-table as the standard.** It is not the standard. The Office reads the list **live from the
-Village**, and `generators/pack.py` says why, in a comment that describes this exact failure:
+### Correction 2 — the submission does not fail; the certification cannot be issued
 
-> *"There is deliberately no `VILLAGE_DEPARTMENTS` here any more. This module held twelve
-> department names. The Village was rebuilt and nine of them stopped existing —
-> `Research & Market Intelligence` became `research`, **`Finance & Administration` became
-> `banking`** — and nothing failed, because **a copy cannot know it has gone stale.** Packs
-> naming departments that had not existed for two days validated cleanly."*
+The second version said:
 
-**The field is called `villageKey`, and the coordinator took the name at its word instead of
-asking what wrote it.** That is Caveat 14 — *read a claim out of the schema or the receiving
-side, not out of the names* — committed by the person who wrote Caveat 14, one day after
-writing it.
+> *"a unit-B submission for `Administration` will find no such department in SimForge — not
+> because the mapping is wrong, but because SimForge's roster predates a Village rebuild."*
 
-### The finding that replaces the wrong one, and it is worse
+**Also wrong, and wrong in the same shape as the first: a true fact with the consequence hung
+one step off.** Measured:
 
-**SimForge is carrying the stale roster the Pack comment warns about.** Its thirteen
-`Department.villageKey` values — Clinical, Compliance, CustomerSuccess, Data, Engineering,
-Executive, Finance, Legal, Marketing, Operations, Payroll, Recruitment, Sales — include nine
-that are not current Village departments, and omit `Administration`, `Banking`,
-`Infrastructure`, `Media_Production`, `Music_Production`, `Publishing` and `AI_Data`.
+| column | type | consequence |
+|---|---|---|
+| `OperationRun.departmentId` | `String, nullable=True`, **no FK** | **a unit-B run opens fine** for any department string |
+| `OperationCert.departmentId` | `String, nullable=True`, **no FK** | same |
+| **`DeptCert.departmentId`** | `String, ForeignKey("Department.id")` | **a certification cannot be issued** for a department SimForge has no row for |
 
-**The Office solved this problem for itself and SimForge has not.** The Office deleted its copy
-and reads the Village live, precisely because *a copy cannot know it has gone stale*. SimForge
-holds a copy, and nothing tells it.
+**So the stale roster does not block the submission. It blocks the certification at the end of
+it.** Those are different failures at different points, and P-04 will be built against
+whichever one this item names — which is why getting it wrong mattered enough to correct
+rather than quietly sharpen.
 
-**The consequence for P-04:** a unit-B submission for `Administration` will find no such
-department in SimForge — **not because the mapping is wrong, but because SimForge's roster
-predates a Village rebuild.** Those two failures look identical from The Office's side, and the
-first version of this item is the proof: it mistook one for the other and cost a ruling.
+### What this means for P-04, stated once and carefully
+
+**P-04 can submit.** A unit-B run for `Administration`, `Banking` or `Operations` will open,
+because `departmentId` is a free string on the run.
+
+**P-04 cannot be satisfied.** No `DeptCert` exists for anything, and one cannot be created for
+`Administration` or `Banking` while SimForge's `Department` table lacks those rows — `DeptCert`
+has a real foreign key to it.
+
+**Build it anyway.** A submitter that correctly reports three uncertified departments is a true
+statement and better than B30's silence. **But it must be built knowing it cannot succeed
+yet**, rather than discovering that at P-11 after four packages have merged behind it.
 
 ### What retires it
 
 1. **SimForge stops holding a department copy**, or refreshes it from the Village and can say
-   when it last did. This is `simforge`'s, and it is the same fix The Office already made.
+   when it last did. Nine of its thirteen `villageKey` values are not current Village
+   departments; seven current ones are absent. **The Office already made exactly this fix** —
+   it deleted its copy and reads live, because a copy cannot know it has gone stale.
 2. **A `DeptCert` is actually earned for a Burkham department.** Nothing has ever produced one,
    so that path is unexercised in exactly the way the Gate 8 handover was until P-01 ran it.
 
 **Neither is a decision for Ivan.** The two questions this item originally asked him are
 withdrawn.
+
+### A note on this item's reliability
+
+**Two retractions, both of the same class: an upstream fact established correctly, then a
+downstream consequence asserted without following the path to where it bites.** The facts held
+each time. The consequences did not.
+
+**Anything else this item claims should be checked before it is acted on.** If a package's work
+had this record it would have been handed back; the coordinator's own gets the same standard
+written down instead.
 
