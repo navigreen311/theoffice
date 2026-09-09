@@ -1769,19 +1769,100 @@ scored that CORRECT — against the files. The same sentence was true of the row
 nobody checked them, because the forcing function forces what is in git and the rows are
 what is in force.
 
-### What would fix it
+### The part that generalises, which is the finding
 
-**Minimum, and it unblocks everything above:** the publish diff is textual —
-`_changed_lines` compares `yaml_source` strings and never needed the previous Pack parsed.
-Reading the previous version's raw source for the diff, instead of a parsed `StoredPack`,
-lets a republish proceed without weakening any validation of what is being *written*.
+**A required field forces what is in git, not what is in force.**
 
-**The larger question, which is not the same one:** reading back a Pack stored under an
-earlier schema should be a **stated condition**, not an exception that reads like
-corruption. A row carries `schema_version` already. "Stored under a schema this build
-cannot parse" is a fact the system can report; `PackStoreError: not a schema-v3 Business
-Pack` on a row that *is* schema-v3 is a message that sends the reader to the wrong place.
+Adding `provenance` with no default was designed as a forcing function, and it worked
+exactly as designed on the two files in the repository — both Packs refused to load until
+all four entries were filled, which is what the prediction called *"the difference between
+a field that documents and a field that decorates."* That prediction was **scored CORRECT**,
+and it was correct.
 
-**Not fixed unilaterally.** The first change touches the publish-diff control, which is
-deliberate machinery, and the second changes what a run does when it meets an old Pack.
-Both are Ivan's call.
+It was also, word for word, true of **ten published rows nobody looked at**. The same
+sentence — *"making it required breaks Pack loading until every entry is filled"* —
+described the database, and the database was never in anyone's view. **The forcing function
+reached the source and stopped at the boundary of the repository**, and that boundary is
+invisible from inside a diff.
+
+Any schema tightening on a persisted document has this shape. The Pack is stored as text
+and re-parsed on read, so a change that is a one-line schema edit in the code is a data
+migration everywhere the text already exists — and unlike a column migration, **nothing
+runs, nothing is stamped, and no version number moves.** Alembic knows about tables. It
+does not know that `business_pack.yaml_source` is a document with a schema of its own.
+
+### The check that does not exist
+
+**Nothing reads a published Pack back out of `business_pack` and parses it.** Every one of
+the 1048 tests loads from `packs/*.yaml` on disk. The suite verifies that the files satisfy
+the schema and never asks whether the rows do.
+
+**A round-trip test would have caught this on the provenance commit**: publish a Pack, read
+the stored row back through `live()`, parse it, and assert it still loads. It fails the
+moment a required field is added without republishing, and it names the right cause
+because the failure arrives at the publish that broke it rather than at the run that
+found it weeks later.
+
+**Named here rather than built.** It is a small test and an easy one to write badly — a
+version that publishes and re-reads within one transaction proves only that `store` and
+`live` agree in the same process, which is not the property. The property is that rows
+written by *an earlier build* still parse under this one, and that is a fixture problem
+worth thinking about rather than a line to add today.
+
+### Fixed 2026-09-08 — the minimum, and only the minimum
+
+`store()` now reads the previous version's **raw `yaml_source`** through a small
+`_previous_source` helper instead of through `live()`/`draft()`. The diff is textual —
+`_changed_lines` compares two strings and never needed the previous Pack parsed.
+
+**Nothing about what is being written is weaker.** `parse_only` still refuses any Pack that
+does not satisfy the current schema, and it runs before the diff. What changed is only that
+**the version being replaced is no longer required to satisfy a schema written after it was
+stored** — which was never a coherent requirement, and which made the control that exists
+to reveal a change refuse to run precisely when the change was largest.
+
+`live()` and `get_version()` are untouched and still parse. That half is B27.
+
+Regression test: `test_a_publish_can_replace_a_row_the_current_schema_cannot_parse`.
+Confirmed to fail against the pre-fix code with B26's own error, and to pass after.
+
+## B27 — an unparseable old row is reported as "not a schema-v3 Business Pack", and it is schema-v3
+
+**`cross-cutting`** · Found 2026-09-08, as the second half of B26. **The fix for B26
+unblocked publishing and deliberately left this standing.**
+
+`live()` and `get_version()` still call `parse_only` on the stored source, and when a row
+was written under an earlier schema the caller gets:
+
+```
+PackStoreError: not a schema-v3 Business Pack: 2 validation errors for BusinessPack
+```
+
+The row **is** schema-v3. Its `schema_version` column says `3`, it was published as v3, and
+it was valid v3 on the day it was written. What is actually true is narrower and more
+useful: *stored under an earlier revision of the v3 schema, before `provenance` was
+required.*
+
+### This is B23's class, arriving in an exception — the fifth instance
+
+B23 collects **names that assert more than the code does**: `max_daily_approvals` reads as
+a limit and limits nothing, and the other three the same way. **This is the same defect in
+a different surface.** The message asserts something false *about the data* — and unlike a
+misleading field name, which sits still and can be read sceptically, **an exception message
+is read at the exact moment the reader has least context and most urgency**, and it points
+them at the file rather than at the migration.
+
+It is worse than silence in the way entry 22's class is worse: it does not fail to explain,
+**it explains incorrectly and confidently.** A reader who trusts it goes and inspects a Pack
+that is fine.
+
+### What would fix it — not built
+
+A read that meets a row it cannot parse should say **which** revision it was stored under
+and **what** the current one requires, and should distinguish *this document is malformed*
+from *this document predates a tightening*. The `schema_version` column is already there and
+already carries the coarse half of the answer; what is missing is a finer marker, and
+deciding what that marker is is a design question rather than a message rewrite.
+
+**Left standing deliberately.** Changing it changes what a run does when it meets an old
+Pack, which is a larger decision than unblocking a publish, and B26 was the blocking half.
