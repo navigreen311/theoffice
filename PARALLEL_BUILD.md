@@ -958,6 +958,36 @@ name `theoffice_test_p09`. The plan should have specified it. **File isolation w
 carefully and database isolation was not designed at all**, which is the same class of miss
 as B26: the thing in git was made atomic and the thing in force was not.
 
+**Caveat 17 — a default is how an instrument keeps running while measuring the wrong thing.**
+New this run, and it belongs beside 12–14 rather than beside 15–16: those two are defects in
+this plan's isolation, these four are all failures of **measurement**.
+
+SimForge's operation battery was pointed at a real model for the first time with
+`LLM_PROVIDER=auto`. Ollama did not answer the ping, the provider resolved to `StubProvider`,
+and **nothing errored — the stub always answers.** The run completed, produced a scoreboard,
+and the scoreboard was of the stub. An error would have stopped the run and been read as a
+broken setup; the default finished it and returned numbers, and numbers get read as a
+measurement.
+
+**Two conclusions came off that run, both pessimistic, both plausible, and the second produced
+an artifact that looked like a real diagnosis.** Plausibility is what made it expensive: a
+model failing a never-do battery is exactly what one expects to find, so nothing in the output
+invited a second look. The retraction and the real finding are recorded in SimForge at
+`docs/calibration/first-battery-run-2026-09-10.md` — the model refuses all five forbidden
+acts.
+
+**The family, stated once.** Caveat 12 reports an output nobody read. Caveat 13 reads
+construction out of a mention. Caveat 14 reads a claim out of a name. **Caveat 17 reads a
+measurement off an instrument that quietly substituted its subject.** In each, the step that
+would have caught it is the same one: look at the thing itself before reporting what it says.
+
+**Check what answered before reading what it said.** SimForge PR #139 does exactly this for
+anything that writes a certification — the answering model is recorded from
+`provider_label(runtime.provider)`, never from `settings.llm_provider`, because config records
+an intention and the two differ exactly when it matters. **An ad-hoc run that writes a
+document instead of a certification is not covered by that fix**, which is why this is a
+caveat and not only a code change.
+
 **Every agent gets its own git worktree.** `git checkout -b` in a shared checkout collides
 with whatever another agent has uncommitted. This cost a recovery on the previous run.
 
