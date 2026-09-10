@@ -2528,6 +2528,19 @@ is no deadlock and there never was.**
 `SimForgeClient.gate_result(run_ref)` exists, fetches a verdict, and is called by nothing
 outside its own test.
 
+> **Correction, 2026-09-09, found by P-03 and verified: `attested_by` is a PARAMETER, not a
+> column.** `certification` has no such column — checked against `information_schema`, zero
+> rows. The grep above is literally true and the conclusion it supports is correct, but the
+> sentence invites a reader to go looking for `attested_by = 'simforge'` in the table, and
+> **that query returns nothing forever** — which reads as *no SimForge-attested certification
+> exists*, accidentally right on the day this was written and wrong the moment the sweep
+> runs. **The structural expression is `simforge_verdict IS NOT NULL`.** See blocking.md B34.
+
+`SimForgeClient.gate_result` is also mis-named here: the method is **`get_gate_result`**, and
+P-03 established it is the *brokered* path — it resolves a grant, enforces a shift, checks a
+budget and ledgers an agent. **A sweep has no agent.** The ingest added `office_gate_result`,
+signed as The Office, on the same footing as `submit_curriculum` and `run_start`.
+
 **Unit B has no submitter.** Two constraints decide what each unit is:
 
 ```
