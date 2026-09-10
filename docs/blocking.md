@@ -2490,6 +2490,130 @@ Gate 7 asserts they exist and are inactive; only the bootstrap, the runtime-conf
 generator and test fixtures ever create one. The sweep reports a submission with no grant
 holders as a finding rather than inventing an agent to certify.
 
+### CLOSED for unit B — 9 September 2026, P-04
+
+**Both halves of B30 are now built. The item stays open on neither producer and closes
+on the pair.** What is NOT closed is certification itself, and the reason has moved: it
+is no longer "nothing submits", it is one unanswered question named at the end of this
+note.
+
+`broker/provisioning.py::_open_department_units` runs after Gate 8's per-module loop and
+opens one unit-B run per **(department, forge)** — the same two keys
+`generators/appointment.py::_unit_b_certs` queries on. `curriculum_submission` now holds
+rows with a `department` and no `module_id`, carrying a `simforge_run_ref`, and
+`overdue_submissions` — which has selected `department` since 0007 and never seen one —
+hands them to P-03's sweep, which routes them without special-casing.
+
+### Unit B is `run_start` alone. There is no curriculum to submit, and that was measured
+
+**B30 said "nothing submits a department curriculum at all" and the phrase carried an
+assumption.** There is no such thing to submit. Read off SimForge:
+
+* `ForgeOperationCurriculum.instruction_set_ref` is an `InstructionSetRef` whose
+  `module_id: str` is **required and non-optional**. A department-scoped curriculum is
+  not expressible in the payload.
+* `CertificationUnitRequest` accepts `unit_type="department_context"` with a
+  `department_id` — and `routers/operation.py::submit_curriculum` reads **exactly one
+  field** off that list, `{u.module_id for u in body.certification_units_requested if
+  u.module_id}`. `unit_type`, `department_id`, `forge_context` and `venture_context`
+  are consumed by nothing. The endpoint's only write is a `ForgeInstructionSet` keyed
+  `(forgeId, moduleId, contentHash)`.
+* `unit` does not appear on the curriculum payload at all. It is on
+  `OperationRunStartRequest`, which already takes `unit="B"`, `rubric_kind="domain"`,
+  `department_id` and a null `module_id`.
+
+So a department hand-over would either 422 on the missing module or bind an instruction
+set under an invented one. `docs/decisions.md` entry 28 had already ruled the same thing
+from the other end — a unit-B run closes on department certification *states* — and this
+is that ruling arrived at from the payload rather than from the run registry. **No
+executable-domain-scenario bridge was built and entry 23 is not reopened.**
+
+### B32's central consequence is on the wrong table — the third correction, and the class is the same
+
+B32 says P-04 "cannot be satisfied" because `DeptCert.departmentId` is a
+`ForeignKey("Department.id")` and SimForge's `Department` table lacks `Administration`
+and `Banking`. **Unit B does not write `DeptCert`.**
+
+SimForge's gate-result callback writes `OperationCertification(unitType=
+"department_context", departmentId=...)`, and that column is `String, nullable=True,
+index=True` with **no ForeignKey** — the same shape B32 itself measured for
+`OperationRun.departmentId` and `OperationCert.departmentId`, one row above the one it
+drew the conclusion from. `apps/api/src/services/operation/recert.py` says it in a
+sentence: *"The domain cert table (AgentCert/DeptCert) is a different table and is never
+touched here."* `DeptCert` is the 8-dimension domain lifecycle, issued through
+`POST /api/certs/dept` behind `require_role`, requiring ≥N covering `AgentCert`s and a
+dept-wide scenario run. Nothing in the operation-certification chain reads or writes it,
+and the unit-B department view (`services/operation/views.py`) looks a department id up
+with `depts.get(c.departmentId, "unknown")` — a fallback, not a join.
+
+**So "zero `DeptCert` rows" is true and irrelevant to unit B, and the stale `Department`
+table blocks nothing on this path.** That is the same shape B32 records twice about
+itself: an upstream fact established correctly, and the consequence hung one step off.
+The third instance was found by following the write, not the name.
+
+### What actually blocks a department certification now, and it is one decision
+
+Two things, in order:
+
+**1. Nothing calls SimForge's gate-result callback for an Office-opened run.**
+`POST /api/operation/gate-result` is not on the Office bridge — `routers/office.py`'s
+`MODULES` binds `gate_result`, `submit_curriculum` and `run_start` and nothing else — so
+a unit-B run opens, sits `IN_PROGRESS`, and reads `TIMEOUT` once its window passes.
+`VERDICT_TO_STATE` maps that to `in_training`, which is correct and is not a
+certification.
+
+**2. A unit-B PASS could not be recorded even if it arrived.**
+`sweeps._ingest_one` recovers `forge_api_version` only when `unit == "A"`, because a
+department has no module and therefore no `forge_operating_instruction` row to recover
+one from. So a unit-B PASS reaches `record_result` with `forge_api_version=None` and
+`certified_records_its_basis` refuses it — the verdict lands in `findings["refused"]` and
+turns the whole sweep `failed`.
+
+**The guard is right and the gap is real.** The missing piece is a ruling on where a
+department's Forge api_version comes from. `forge_registry.api_version` is already read
+by `SimForgeClient._registry` and is exactly "the version of the Forge this department's
+context was cleared against" — but `broker/sweeps.py` and `broker/certification.py` are
+P-03's, so P-04 named it and locked the current behaviour instead:
+`tests/contract/test_unit_b_certification.py::test_a_unit_b_pass_is_refused_rather_than_certified_without_a_basis`
+fails the day somebody resolves it, which is the point.
+
+### Three things this package refused to fudge
+
+**A department with nothing accepted gets no run and no row.**
+`curriculum_submission.scenario_count` is `CHECK (scenario_count > 0)` and a run whose
+modules were all refused has no basis SimForge holds anything for. Clamping the count to
+1 would have written a correlation row for a run nobody opened, which would sit in the
+sweep's queue for a verdict that cannot arrive. The pair is reported in the gate's
+evidence carrying `skipped` and the department it names — which is exactly the pair
+`appointment.generate` will refuse as `missing_unit_b`, said at the gate that could have
+produced it instead of four gates later as "zero certified candidates".
+
+**The department's basis is a composite and says so.** A department has no operating
+instruction, so `simforge.department_basis_hash` hashes the set its accepted modules were
+handed over under, domain-separated by an `office/unit-b/v1` prefix so it cannot be
+mistaken for a `forge_operating_instruction.content_hash`.
+`certification.recompute_staleness` already exempts unit B from the live-hash comparison,
+in writing, for this exact reason.
+
+**A unit-B ref names the department in the segment a unit-A ref names the module in.**
+Without it two departments operating one module set on one Forge mint one ref,
+`open_run` is idempotent on the ref, the second `run_start` lands silently on the first
+department's run, and the sweep writes two certifications for two departments out of one
+verdict. `mint_run_ref` gained an optional `department` rather than a second minter:
+two functions agreeing on four segments out of five is the "two spellings of one rule"
+defect `submission_unit` was extracted to prevent.
+
+### Also found, not fixed, not mine
+
+**Gate 8's PASSED reason claims the domain scenarios were submitted, and they never
+are.** `_gate_8` computes `total = len(curriculum.domain_scenarios) +
+len(curriculum.operation_scenarios)` and reports *"{total} scenario(s) submitted
+({n} domain, {m} operation)"*, while `by_module` — the only thing that reaches
+`_curriculum_payload` — is built exclusively from `operation_scenarios`. Domain scenarios
+are Pack-validation-only per entry 23 and correctly never leave The Office; the sentence
+says otherwise. **P-04 did not touch it**: the counts are `generators/` territory and the
+string is Gate 8 evidence a reader may already be diffing against.
+
 ## B31 — a renamed Pack field reads as a malformed document, not an older one
 
 **`theoffice`** · Found 2026-09-09 by the coordinator, merging P-07 and P-08 in the same

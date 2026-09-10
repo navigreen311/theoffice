@@ -43,6 +43,7 @@ from broker.simforge import (
     CurriculumRejectedError,
     SimForgeClient,
     SimForgeError,
+    department_basis_hash,
     mint_run_ref,
     submission_unit,
 )
@@ -541,6 +542,31 @@ async def _gate_8(ctx: _Context) -> GateOutcome:
         satisfy a counter would produce boilerplate that is then GRADED against, and a
         certification earned on it would be evidence of nothing. A 422 naming missing
         classes is a true statement about where the work is.
+
+    AND THEN THE OTHER UNIT, WHICH THIS GATE HAS NEVER PRODUCED
+    ===========================================================
+
+        Certification has two units and one submission is one or the other, keyed on
+        `module_id` - `submission_unit` is the rule and it is called, never restated.
+        One curriculum per module makes every submission this gate has ever written a
+        unit A: ten rows with a module, none with a department.
+
+        `generators/appointment.py` requires BOTH. It refuses any candidate whose
+        position touches a Forge the candidate's department holds no certified unit-B
+        row for, and reports it as `missing_unit_b`. So the unit-A half being perfect
+        appoints nobody.
+
+        `_open_department_units` runs after the per-module loop and opens one unit-B run
+        per (department, forge) - the same two keys `appointment._unit_b_certs` queries
+        on. **It submits no curriculum**, because there is nothing on the receiving side
+        to submit one to: SimForge's `ForgeOperationCurriculum.instruction_set_ref`
+        requires a `module_id`, and the `unit_type="department_context"` entry its
+        `CertificationUnitRequest` accepts is read by nothing in
+        `routers/operation.py::submit_curriculum`, which takes `module_id` out of that
+        list and ignores every other field on it. A unit B is `run_start` and the
+        correlation row, and `docs/decisions.md` entry 28 already ruled why: a unit-B
+        run closes on department certification STATES, not on execution of
+        Office-submitted content.
     """
     artifacts = ctx.require_artifacts()
     curriculum = artifacts.curriculum
@@ -597,6 +623,14 @@ async def _gate_8(ctx: _Context) -> GateOutcome:
                 pack_ref=pack_ref,
             )
             submitted.append(outcome)
+
+        department_units = await _open_department_units(
+            ctx, client,
+            submitted=submitted,
+            positions=artifacts.roles.positions,
+            module_forge=module_forge,
+            pack_ref=pack_ref,
+        )
     finally:
         if owns_client:
             await client.aclose()
@@ -604,6 +638,7 @@ async def _gate_8(ctx: _Context) -> GateOutcome:
     attempted = [o for o in submitted if "skipped" not in o]
     accepted = [o for o in attempted if o["run_ref"]]
     skipped = [o for o in submitted if "skipped" in o]
+    units_opened = [u for u in department_units if u.get("run_ref")]
     await ctx.conn.commit()
 
     detail: dict[str, Any] = {
@@ -618,6 +653,12 @@ async def _gate_8(ctx: _Context) -> GateOutcome:
         # the fix is to author the instruction rather than to look at SimForge.
         "modules_skipped": [o["module_id"] for o in skipped],
         "submissions": submitted,
+        # Kept OUT of `submissions`, which means "one module's curriculum went over".
+        # A unit-B entry has no module and carried no curriculum, and folding the two
+        # lists together would make `modules_submitted` count something that is not a
+        # module submission - the same collapse B30 says hid unit B in the first place.
+        "department_units": department_units,
+        "department_units_opened": len(units_opened),
         "coverage": [
             {"dimension": c.dimension, "covered": c.covered,
              "denominator": c.denominator, "uncovered": c.uncovered}
@@ -626,6 +667,13 @@ async def _gate_8(ctx: _Context) -> GateOutcome:
     }
 
     tail = f"; {len(skipped)} module(s) have no live instruction" if skipped else ""
+    if department_units:
+        # Named in the sentence rather than only in the evidence: unit B gates
+        # appointment on its own, and a reader who sees only a module count cannot tell
+        # a venture that opened department runs from one that opened none.
+        tail += (
+            f"; {len(units_opened)} of {len(department_units)} department unit(s) opened"
+        )
     if not attempted:
         reason = f"{total} scenario(s) generated; no module to submit{tail}"
     elif len(accepted) == len(attempted):
@@ -752,27 +800,26 @@ async def _submit_one_module(
     # `simforge_run_ref` is the whole point of this package: B8's retirement condition
     # is a stored ref, not a call that returned one. It is NULL unless the curriculum
     # was accepted AND the run was opened, which is what "handed over" now means.
-    async with ctx.conn.cursor() as cur:
-        await cur.execute(
-            """
-            INSERT INTO curriculum_submission
-              (submission_id, venture_id, forge_id, module_id, scenario_pack_ref,
-               scenario_count, coverage_denominator, instruction_content_hash,
-               submitted_by, simforge_run_ref)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """,
-            (
-                uuid.uuid4(), ctx.venture_id, forge_id, module_id,
-                f"{pack_ref}/{module_id}", len(scenarios), max(modules_in_forge, 1),
-                instruction.content_hash,
-                ctx.actor, run_ref,
-            ),
-        )
+    await _record_submission(
+        ctx,
+        forge_id=forge_id,
+        module_id=module_id,
+        department=None,
+        scenario_pack_ref=f"{pack_ref}/{module_id}",
+        scenario_count=len(scenarios),
+        coverage_denominator=max(modules_in_forge, 1),
+        instruction_content_hash=instruction.content_hash,
+        run_ref=run_ref,
+    )
 
     outcome: dict[str, Any] = {
         "module_id": module_id,
         "scenario_count": len(scenarios),
         "run_ref": run_ref,
+        # Carried out of here because the unit-B pass needs the basis this module was
+        # actually handed over under, and re-reading `instructions.live` after the fact
+        # would answer a question about now rather than about the submission.
+        "instruction_content_hash": instruction.content_hash,
     }
     if module_level is not None:
         # The certification level SimForge assigned this module, carried into the
@@ -791,6 +838,218 @@ async def _submit_one_module(
     if violations is not None:
         outcome["violations"] = violations
     return outcome
+
+
+async def _record_submission(
+    ctx: _Context, *, forge_id: str, module_id: str | None, department: str | None,
+    scenario_pack_ref: str, scenario_count: int, coverage_denominator: int,
+    instruction_content_hash: str, run_ref: str | None,
+) -> None:
+    """The one place Gate 8 writes a `curriculum_submission` row, for either unit.
+
+    One site, because the two units differ in exactly two columns and everything else
+    about the row - what a NULL `simforge_run_ref` means, which columns are NOT NULL,
+    what the sweep will do with it - is identical. Two INSERTs into one table would be
+    two places to keep in step, and they would disagree the first time a column was
+    added, silently, because each would look right beside its own caller.
+
+    **`module_id` and `department` are the unit**, and nothing here enforces that: the
+    `unit_targets_match` and `rubric_matches_unit` CHECK constraints are on
+    `certification`, NOT on this table - `curriculum_submission` has no unit constraint
+    at all and both columns are nullable. So the rule lives where it always did, in
+    `submission_unit`, and this function's callers pass exactly one of the two.
+    """
+    async with ctx.conn.cursor() as cur:
+        await cur.execute(
+            """
+            INSERT INTO curriculum_submission
+              (submission_id, venture_id, forge_id, module_id, department,
+               scenario_pack_ref, scenario_count, coverage_denominator,
+               instruction_content_hash, submitted_by, simforge_run_ref)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                uuid.uuid4(), ctx.venture_id, forge_id, module_id, department,
+                scenario_pack_ref, scenario_count, coverage_denominator,
+                instruction_content_hash, ctx.actor, run_ref,
+            ),
+        )
+
+
+def _department_forge_modules(
+    positions: list[Any], module_forge: dict[str, str]
+) -> dict[tuple[str, str], list[str]]:
+    """(department, forge) -> the modules that department's positions operate there.
+
+    **The two keys are `appointment._unit_b_certs`' two keys**, and that is the whole
+    reason the grouping is shaped this way rather than around the venture's operating
+    Forge. A position spans Forges - Greenstone's Acquisition Analyst reaches cre-forge
+    and voiceforge - and unit B is required for EVERY Forge a position touches, so a
+    department needs one certification per Forge and not one certification.
+
+    `source_department` is used verbatim. It is a Village department name, validated
+    against the live list by V29/V30, and `appointment.generate` passes exactly this
+    string to the certification lookup - so any normalisation here would produce rows
+    the gate that needs them cannot find.
+
+    A module no Forge registers is dropped, not guessed at. V32 is the finding for
+    that, and `appointment.generate` reports it separately as `module_not_registered`.
+    """
+    grouped: dict[tuple[str, str], set[str]] = {}
+    for position in positions:
+        for module_id in position.forge_modules_operated:
+            forge_id = module_forge.get(module_id)
+            if forge_id is None:
+                continue
+            grouped.setdefault((position.source_department, forge_id), set()).add(module_id)
+    return {key: sorted(modules) for key, modules in sorted(grouped.items())}
+
+
+async def _open_department_units(
+    ctx: _Context, client: Any, *, submitted: list[dict[str, Any]],
+    positions: list[Any], module_forge: dict[str, str], pack_ref: str,
+) -> list[dict[str, Any]]:
+    """The unit-B half. One run per (department, forge). **No curriculum is submitted.**
+
+    WHY THERE IS NOTHING TO SUBMIT, READ OFF THE RECEIVING SIDE
+    ===========================================================
+
+        `ForgeOperationCurriculum.instruction_set_ref.module_id` is a required, non
+        optional `str`, so a department-scoped curriculum is not expressible in
+        SimForge's payload. The one field that looks like it is - a
+        `CertificationUnitRequest` with `unit_type="department_context"` and a
+        `department_id` - is read by nothing: `routers/operation.py::submit_curriculum`
+        takes `{u.module_id for u in body.certification_units_requested if u.module_id}`
+        out of that list and consumes no other field on it, then upserts a
+        `ForgeInstructionSet` keyed `(forgeId, moduleId, contentHash)`.
+
+        Calling `submit_curriculum` for a department would therefore either 422 on the
+        missing module or upsert an instruction set under an invented module name. So
+        the unit-B path is `run_start` and the correlation row, which is what
+        `OperationRunStartRequest` was already shaped for: `unit`, `rubric_kind` and
+        `department_id` are all on it, and `module_id` is optional.
+
+    WHAT A DEPARTMENT RUN IS OPENED AGAINST
+    =======================================
+
+        Only the modules whose curriculum SimForge ACCEPTED and whose run opened. A
+        department's context on a Forge is cleared against the instructions SimForge
+        actually holds for it; a module that 422'd or never reached the Forge is not
+        part of a basis SimForge could judge, and including it would put a hash in the
+        column that names material the other side does not have.
+
+        A (department, forge) pair with no accepted module is **reported and not
+        opened** - it appears in the evidence carrying `skipped` and the department it
+        names. That is the pair `appointment.generate` will refuse as
+        `missing_unit_b`, said out loud at the gate that could have produced it,
+        instead of surfacing four gates later as "zero certified candidates".
+
+    THE COUNTS ARE THE DEPARTMENT'S, AND THEY ARE NOT INVENTED
+    ==========================================================
+
+        `scenario_count` is the sum of the scenarios The Office actually submitted for
+        that department's accepted modules on that Forge - the same quantity the unit-A
+        path sends, aggregated over the unit's own key. It is not a count of scenarios
+        this run carries, because it carries none, and it is not a guess:
+        `curriculum_submission.scenario_count` is `CHECK (scenario_count > 0)`, and
+        rather than clamp a zero to 1 the way a placeholder would, a department with
+        nothing submitted gets no run at all.
+
+        `coverage_denominator` is how many modules that department operates on that
+        Forge, against a numerator of how many were accepted. Both are named in the
+        evidence so the denominator is visible rather than implied - "a scenario count
+        without one is not coverage."
+    """
+    accepted = {
+        o["module_id"]: o
+        for o in submitted
+        if o.get("run_ref") and o.get("instruction_content_hash")
+    }
+    units: list[dict[str, Any]] = []
+
+    for (department, forge_id), modules in _department_forge_modules(
+        positions, module_forge
+    ).items():
+        covered = [m for m in modules if m in accepted]
+        entry: dict[str, Any] = {
+            "department": department,
+            "forge_id": forge_id,
+            "modules_operated": len(modules),
+            "modules_accepted": len(covered),
+            "run_ref": None,
+        }
+        if not covered:
+            # Not an error and NOT A RUN. Same rule as a module with no live
+            # instruction: a correlation row for a run nobody opened would sit in the
+            # sweep's queue waiting for a verdict that cannot arrive.
+            entry["skipped"] = (
+                "no module of this department was accepted by this Forge, so there is "
+                "no basis a department context could be cleared against"
+            )
+            units.append(entry)
+            continue
+
+        basis = department_basis_hash(
+            {m: accepted[m]["instruction_content_hash"] for m in covered}
+        )
+        scenario_count = sum(int(accepted[m]["scenario_count"]) for m in covered)
+        # One rule, one place. `submission_unit(None)` is what makes this a B, exactly
+        # as `submission_unit(module_id)` makes the per-module path an A.
+        unit, rubric_kind = submission_unit(None)
+        minted_ref = mint_run_ref(
+            venture_id=ctx.venture_id, forge_id=forge_id, module_id=None,
+            department=department, content_hash=basis,
+        )
+        entry["instruction_content_hash"] = basis
+        entry["scenario_count"] = scenario_count
+
+        run_ref: str | None = None
+        try:
+            started = await client.run_start(
+                ctx.conn,
+                run_ref=minted_ref,
+                unit=unit,
+                forge_id=forge_id,
+                instruction_content_hash=basis,
+                rubric_kind=rubric_kind,
+                # NULL, and it is the unit. `unit_targets_match` reads
+                # `B -> department NOT NULL`, and a module id on a unit-B run would be
+                # a unit-A assertion on it.
+                module_id=None,
+                # A department certification is about the department, not about one of
+                # its agents. Naming one would be a claim about which agent the run is
+                # for, decided by a sort order.
+                agent_id=None,
+                department_id=department,
+                scenario_count=scenario_count,
+                coverage_denominator=len(modules),
+                # Omitted, not guessed. The window is SimForge's policy, same as the
+                # per-module path.
+                window_minutes=None,
+            )
+            entry["already_open"] = bool(started.get("already_open"))
+            run_ref = minted_ref
+        except SimForgeError as exc:
+            # Non-fatal, for the reason the per-module path gives: The Office's half is
+            # complete and reproducible, and provisioning must not depend on a service
+            # that is allowed to be down.
+            entry["error"] = str(exc)
+
+        await _record_submission(
+            ctx,
+            forge_id=forge_id,
+            module_id=None,
+            department=department,
+            scenario_pack_ref=f"{pack_ref}/dept:{department}@{forge_id}",
+            scenario_count=scenario_count,
+            coverage_denominator=len(modules),
+            instruction_content_hash=basis,
+            run_ref=run_ref,
+        )
+        entry["run_ref"] = run_ref
+        units.append(entry)
+
+    return units
 
 
 def _curriculum_payload(

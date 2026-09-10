@@ -27,6 +27,7 @@ mechanism, and it is deliberate that it is annoying.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import uuid
 from dataclasses import dataclass
@@ -142,7 +143,12 @@ def submission_unit(module_id: str | None) -> tuple[str, str]:
 
 
 def mint_run_ref(
-    *, venture_id: str, forge_id: str, module_id: str | None, content_hash: str
+    *,
+    venture_id: str,
+    forge_id: str,
+    module_id: str | None,
+    content_hash: str,
+    department: str | None = None,
 ) -> str:
     """The run reference The Office mints, and SimForge opens a run under.
 
@@ -170,13 +176,77 @@ def mint_run_ref(
         A changed `content_hash` is a different instruction set and mints a different
         ref. That is not a retry - it is a new submission, and it should be a new run.
 
-    Carries no scenario content: two ids, a module name and a hash prefix. The hash is
-    truncated because the full 64 characters buy nothing a reader wants and make the ref
-    unreadable in a log line, where its only job is to be recognised.
+    A UNIT-B REF NAMES THE DEPARTMENT IN THE SLOT A MODULE WOULD HOLD
+    =================================================================
+
+        A unit-B run has no module, so without `department` the third segment would be
+        `-` on every department in a venture and two departments operating the same
+        module set on one Forge would mint the SAME ref. `open_run` is idempotent on
+        the ref, so the second `run_start` would land silently on the first
+        department's run, both correlation rows would carry one ref, and P-03's sweep
+        would write two certifications - for two different departments - out of one
+        verdict.
+
+        That is why this stayed one function rather than becoming a second minter: a
+        unit-B ref differs from a unit-A ref in exactly one segment, and two functions
+        agreeing on the other four is the same "two spellings of one rule" defect
+        `submission_unit` was extracted to prevent.
+
+        `department` is ignored when `module_id` is given. A run is one unit or the
+        other and `submission_unit` is what decides; a ref carrying both would be a ref
+        that cannot say which.
+
+    Carries no scenario content: two ids, a module or department name and a hash
+    prefix. The hash is truncated because the full 64 characters buy nothing a reader
+    wants and make the ref unreadable in a log line, where its only job is to be
+    recognised.
     """
-    return ":".join(
-        ("office", venture_id, forge_id, module_id or "-", content_hash[:12])
+    target = module_id or (f"dept:{department}" if department else "-")
+    return ":".join(("office", venture_id, forge_id, target, content_hash[:12]))
+
+
+def department_basis_hash(module_hashes: dict[str, str]) -> str:
+    """The basis a unit-B run executes against. **A composite, and it says so.**
+
+    `OperationRunStartRequest.instruction_content_hash` is required and
+    `curriculum_submission.instruction_content_hash` is NOT NULL, so a unit-B run has
+    to name what it was judged against. A department is not a module and has no single
+    operating instruction, so there is nothing to look up - the basis is the set of
+    instructions the department's modules were actually handed over under, and the only
+    honest way to name a set in one column is to hash it.
+
+    WHY THIS IS NOT A `forge_operating_instruction.content_hash`, AND MUST NOT BE READ AS ONE
+    =========================================================================================
+
+        A reader who takes this value into
+        `certification.forge_api_version_in_force` gets a refusal - "no
+        forge_operating_instruction carries content hash ..." - which is correct and is
+        the point. It is domain-separated by the `office/unit-b/v1` prefix so it cannot
+        collide with a real instruction hash by accident, and
+        `certification.recompute_staleness` already exempts unit B from the live-hash
+        comparison for this exact reason, in writing: a unit-B cert "carries
+        `module_id IS NULL` by design, so there is no single instruction it could be
+        compared against."
+
+        The property that makes it useful is the one a single hash has: it changes when
+        any of the department's instructions changes, and it does not change when they
+        do not. So a re-run of Gate 8 against unchanged instructions mints the same ref
+        and lands on the run that is already open, exactly as the unit-A path does.
+
+    An empty mapping raises rather than hashing nothing. A department with no handed
+    over module on a Forge has no context to clear, and a hash of the empty set would
+    be a stable value that looks like a basis and stands for nothing.
+    """
+    if not module_hashes:
+        raise ValueError(
+            "a department basis needs at least one module instruction; a hash of no "
+            "instructions is a value that looks like a basis and names nothing"
+        )
+    material = "\n".join(
+        f"{module_id}:{content_hash}"
+        for module_id, content_hash in sorted(module_hashes.items())
     )
+    return hashlib.sha256(f"office/unit-b/v1\n{material}".encode()).hexdigest()
 
 
 class SimForgeClient:
