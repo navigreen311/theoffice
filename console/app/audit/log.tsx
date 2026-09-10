@@ -4,6 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { AlertTriangle } from "@/components/icons";
 import { LocalTime } from "@/components/local-time";
+import { Prose } from "@/components/term";
 
 /**
  * The log.
@@ -103,7 +104,9 @@ function ActorCell({ entry }: { entry: Entry }) {
 function ExpandedRow({ detail }: { detail: Detail }) {
   return (
     <div className="mt-2 rounded-lg border border-line bg-surface-muted px-4 py-3">
-      <p className="text-desc text-ink-secondary">{detail.meaning}</p>
+      <p className="text-desc text-ink-secondary">
+        <Prose text={detail.meaning} />
+      </p>
 
       <dl className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-2">
         <div>

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { AsOf } from "@/components/local-time";
+import { Prose } from "@/components/term";
 import { api, ApiError, NotAuthenticated, type VentureRow } from "@/lib/api";
 
 import { ChainIntegrity, type ChainState } from "./chain";
@@ -230,7 +231,7 @@ export default async function AuditPage({
                 </span>
               </div>
               <p className="mt-0.5 max-w-3xl text-meta text-ink-secondary">
-                {event.meaning}
+                <Prose text={event.meaning} />
               </p>
             </li>
           ))}
