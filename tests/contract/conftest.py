@@ -377,6 +377,12 @@ def certified_agent(
     # failed at a gate with no obvious cause.
     """An agent holding live instructions plus both certification units.
 
+    Both rows carry `agent_model`, and they have to: migration 0035's
+    `certified_records_its_basis` refuses a row with a `simforge_verdict` and no model,
+    because the model is what answered the battery and a certification that cannot name
+    the candidate is one nobody can reproduce. A fixture that omitted it would be
+    building a row the production path cannot build.
+
     Phase 2 turned the certification gate from a non-null string check into a live
     state check, so `granted_agent` alone no longer reaches a Forge. This fixture is
     what "assignable" now means.
@@ -420,9 +426,10 @@ def certified_agent(
             INSERT INTO certification
               (cert_id, unit, office_agent_id, forge_id, module_id, state,
                certified_tier, instruction_content_hash, forge_api_version,
-               rubric_kind, rubric_version, score, threshold, simforge_verdict)
+               rubric_kind, rubric_version, score, threshold, simforge_verdict,
+               agent_model)
             VALUES (%s, 'A', %s, %s, %s, 'certified', 'auto_execute', %s, '2.1.0',
-                    'operation', '1.4.0', 0.91, 0.80, 'PASS')
+                    'operation', '1.4.0', 0.91, 0.80, 'PASS', 'ollama/llama3.1:8b')
             """,
             (str(uuid.uuid4()), agent_id, forge_id, module_id, content_hash),
         )
@@ -431,9 +438,9 @@ def certified_agent(
             INSERT INTO certification
               (cert_id, unit, department, forge_id, state, certified_tier,
                instruction_content_hash, forge_api_version, rubric_kind,
-               rubric_version, score, threshold, simforge_verdict)
+               rubric_version, score, threshold, simforge_verdict, agent_model)
             VALUES (%s, 'B', %s, %s, 'certified', 'auto_execute', %s, '2.1.0',
-                    'domain', '3.2.0', 0.88, 0.80, 'PASS')
+                    'domain', '3.2.0', 0.88, 0.80, 'PASS', 'ollama/llama3.1:8b')
             """,
             (str(uuid.uuid4()), department, forge_id, content_hash),
         )

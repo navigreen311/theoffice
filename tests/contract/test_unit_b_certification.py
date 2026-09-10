@@ -68,6 +68,11 @@ def _domain_result(verdict: str, *, run_ref: str, tier: str | None = None) -> Ga
         certified_tier=tier,
         scenario_count=0,
         coverage_denominator=2,
+        # A verdict names what answered it. `record_result` refuses one that does
+        # not, because `certified_records_its_basis` refuses the row - so a helper
+        # omitting it would build a verdict the ingest cannot store, and every test
+        # through it would fail for the wrong reason.
+        agent_model="ollama/llama3.1:8b",
     )
 
 

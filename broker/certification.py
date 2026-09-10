@@ -32,6 +32,13 @@ from datetime import datetime
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 
+#: The verdicts that mean SOMETHING ANSWERED, imported rather than restated.
+#: `simforge.TERMINAL_VERDICTS` is the one definition, named by P-03 when it decided
+#: which results may stamp `result_received_at`, and migration 0035's CHECK mirrors it.
+#: Three spellings of one set is how two of them drift; there are already two, and the
+#: SQL one cannot import.
+from broker.simforge import TERMINAL_VERDICTS as ANSWERED_VERDICTS
+
 CERTIFIED = "certified"
 PROVISIONAL = "provisional"
 STALE_INSTRUCTIONS = "stale_instructions"
@@ -256,6 +263,7 @@ async def record_result(
     score: float | None = None,
     threshold: float | None = None,
     scenario_pack_ref: str | None = None,
+    agent_model: str | None = None,
     attested_by: str = "simforge",
     bootstrap_reason: str | None = None,
 ) -> CertState:
@@ -301,6 +309,37 @@ async def record_result(
     state = state_for_verdict(verdict)
     rubric_kind = "operation" if unit == "A" else "domain"
 
+    # A real verdict names the model that produced it. Mirrors migration 0035's
+    # `certified_records_its_basis`, in code, so the refusal says WHICH fact is missing -
+    # a CHECK violation says only that the row was rejected, and a caller reading that
+    # cannot tell a missing model from a missing hash.
+    #
+    # Keyed on the VERDICT rather than on the state, and on a verdict that means
+    # something answered rather than on any verdict at all. TIMEOUT and IN_PROGRESS are
+    # computed by SimForge about an open run, so a row carrying one records that nothing
+    # answered and has no model to name - the first draft of this guard demanded one and
+    # a test caught it.
+    #
+    # The other half of the distinction:
+    # `attested_by='bootstrap'` is a grant issued against no scenario run, so it has no
+    # model, and demanding one would make it invent a candidate that never sat the exam.
+    # `simforge_verdict IS NOT NULL` is the structural expression of "a battery ran" -
+    # B34 records that `attested_by` is a parameter and not a column, so this is the only
+    # spelling the row itself can carry.
+    if (
+        attested_by == "simforge"
+        and verdict in ANSWERED_VERDICTS
+        and not (agent_model or "").strip()
+    ):
+        raise CertificationError(
+            "a SimForge verdict must name the model that earned it - "
+            "`provider/model`, e.g. `ollama/llama3.1:8b`. `certified_records_its_basis` "
+            "already demands the instruction hash, the Forge api_version and the tier, "
+            "all of which describe the EXAM. The model is what answered it, and a "
+            "certification that cannot name the candidate is one nobody can reproduce "
+            "or expire when the model moves. See blocking.md B34."
+        )
+
     if state == CERTIFIED and not (
         instruction_content_hash and forge_api_version and certified_tier
     ):
@@ -336,9 +375,9 @@ async def record_result(
             INSERT INTO certification
               (cert_id, unit, office_agent_id, department, forge_id, module_id,
                state, certified_tier, instruction_content_hash, forge_api_version,
-               rubric_kind, rubric_version, score, threshold, scenario_pack_ref,
+               rubric_kind, rubric_version, score, threshold, scenario_pack_ref, agent_model,
                simforge_verdict)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT {conflict} DO UPDATE SET
               state = EXCLUDED.state,
               certified_tier = EXCLUDED.certified_tier,
@@ -348,6 +387,7 @@ async def record_result(
               score = EXCLUDED.score,
               threshold = EXCLUDED.threshold,
               scenario_pack_ref = EXCLUDED.scenario_pack_ref,
+              agent_model = EXCLUDED.agent_model,
               simforge_verdict = EXCLUDED.simforge_verdict,
               updated_at = now()
             RETURNING cert_id, unit, state, certified_tier
@@ -364,6 +404,10 @@ async def record_result(
                     if attested_by == "bootstrap"
                     else scenario_pack_ref
                 ),
+                # NULL on a bootstrap, for the same reason `simforge_verdict` is: no
+                # battery ran, so no model answered. Recording one here would name a
+                # candidate that never sat the exam.
+                None if attested_by == "bootstrap" else agent_model,
                 # NULL on a bootstrap. See the docstring: this column means
                 # SimForge said so, and nothing else may write into it.
                 None if attested_by == "bootstrap" else verdict,

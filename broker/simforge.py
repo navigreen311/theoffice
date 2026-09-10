@@ -123,6 +123,15 @@ class GateResult:
     certified_tier: str | None
     scenario_count: int
     coverage_denominator: int
+    #: `provider/model` that answered the battery, e.g. `ollama/llama3.1:8b`.
+    #:
+    #: Optional on the wire and NOT optional in the record: a verdict that arrives
+    #: without one cannot be stored as a certification, because
+    #: `certified_records_its_basis` refuses it. The field is `str | None` here so an
+    #: older SimForge that does not send it produces a REFUSAL at the guard rather than
+    #: a parse error at the boundary - the two need different responses, and the first
+    #: names the missing fact while the second only says the shape was wrong.
+    agent_model: str | None = None
 
 
 def submission_unit(module_id: str | None) -> tuple[str, str]:
@@ -804,6 +813,7 @@ def parse_gate_result(body: dict[str, Any]) -> GateResult:
         certified_tier=body.get("certified_tier"),
         scenario_count=body["scenario_count"],
         coverage_denominator=body["coverage_denominator"],
+        agent_model=body.get("agent_model"),
     )
 
 
@@ -926,6 +936,12 @@ def timeout_gate_result(submission: dict[str, Any], *, rubric_version: str) -> G
         score=None,
         threshold=None,
         certified_tier=None,
+        # No model, and deliberately not the one that WOULD have answered. A timeout is
+        # the absence of an answer; naming a model here would record a candidate that
+        # never sat the exam. `simforge_verdict` is TIMEOUT and the state is
+        # `in_training`, so the CHECK does not demand one - which is the rule agreeing
+        # with the fact rather than being worked around.
+        agent_model=None,
         scenario_count=0,
         coverage_denominator=0,
     )
