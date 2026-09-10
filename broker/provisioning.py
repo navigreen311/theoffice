@@ -38,7 +38,7 @@ from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from broker import audit, humans, instructions, knowledge, packs
+from broker import audit, humans, instructions, knowledge, packs, revocation
 from broker.simforge import (
     CurriculumRejectedError,
     SimForgeClient,
@@ -474,27 +474,83 @@ async def _gate_6(ctx: _Context) -> GateOutcome:
 
 
 async def _gate_7(ctx: _Context) -> GateOutcome:
-    """Engagement registered, grants inactive. Verified, not assumed."""
+    """Engagement registered, grants inactive. Verified, not assumed.
+
+    THE GATE ASKS THE REVOCATION TABLE, NOT A COLUMN NOTHING WRITES
+    ==============================================================
+
+        This counted `WHERE revoked_at IS NULL`, which reads as "grants still live" and
+        is not. **Nothing in the broker writes `agent_forge_grant.revoked_at`** - the
+        only writers in the repository are two test fixtures, and the single production
+        `UPDATE agent_forge_grant` sets `activated_at`. So the filter removed nothing a
+        revocation put there, and the gate counted every grant ever issued, forever.
+
+        `burkham-wickmont` is where that landed: two grants, both activated by Phase
+        0's bootstrap, which is the record of the first real brokered call. A run that
+        cleared Gate 4.5 blocked here on them - one gate past the furthest any run has
+        ever reached - and the two candidate fixes were to revoke the record of the
+        first call, or to fix the gate. **Ivan's ruling: the gate is reading the wrong
+        source.**
+
+        Revocation in this system is a separate table, consulted per call, never
+        cached - four scopes, broadest wins, `broker/revocation.py`. That is what
+        `client/office_client.py` asks before every call, and it is now what this gate
+        asks, through the same predicate rather than a second spelling of it.
+
+    WHAT DID NOT CHANGE
+    ===================
+
+        The demand. Gate 7 exists so grants are *issued inactive and activated only
+        against a valid sign-off*, and an active grant with no revocation over it still
+        blocks the run. Only the set of rows the question is asked of moved. The test
+        that matters here is the one asserting a live active grant still BLOCKS:
+        without it this is a gate that passes.
+
+    `revoked_at IS NULL` stays in the SQL below as a term, and today it is a no-op.
+    It is left because removing a column read that `broker/app.py` and
+    `broker/grants.py` also perform is a wider change than this gate, and because the
+    column is not empty in the live database - two `burkham-wickmont` rows carry a
+    hand-written value with no `revocation` row and no audit event behind it. See
+    `docs/blocking.md` B35 for the proposal that narrows it.
+    """
     async with ctx.conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
-            "SELECT count(*) AS total, "
-            "       count(*) FILTER (WHERE activated_at IS NOT NULL) AS active "
+            "SELECT grant_id, activated_at IS NOT NULL AS active "
             "FROM agent_forge_grant WHERE venture_id = %s AND revoked_at IS NULL",
             (ctx.venture_id,),
         )
-        row = await cur.fetchone()
-    assert row is not None
-    evidence = {"grants": int(row["total"]), "already_active": int(row["active"])}
-    if row["active"]:
+        rows = await cur.fetchall()
+
+    covered = await revocation.covered_grants(ctx.conn, venture_id=ctx.venture_id)
+    live = [row for row in rows if row["grant_id"] not in covered]
+    active = [row for row in live if row["active"]]
+    revoked_active = [row for row in rows if row["active"] and row["grant_id"] in covered]
+
+    scopes = sorted({covered[row["grant_id"]].scope for row in revoked_active})
+    evidence: dict[str, Any] = {
+        "grants": len(live),
+        "already_active": len(active),
+        # Named, because "0 active" on a venture holding activated grants is a claim
+        # that has to say why it is true.
+        "revoked": len(rows) - len(live),
+        "active_but_revoked": len(revoked_active),
+        "revocation_scopes": scopes,
+    }
+    if active:
         return GateOutcome(
             "7", BLOCKED,
-            f"{row['active']} grant(s) are already active before Gate 11. Grants are "
+            f"{len(active)} grant(s) are already active before Gate 11. Grants are "
             "issued inactive and activated only against a valid sign-off.",
             evidence,
         )
+    covered_note = (
+        f"; {len(revoked_active)} activated grant(s) discounted by a live "
+        f"{'/'.join(scopes)} revocation"
+        if revoked_active else ""
+    )
     return GateOutcome(
         "7", PASSED,
-        f"{row['total']} grant(s) registered, none active",
+        f"{len(live)} grant(s) registered, none active{covered_note}",
         evidence,
     )
 

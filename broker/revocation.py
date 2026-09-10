@@ -47,22 +47,61 @@ class ActiveRevocation:
     revoked_at: str
 
 
-_CHECK_SQL = """
-SELECT revocation_id, scope, reason, revoked_at
-FROM revocation
-WHERE reinstated_at IS NULL
-  AND (
-        (scope = 'forge'        AND forge_id = %(forge_id)s)
-     OR (scope = 'venture'      AND venture_id = %(venture_id)s)
-     OR (scope = 'agent'        AND office_agent_id = %(agent_id)s)
-     OR (scope = 'agent_module' AND office_agent_id = %(agent_id)s
-                                AND forge_id = %(forge_id)s
-                                AND module_id = %(module_id)s)
-      )
-ORDER BY CASE scope
-           WHEN 'forge' THEN 1 WHEN 'venture' THEN 2
-           WHEN 'agent' THEN 3 ELSE 4
-         END
+def _covers(*, agent: str, forge: str, module: str, venture: str, rev: str = "r") -> str:
+    """The four scopes, as one SQL predicate, parameterised by what the target is.
+
+    THIS IS THE RULE. THERE IS ONE COPY OF IT.
+    ==========================================
+
+        "Is this covered by a live revocation?" is asked at two cardinalities in this
+        system - once per call by `check_revocations`, and over a set of grants by
+        `covered_grants`. They are the same question, so they are the same text: the
+        caller supplies the SQL expressions that stand for the target, `%(agent_id)s`
+        for one call or `g.office_agent_id` for a table of grants, and the scope logic
+        itself is written once here.
+
+        The alternative is a second spelling in the caller, and this module already
+        carries one of those - `blast_radius` re-types these four predicates and says
+        so, with a test binding the two together. Two is the most this file will hold.
+        A gate that re-derived "broadest wins" in `provisioning.py` would be a third
+        answer to a question that must only have one, and the tell is that it would
+        pass its own tests.
+
+    `reinstated_at IS NULL` is part of the predicate rather than a term the caller
+    remembers to add. A reinstated revocation that still covered anything would be a
+    kill switch with no off position, and the way that ships is by being somebody
+    else's line to write.
+    """
+    return f"""
+        {rev}.reinstated_at IS NULL
+    AND (
+          ({rev}.scope = 'forge'        AND {rev}.forge_id = {forge})
+       OR ({rev}.scope = 'venture'      AND {rev}.venture_id = {venture})
+       OR ({rev}.scope = 'agent'        AND {rev}.office_agent_id = {agent})
+       OR ({rev}.scope = 'agent_module' AND {rev}.office_agent_id = {agent}
+                                        AND {rev}.forge_id = {forge}
+                                        AND {rev}.module_id = {module})
+        )
+    """
+
+
+def _breadth(rev: str = "r") -> str:
+    """Broadest scope first. An agent stopped by a Forge-wide revocation should be told
+    that, not told its own grant is gone."""
+    return (
+        f"CASE {rev}.scope WHEN 'forge' THEN 1 WHEN 'venture' THEN 2 "
+        f"WHEN 'agent' THEN 3 ELSE 4 END"
+    )
+
+
+_CHECK_SQL = f"""
+SELECT r.revocation_id, r.scope, r.reason, r.revoked_at
+FROM revocation r
+WHERE {_covers(
+    agent="%(agent_id)s", forge="%(forge_id)s",
+    module="%(module_id)s", venture="%(venture_id)s",
+)}
+ORDER BY {_breadth()}
 LIMIT 1
 """
 
@@ -102,6 +141,62 @@ async def check_revocations(
         revocation_id=str(row["revocation_id"]),
         reason=row["reason"],
     )
+
+
+async def covered_grants(
+    conn: AsyncConnection, *, venture_id: str
+) -> dict[uuid.UUID, ActiveRevocation]:
+    """Which of a venture's grants a live revocation currently covers.
+
+    `check_revocations` asked once, for one call. This is the same question asked of a
+    set, for the callers that have to reason about a venture's authority in aggregate -
+    Gate 7 is the first. Same predicate, same breadth ordering, so a grant appears here
+    exactly when a call against it would raise `Revoked`, and the scope reported is the
+    one that call would be told about.
+
+    WHY THIS IS NOT A COLUMN ON THE GRANT
+    =====================================
+
+        Because `agent_forge_grant.revoked_at` looks like it already answers this and
+        does not. Nothing in the broker writes it; the only writers in the repository
+        are two test fixtures. On 3 September two `burkham-wickmont` grants acquired a
+        `revoked_at` by hand, with no `revocation` row, no reason, no named human and
+        no audit event - and every `WHERE revoked_at IS NULL` in this codebase has been
+        reporting that hand-edit as authority state since.
+
+        Read this module's header for the other half: a venture-scope revocation must
+        cover grants issued *after* it was declared, which a column stamped at revoke
+        time cannot do. So this is a join, computed live, and there is deliberately no
+        cache of it anywhere.
+
+    Returns a mapping rather than a set because a caller that reports "this grant does
+    not count" owes the reader which revocation says so.
+    """
+    sql = f"""
+        SELECT DISTINCT ON (g.grant_id)
+               g.grant_id, r.revocation_id, r.scope, r.reason, r.revoked_at
+        FROM agent_forge_grant g
+        JOIN revocation r
+          ON {_covers(
+              agent="g.office_agent_id", forge="g.forge_id",
+              module="g.module_id", venture="g.venture_id",
+          )}
+        WHERE g.venture_id = %(venture_id)s
+        ORDER BY g.grant_id, {_breadth()}
+    """
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(sql, {"venture_id": venture_id})
+        rows = await cur.fetchall()
+
+    return {
+        row["grant_id"]: ActiveRevocation(
+            revocation_id=row["revocation_id"],
+            scope=row["scope"],
+            reason=row["reason"],
+            revoked_at=row["revoked_at"].isoformat(),
+        )
+        for row in rows
+    }
 
 
 def assert_authority(scope: str, actor_role: str) -> None:

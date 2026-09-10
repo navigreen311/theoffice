@@ -3149,7 +3149,131 @@ issue and activate its own, or teach Gate 7 that a pre-ladder activation is a di
 from an out-of-order one. **The first is cleaner and destroys the record of the first real
 brokered call; the second widens a gate whose narrowness is the point.**
 
-**Not urgent, and not to be discovered mid-run.** Gate 4.5 still blocks on V24, and unit-B
-certification cannot be earned at all until SimForge has a `DeptCert` path (B32). This is the
+**Not urgent, and not to be discovered mid-run.** Gate 4.5 still blocks on V24. This is the
 gate *after* the one everyone is working on, and it is recorded now so the certification run
 does not end with a surprise eight lines past its goal.
+
+> **Corrected 2026-09-09.** This paragraph originally said unit-B certification *"cannot be
+> earned at all until SimForge has a `DeptCert` path (B32)"*. **B32 is withdrawn** — unit B
+> does not write `DeptCert` and never did. What actually blocks unit-B certification is in
+> B36, and neither half is about `DeptCert`. **The claim above was one of B32's three wrong
+> consequences, quoted here before it was retracted; it is corrected rather than deleted so
+> the propagation is visible.**
+## B35 closure — P-17: Gate 7 asks the revocation table, and the column it used to ask has never been written
+
+**Appended by P-17, 2026-09-09. This is P-17's section; B35's own item above is the
+coordinator's and is not rewritten.** B35 was authored on `coord/b35-gate-7-blocks` and had
+not reached `main` when this closure was written, so this section stands on its own and reads
+forward to it.
+
+**Ivan's ruling: Gate 7 is reading the wrong source. Fix that.** Not: revoke Burkham's two
+bootstrap grants. They are the record of the first real brokered call and **no data changed in
+this package.**
+
+### The half B35 did not have
+
+B35 measured `burkham-wickmont` at two unrevoked, active grants against a gate that blocks on
+any active grant, and called the two "correct and incompatible". They are not incompatible.
+**The gate is asking a column that nothing in this system writes.**
+
+Verified independently for this package, over every `.py`, `.sql`, `.ts`, `.tsx` and `.md` in
+the tree, matched across line breaks so a statement split between string literals cannot hide:
+
+| `UPDATE ... SET revoked_at` | table |
+|---|---|
+| `broker/humans.py:346` | `office_human_role` |
+| `broker/knowledge.py:131,145` | `playbook_share` |
+| `tests/isolation/test_phi_flush.py:248` | `office_agent_identity` |
+| `tests/contract/test_call_path.py:108` | **`agent_forge_grant` — a test fixture** |
+| `tests/contract/test_module_exclusion.py:104` | **`agent_forge_grant` — a test fixture** |
+
+The **only** two writers of `agent_forge_grant.revoked_at` in the repository are test fixtures
+simulating a revocation the product cannot perform. The one production `UPDATE
+agent_forge_grant` is `provisioning.py:1457`, and it sets `activated_at`. The only trigger on
+the table is `agent_forge_grant_exclusion_guard` (0030), BEFORE INSERT.
+
+So `WHERE revoked_at IS NULL` filtered on a column no code populates: **Gate 7 counted every
+grant the venture had ever been issued, forever.** `broker/grants.py:221` reads the same column
+and carries the same dead branch — same finding, not fixed here, recorded below.
+
+### And the column is not empty, which is worse than dead
+
+Measured read-only against `OFFICE_ADMIN_DSN`:
+
+```
+ venture_id       | grants | active | revoked_at NOT NULL
+ burkham-wickmont |      4 |      4 |                   2
+ greenstone       |      2 |      2 |                   0
+```
+
+Two `burkham-wickmont` grants carry a `revoked_at` written on 2026-09-03 at 14:24 and 14:45.
+`revocation` holds **one row ever** — a `greenstone` venture-scope stop, since reinstated — and
+`audit_log` across that window holds `forge_call_intent`, `office_identity_issued` and
+`shift_assigned` and **no revocation event of any kind**.
+
+**Somebody stopped two grants by hand.** No reason, no named human, no blast radius, no audit
+row — every part of the §1.4 ritual absent — and fourteen `revoked_at IS NULL` reads in
+`broker/` then reported that hand-edit as the authority state of a grant. B35 counted
+`burkham-wickmont` at two grants precisely *because* of those two hand-written values.
+
+*(One guess checked before it was made: the partial index on `(office_agent_id, forge_id,
+module_id) WHERE revoked_at IS NULL` is **not** unique — `pg_indexes` — so the column carries
+no re-issue duty either. Caveat 14, caught on this package rather than by it.)*
+
+### What changed
+
+**Gate 7 now asks what the call path asks.** `broker/revocation.py` gains
+`covered_grants(conn, venture_id)`, and `_gate_7` discounts any grant a live revocation covers.
+
+**One source of truth, not a second spelling.** The four scopes were extracted out of
+`_CHECK_SQL` into `_covers()`, which takes the target as SQL expressions — `%(agent_id)s` for
+one call, `g.office_agent_id` for a set of grants — so `check_revocations` and `covered_grants`
+are the *same predicate text* at two cardinalities, ordered by the same breadth ranking.
+`reinstated_at IS NULL` lives inside it rather than being a term each caller remembers. Nothing
+about the four-scope rule was retyped in `provisioning.py`; had it been, this would be the
+third answer to a question that must have one, and it would have passed its own tests.
+
+**The gate's meaning did not widen.** It still demands that grants are issued inactive and
+activated only against a valid sign-off. An active grant with nothing revoking it still BLOCKS,
+and that is the load-bearing test of the nine —
+`test_an_active_grant_with_no_revocation_still_blocks`. Against the pre-fix `_gate_7` the
+scope tests fail on the verdict itself: `assert 'blocked' == 'passed'`, read from the run, not
+predicted.
+
+Evidence gained three keys — `revoked`, `active_but_revoked`, `revocation_scopes` — because
+"0 active" reported over a venture holding four activated grants is a claim that owes the
+reader why.
+
+### The ruling this package owed on `revoked_at`
+
+**Neither of the two options offered. It is a third thing, and that is the reason to keep it
+and stop reading it.**
+
+- It must **not** become a cache of `revocation`. This module's own header refuses that in
+  writing: *"a venture-wide revocation must apply to grants issued after it was declared.
+  Storing it on the grant would silently miss both."* A trigger stamping `revoked_at` on revoke
+  would make Gate 7 *look* fixed while a venture-scope stop declared before a grant still
+  missed it — the exact failure the header was written to prevent.
+- It is **not vestigial** either, because somebody used it, twice, in production, three days
+  into Phase 0. A column with live hand-written values is in use whether or not code writes it.
+
+It is a **manual tombstone with no ritual attached**, and its defect is that fourteen read
+sites in `broker/` spell it "live grant".
+
+**Proposed, not done here — this is narrowing, not removal:**
+
+1. Make `revocation` the only answer to "is this grant live", one read site at a time, starting
+   with `broker/grants.py:221` and `broker/app.py`.
+2. Audit the two existing hand-written `burkham-wickmont` values into `revocation` rows with a
+   reason and a named human, or record in writing that their provenance is unrecoverable.
+3. Only then, with a migration, either comment the column as *not a revocation* or drop it.
+
+**Deliberately not in this package**: a migration removing a column `broker/app.py` and
+`broker/grants.py` read is wider than one gate, and `broker/grants.py` is on P-17's MUST NOT
+TOUCH list. `revoked_at IS NULL` therefore remains as a term in Gate 7's own SQL, where it is a
+no-op today.
+
+**One documentation drift this package creates and does not fix**: `docs/provisioning.md:106`
+still quotes `is_assignable` with `revoked_at IS NULL` in it and reads as though the column is
+the revocation control. That file is outside P-17's MAY MODIFY list, so it is named here rather
+than edited.
