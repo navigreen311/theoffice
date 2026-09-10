@@ -3460,3 +3460,172 @@ never existed.
 
 **Recorded now rather than found at the run**, which is the same reason GAP-5 was answered
 early — and unlike GAP-5, this one was verified before it was written down.
+
+
+---
+
+
+## B38 — P-16b: four approved sends promise a reply channel, contents and an unsubscribe that do not exist, and the Compliance Library is not empty
+
+**Written by P-16b, 10 September 2026.** P-16b is the completion half of the FunnelForge manual
+set: P-16 authored five of the nine operating instructions and named the other four rather than
+producing thin ones, and this package authored those four —
+`send_scheduling_confirmation`, `send_deliverable_cover`, `send_followup_no_engagement`,
+`send_brief_cover`. **V11 and V23 now have all nine.** `tests/test_funnelforge_manuals.py`'s
+`OUTSTANDING` tuple is empty and kept, which is where a tenth bound module lands.
+
+**If another package has already claimed B38 on a concurrent branch, renumber this one.** The
+content does not depend on the number.
+
+**Nothing here is fixed, and nothing here is P-16b's to fix.** All four items are the copy
+meeting the transport, and the copy sits behind the §4.5 two-founder review gate, which this
+package does not sit on. **P-16b did not apply
+`docs/plans/funnelforge-position-DEFERRED.patch`, did not edit any Pack, and did not run
+`scripts/register_funnelforge_modules.py`.** Burkham's Gate 2 is unchanged at 0 FAIL.
+
+### Finding 1 — three approved templates tell the recipient to reply, and a reply reaches FunnelForge
+
+**The adapter sends no `from`**, so `EmailSender` uses `DEFAULT_FROM_EMAIL || 'hello@funnelforge.ai'`
+and the envelope is `FunnelForge <hello@funnelforge.ai>` — B33 and shared rule 7b, measured on
+the running container on 9 September 2026.
+
+**And there is no Reply-To field on this path.** `sendEmailSchema` is enumerated in two
+independent places in this repository — shared rule 7f (`to`, `from`, `subject`, `html`, `text`,
+`preheader`, `tags`, `leadId`) and the `EMAILS_SEND` comment in
+`adapters/funnelforge/upstream.py` — and neither enumeration contains one. With no Reply-To, a
+reply addresses the From.
+
+**Three approved autonomous templates instruct the recipient to reply, and a fourth depends on
+their doing so:**
+
+| template | module | the sentence |
+|---|---|---|
+| `intake_acknowledgment` | `send_intake_acknowledgment` | *"reply to this message and it will reach the same people"* |
+| `scheduling_confirmation` | `send_scheduling_confirmation` | *"If the time no longer works, reply here and we will move it."* |
+| `deliverable_cover` | `send_deliverable_cover` | *"Questions are welcome; reply here and they reach the team that wrote it."* |
+| `followup_no_engagement` | `send_followup_no_engagement` | *"if the timing is wrong, say so and we will leave it there"* — no other channel is named |
+
+**So a declined applicant whose details have changed, a client whose appointment time is wrong,
+a client with a question about the Blueprint they paid for, and a client asking not to be
+contacted again are all told to reply, and all four replies land at an address that is not
+Burkham's.** Nothing in The Office watches it and this repository cannot say whether anybody
+does.
+
+**This is derived from the schema rather than measured against a running stack**, and it is
+labelled that way in each manual's PROVENANCE. `docs/forge-adapter.md` trap #4 is the standing
+note about what a source reading is worth against a call. What would settle it is one send with
+a provider configured and one reply.
+
+### Finding 2 — `scheduling_confirmation` promises its own contents, and a calendar invitation nothing can produce
+
+**B33's finding 3 lists `scheduling_confirmation` among the three templates the attachment
+problem does *not* touch. That is correct, and it is why nobody looked at this one.** It
+promises no enclosure. It promises two other things instead.
+
+The approved body, in full:
+
+> Your Blueprint call is confirmed. The details are below, and a calendar invitation follows
+> separately.
+>
+> If the time no longer works, reply here and we will move it.
+
+**There are no details below.** The body is a fixed string and **none of the six approved
+subjects or bodies contains a merge field** — counted in `adapters/funnelforge/templates.py`,
+zero occurrences of any `{{...}}`, which is also shared rule 7a's own statement. So no date, no
+time, no duration and no location goes out. **The sentence is false on every send**, and false
+in the way a recipient discovers immediately, because it is an instruction to look at something
+that is not there.
+
+**Nothing follows separately either.** No module on this Forge emits an `.ics`; the booking
+route supplies no `calendarUrl` and leaves `Appointment.meetingUrl` null
+(`funnelforge-schedule-blueprint-call.md`, read from the route and the Prisma schema); and the
+transport could not carry an invitation in either form — as a file it is an attachment, and
+shared rule 7f establishes there is no attachment field at any layer.
+
+**Three unkeepable promises in one two-sentence template**, counting the reply. And the module
+is never the first confirmation: the booking route already sent FunnelForge's own unreviewed one
+(B33 finding 4), so **the reviewed message is the duplicate.**
+
+### Finding 3 — no approved template carries an unsubscribe link, and the marketing plan says every marketing email does
+
+`docs/reference/burkham-wickmont-marketing-plan-intake.md` §6.5 states the removal mechanism
+first among four: *"Unsubscribe link in every marketing email (one-click)"*, against a CAN-SPAM
+SLA of ten business days.
+
+**No approved template contains a link of any kind.** Count `templates.py`: there is not one
+`<a>` element in the seven-entry inventory. The adapter supplies no `preheader` and no
+list-unsubscribe.
+
+**On five of the six that is arguable, because they are transactional** — an acknowledgment
+answering a form, a confirmation answering a booking, a cover note answering a purchase, a
+briefing to a partner on a standing distribution.
+
+**`followup_no_engagement` is the one where it is not arguable, and it is the one with no
+link.** It is the only approved send that answers no act of the recipient's: it goes to a
+Blueprint client *because they did nothing*, and "did nothing" is not an initiating action.
+**Whether that send is commercial or transactional has never been decided**, and it is the
+question that decides whether §6.5's own rule was broken by the template that most needs it.
+
+**And its copy makes the promise §6.5 exists to keep.** *"say so and we will leave it there"* —
+with no suppression check before the send (the route consults nothing), no link in the message,
+no working reply out of it (finding 1), and no record after it (shared rule 7c writes nothing).
+`compliance/outbound-contact-boundary-v1`'s escalation trigger 4 is written for exactly this
+moment — *"take me off your list. End the call, update the record"* — and **there is no record
+to update on this path.**
+
+### Finding 4 — shared rule 10 says the Compliance Library ships empty. It does not, and it has not since 31 August
+
+**`docs/instructions/funnelforge-approved-send-rules.md` rule 10 closes:** *"The Compliance
+Library ships empty. No entry is committed anywhere in this repository, so every ref above names
+an entry an agent cannot read."*
+
+**`packs/compliance-library/burkham-wickmont.yaml` holds nineteen entries** — counted by loading
+the file; its own header comment says sixteen and is stale in the other direction — **and was
+committed on 31 August 2026 in `0bc65a1`, nine days before rule 10 was written.** Every ref the
+FunnelForge manuals cite resolves: `outbound-contact-boundary-v1`, `own-claims-and-pricing-v1`,
+`client-interest-standard-v1`, `estimate-not-offer-v1`, `facilitator-not-broker-v1`,
+`consumer-privacy-rights-v1`, `reg-z-advertising-boundary-v1`.
+
+**Where the mistake came from is the part worth keeping.** `packs/burkham-wickmont.draft.yaml`
+carries a comment above its `compliance_surface` block saying *"`library_entry_ref` is omitted
+throughout and `library_gap: true` set instead, because the Compliance Library ships EMPTY"* —
+and the rows beneath it now carry `library_entry_ref` on all but one. **The comment is stale and
+the data underneath it is current**, which is the shape B31 and B27 are both about: a document
+that describes itself accurately at the moment it was written and is read as current
+afterwards. P-16 read the comment rather than the rows, and the error propagated into a
+shared-rules file that every FunnelForge manual points at.
+
+**Why it matters rather than being a footnote.** Rule 10's sentence tells an agent it has
+nothing to consult, and an agent that believes it will not consult. **The entry it would have
+found is `outbound-contact-boundary-v1`, and it is not background — it is a gate.** *"NO
+OUTBOUND CONTACT WITHOUT ALL THREE"*: a documented relationship, the channel the person actually
+gave, and a purpose matching the initiating action, with a former-client lookback of eighteen
+months and a rule that *"A REFERRAL IS NOT CONSENT"*. **That test forbids sends these modules
+would otherwise make**, and the four manuals P-16b authored apply it per module — cleanly
+satisfied on the two transactional sends, doing real work on the follow-up, and marking a
+boundary the quarterly Brief cover cannot see.
+
+**Corrected in place.** Rule 10's closing paragraph is amended on this branch to point at the
+committed library, with the Pack comment named as the source of the error. The Pack comment
+itself is **not** touched: `packs/` is not P-16b's, `docs/plans/funnelforge-position-DEFERRED.patch`
+is P-13b's, and correcting a comment is not worth a Pack edit from a package that has been told
+not to make one. **It is recorded here so the next person to read that comment reads this
+first.**
+
+### What this does not change
+
+**Nothing about the adapter, the Pack, the registry or the gate.** No code changed. The four
+manuals, their four scenario sets and one amended paragraph in the shared rules are the whole
+diff, plus the two tests in `tests/test_funnelforge_manuals.py` that changed shape when
+`OUTSTANDING` emptied — a parametrised test over an empty tuple is a skip that reports in the
+green line, and both were rewritten to keep asserting rather than to stop running.
+
+**V31 still refuses seven of the nine at the only tier that reaches a Forge**, and V11 and V23
+now pass on manuals for the Marketing Operations Coordinator having nine of nine. The ordering
+P-13 measured still stands: the registry rows land before or with the patch, never after.
+
+**Four things are now open on the §4.5 review gate rather than one.** B33 finding 3 raised the
+attachment problem on three templates. Findings 1, 2 and 3 above raise a reply channel on four,
+self-referential contents on one, and an unsubscribe on one. **They retire together or not at
+all**, because they are one question wearing four faces: approved copy was written for a mail
+system, and it was bound to a transactional send route that has five fields.

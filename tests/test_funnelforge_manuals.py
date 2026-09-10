@@ -36,11 +36,26 @@ SCOPE - THE FUNNELFORGE NINE ONLY
 THE DELIVERED SUBSET IS A CONSTANT, AND THAT IS THE DESIGN
 ==========================================================
 
-    P-16 delivers five of the nine. The other four are named in OUTSTANDING below and
-    are asserted ABSENT - so the day somebody writes one, this file fails until they
-    move the name from one list to the other. A partial delivery that is asserted stays
-    visible; a partial delivery that is merely incomplete becomes invisible the moment
-    somebody stops counting.
+    P-16 delivered five of the nine and named the other four in OUTSTANDING, asserted
+    ABSENT - so the day somebody wrote one, this file failed until the name moved from
+    one list to the other. A partial delivery that is asserted stays visible; a partial
+    delivery that is merely incomplete becomes invisible the moment somebody stops
+    counting.
+
+    **THE MECHANISM FIRED AS DESIGNED AND THE LIST IS NOW EMPTY.** P-16b authored the
+    remaining four - `send_scheduling_confirmation`, `send_deliverable_cover`,
+    `send_followup_no_engagement`, `send_brief_cover` - and moving each name across is
+    what brought every assertion above to bear on it. Nine manuals, nine scenario sets.
+
+    OUTSTANDING IS KEPT RATHER THAN DELETED, and that is not sentiment. It is where a
+    tenth bound module lands: the meta-test refuses a name that is in neither list, so
+    the next person to bind one chooses a list rather than discovering months later that
+    a module has no instruction. An empty tuple with a live meta-test is a working
+    mechanism; a deleted one is a gap that reads as completeness.
+
+    Two tests below changed shape when the list emptied, because a parametrised test
+    over an empty tuple is a skip that reports as a pass, and the two things they were
+    proving still need proving. See each docstring.
 """
 
 from __future__ import annotations
@@ -66,26 +81,32 @@ SCENARIOS = ROOT / "scenarios"
 FORGE_LINE = re.compile(r"\*\*Forge:\*\*\s*([^*\n]+?)(?:\s{2,}|\n|\*\*)")
 MODULE_LINE = re.compile(r"\*\*Module:\*\*\s*`([a-z0-9_]+)`")
 
-#: What P-16 authored. Manual and scenarios, both, to the standard of the eleven.
+#: Every bound module. Manual and scenarios, both, to the standard of the eleven.
+#: The first five are P-16's; the last four are P-16b's, moved here out of OUTSTANDING,
+#: which is what put them under every assertion in this file.
 DELIVERED: dict[str, str] = {
     "send_intake_acknowledgment": "funnelforge-send-intake-acknowledgment.md",
     "distribute_referrer_briefing": "funnelforge-distribute-referrer-briefing.md",
     "schedule_blueprint_call": "funnelforge-schedule-blueprint-call.md",
     "capture_contact": "funnelforge-capture-contact.md",
     "read_funnel_analytics": "funnelforge-read-funnel-analytics.md",
+    "send_scheduling_confirmation": "funnelforge-send-scheduling-confirmation.md",
+    "send_deliverable_cover": "funnelforge-send-deliverable-cover.md",
+    "send_followup_no_engagement": "funnelforge-send-followup-no-engagement.md",
+    "send_brief_cover": "funnelforge-send-brief-cover.md",
 }
 
-#: What P-16 did not author, named individually because "four of nine" is a count and
-#: this is a handover. Each is an approved autonomous send with the same request shape,
-#: the same two refusals, the same failure table and the same retry rule as
-#: `send_intake_acknowledgment`; what is owed per module is the occasion, the recipient,
-#: the approved copy quoted, and the compliance entries that copy touches.
-OUTSTANDING: tuple[str, ...] = (
-    "send_scheduling_confirmation",
-    "send_deliverable_cover",
-    "send_followup_no_engagement",
-    "send_brief_cover",
-)
+#: Bound modules with no manual. **Empty, and kept.**
+#:
+#: P-16 put four names here and P-16b emptied it. It is not deleted because the
+#: meta-test refuses a bound name that is in neither list, so this is where a tenth
+#: module lands the day somebody binds one - a decision, taken then, rather than a
+#: manual nobody notices is missing. What is owed for a name that appears here is what
+#: was owed for those four: the occasion, the recipient and what that recipient believes
+#: when the message arrives, the approved copy quoted in full, and the compliance
+#: entries that copy touches. Everything shared lives in the shared rules and is not
+#: restated per module.
+OUTSTANDING: tuple[str, ...] = ()
 
 #: Not a module manual. Shared rules govern the six sends and name no module, which is
 #: why it carries no `**Module:**` header - see `test_the_shared_rules_file_is_shared`.
@@ -344,50 +365,89 @@ def test_every_authored_scenario_carries_a_situation_distinct_from_its_behaviour
 # --------------------------------------------------- the gap, asserted not implied
 
 
-@pytest.mark.parametrize("module_id", sorted(OUTSTANDING))
-def test_the_outstanding_four_are_outstanding(module_id: str):
-    """P-16 delivered five of nine and said so. This is where that is enforced.
+def test_nothing_is_outstanding_and_no_stray_file_claims_a_name_that_is():
+    """P-16 delivered five of nine and said so; P-16b delivered the other four.
 
-    The moment somebody authors one of these, this test fails - and the fix is to move
-    the name from OUTSTANDING into DELIVERED with its filename, at which point every
-    assertion above starts applying to it. A partial delivery that fails loudly when it
-    is completed is a partial delivery nobody can lose track of.
+    **This test is not parametrised, and that is the change P-16b made rather than an
+    oversight.** It was `@pytest.mark.parametrize("module_id", sorted(OUTSTANDING))`,
+    which was right while four names were in the list and becomes a *skip* the moment
+    the list empties - and a skip reports in the same green summary line as a pass. The
+    thing this file exists to prevent is a gap that reports itself as filled, so the
+    test that guards the gap must not be the one that quietly stops running.
 
-    If this fails and you did NOT author a manual, something else created a file for one
-    of these module ids, and that is the `lender_match` shape: a name registered to
-    clear a line. Read it before you keep it.
+    So it now asserts both halves explicitly. That OUTSTANDING is empty, which is a
+    statement about the nine that a reader can see failed if it stops being true. And,
+    for any name that IS in it, that no manual and no scenario file has appeared for
+    that name - the original assertion, kept whole, because the day a tenth module is
+    bound this is what makes authoring its manual visible instead of optional.
+
+    If the loop below ever fails, the fix is to move the name into DELIVERED with its
+    filename, at which point every assertion above starts applying to it. If it fails
+    and you did NOT author a manual, something else created a file for that module id,
+    and that is the `lender_match` shape: a name registered to clear a line. Read it
+    before you keep it.
     """
-    stray_manuals = [
-        p.name
-        for p in INSTRUCTIONS.glob("funnelforge-*.md")
-        if (m := MODULE_LINE.search(_text(p))) is not None and m.group(1) == module_id
-    ]
-    assert not stray_manuals, (
-        f"{module_id} is listed OUTSTANDING and {stray_manuals} declares itself its "
-        "manual. Move it into DELIVERED so the rest of this file applies to it."
+    assert OUTSTANDING == (), (
+        "OUTSTANDING is no longer empty. That is not a failure by itself - it is how a "
+        f"newly bound module announces that nobody has written its manual: {OUTSTANDING}. "
+        "Author it, or record here why it is owed and by whom, and then update this "
+        "assertion deliberately rather than to make a red line green."
     )
-    scenario = SCENARIOS / f"{module_id}.yaml"
-    assert not scenario.exists(), (
-        f"{module_id} is listed OUTSTANDING and scenarios/{module_id}.yaml exists. "
-        "Move it into DELIVERED so the rest of this file applies to it."
-    )
-
-
-def test_the_four_outstanding_are_all_approved_sends():
-    """Why these four and not four others, asserted rather than asserted in prose.
-
-    The subset P-16 delivered covers all three non-send modules plus two of the six
-    approved sends - the canonical one and the one whose audience and compliance
-    exposure differ most. What is left is four sends that share a request shape, two
-    refusals, a failure table and a retry rule with a manual that already exists, which
-    is the cheapest four to hand over and the reason the split fell here.
-    """
     for module_id in OUTSTANDING:
-        binding = MODULES[module_id]
-        assert binding.template_id is not None, (
-            f"{module_id} is OUTSTANDING but binds no template, so it is not one of the "
-            "six approved sends. The subset rationale in this file no longer holds - "
-            "re-read it before changing the lists."
+        stray_manuals = [
+            p.name
+            for p in INSTRUCTIONS.glob("funnelforge-*.md")
+            if (m := MODULE_LINE.search(_text(p))) is not None
+            and m.group(1) == module_id
+        ]
+        assert not stray_manuals, (
+            f"{module_id} is listed OUTSTANDING and {stray_manuals} declares itself its "
+            "manual. Move it into DELIVERED so the rest of this file applies to it."
         )
+        scenario = SCENARIOS / f"{module_id}.yaml"
+        assert not scenario.exists(), (
+            f"{module_id} is listed OUTSTANDING and scenarios/{module_id}.yaml exists. "
+            "Move it into DELIVERED so the rest of this file applies to it."
+        )
+
+
+def test_the_six_approved_sends_are_the_six_the_manual_set_says_they_are():
+    """The shape claim the manual set rests on, asserted against the dispatch map.
+
+    **This replaces `test_the_four_outstanding_are_all_approved_sends`**, which looped
+    over OUTSTANDING to prove that the four handed over were approved sends sharing a
+    request shape with a manual that already existed. That was a live assertion while
+    the list had four names in it and became a vacuous pass when it emptied - the loop
+    body simply stops executing, and nothing says so.
+
+    What it was really proving is still worth proving and is now true of the whole set:
+    six modules bind a template and three do not, and every manual in this set is
+    written on that split. The send manuals lean on `send_intake_acknowledgment` for a
+    request shape, two refusals, a failure table and a retry rule; the three non-sends
+    do not, because they have none of it. If a binding ever changes side - a send loses
+    its template, or `capture_contact` gains one - the manual that leans on the shared
+    shape is describing a module that no longer has it, and this is where that surfaces.
+    """
+    sends = {m for m, b in MODULES.items() if b.template_id is not None}
+    non_sends = set(MODULES) - sends
+
+    assert len(sends) == 6, (
+        f"the manual set is written around six approved sends and finds {len(sends)}: "
+        f"{sorted(sends)}. `funnelforge-approved-send-rules.md` and every send manual "
+        "state six; re-read them before changing a binding."
+    )
+    assert non_sends == {
+        "schedule_blueprint_call",
+        "capture_contact",
+        "read_funnel_analytics",
+    }, f"the three non-send modules are not the three the manuals name: {sorted(non_sends)}"
+
+    for module_id in sorted(sends):
+        binding = MODULES[module_id]
         assert binding.is_mutating is True
-        assert binding.idempotency_support == "at_most_once"
+        assert binding.idempotency_support == "at_most_once", (
+            f"{module_id} declares idempotency_support "
+            f"{binding.idempotency_support!r}. Shared rule 8 and every send manual's "
+            "retry rule are written on `at_most_once`, and V31's refusal is over "
+            "exactly that shape - a change here changes what those manuals teach."
+        )
