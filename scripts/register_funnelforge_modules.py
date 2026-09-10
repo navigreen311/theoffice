@@ -48,6 +48,7 @@ from adapters.funnelforge.modules import manifest  # noqa: E402
 from broker.db import connection  # noqa: E402
 from generators import forge_module_rows  # noqa: E402
 from generators.pack import load_pack  # noqa: E402
+from generators.validator import validate  # noqa: E402
 
 FORGE_ID = "funnelforge"
 API_VERSION = "1.0.0"
@@ -100,11 +101,24 @@ async def run(confirm: bool) -> int:
     async with connection() as conn:
         written = await forge_module_rows.apply(conn, generated, confirmed=True)
         await conn.commit()
+        v31 = (await validate(pack, conn)).get("V31")
     print(f"\n{len(written)} row(s) written: {', '.join(written)}")
     print(
         "verification_method=adapter_manifest. That says a handler is bound to each "
         "name. It does not say the handler works, or that it does what the name says."
     )
+    # Read V31 back here, where the rows just became readable. Writing rows is the
+    # act that moves this rule off NOT_RUN, and the verdict it moves to is the whole
+    # reason B33 says the rows land before or with the Pack edit and never after:
+    # run in the wrong order, V31 was mute at the moment the declaration arrived and
+    # this answer turned up later, attached to a registration step rather than to the
+    # edit that caused it. Printing it here attaches it to the act that produced it.
+    print(f"\nV31 is now {v31.verdict.value}: {v31.message}")
+    if v31.verdict.value == "FAIL":
+        print(
+            "That refusal is the finding, not a regression. Do not soften the tier "
+            "or the rule to clear it - see docs/blocking.md B38."
+        )
     return 0
 
 

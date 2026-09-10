@@ -3629,3 +3629,173 @@ attachment problem on three templates. Findings 1, 2 and 3 above raise a reply c
 self-referential contents on one, and an unsubscribe on one. **They retire together or not at
 all**, because they are one question wearing four faces: approved copy was written for a mail
 system, and it was bound to a transactional send route that has five fields.
+
+---
+
+## B39 — P-13b: the ordering B33 states is now enforced, and the patch it governs had already stopped applying
+
+**Scope:** venture-scoped: burkham-wickmont
+
+**Written by P-13b, 10 September 2026.** P-13 built the FunnelForge binding and deliberately
+did not apply `docs/plans/funnelforge-position-DEFERRED.patch`, edit any Pack, or run
+`scripts/register_funnelforge_modules.py`. This package owns that deferred patch and the rule
+attached to it:
+
+> The registry rows land before or with the patch, never after, or V31 goes mute.
+
+**That sentence has been correct and unenforced since 2026-09-09.** It was restated in B33, in
+`docs/plans/funnelforge-binding-RECORD.md` twice and in `PARALLEL_BUILD.md`, and between all
+four of them there was nothing a person could run that would refuse the wrong order. This entry
+records what the rule actually costs when it is inverted, what now enforces it, and the two
+things found on the way.
+
+### Why V31 goes mute — from the rule, not from the sentence
+
+`generators/validator.py`, `unattended_writes`. For each position at `auto_execute` it looks up
+every module the position operates in `forge_module_registry`. A module with no row produces no
+`ModuleShape`, so it lands in `unresolved` and **never reaches the `unsafe_unattended` test at
+all**. With every module unresolved there are no refusals, and `_v31_unattended_writes` returns
+`None`, which `validate` records as NOT_RUN.
+
+**Measured, both directions, against the seeded world on 10 September:**
+
+| | Gate 2 | V6 | V31 |
+|---|---|---|---|
+| Pack as it stands | **0 FAIL**, 3 NOT_RUN | PASS | PASS (nothing at `auto_execute`) |
+| patch applied, rows absent | 3 FAIL | **FAIL** — nine modules not in the registry | **NOT_RUN** |
+| patch applied, rows present | 3 FAIL | PASS | **FAIL**, naming seven modules |
+
+**The two wrong-way-round states have the same FAIL count and opposite meanings.** Three either
+way, so anything counting verdicts sees no difference. What differs is *which* problem is on the
+record. Rows-missing says **a measurement is absent** and its remedy is to run a script;
+rows-present says **a declaration is refused** — seven `at_most_once` sends operated with nobody
+in the path — and its remedy is an idempotency key on FunnelForge's send path or a lower tier.
+Different problem, different owner, different fix, indistinguishable by count.
+
+**And inverting the order misattributes the finding.** V31's own NOT_RUN message tells the
+reader to go and register the rows. Doing so flips it to FAIL — so the refusal surfaces attached
+to the registration step, rather than to the Pack edit that introduced the declaration. The
+provisioning run's evidence for the intervening window records `not_run: [V31]` and no trace
+that an unattended agent was declared over six emails and a booking.
+
+### "Before" was never available. Only "with" — and that is why it needed a command
+
+`scripts/register_funnelforge_modules.py` takes the human half of each row from the Pack's
+`modules_expected`. While the edit is held the Pack declares no `funnelforge` binding, so the
+script prints *"declares no funnelforge binding. Nothing to register"* and exits 1. **The rows
+cannot precede the patch.** The rule as written offered two options and one of them does not
+exist, which is part of why it kept being restated instead of enforced.
+
+**What makes "with" reachable is that the patch has always been two independent hunks.**
+`forge_dependencies` carries the binding; `positions_required` carries the position.
+
+> **Corrected by the coordinator, 11 September 2026, before merge.** This paragraph first read
+> *"V31 iterates positions and never reads the binding block."* **V31 does read the binding
+> block** — `generators/validator.py:1150-1152` builds its Forge set as
+> `{b.forge for b in pack.forge_dependencies.forge_bindings} | {operating_forge}` and scopes its
+> `forge_module_registry` query to exactly that set.
+>
+> **The order is right and the false premise hid why.** The binding half is safe to land alone
+> for a different reason: `unattended_writes` iterates `positions_required`, so with no
+> FunnelForge position declared, no module of that Forge is examined and `unresolved` stays
+> empty. And the binding must come **first** for the reason the original sentence denied — with
+> no binding, `funnelforge` is not in V31's Forge set, so registry rows written in step 2 are
+> never queried and the rule would report NOT_RUN *even with all nine rows in place.* Anyone
+> "simplifying" this order on the strength of the withdrawn sentence would reintroduce the exact
+> silence B33 exists to prevent.
+
+`scripts/land_funnelforge_position.py` splits the held patch on that line and does the whole
+thing as one command:
+
+1. apply the `forge_dependencies` hunk — no position is declared yet, so V31 examines no module
+   of this Forge and cannot go mute here; it also puts `funnelforge` into V31's Forge set, which
+   is what makes step 2's rows readable at all;
+2. `register_funnelforge_modules.py --confirm` — which now has a declared half to read;
+3. verify nine rows exist and none is `verification_method = 'hand'`;
+4. apply the `positions_required` hunk;
+5. **re-read V31. NOT_RUN reverts both hunks and exits 1.**
+
+Step 5 is the enforcement; steps 1–4 are only the method. It checks the property the ordering
+exists to produce, so an ordering broken some future way is still caught. **A V31 FAIL is kept,
+not reverted** — a refusal is an answer, and the seven-module refusal is the finding this
+binding was built to produce.
+
+Between steps 1 and 4 V6 FAILs for a few seconds: nine modules declared, no rows. That window is
+deliberate and it is the right one of the two — it names itself accurately, and any failure
+reverts every hunk applied.
+
+### What stops the wrong order being committed
+
+**The database half is the script. The repository half is a receipt.** Step 5 writes
+`docs/plans/funnelforge-landing-receipt.json` recording the nine rows and their
+`verification_method` as they stood when the position landed.
+`tests/validator/test_funnelforge_landing_order.py` fails if the Pack operates FunnelForge
+modules at `auto_execute` and no receipt accounts for every one of them. So `git apply`-ing the
+patch by hand and committing it is a red build naming B33 — verified by doing exactly that.
+
+**This is enforcement, not documentation, and the limit is worth stating plainly: the wrong
+order can still be typed. It can no longer be committed, and it can no longer be left in the
+database by the supported command.** Closing the last gap — making the wrong order unreachable
+even by hand — would need the Pack edit to stop being a file a human can apply at all, which is
+a bigger change to how Packs are edited than this package should make on its own.
+
+### Finding 1 — the deferred patch had stopped applying, and the test that guards it could not see
+
+`git apply docs/plans/funnelforge-position-DEFERRED.patch` — the command the record gives, whose
+promise is that the position returns *"exactly as authored, comment and all"* — **failed on
+every Windows checkout.** `error: patch does not apply`, nothing about the reason.
+
+The blob is LF. `.gitattributes` ended in `* text=auto`, which gave a `.patch` CRLF on checkout
+where `core.autocrlf` is on, and `git apply` compares context lines byte for byte: every line
+mismatches and the patch is refused whole. It worked in CI, which checks out on Linux — the same
+*"luck, not design"* that file already records for `bootstrap.sh`.
+
+**`tests/adapters/test_funnelforge_rows.py` exists in part to stop this**, and says so: *"a patch
+nothing checks is a patch that stops applying, and the record's promise that it can be re-applied
+would then be a claim with nothing behind it."* It reads the module names out of the patch with
+`splitlines()`, which is indifferent to carriage returns. **The guard checked the payload; the
+property it was protecting was appliability.** It was green throughout.
+
+Fixed by pinning `*.patch text eol=lf`, one line, on the reasoning `.gitattributes` already gives
+for `*.sh`. **The patch file itself is not edited** — the committed blob was never wrong.
+
+The new test runs the documented command. Writing it reproduced the same mistake one layer up:
+the first version read the patch with `read_text`, whose universal-newline handling normalised
+the defect away before `git apply` could see it, and it passed against a deliberately CRLF-ed
+patch. It is bytes end to end now, and it was re-checked against that CRLF-ed patch before being
+believed.
+
+### Finding 2 — the re-application recipe in the RECORD cannot come out the way it says
+
+`docs/plans/funnelforge-binding-RECORD.md` closes: *"Gate 2 should return to 0 FAIL with V31
+finally **running** — and, per this package's own finding, **failing on seven of the nine**"*.
+
+**Those two cannot both happen.** A V31 FAIL *is* a Gate 2 FAIL. Measured with rows registered
+and the position landed, Gate 2 is 3 FAIL — V11, V23 and V31. P-16b closes V11 and V23 when the
+four outstanding manuals exist. **V31 does not close.** It refuses seven of the nine at
+`auto_execute` and it is right to.
+
+**So the patch is not landable at all today, and not merely un-landable until the manuals are
+written.** What makes it landable is one of exactly two things, both outside this repository:
+an idempotency key on FunnelForge's send path, or a decision to operate the position below
+`auto_execute` — which P-13 argued at length would be a different thing wearing the name, since
+step 7 of the client library turns anything below that tier into a proposal and makes no HTTP
+call.
+
+**P-13b therefore did not land the patch.** Burkham's Gate 2 is 0 FAIL before this package and
+0 FAIL after it, byte-identical report. The landing was rehearsed end to end against a
+temporarily registered Forge and reverted, which is where the numbers in the table above come
+from.
+
+### The prior blocker is still the first one
+
+`funnelforge` is not in `forge_registry`, and `forge_module_registry.forge_id` references it. No
+row can be written, so the rows cannot land with the patch, so the patch cannot land. There is no
+`base_url` because the containers publish no host ports and the adapter is not deployed. The
+landing script refuses on this first and says so in those terms.
+
+### Not touched
+
+No FunnelForge manual, no scenario set, and not `tests/test_funnelforge_manuals.py` — P-16b owns
+those and was running concurrently. No rule was weakened. `packs/burkham-wickmont.draft.yaml` is
+unchanged.
