@@ -3278,6 +3278,76 @@ still quotes `is_assignable` with `revoked_at IS NULL` in it and reads as though
 the revocation control. That file is outside P-17's MAY MODIFY list, so it is named here rather
 than edited.
 
+## B37 — the hand-set `revoked_at` is not a dead branch: it refuses two agents at call time
+
+**`theoffice`** · Found 2026-09-10 by the coordinator, tracing what P-17 left. **This corrects
+both P-17's closure note and B35: each described `broker/grants.py:221` as a dead branch
+carrying the same defect. It is not dead. It is the live enforcement path.**
+
+### What is actually true
+
+`client/office_client.py:139` calls `grants.resolve_grant`, and `grants.py:221`:
+
+```python
+if row["grant_revoked_at"] is not None:
+    raise NotGranted("grant is revoked", grant_id=..., revoked_at=...)
+```
+
+**So `agent_forge_grant.revoked_at` is enforced on every call.** The two hand-set tombstones
+are refusing two real agents right now:
+
+```
+capitalforge/client_read   Amelie Wystan   revoked 2026-09-03 14:24:07
+capitalforge/client_read   Brina Arvane    revoked 2026-09-03 14:45:57
+```
+
+**With no `revocation` row and no audit event.** The `revocation` table holds one record ever —
+a Greenstone venture stop from 25 August, reinstated nine seconds later, both audit events
+present. Nothing accounts for these two.
+
+### Two revocation checks on one call, and only one of them has a ritual
+
+| check | source | has a reason, an actor, a blast radius, a reinstatement path |
+|---|---|---|
+| `grants.py:221` | `agent_forge_grant.revoked_at` | **no** — a bare timestamp |
+| `office_client.py:248` | `revocation` table via `check_revocations` | **yes**, all four |
+
+`revoke()` writes the second and **never** the first. So the documented, audited, reinstatable
+revocation path **cannot produce the refusal that is currently in force**, and the refusal that
+is in force **cannot be explained, attributed, or reinstated** by any code in the repository.
+
+**An agent blocked this way is told "grant is revoked" and there is nothing to read.**
+`Revoked` — the exception from the other path — carries a scope, a revocation id and a reason,
+precisely because *"an agent blocked by a Forge-wide revocation should be told that, not told
+its own grant is gone."* The column path gives the second answer with none of the first's
+evidence.
+
+### Why P-17 and the coordinator both called it dead
+
+**Because Gate 7's use of it was dead** — filtering on a column nothing writes, which is what
+P-17 fixed. The enforcement use was never checked, by either of us. **P-17 was told not to
+touch `grants.py` and correctly did not; the error is in the description it inherited from
+B35, which was mine.**
+
+That is Caveat 14 once more: *dead branch* was a claim about one call site generalised to a
+column, and the generalisation was never read.
+
+### What retires it
+
+**Two decisions, and the first is urgent in a way the rest of this file is not.**
+
+1. **What are those two tombstones?** Somebody stopped two agents on 3 September and left no
+   reason. Either that stop is still wanted — in which case it should be re-expressed through
+   `revoke()` so it carries an actor and a reason and can be lifted — or it was a hand-edit
+   during Phase 0 bootstrapping that nobody meant to leave, in which case **two agents are
+   being refused by an accident that is fifteen days old.**
+2. **Then the column.** P-17's proposal stands: a three-step narrowing. It is now clear the
+   narrowing must end with `revoke()` writing both, or with `resolve_grant` reading only the
+   `revocation` table — **not with the column quietly staying as a second, ritual-free way to
+   stop an agent.**
+
+**No data was changed to record this.** The tombstones are exactly as found.
+
 ## B36 — nothing runs a battery, and a unit-B PASS could not be recorded if one arrived
 
 **`cross-cutting`** · Found 2026-09-09 by P-04, building the unit-B submitter. **Both halves
