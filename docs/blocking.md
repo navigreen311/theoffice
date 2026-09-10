@@ -3335,10 +3335,39 @@ from `forge_operating_instruction`, keyed on the instruction hash the submission
 because a department-scoped curriculum is not expressible in the payload (P-04 established
 this from `instruction_set_ref.module_id` being a required `str`; entry 28).
 
-So unit B needs a different source for the same fact. **`forge_registry.api_version` is the
-obvious candidate** and it is not the same guarantee: it is the version live *now*, not the
-version a run was judged against. Whether that is honest enough for a certification's basis is
-a real question, not a lookup.
+So unit B needs a different source for the same fact.
+
+> **Amended 2026-09-09, after reading what P-04 actually built.** This paragraph originally
+> said *"`forge_registry.api_version` is the obvious candidate"*. **It is the weaker answer,
+> and P-04's own design implies a better one.**
+>
+> P-04 built `simforge.department_basis_hash(module_hashes)` — a composite over the set of
+> instruction hashes the department's modules were handed over under, domain-separated by an
+> `office/unit-b/v1` prefix so it **cannot collide with a real instruction hash**. Its
+> docstring is explicit that a reader taking it into `forge_api_version_in_force` gets a
+> refusal, *"which is correct and is the point"*, and `recompute_staleness` already exempts
+> unit B from the live-hash comparison in writing.
+>
+> **So the basis is already named honestly. What is missing is only the api_version field.**
+> And the same `module_hashes` that compose the basis each resolve to a
+> `forge_operating_instruction` row carrying a `forge_api_version` — **the versions those
+> instructions were actually judged against**, which is the guarantee `forge_registry` cannot
+> give.
+>
+> **Two things make this a question rather than a lookup, and both are P-03's shape:**
+>
+> 1. **The composite is one-way.** The sweep holds the hash, not the set. Recovering the
+>    module list for a `(department, forge)` pair means going back to the Pack, which the
+>    sweep does not read. **Either the submission stores the members, or the sweep gains a
+>    source it does not have.**
+> 2. **The versions may disagree.** If a department's modules were handed over under
+>    instructions carrying different `forge_api_version` values, there is no single answer —
+>    the same ambiguity P-03 met on unit A and resolved by taking *the row in force at
+>    `submitted_at`*, refusing when more than one was. **Unit B needs the same decision made
+>    deliberately, not a `max()` or a first-row.**
+>
+> **`forge_registry.api_version` remains available and is honest about being weaker** — the
+> version live now. If it is chosen, the certification should say that is what it means.
 
 **P-04 locked the refusal in a test rather than reaching into P-03's files.** That is the right
 call — the failing behaviour is now pinned, so whoever fixes it cannot do so silently.
