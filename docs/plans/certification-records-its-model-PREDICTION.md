@@ -130,3 +130,82 @@ plus a CHECK is exactly the shape that has moved `Migrations are reversible` bef
 ## Scored
 
 *(filled in after the run, below the line, without editing anything above it)*
+
+*Nothing above this line was edited after the run.*
+
+### P1, P2 — CORRECT, and P2's trap was real
+
+**theoffice: Alembic `0035`**, unclaimed as predicted, re-checked rather than inherited.
+**simforge: both** a Prisma migration (`20260910000000_certification_records_its_model`) and
+the SQLAlchemy mirror.
+
+**And the trap fired exactly as described.** The SimForge suite passed with the mirror edited
+and would have passed with the migration absent — `conftest.py` builds from `create_all` and
+never sees `schema.prisma`. So the change carries
+`tests/unit/test_certification_records_its_model.py`, which asserts all three: the mirror has
+the column, `schema.prisma` has it, and **a migration under `packages/db/migrations` actually
+adds it.** The third is the one that matters — a declared column nobody applied reads as done.
+
+### P3 — CORRECT ON THE DATA AND WRONG ON THE RULE. A test caught it.
+
+The bootstrap half held: four certified rows, all `simforge_verdict IS NULL`, all survived,
+and a naive *"certified implies a model"* CHECK would have refused every one.
+
+**What the prediction missed: TIMEOUT.** The rule as written — *required when
+`simforge_verdict IS NOT NULL`* — refuses a timed-out run, because TIMEOUT **is** a verdict.
+`test_an_unanswered_run_still_resolves_to_timeout_and_in_training` failed, and it was right to.
+
+`gate_result_for` **derives** TIMEOUT and IN_PROGRESS from the window when nothing was stored.
+A timed-out battery has no model for **exactly the same reason a bootstrap does not** — nothing
+answered — and the prediction reasoned about one of those cases and not the other.
+
+The rule now mirrors `simforge.TERMINAL_VERDICTS`, **which P-03 had already named for this
+distinction** when it decided which results may stamp `result_received_at`. It is imported
+rather than restated: three spellings of one set is how two of them drift, and there are
+already two because SQL cannot import.
+
+**The prediction was one case short of a rule that was otherwise right, and the test found the
+case rather than a re-read.**
+
+### P4 — CORRECT ON THE NEED, WRONG ON THE KEY
+
+The manifest does refuse an unenumerated field, and the field did have to land in the same
+change. **The key is `get_gate_result`, not `gate_result`** — asserted from memory and
+corrected by reading the file.
+
+Also checked, and worth recording as a near miss: the manifest has a `_deliberately_absent`
+section listing fields that **must never exist**, all of them scenario-content leaks. A model
+name is provenance rather than content, so it belongs in the allowed list — but that was
+verified rather than assumed, and the opposite answer was available.
+
+### P5 — HELD, and the open question stayed open
+
+`provider/model`, from `provider_label(runtime.provider)` — **the provider that actually
+answered**, never `settings.llm_provider`, because `auto` resolves to Ollama or the stub
+depending on a ping and config records an intention rather than a fact.
+
+Two cases the prediction did not anticipate and the code now states: `CachedLLMProvider`
+reports its **inner** provider, because a cache is not a candidate; `StubProvider` reports
+`stub` with no model, deliberately ugly, so a stub answer can never look like a certification
+earned from a model.
+
+**The weight-digest question is still open and still recorded as open.**
+
+### P6 — the file list held. P7, P8 — read rather than estimated
+
+**theoffice 1342 → 1342** (five new tests, four migrated fixtures — the count did not move
+because the new tests replaced nothing and the suite had already grown). **simforge 865 → 870.**
+
+### What the prediction did not have, and cost the most
+
+**Four fixtures across two repos were building rows the production path cannot build** —
+contract conftest, `world.py`, isolation conftest, two verdict helpers, and twelve payload
+dicts. 368 errors at the peak. Every one was the CHECK doing its job on a fixture written
+before the rule, and none was a workaround.
+
+**And three coordinator errors, none predicted:** a column added to an INSERT without its
+placeholder (17 vs 16, caught by counting); `EXPECTED_SCHEMA_REVISION` not bumped — the caveat
+this coordinator wrote into `PARALLEL_BUILD.md`; and **a lint check piped to `tail`, which
+masked ruff's exit code and shipped four E501s into a commit.** That last is Caveat 12,
+committed in the same session it has been quoted at package agents. Every check afterwards
+reads `$?`.
