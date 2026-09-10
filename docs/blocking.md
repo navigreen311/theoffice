@@ -3277,3 +3277,87 @@ no-op today.
 still quotes `is_assignable` with `revoked_at IS NULL` in it and reads as though the column is
 the revocation control. That file is outside P-17's MAY MODIFY list, so it is named here rather
 than edited.
+
+## B36 — nothing runs a battery, and a unit-B PASS could not be recorded if one arrived
+
+**`cross-cutting`** · Found 2026-09-09 by P-04, building the unit-B submitter. **Both halves
+verified independently by the coordinator before recording, because the last item written this
+way needed three retractions.** Each claim below names the line it was read from.
+
+**These are what actually block certification.** B32 spent three versions on `DeptCert` and the
+department roster, and was withdrawn: unit B does not write `DeptCert` and the roster blocks
+nothing on this path. **Neither blocker is about departments at all.**
+
+### Half one — nothing posts a run outcome, for either unit
+
+SimForge has two `gate-result` routes and they are not the same thing:
+
+| route | direction | on the Office bridge? |
+|---|---|---|
+| `GET /operation/gate-result/{run_ref}` | The Office **reads** a verdict | **yes** — `gate_result` in `routers/office.py::MODULES` |
+| **`POST /operation/gate-result`** | a battery **reports** its outcome | **no** |
+
+The Office bridge exposes exactly three modules: `gate_result`, `submit_curriculum`,
+`run_start`. **The posting route is not among them**, and nothing in either repository calls
+it outside its own definition — grepped across both trees.
+
+**So `run_start` opens a run and nothing ever closes it.** `gate_result_for` returns
+`run.verdict` when one exists and otherwise *derives* an answer from the window, so every
+Office-opened run reads **TIMEOUT**, which `VERDICT_TO_STATE` maps to `in_training`.
+
+**P-04 framed this as "nothing calls the callback for an Office-opened run". The verified
+shape is wider and the correction matters:** the poster was never supposed to be The Office.
+`POST /gate-result` is guarded by `require_role("compliance_analyst")` — SimForge's own
+internal path — and **P-05b established the battery must run inside SimForge**, because an
+external runner cannot deliver a probe it is forbidden to fetch (ADR-0050).
+
+**The gap is that nothing runs a battery.** P-05b said so in its own words and left it open
+deliberately: *"ADR-0050 settles that it must be in-process and settles nothing about what puts
+the questions to the agent."* **This affects unit A exactly as much as unit B** — P-03's
+ingest is correct and will read TIMEOUT forever until something scores a run and posts it.
+
+### Half two — a unit-B PASS is refused by a guard doing its job
+
+`broker/sweeps.py:543-548`:
+
+```python
+unit, _rubric_kind = simforge.submission_unit(sub["module_id"])
+if unit == "A":
+    api_version = await certification.forge_api_version_in_force(...)
+```
+
+**The recovery is gated on unit A.** A unit-B result therefore reaches `record_result` with no
+`forge_api_version`, `certified_records_its_basis` refuses it, and the sweep reports `failed`.
+
+**The guard is right and the omission is the defect.** P-03 built that recovery for unit A
+from `forge_operating_instruction`, keyed on the instruction hash the submission stored —
+*the version actually judged, not the one live today*. **Unit B has no instruction hash**,
+because a department-scoped curriculum is not expressible in the payload (P-04 established
+this from `instruction_set_ref.module_id` being a required `str`; entry 28).
+
+So unit B needs a different source for the same fact. **`forge_registry.api_version` is the
+obvious candidate** and it is not the same guarantee: it is the version live *now*, not the
+version a run was judged against. Whether that is honest enough for a certification's basis is
+a real question, not a lookup.
+
+**P-04 locked the refusal in a test rather than reaching into P-03's files.** That is the right
+call — the failing behaviour is now pinned, so whoever fixes it cannot do so silently.
+
+### Why neither is a small fix
+
+**Half two is a few lines and a decision** — which source, and whether a live api_version can
+stand as a judged one.
+
+**Half one is a component that does not exist.** A runner that holds an agent, receives probes
+one at a time through P-05b's `ask` callback, scores them, and posts the result. ADR-0050
+constrains its shape and settles nothing about who builds it.
+
+### What this changes about the certification run
+
+**Nothing certifies today, for either unit**, and the reason is not the one this file has been
+carrying. B30 said certification had two missing producers and P-03 and P-04 built both. **They
+are correct and they have nothing to consume**, because the thing that produces a verdict has
+never existed.
+
+**Recorded now rather than found at the run**, which is the same reason GAP-5 was answered
+early — and unlike GAP-5, this one was verified before it was written down.
