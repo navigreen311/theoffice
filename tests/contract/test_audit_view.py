@@ -107,6 +107,45 @@ async def test_the_glossary_says_what_each_event_means_and_what_writes_it(api):
         assert event["written_by"].startswith("broker."), event["event_type"]
 
 
+async def test_an_identifier_inside_a_meaning_is_marked_as_one(api):
+    """A meaning that names a table or a column must quote it, so the console can set it.
+
+    The console's rule is `Term`'s: human label as primary text, identifier as 11px muted
+    mono, never the identifier alone. A glossary entry is the one place that rule cannot
+    be applied by the component that renders it, because the identifier is *inside a
+    sentence* rather than beside a label. Backticks are how the sentence says which words
+    those are, and `components/term.tsx`'s `Prose` is what reads them.
+
+    Caught the hard way: `grant_tombstone_cleared` named three real things -
+    `agent_forge_grant`, `revoked_at`, `resolve_grant` - and the console rendered the
+    string raw, so the backticks appeared on screen and the identifiers inside them were
+    set in prose colour. The console smoke check failed it as three identifiers rendering
+    as primary text on /audit.
+
+    **This is the check at the source, and it is the half that generalises.** The smoke
+    check finds it on a rendered page, once a browser is up and a run has been seeded;
+    this finds it in the string, the moment somebody writes the next event. The fix for a
+    failure here is a pair of backticks, never an entry in the smoke check's allow-list -
+    that list is for words that only look like identifiers, and these are the real thing.
+    """
+    _id, token = await make("Ivan", "ivan@audit.example.com")
+    events = (await api.get("/api/audit/events", headers=auth(token))).json()["events"]
+
+    identifier = re.compile(r"\b[a-z][a-z0-9]*_[a-z0-9_]+\b")
+    unmarked = {
+        event["event_type"]: found
+        for event in events
+        # Quoted runs are already marked; what is left is the plain prose.
+        if (found := identifier.findall(re.sub(r"`[^`]+`", "", event["meaning"])))
+    }
+
+    assert not unmarked, (
+        f"these meanings name identifiers without marking them: {unmarked}. "
+        "Wrap each in backticks so the console can set it in 11px muted mono - an "
+        "identifier in prose colour is the thing the Term doctrine refuses."
+    )
+
+
 # ------------------------------------------------------- verification as evidence
 
 async def test_the_chain_state_reports_what_was_verified_when_and_how(api):

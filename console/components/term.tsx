@@ -94,3 +94,45 @@ export function Glossary({ terms }: { terms: string[] }) {
     </details>
   );
 }
+
+/**
+ * Prose that quotes a code identifier, with the quoted run set as one.
+ *
+ * `Term` covers a stored value that has a label. This covers the other shape: a sentence
+ * *about* the system, which has to name a table, a column or a function to say anything
+ * useful. The audit glossary in `broker/audit_events.py` already marks those runs with
+ * backticks and the console rendered the string raw — so the backticks themselves reached
+ * the screen, and the identifiers between them were set in the same size and colour as
+ * the sentence around them.
+ *
+ * That is the failure `Term`'s doctrine exists to prevent, arriving through the one door
+ * it did not cover. **The mark-up said which words were identifiers and nothing read it.**
+ * The console smoke check caught it as three identifiers rendering as primary text on
+ * /audit; the fix is to honour the marks, not to widen the check's allow-list, which
+ * would have made the sentence pass while still reading wrong.
+ *
+ *     A hand-set agent_forge_grant.revoked_at was removed.   ← before: 12px, prose colour
+ *     A hand-set `agent_forge_grant.revoked_at` was removed. ← after:  11px mono, muted
+ *
+ * Splits on PAIRED backticks only. A lone backtick is left as written rather than
+ * swallowing the rest of the sentence into a code span — a rendering bug should not be
+ * able to hide the text it was given.
+ */
+export function Prose({ text }: { text: string }) {
+  const parts = text.split(/`([^`]+)`/g);
+
+  return (
+    <>
+      {parts.map((part, index) =>
+        // Odd indices are the capture groups, which is to say the quoted runs.
+        index % 2 === 1 ? (
+          <code key={index} className="font-mono text-ident text-ink-muted">
+            {part}
+          </code>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
