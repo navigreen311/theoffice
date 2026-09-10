@@ -246,7 +246,8 @@ async def test_a_certified_result_must_record_its_basis(registered_forge, seed_a
         with pytest.raises(CertificationError):
             await certification.record_result(
                 conn, unit="A", forge_id=forge_id, module_id=module_id,
-                office_agent_id=seed_agent, verdict="PASS", rubric_version="1.0.0", agent_model="ollama/llama3.1:8b",
+                office_agent_id=seed_agent, verdict="PASS", rubric_version="1.0.0",
+                agent_model="ollama/llama3.1:8b",
             )
 
 
@@ -272,7 +273,8 @@ async def test_a_unit_a_cert_with_no_live_instruction_goes_stale(
     async with connection() as conn:
         await certification.record_result(
             conn, unit="A", forge_id=forge_id, module_id=module_id,
-            office_agent_id=seed_agent, verdict="PASS", rubric_version="1.0.0", agent_model="ollama/llama3.1:8b",
+            office_agent_id=seed_agent, verdict="PASS", rubric_version="1.0.0",
+                agent_model="ollama/llama3.1:8b",
             certified_tier="auto_execute",
             # The fixture's forge is at 2.1.0. Passing anything else makes
             # stale_forge fire and the test measures the wrong rule.
@@ -311,7 +313,8 @@ async def test_unit_b_is_not_swept_stale_for_having_no_module(
     async with connection() as conn:
         await certification.record_result(
             conn, unit="B", forge_id=forge_id, department="engineering",
-            verdict="PASS", rubric_version="1.0.0", agent_model="ollama/llama3.1:8b", certified_tier="auto_execute",
+            verdict="PASS", rubric_version="1.0.0",
+                agent_model="ollama/llama3.1:8b", certified_tier="auto_execute",
             instruction_content_hash="d" * 64, forge_api_version="2.1.0",
         )
         await certification.recompute_staleness(conn, forge_id=forge_id)
@@ -381,7 +384,8 @@ async def test_a_real_verdict_still_records_one(registered_forge, seed_agent, ad
     async with connection() as conn:
         await certification.record_result(
             conn, unit="A", forge_id=forge_id, module_id=module_id,
-            office_agent_id=seed_agent, verdict="PASS", rubric_version="1.0.0", agent_model="ollama/llama3.1:8b",
+            office_agent_id=seed_agent, verdict="PASS", rubric_version="1.0.0",
+                agent_model="ollama/llama3.1:8b",
             certified_tier="auto_execute",
             instruction_content_hash="b" * 64, forge_api_version="1.0.0",
             scenario_pack_ref="pack-7",
