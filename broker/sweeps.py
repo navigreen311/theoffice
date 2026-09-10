@@ -598,6 +598,12 @@ async def _ingest_one(
                 score=result.score,
                 threshold=result.threshold,
                 scenario_pack_ref=sub["scenario_pack_ref"],
+                # Straight from the verdict, never defaulted. A model this sweep chose
+                # would be a guess about what answered, and `record_result` refuses an
+                # empty one rather than storing a placeholder a later reader takes for
+                # a fact - the same rule `functions_in_module` follows when The Office
+                # sends 0 instead of inventing a denominator.
+                agent_model=result.agent_model,
                 attested_by="simforge",
             )
         except certification.CertificationError as exc:

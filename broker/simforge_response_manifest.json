@@ -17,7 +17,6 @@
     "much against what threshold. It is not entitled to learn WHY, because a rich",
     "enough explanation of a failure reconstructs the scenario that produced it."
   ],
-
   "submit_curriculum": {
     "purpose": "Acknowledge receipt of a curriculum, and echo the per-module certification levels, the declared absences and the Gate 9.5 flag. It does NOT open a run - see run_start.",
     "fields": {
@@ -33,7 +32,6 @@
       "rejected_reason": "Short enum-like reason if not accepted. Never scenario text."
     }
   },
-
   "run_start": {
     "purpose": "Open the OperationRun a verdict is later read by. The Office mints the run_ref and declares the unit; SimForge records the run and fixes its window.",
     "fields": {
@@ -44,7 +42,6 @@
       "already_open": "True when this ref was already open and the clock was NOT restarted. The signal that a retried hand-over did not extend a hanging run's window."
     }
   },
-
   "get_gate_result": {
     "purpose": "The verdict of a certification run.",
     "fields": {
@@ -58,10 +55,10 @@
       "certified_tier": "auto_execute | propose | suggest. Caps the declared tier.",
       "scenario_count": "How many scenarios ran.",
       "coverage_denominator": "How many there were. Report the denominator.",
-      "completed_at": "When the run finished. A timestamp carries no scenario content."
+      "completed_at": "When the run finished. A timestamp carries no scenario content.",
+      "agent_model": "provider/model that answered the battery, e.g. ollama/llama3.1:8b. Provenance, never content: it names the candidate, not what it said. Required in the record by certified_records_its_basis whenever a real verdict arrives."
     }
   },
-
   "get_certification_status": {
     "purpose": "Current state of a certification, for staleness reconciliation.",
     "fields": {
@@ -71,7 +68,6 @@
       "updated_at": "When SimForge last changed this state. Used for reconciliation only."
     }
   },
-
   "_deliberately_absent": {
     "purpose": "Fields that must never exist. Listed so their absence is intentional and reviewable, not accidental.",
     "fields": {

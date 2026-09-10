@@ -85,9 +85,9 @@ def certified_forge(admin: psycopg.Connection, seed_agent):
             INSERT INTO certification
               (cert_id, unit, office_agent_id, forge_id, module_id, state,
                certified_tier, instruction_content_hash, forge_api_version,
-               rubric_kind, rubric_version, simforge_verdict)
+               rubric_kind, rubric_version, simforge_verdict, agent_model)
             VALUES (%s, 'A', %s, %s, %s, 'certified', 'auto_execute', %s, '1.4.0',
-                    'operation', '1.0.0', 'PASS')
+                    'operation', '1.0.0', 'PASS', 'ollama/llama3.1:8b')
             """,
             (str(cert_id), seed_agent, forge_id, module_id, row[0]),
         )
