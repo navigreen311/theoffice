@@ -2752,109 +2752,69 @@ certified candidates before this and it is blocked on V24 now. **What is fixed i
 not the row.** B28's decision — which rows get migrated, and by whom — is still open and still
 Ivan's.
 
-## B32 — GAP-5: no `DeptCert` has ever existed, and SimForge holds a stale department copy
+## B32 — WITHDRAWN. Three consequences, three retractions, and the blocker was never here
 
-**`cross-cutting`** · Answered 2026-09-09 by the coordinator, read-only. **This was P-04's
-first task and Ivan asked for it the day it was known rather than at P-11.**
+**`cross-cutting`** · Opened 2026-09-09 by the coordinator as GAP-5. **Withdrawn the same day,
+after being wrong three times in one shape.** Kept, not deleted: an item retracted for cause
+teaches something a deleted one does not, and the shape it got wrong is the most repeated
+error in this run.
 
-**CORRECTED TWICE, THE SAME DAY. Both corrections were to the same kind of error: a true fact
-with a wrong consequence hung on it.** The retracted claims are quoted rather than deleted.
-This item is the least reliable thing in this file, and the third version says so at the top
-rather than presenting itself as settled.
+### The three versions, and what each claimed
 
-### What has been true throughout, and is the actual finding
-
-**`DeptCert` holds zero rows.** Not zero for Burkham's departments — **zero for any department,
-including Engineering.** No domain certification has ever existed in SimForge.
-
-**The Office's three `certified` unit-B rows are all `engineering`, all
-`attested_by='bootstrap'`** — *"a grant issued against no scenario run"* — **and correspond to
-nothing in SimForge.** The one department carrying unit-B certification in The Office is the
-one Burkham does not use.
-
-**Unit B is therefore blocked harder than B30 said.** B30 recorded that unit B has no
-submitter, with the implicit assumption that building one would let certification be earned.
-**There is nothing on the other side to earn it from.**
-
-### Correction 1 — the department mapping was never missing
-
-The first version said `administration` and `banking` *"have no counterpart of any spelling"*
-in SimForge, and put two questions to Ivan. He ruled **banking → Finance, administration →
-Executive**. **No mapping was needed and that ruling must not be applied.**
-
-The Village's twelve, read live from `broker.departments`:
-
-```
-Administration, AI_Data, Banking, Engineering, Executive, Infrastructure,
-Marketing, Media_Production, Music_Production, Operations, Publishing, Research
-```
-
-`Administration`, `Banking` and `Operations` are all real Village departments. **Burkham's
-three names are correct exactly as the Pack has them**, and V29/V30 validate against this live
-list and pass.
-
-**The error:** the coordinator compared The Office's departments against SimForge's
-`Department` table and treated that table as the standard. The Office reads the list **live
-from the Village**, and `generators/pack.py` says why, describing this exact failure —
-*"a copy cannot know it has gone stale."* **The field is called `villageKey` and the name was
-taken at its word instead of asking what wrote it.** Caveat 14.
-
-### Correction 2 — the submission does not fail; the certification cannot be issued
-
-The second version said:
-
-> *"a unit-B submission for `Administration` will find no such department in SimForge — not
-> because the mapping is wrong, but because SimForge's roster predates a Village rebuild."*
-
-**Also wrong, and wrong in the same shape as the first: a true fact with the consequence hung
-one step off.** Measured:
-
-| column | type | consequence |
+| # | Claimed | Actually |
 |---|---|---|
-| `OperationRun.departmentId` | `String, nullable=True`, **no FK** | **a unit-B run opens fine** for any department string |
-| `OperationCert.departmentId` | `String, nullable=True`, **no FK** | same |
-| **`DeptCert.departmentId`** | `String, ForeignKey("Department.id")` | **a certification cannot be issued** for a department SimForge has no row for |
+| **1** | `administration` and `banking` are not SimForge departments; **Ivan was asked to rule a mapping** and ruled `banking → Finance`, `administration → Executive` | **The Village is the authority, not SimForge's table.** Its live twelve include `Administration`, `Banking`, `Operations`. Burkham's names were always correct. **The ruling was never needed and must not be applied.** |
+| **2** | The stale roster blocks the unit-B **submission** | `OperationRun.departmentId` is `String, nullable=True`, **no FK**. The run opens for any string. |
+| **3** | The stale roster blocks the unit-B **certification**, because `DeptCert.departmentId` FKs `Department.id` | **Unit B does not write `DeptCert`.** The gate-result callback writes `OperationCertification(unitType="department_context", departmentId=…)` — `String, nullable=True`, **no FK**. `recert.py` says it outright: *"The domain cert table (AgentCert/DeptCert) is a different table and is never touched here."* |
 
-**So the stale roster does not block the submission. It blocks the certification at the end of
-it.** Those are different failures at different points, and P-04 will be built against
-whichever one this item names — which is why getting it wrong mattered enough to correct
-rather than quietly sharpen.
+**Found by P-04, from the receiving side, which is where all three answers were the whole
+time.**
 
-### What this means for P-04, stated once and carefully
+### What survives
 
-**P-04 can submit.** A unit-B run for `Administration`, `Banking` or `Operations` will open,
-because `departmentId` is a free string on the run.
+**Two true facts that block nothing measured:**
 
-**P-04 cannot be satisfied.** No `DeptCert` exists for anything, and one cannot be created for
-`Administration` or `Banking` while SimForge's `Department` table lacks those rows — `DeptCert`
-has a real foreign key to it.
+- **`DeptCert` holds zero rows** — true, and **irrelevant**, because unit B never writes that
+  table.
+- **SimForge's `Department` roster is stale** — nine of thirteen `villageKey` values are not
+  current Village departments. True, and it blocks nothing on this path. It may matter
+  somewhere else; **no claim about where is made here, because that is exactly the move this
+  item got wrong three times.**
 
-**Build it anyway.** A submitter that correctly reports three uncertified departments is a true
-statement and better than B30's silence. **But it must be built knowing it cannot succeed
-yet**, rather than discovering that at P-11 after four packages have merged behind it.
+**The Office's three `certified` unit-B rows are all `engineering` and all bootstrap-issued.**
+Still true. Still not what blocks Burkham.
 
-### What retires it
+### The shape of the error, which is the reason to keep this
 
-1. **SimForge stops holding a department copy**, or refreshes it from the Village and can say
-   when it last did. Nine of its thirteen `villageKey` values are not current Village
-   departments; seven current ones are absent. **The Office already made exactly this fix** —
-   it deleted its copy and reads live, because a copy cannot know it has gone stale.
-2. **A `DeptCert` is actually earned for a Burkham department.** Nothing has ever produced one,
-   so that path is unexercised in exactly the way the Gate 8 handover was until P-01 ran it.
+**Right fact, wrong consequence — three times, and each time the consequence was drawn from a
+table adjacent to the correct one.** `Department` instead of the Village. `OperationRun`
+instead of the submission path. `DeptCert` instead of `OperationCertification` — **one row
+above the row the conclusion actually needed, in a file the item had already read.**
 
-**Neither is a decision for Ivan.** The two questions this item originally asked him are
-withdrawn.
+Every version measured something real and then reasoned one step past what it had measured.
+**That is Caveat 14 with the grep done correctly and the question asked of the wrong object**,
+and it is more dangerous than an unmeasured claim, because each version arrived carrying
+evidence.
 
-### A note on this item's reliability
+**A package with this record would have been handed back after the second retraction.** This
+one was written by the coordinator and ran to three.
 
-**Two retractions, both of the same class: an upstream fact established correctly, then a
-downstream consequence asserted without following the path to where it bites.** The facts held
-each time. The consequences did not.
+### What actually blocks unit-B certification — found by P-04, recorded here as a pointer
 
-**Anything else this item claims should be checked before it is acted on.** If a package's work
-had this record it would have been handed back; the coordinator's own gets the same standard
-written down instead.
+Neither is what this item spent three versions on. **See B36**, and note that both are named
+rather than fixed because both sit outside P-04's scope:
 
+1. **Nothing calls SimForge's gate-result callback for an Office-opened run.** It is not on
+   the Office bridge. Unit-B runs open, hang, and read TIMEOUT → `in_training`.
+2. **A unit-B PASS could not be recorded even if one arrived.** `sweeps._ingest_one` recovers
+   `forge_api_version` for unit A only, so `certified_records_its_basis` refuses and the sweep
+   reports `failed`. `forge_registry.api_version` is the obvious source.
+
+### For anyone reading an earlier version of this item
+
+**Do not act on it.** The `banking → Finance` and `administration → Executive` ruling is
+withdrawn. The mapping was never missing, the submission was never blocked by the roster, and
+the certification is not blocked by `DeptCert`.
 
 ## B33 — P-16: what V11 and V23 now have for FunnelForge, and four things found while authoring them
 
