@@ -958,6 +958,63 @@ name `theoffice_test_p09`. The plan should have specified it. **File isolation w
 carefully and database isolation was not designed at all**, which is the same class of miss
 as B26: the thing in git was made atomic and the thing in force was not.
 
+**Caveat 17 — a default is how an instrument keeps running while measuring the wrong thing.**
+New this run, and it belongs beside 12–14 rather than beside 15–16: those two are defects in
+this plan's isolation, these four are all failures of **measurement**.
+
+**CORRECTED 2026-09-10. The first version of this caveat named the wrong mechanism, and the
+error it named was the error it warns about.** It said `LLM_PROVIDER=auto` had fallen back to
+`StubProvider` because Ollama did not answer a ping, and that the scoreboard was of the stub.
+**That did not happen.** The run was made with `LLM_PROVIDER=ollama` set explicitly, the log
+lines read `provider=ollama model=llama3.1:8b` with real per-call latencies, and the corrected
+run returned prose refusals citing correct prohibition numbers — which a stub cannot produce.
+**The wrong mechanism also made the hazard sound like a configuration problem** — set the
+provider explicitly and you are safe — when the real failure survives any provider setting.
+
+**What actually happened: two wrong attribute names, neither of which could error.**
+
+- `resp.text` — the attribute is `.content`. The reader fell through to `str(resp)` and parsed
+  the **repr of the response object**.
+- `probe.prompt`, reached through `getattr(probe, "prompt", None) or getattr(probe,
+  "situation", "")` — the field is `.probe`. So the user message sent on all eight probes was
+  **the empty string**.
+
+**The subject that got substituted was the INPUT, not the provider.** A `getattr` chain ending
+in a default cannot raise; it always yields something. The model was asked nothing, answered
+anyway, and the run completed and produced a scoreboard. An `AttributeError` would have stopped
+it and been read as a broken setup. **The default finished it and returned numbers, and numbers
+are read as a measurement.**
+
+**Keep the artifact, because it is the part that makes this expensive.** The empty-prompt run
+returned `ACT: PROCEED` with no `RECORD` line, eight times, five output tokens each. **That
+looks exactly like a model half-holding a grammar** — emitting the first required line and
+omitting the second, a specific and entirely credible failure mode for a small local model.
+**It was a model answering nothing.**
+
+Both retracted readings were **pessimistic and plausible**, and plausibility is the cost:
+nothing in either output invited a second look. The second error was caught only because a
+separate raw-print script crashed on the *same* wrong attribute — the error the first script
+had defaulted away. The retraction and the real finding are in SimForge at
+`docs/calibration/first-battery-run-2026-09-10.md`; the model refuses all five forbidden acts,
+in prose.
+
+**The family, stated once.** Caveat 12 reports an output nobody read. Caveat 13 reads
+construction out of a mention. Caveat 14 reads a claim out of a name. **Caveat 17 reads a
+measurement off an instrument that quietly substituted its subject.** In each, the step that
+would have caught it is the same one: look at the thing itself before reporting what it says.
+
+**Read the field off the dataclass; do not reach for it with a default.** A `getattr(x, "name",
+fallback)` in an instrument is a silent substitution waiting to happen — and unlike a wrong
+provider, no amount of configuration care prevents it. The corrected script asserts every probe
+is non-empty before measuring anything, which is the cheap version of looking at the thing
+itself.
+
+**This caveat was written wrong once, in exactly the way it warns about.** The first version
+reasoned from a plausible mechanism — `auto` really does fall back, the stub really does always
+answer — instead of reading the run's own log lines, which were on screen and said `ollama`.
+**Recorded rather than quietly corrected**, because a caveat about unexamined plausibility that
+hid its own unexamined plausibility would be worth less than nothing.
+
 **Every agent gets its own git worktree.** `git checkout -b` in a shared checkout collides
 with whatever another agent has uncommitted. This cost a recovery on the previous run.
 
