@@ -10,6 +10,15 @@ So the assertions here are about the row and about what a sweep can do with it, 
 about the flag. A gate reporting a hand-over is easy to write and easy to believe; a
 submission that can be correlated to a verdict is the thing that was missing.
 
+**Amended by P-04, and the amendment is the finding.** Four assertions here read
+"every row Gate 8 writes names a module" and "every run Gate 8 opens is unit A". Both
+were true of every row that had ever been written and neither was a property of Gate 8 -
+they were the shape of the half of certification that existed. P-04 opens the other
+half, so each is now scoped to the unit it was actually about, and the unit-B rows are
+asserted on in `tests/provisioning/test_department_unit.py` rather than folded in here.
+Widening an assertion to accommodate new rows would have thrown the assertion away; the
+scoped version still fails if a unit-A row loses its module.
+
 **These fakes changed shape in P-15, and the change is the point.** They used to
 implement `submit_curriculum -> str`, returning a ref, because the client did. The ref
 was never SimForge's to return - it is an input to `run_start`, minted on this side -
@@ -153,7 +162,8 @@ async def _submissions(conn, venture_id: str = VENTURE) -> list[dict]:
     async with conn.cursor() as cur:
         await cur.execute(
             """
-            SELECT scenario_pack_ref, simforge_run_ref, scenario_count, module_id
+            SELECT scenario_pack_ref, simforge_run_ref, scenario_count, module_id,
+                   department
             FROM curriculum_submission WHERE venture_id = %s
             ORDER BY submitted_at
             """,
@@ -161,9 +171,22 @@ async def _submissions(conn, venture_id: str = VENTURE) -> list[dict]:
         )
         rows = await cur.fetchall()
     return [
-        {"pack_ref": r[0], "run_ref": r[1], "count": r[2], "module_id": r[3]}
+        {
+            "pack_ref": r[0], "run_ref": r[1], "count": r[2], "module_id": r[3],
+            "department": r[4],
+        }
         for r in rows
     ]
+
+
+def _unit_a(rows: list[dict]) -> list[dict]:
+    """The per-module rows. `module_id` IS the unit - see `simforge.submission_unit`.
+
+    Gate 8 now writes rows for both units, and the assertions in this file are about
+    the per-module hand-over. Filtering on the column the rule reads keeps them about
+    that, rather than about however many rows happen to exist.
+    """
+    return [r for r in rows if r["module_id"] is not None]
 
 
 def _attempts(gate) -> list[dict]:
@@ -210,13 +233,19 @@ async def test_an_accepted_handover_stores_the_run_ref(at_gate_8, operator):
     assert all(r["run_ref"] for r in rows), "a row with no run_ref: B8 is not retired"
     opened = {call["run_ref"] for call in fake.run_starts}
     assert {r["run_ref"] for r in rows} == opened
-    assert all(r["module_id"] for r in rows), "a submission row with no module"
-    assert len({r["module_id"] for r in rows}) == len(rows), "two rows for one module"
+    per_module = _unit_a(rows)
+    assert per_module, "gate 8 wrote no per-module submission"
+    assert all(r["module_id"] for r in per_module), "a unit-A row with no module"
+    assert len({r["module_id"] for r in per_module}) == len(per_module), (
+        "two rows for one module"
+    )
 
     gate = _gate_8(outcomes)
     assert gate.evidence["handed_over_to_simforge"] is True
     assert gate.evidence["modules_accepted"] == gate.evidence["modules_submitted"]
-    assert {s["module_id"] for s in _attempts(gate)} == {r["module_id"] for r in rows}
+    assert {s["module_id"] for s in _attempts(gate)} == {
+        r["module_id"] for r in per_module
+    }
 
     # The hand-over carried the human who provisioned - never an agent - and a real
     # curriculum rather than a count of one.
@@ -276,7 +305,13 @@ async def test_the_timeout_sweep_can_now_resolve_a_submission(at_gate_8, operato
     # deadline_hours=0: everything unanswered is overdue, which is what a hung run
     # looks like without waiting a day to see one.
     overdue = await overdue_submissions(conn, deadline_hours=0)
-    mine = [r for r in overdue if r["venture_id"] == VENTURE]
+    # The per-module rows. A unit-B row is in this queue too and resolves to a TIMEOUT
+    # of its own; that is asserted in `test_department_unit.py`, and asserting unit "A"
+    # against whichever row sorted last would be asserting the sort order.
+    mine = [
+        r for r in overdue
+        if r["venture_id"] == VENTURE and r["module_id"] is not None
+    ]
     assert mine, "the sweep found nothing"
 
     from broker.simforge import timeout_gate_result
@@ -389,14 +424,18 @@ async def test_gate_8_populates_simforge_run_ref_on_the_stored_row(at_gate_8, op
             "WHERE venture_id = %s",
             (VENTURE,),
         )
-        rows = await cur.fetchall()
+        all_rows = await cur.fetchall()
 
-    assert rows, "gate 8 wrote no submission row"
-    nulls = [r[0] for r in rows if r[1] is None]
+    assert all_rows, "gate 8 wrote no submission row"
+    nulls = [r[0] for r in all_rows if r[1] is None]
     assert not nulls, f"simforge_run_ref is still NULL for {nulls}: B8 is not retired"
 
     opened = {c["run_ref"]: c for c in fake.run_starts}
-    assert len(opened) == len(rows), "a row without a run opened under its ref"
+    assert len(opened) == len(all_rows), "a row without a run opened under its ref"
+    # The per-module rows only: this test is about what a unit-A hand-over declares at
+    # the start, and a unit-B run declares "B"/"domain" for the same reason.
+    rows = [r for r in all_rows if r[0] is not None]
+    assert rows, "gate 8 wrote no per-module row"
     for module_id, ref in rows:
         assert ref in opened, f"{module_id} stored a ref no run was opened under"
         # Declared at the START, which is why `run_start` takes it. A run whose unit is
@@ -459,8 +498,8 @@ async def test_the_ref_gate_8_mints_is_derived_from_the_submission(at_gate_8, op
     async with conn.cursor() as cur:
         await cur.execute(
             """
-            SELECT venture_id, forge_id, module_id, instruction_content_hash,
-                   simforge_run_ref
+            SELECT venture_id, forge_id, module_id, department,
+                   instruction_content_hash, simforge_run_ref
             FROM curriculum_submission WHERE venture_id = %s
             """,
             (VENTURE,),
@@ -468,11 +507,14 @@ async def test_the_ref_gate_8_mints_is_derived_from_the_submission(at_gate_8, op
         rows = await cur.fetchall()
 
     assert rows
-    for venture_id, forge_id, module_id, content_hash, stored in rows:
+    # Both units, recomputed from their own row. A unit-B ref names the department in
+    # the segment a unit-A ref names the module in, precisely so two departments
+    # operating one module set on one Forge do not mint one ref and land on one run.
+    for venture_id, forge_id, module_id, department, content_hash, stored in rows:
         assert stored == mint_run_ref(
             venture_id=venture_id, forge_id=forge_id,
-            module_id=module_id, content_hash=content_hash,
-        ), f"{module_id}: the ref is not a function of the submission"
+            module_id=module_id, department=department, content_hash=content_hash,
+        ), f"{module_id or department}: the ref is not a function of the submission"
 
 
 async def test_a_run_that_was_already_open_is_reported_as_such(at_gate_8, operator):
