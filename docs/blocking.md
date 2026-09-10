@@ -2995,3 +2995,77 @@ taken mid-run.
 this item. **B30 carries the same sentence and is deliberately left for after P-04 merges**,
 because P-04 is appending its unit-B closure note to B30 and two writers in one section is
 the thing the append-only rule exists to prevent.
+
+## B35 — Gate 7 will block Burkham on the bootstrap's own grants, and no run has ever reached it
+
+**`cross-cutting`** · Found 2026-09-09 by the coordinator, read-only, while tracing what P-03
+left open about `operation_cert_ref`. **Measured, not inferred from a name — this item states
+its evidence and its inference separately, because the coordinator has hung a wrong
+consequence on a right fact twice today.**
+
+### What was measured
+
+```
+agent_forge_grant, unrevoked, by venture:
+  burkham-wickmont   2 grants   2 with operation_cert_ref   2 ACTIVE
+  greenstone         2 grants   2 with operation_cert_ref   2 ACTIVE
+```
+
+And `_gate_7`, in full:
+
+```python
+if row["active"]:
+    return GateOutcome("7", BLOCKED,
+        f"{row['active']} grant(s) are already active before Gate 11. Grants are "
+        "issued inactive and activated only against a valid sign-off.", evidence)
+```
+
+The query is `WHERE venture_id = %s AND revoked_at IS NULL`. **There is no branch between
+those two facts.** Two active grants for `burkham-wickmont`, and the gate returns BLOCKED.
+
+### The inference, stated as one
+
+**A run that clears Gate 4.5 will then block at Gate 7**, on grants Phase 0's bootstrap
+issued and activated during the first real brokered call. Nothing is wrong with those grants
+— they are the record of the thing that worked — and nothing is wrong with Gate 7, whose rule
+is exactly right: *grants are issued inactive and activated only against a valid sign-off*.
+
+**The two are correct and incompatible.** Phase 0 activated grants because there was no ladder
+to activate them; the ladder now refuses to run past grants that are already active.
+
+### Why nobody has hit it
+
+**No run has ever reached Gate 7.** Run `def65e4f` is halted at 4.5 on V24 with zero certified
+candidates, and every Greenstone run before it stopped at 4 or earlier. The gate ladder's
+highest recorded pass is 4. **This blocker has been sitting one gate past the furthest anyone
+has been**, which is why the certification work — P-03, P-04, P-05 — would have delivered a
+run that clears 4.5 and stops eight lines later.
+
+### Two adjacent facts, and only one of them is a problem
+
+**Nothing in the provisioning path issues grants.** `agent_forge_grant` is INSERTed in exactly
+one place — `broker/bootstrap_phase0.py`. `_gate_7` only *verifies*. So the ladder checks a
+table it never populates, and for any venture the bootstrap has not touched, Gate 7 would
+report `0 grant(s) registered, none active` and **pass** — a green gate over an empty set.
+Whether that is a second defect or the correct reading of a phase that has not arrived is not
+settled here.
+
+**`operation_cert_ref` is populated on all four grants**, so P-03's concern — that `_gate_9`
+reads certification through a pointer while the enforcement path joins the natural key — does
+**not** currently produce a divergence for these rows. `record_result` upserts on
+`(office_agent_id, forge_id, module_id)`, so a sweep-written row keeps the `cert_id` the
+pointer already names. **The two spellings agree today.** They diverge the first time a
+certification is written for an agent/module pair that has no grant yet, or a grant is issued
+before its certification exists. P-03 was right to flag it and right not to fix it.
+
+### What retires it
+
+**A decision about the bootstrap's grants, and it is Ivan's:** revoke them and let the ladder
+issue and activate its own, or teach Gate 7 that a pre-ladder activation is a distinct state
+from an out-of-order one. **The first is cleaner and destroys the record of the first real
+brokered call; the second widens a gate whose narrowness is the point.**
+
+**Not urgent, and not to be discovered mid-run.** Gate 4.5 still blocks on V24, and unit-B
+certification cannot be earned at all until SimForge has a `DeptCert` path (B32). This is the
+gate *after* the one everyone is working on, and it is recorded now so the certification run
+does not end with a surprise eight lines past its goal.
