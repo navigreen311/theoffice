@@ -86,6 +86,13 @@ EVENTS: tuple[Event, ...] = (
     Event("console_incident_account_appended", "Incident account appended",
           "One stage of an incident response was written down.",
           "broker.app", CONSOLE),
+    Event("grant_tombstone_cleared", "Grant tombstone cleared",
+          "A hand-set `agent_forge_grant.revoked_at` was removed. That column is "
+          "enforced by `resolve_grant` on every call but is never written by "
+          "`revoke()`, so a value in it is a stop with no reason, no actor and no "
+          "reinstatement path. This entry is the record the original stamp did not "
+          "have. See blocking.md B37.",
+          "broker.revocation", SYSTEM),
     Event("console_revocation_created", "Revocation issued",
           "The kill switch. Takes effect on the target's next call.",
           "broker.app", CONSOLE),
