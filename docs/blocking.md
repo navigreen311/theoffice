@@ -3901,6 +3901,108 @@ grant because of this** — the defect is entirely in what a human is told, whic
 `console` item and not a `call-path` one.
 
 
+### CLOSED 2026-09-10 (P-03) — seven sites, not six, and the predicate went into SQL
+
+**The count in the table above is wrong, and the correction is the first thing to read.**
+There are **seven** queries producing a `live_grants` column, not six. `broker/roster.py`
+computes it **three** times, not twice: the departure diff, the orphan-identity list — and
+**the roster table itself**, `directory()`'s first query, which is the roster page. The
+table above names the first and third and skips the middle one. That list came off a
+truncated grep, which is the same failure this page warns about two entries earlier, on
+this very column.
+
+**What was done.** All seven now carry a `NOT EXISTS` over `revocation`, and `live_grants`
+means "a grant no live revocation covers" on every screen that says it.
+
+#### The decision this package existed to make
+
+`revocation.covered_grants(conn, venture_id=...)` answers per venture. The note above says
+three of the six aggregate across ventures. Read query by query, **it serves none of the
+seven**, and the arithmetic is not close:
+
+| site | shape | why `covered_grants` does not fit |
+|---|---|---|
+| `roster.diff` | per agent, across ventures | names no venture at all |
+| `roster.directory` ×2 | per agent, across ventures | names no venture at all |
+| `app.list_agents` | per agent, across ventures | names no venture at all |
+| `app.list_ventures` | per venture, **every** venture | one statement, one round trip; the helper is one call per venture |
+| `ventures.directory` | per venture, **every** venture | same |
+| `proposals.queue` | the whole estate | no venture anywhere |
+
+So the predicate went into SQL. **Not re-spelled — imported.** `revocation._covers` is the
+one copy of the four-scope rule, parameterised by the SQL expressions that stand for the
+target precisely so a second caller can supply its own; `check_revocations` passes
+`%(agent_id)s`, `covered_grants` passes `g.office_agent_id`, and these four now pass the
+same. That module's docstring says the thing out loud — *"THIS IS THE RULE. THERE IS ONE
+COPY OF IT"*, and *"a third answer to a question that must only have one ... would pass its
+own tests"* — so writing an eighth `NOT EXISTS` by hand in four console modules was the one
+option the file rules out. `broker/revocation.py` is unchanged.
+
+`tests/contract/test_departure_revokes.py::_live_grants` was the model for the **shape** and
+not for the **rule**: it covers `agent` and `agent_module` only, correctly, because those are
+the two scopes a departure can produce. These screens are not only about departures, and the
+`venture`-scope case is the one this entry names as reading wrong in the dangerous direction.
+All four scopes, therefore, and `reinstated_at IS NULL` with them.
+
+**A public alias for `_covers` would be tidier** than four callers reaching for a private
+name. `revocation.py` was out of scope for this package and a stable interface for others in
+the same run, so it was left alone rather than edited quietly. It is a rename, not a
+decision.
+
+#### Deliberately not changed: `assignable_grants`
+
+Four of the seven queries also compute `assignable_grants`, and `ventures._status_for` reads
+it to decide a venture is **live**. It is **not** revocation-filtered, and that is a choice
+rather than an oversight. `is_assignable` is `GENERATED ALWAYS AS` the two certification refs
+plus `activated_at` — "was this grant ever fit to assign" — which stays true of a revoked
+grant. The field is accurate to its own name, and B40 is about the field whose name claims
+something else. `min(g.trust_tier) AS declared_tier` is left for the same reason.
+
+**Whether a venture whose every grant is revoked should still report "live" is a real
+question and this entry is not it.** It is a status rule, it moves a gate ladder, and putting
+it in this diff would make the change reviewable as neither. Filed here so the next reader
+finds it stated rather than inferring it from a filter that is missing.
+
+`proposals.queue`'s `grants_below_auto` **was** filtered, in the same statement, because
+`_empty_reason` compares the two numbers to conclude "every live grant is at auto_execute".
+Counted over different populations they contradict each other and the sentence names a cause
+that is not in force — which is the exact defect this entry is about, one field along.
+
+#### A guard narrowed itself on the way through
+
+Interpolating the predicate turned six of these queries into f-strings, and
+`tests/test_sql_shapes.py::sql_literals` reads `ast.Constant`. An f-string is a `JoinedStr`,
+so all six **silently left that sweep** — with the `count(*)`/`LEFT JOIN` pairing that file
+exists for landing on opposite sides of the placeholder. Nothing went red. Two of
+`humans.py`'s queries had been outside it the same way for longer.
+
+The collector now reassembles f-strings, each `{...}` written as `{}`, and reads each query
+once. Three checks hold it: the detectors must still fire on the shipped shape written as an
+f-string; no source location may be swept twice; and **every** f-string SQL query with a
+`LEFT JOIN`, enumerated independently, must come back from the sweep. The third exists
+because the obvious version of it — "some collected query contains `{}`" — passes while the
+sweep sees no f-string at all, on two unrelated `humans.py` literals that contain `{}` for
+their own reasons. That was found by breaking the collector and watching the check stay
+green.
+
+#### Evidence
+
+`tests/contract/test_live_grants_asks_revocation.py`, 18 tests: each of the seven counters
+against an `agent`-scope revocation; the cross-venture case, where a `venture` revocation on
+one venture has to reach four counters that name no venture and leave the other venture's
+numbers untouched; a grant **issued after** a venture revocation, which a snapshot predicate
+would get wrong and nothing else here would catch; `agent_module` taking one module and not
+the agent; `forge` taking everything; a reinstated revocation stopping; and the counters
+agreeing with `check_revocations` itself rather than with an expected integer.
+
+Six deliberate breakages, each watched failing and restored byte-identical: a counter losing
+its predicate (fires in eight places), the rule losing its `venture` scope, an eighth
+`live_grants` query written the obvious way, and the sweep reverting to `ast.Constant`.
+
+**Still true, and unchanged by this:** no agent could ever act on a revoked grant.
+`resolve_grant` and Gate 7 have always asked the `revocation` table. This was only ever about
+what a person was told.
+
 ---
 
 ## B45 — FunnelForge has three parallel email transports, and the only capable one is reachable from a test-send helper

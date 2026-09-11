@@ -54,12 +54,37 @@ COALESCED_BOOL_AGG = re.compile(
 )
 
 
+def joined_source(node: ast.JoinedStr) -> str:
+    """An f-string put back together as one string, each `{...}` written as `{}`.
+
+    Without this an f-string reaches the checks below as one fragment per placeholder,
+    and the pairing those checks rest on is gone: a `count(*)` on one side of an
+    interpolation and the `LEFT JOIN` on the other are never seen together, so the
+    query is swept and nothing in it can fail. That is not hypothetical. The six
+    `live_grants` queries became f-strings the moment they started asking the
+    `revocation` table (B40), and all six silently left this sweep in the same commit -
+    a guard narrowing itself while every test stayed green.
+
+    The placeholder is NOT expanded. These are source-shape checks and the shape is
+    what somebody wrote here; substituting a value would make the check depend on what
+    a constant happens to hold today.
+    """
+    return "".join(
+        value.value if isinstance(value, ast.Constant) and isinstance(value.value, str)
+        else "{}"
+        for value in node.values
+    )
+
+
 def sql_literals() -> list[tuple[pathlib.Path, int, str]]:
-    """Every string constant in the source that looks like SQL with a LEFT JOIN.
+    """Every string in the source that looks like SQL with a LEFT JOIN.
 
     Read per string literal rather than per file: a file-wide regex would pair a
     `LEFT JOIN` in one query with a `count(*)` in an unrelated one three statements
     later, which is a check that fails for a reason it did not ask about.
+
+    f-strings count, reassembled by `joined_source`. A query built with an interpolated
+    predicate is still one query.
     """
     out: list[tuple[pathlib.Path, int, str]] = []
     for package in PACKAGES:
@@ -76,13 +101,30 @@ def sql_literals() -> list[tuple[pathlib.Path, int, str]]:
                 and isinstance(node.body[0].value, ast.Constant)
                 and isinstance(node.body[0].value.value, str)
             }
+            # Every node that lives INSIDE an f-string. Its pieces are read through the
+            # f-string that owns them, so reading them again would report the same query
+            # two or three times - once whole and once per fragment - and a fragment
+            # that cannot fail would sit in the parametrised ids looking like coverage.
+            owned: set[int] = set()
             for node in ast.walk(tree):
-                if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+                if isinstance(node, ast.JoinedStr):
+                    for piece in ast.walk(node):
+                        if piece is not node:
+                            owned.add(id(piece))
+
+            for node in ast.walk(tree):
+                if id(node) in owned:
                     continue
-                if id(node) in docstrings:
+                if isinstance(node, ast.JoinedStr):
+                    text = joined_source(node)
+                elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+                    if id(node) in docstrings:
+                        continue
+                    text = node.value
+                else:
                     continue
-                if "left join" in node.value.lower():
-                    out.append((path, node.lineno, node.value))
+                if "left join" in text.lower():
+                    out.append((path, node.lineno, text))
     return out
 
 
@@ -170,6 +212,95 @@ def test_both_detectors_catch_the_shapes_that_actually_shipped():
         "bool_or(c.state = 'certified')", "COALESCE(bool_or(c.state = 'certified'), false)"
     )
     assert len(BOOL_AGG.findall(fixed)) == len(COALESCED_BOOL_AGG.findall(fixed))
+
+
+def test_an_f_string_query_is_swept_whole():
+    """A query built with an interpolated predicate is still one query.
+
+    The sweep reads `ast.Constant`. An f-string is not one: it is a `JoinedStr` whose
+    pieces are separate constants, so `count(*) FILTER (...)` before the placeholder and
+    `LEFT JOIN` after it land in different fragments and neither fragment can fail the
+    check. Six `live_grants` queries became f-strings in B40 and left this sweep in the
+    same commit, green the whole way.
+
+    So: the bad shape, written as an f-string, must still be caught.
+    """
+    source = (
+        'PRED = "g.venture_id = %(v)s"\n'
+        'SQL = f"""\n'
+        "    SELECT v.venture_id,\n"
+        "           count(*) FILTER (WHERE g.revoked_at IS NULL) AS live_grants\n"
+        "    FROM ventures v\n"
+        "    LEFT JOIN agent_forge_grant g ON {PRED}\n"
+        "    GROUP BY v.venture_id\n"
+        '"""\n'
+    )
+    tree = ast.parse(source)
+    joined = [n for n in ast.walk(tree) if isinstance(n, ast.JoinedStr)]
+    assert len(joined) == 1, "the fixture is not one f-string"
+
+    whole = joined_source(joined[0])
+    assert "left join" in whole.lower(), "the f-string did not come back whole"
+    assert "{}" in whole, "the placeholder was lost, or silently expanded"
+    assert COUNT_STAR_IS_NULL.search(whole), (
+        "the count(*) detector does not catch the shipped shape once it is an f-string "
+        "- which is the state the sweep was in for every query B40 touched"
+    )
+
+
+def test_the_sweep_reaches_f_string_queries():
+    """The sweep must actually be reading f-strings, not merely able to.
+
+    `test_an_f_string_query_is_swept_whole` proves `joined_source` works on a fixture.
+    That is a different claim: `sql_literals` could stop calling it tomorrow and both
+    that test and `test_the_sweep_reports_each_query_once` would stay green - the second
+    more comfortably, because fewer queries swept means fewer chances to duplicate.
+    Dropping the eight f-string queries out of this file's coverage is exactly the change
+    that would pass.
+
+    So the f-string queries are enumerated here independently and every one of them has
+    to come back from the sweep. Looking for a placeholder in the collected text is not
+    enough: `humans.py` has two plain literals that contain `{}` for unrelated reasons,
+    and they kept this check green through a run where the sweep saw no f-string at all.
+    """
+    expected: set[tuple[str, int]] = set()
+    for package in PACKAGES:
+        for path in (ROOT / package).rglob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if (
+                    isinstance(node, ast.JoinedStr)
+                    and "left join" in joined_source(node).lower()
+                ):
+                    expected.add((path.name, node.lineno))
+
+    assert expected, (
+        "no f-string SQL with a LEFT JOIN exists at all, so this check proves nothing "
+        "about the sweep. If that is genuinely true now, delete it rather than leave it."
+    )
+    found = {(p.name, n) for p, n, _ in sql_literals()}
+    missing = sorted(expected - found)
+    assert not missing, (
+        "these queries are built as f-strings and the sweep does not see them, so "
+        "nothing in this file can fail on them: "
+        + ", ".join(f"{name}:{line}" for name, line in missing)
+    )
+
+
+def test_the_sweep_reports_each_query_once():
+    """A fragment counted as a query is coverage that cannot fail.
+
+    An f-string's pieces are `ast.Constant` nodes in their own right. Read both ways,
+    one query arrives two or three times - once whole and once per fragment - and the
+    duplicates sit in the parametrised ids looking like more checking than there is.
+    """
+    seen = [(p, n) for p, n, _ in sql_literals()]
+    duplicates = {site for site in seen if seen.count(site) > 1}
+    assert not duplicates, (
+        "the same source location is swept more than once, so an f-string is being read "
+        "both whole and in fragments: "
+        + ", ".join(f"{p.name}:{n}" for p, n in sorted(duplicates, key=lambda s: s[1]))
+    )
 
 
 # =================================================================================================

@@ -28,7 +28,24 @@ from typing import Any
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 
-from broker import audit, humans
+from broker import audit, humans, revocation
+
+# `live_grants` means "a grant no live revocation covers". The four-scope rule that
+# decides that has exactly one copy - `revocation._covers`, the same text
+# `check_revocations` enforces on every call and `covered_grants` reports to Gate 7. It
+# is called here rather than re-spelled, because that module says in its own docstring
+# that a second spelling is how two answers to one question ship, each passing its own
+# tests. `covered_grants` itself does not fit these callers: it answers per venture, and
+# not one counter below is a single-venture call. See blocking.md B40. The
+# `FILTER (WHERE g.revoked_at IS NULL)` this replaces never did any of this work - that
+# column had no writer, was true for every row ever written, and 0036 dropped it (B37).
+_NOT_REVOKED = f"""NOT EXISTS (
+                SELECT 1 FROM revocation r
+                WHERE {revocation._covers(
+                    agent="g.office_agent_id", forge="g.forge_id",
+                    module="g.module_id", venture="g.venture_id",
+                )}
+              )"""
 
 # Roster work is authorised as `venture_operator`, unscoped. There are three roles in
 # this system and a fourth is not warranted here: issuing an identity is an operator act
@@ -121,15 +138,22 @@ async def diff(
         current = {r["village_agent_ref"]: dict(r) for r in await cur.fetchall()}
 
         await cur.execute(
-            """
+            f"""
             SELECT i.village_agent_ref,
                    -- `count(g.grant_id)`, not `count(*)`: the LEFT JOIN gives an
                    -- identity with no grants one all-NULL row, which `count(*)` counts
                    -- - reporting 1 for an agent holding none, in the diff somebody
                    -- confirms a departure from. Counting the column skips the null row.
                    -- This is what kept the count honest; the `revoked_at` filter that
-                   -- used to sit beside it never did (migration 0036, B37).
-                   count(g.grant_id) AS live_grants
+                   -- used to sit beside it never did (migration 0036, B37). The
+                   -- FILTER does: a grant a live revocation covers is not authority
+                   -- this departing agent still holds. This is the number the
+                   -- console turns into "- holds an Office identity and 2 live
+                   -- grants. Revoke them." Wrong, it tells a human to revoke what
+                   -- is already revoked - or hides a departed agent covered only by
+                   -- a venture-scope revocation, which nothing else on this screen
+                   -- would show. B40.
+                   count(g.grant_id) FILTER (WHERE {_NOT_REVOKED}) AS live_grants
             FROM office_agent_identity i
             LEFT JOIN agent_forge_grant g ON g.office_agent_id = i.office_agent_id
             WHERE i.village_agent_ref IS NOT NULL
@@ -394,13 +418,21 @@ async def directory(
 
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
-            """
+            f"""
             SELECT v.village_agent_ref, v.agent_name, v.department, v.status,
                    v.source, v.departed_at,
                    i.office_agent_id::text AS office_agent_id,
                    i.status AS identity_status,
                    count(DISTINCT g.grant_id)
-                                                                 AS live_grants,
+                     FILTER (WHERE {_NOT_REVOKED})                AS live_grants,
+                   -- `assignable_grants` is deliberately NOT filtered, and neither
+                   -- is `declared_tier`. `is_assignable` is GENERATED from the two
+                   -- certification refs and `activated_at`: it says whether a grant
+                   -- was ever fit to assign, which stays true of a revoked one.
+                   -- That is a different question from the one `live_grants` asks,
+                   -- and B40 is about the field whose name claims to answer this
+                   -- one. Changing the others would be a second decision wearing
+                   -- this one's diff.
                    count(DISTINCT g.grant_id)
                      FILTER (WHERE g.is_assignable)
                                                                   AS assignable_grants,
@@ -427,11 +459,19 @@ async def directory(
         # The Office has appointed and the roster cannot account for is a discrepancy,
         # and hiding it would make the two counts agree by losing a row.
         await cur.execute(
-            """
+            f"""
             SELECT i.office_agent_id::text AS office_agent_id, i.agent_name,
                    i.department, i.village_agent_ref, i.status AS identity_status,
                    count(DISTINCT g.grant_id)
-                                                                 AS live_grants,
+                     FILTER (WHERE {_NOT_REVOKED})                AS live_grants,
+                   -- `assignable_grants` is deliberately NOT filtered, and neither
+                   -- is `declared_tier`. `is_assignable` is GENERATED from the two
+                   -- certification refs and `activated_at`: it says whether a grant
+                   -- was ever fit to assign, which stays true of a revoked one.
+                   -- That is a different question from the one `live_grants` asks,
+                   -- and B40 is about the field whose name claims to answer this
+                   -- one. Changing the others would be a second decision wearing
+                   -- this one's diff.
                    count(DISTINCT g.grant_id)
                      FILTER (WHERE g.is_assignable)
                                                                   AS assignable_grants,
