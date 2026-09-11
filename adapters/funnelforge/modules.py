@@ -51,6 +51,41 @@ key on the send path is what would change it. Sized and recorded in the binding 
 
 `capture_contact` (natural) and `read_funnel_analytics` (non-mutating) are the two V31
 permits.
+
+THE ADAPTER DOES NOT REPORT ITS OWN EXECUTION AS THE OUTCOME
+============================================================
+
+These handlers used to answer `sent: True`, `booked: True` and `captured: True` as literals,
+and `app.py` wraps a handler's return in a 200 without consulting it. Against the FunnelForge
+running on 9 September 2026 - `RESEND_API_KEY` present and empty, so every approved send is a
+`500 SEND_FAILED` - the adapter answered `{"sent": true, "upstream": {"status": 500, ...}}`,
+and an agent reading the flag reported an email that does not exist. B33 Finding 1 raised it;
+B42 is the fix.
+
+**The flags are deleted rather than derived from the status, and the reasons are these.**
+
+- **The flag was never a measurement.** A handler that declines raises `Refused` and `app.py`
+  answers 422, so a 200 already means *the handler ran and made the call* - exactly and only
+  what the flag meant. One possible value is no information. Deriving it from
+  `answer["status"]` would replace no information with **less** information than the sibling
+  key already carries: one bit collapsing an HTTP status, FunnelForge's envelope `success`
+  field and the domain outcome, leaving every reader to guess which of the three it collapsed.
+- **The word claims more than any evidence here supports.** The strongest available fact is
+  that FunnelForge's API accepted the request. `sent` says an email reached a person. No
+  function of the status makes that word true, so the honest field is the status.
+- **This file has already taken this decision once.** `_capture_contact` does not return
+  `isNew` because it does not mean what it says. A field that does not mean what it says is
+  omitted here rather than passed on, and `sent` is that same field one step further along.
+- **Absence cannot be misread.** A derived flag is one careless edit away from being a literal
+  again, and nothing would notice. An absent key makes `result.get("sent")` falsy, which fails
+  closed, and `OUTCOME_CLAIM_KEYS` below turns its return into a failing test.
+
+**What replaces it is `upstream`, whole** - `{"status": ..., "body": ...}` exactly as
+`HttpUpstream.__call__` built it, passed back untouched. The FunnelForge manuals and the
+eight scenario files already instruct an agent to read `upstream.status` and to disregard
+the flag, so the act they prescribe is unchanged and is now the only one available; what
+they say *about* the flag is now stale. Listed in B42 rather than edited here -
+`docs/instructions/` and `scenarios/` belong to other packages.
 """
 
 from __future__ import annotations
@@ -65,6 +100,20 @@ from adapters.funnelforge.templates import APPROVED_TEMPLATES
 from adapters.funnelforge.upstream import Upstream, UpstreamCall
 
 Handler = Callable[[dict[str, Any], Upstream], Awaitable[dict[str, Any]]]
+
+#: Keys a handler must never answer with, because each would be the adapter stating an
+#: outcome it did not observe. Asserted over every bound handler, against a 500 and against
+#: a 200, in `tests/adapters/test_funnelforge_truthfulness.py`.
+#:
+#: **This is not a denylist to be routed around.** It exists because the defect it pins
+#: appeared as three separate literals in one file, was recorded in B33 Finding 1, and was
+#: then described in nine instruction files as something an agent must work around. The
+#: honest answer is one key along. If a handler needs to say something new, say it in a
+#: word that names what the handler itself did - `template_id` does - and not the effect
+#: of that act on the world.
+OUTCOME_CLAIM_KEYS = frozenset(
+    {"sent", "booked", "captured", "delivered", "created", "success", "ok"}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,10 +186,12 @@ def _send_approved(template_id: str) -> Handler:
                 },
             )
         )
+        # No `sent`. `template_id` and `template_name` are facts about which approved copy
+        # this handler used; `upstream` is what FunnelForge said about it. Nothing here
+        # asserts that an email reached anybody - see OUTCOME_CLAIM_KEYS.
         return {
             "template_id": template_id,
             "template_name": template.name,
-            "sent": True,
             "upstream": answer,
         }
 
@@ -182,7 +233,9 @@ async def _schedule_blueprint_call(
             },
         )
     )
-    return {"booked": True, "upstream": answer}
+    # No `booked`. A 404 here is a real one - the appointment type was not found - and the
+    # old literal sat above it saying an appointment exists. See OUTCOME_CLAIM_KEYS.
+    return {"upstream": answer}
 
 
 async def _capture_contact(payload: dict[str, Any], call: Upstream) -> dict[str, Any]:
@@ -212,7 +265,9 @@ async def _capture_contact(payload: dict[str, Any], call: Upstream) -> dict[str,
             },
         )
     )
-    return {"captured": True, "upstream": answer}
+    # No `captured`. The `P2003` foreign-key 500 on a bad `business_id` is the case this
+    # used to answer `captured: True` over the top of. See OUTCOME_CLAIM_KEYS.
+    return {"upstream": answer}
 
 
 async def _read_funnel_analytics(
