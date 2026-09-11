@@ -1045,6 +1045,48 @@ position to make**, and a coordinator taking one on trust is reading a fact out 
 rather than out of the two diffs, which is Caveat 13 wearing different clothes. The collision
 was found by listing both PRs' files and intersecting them, which takes one command.
 
+**Caveat 19 - a guard that records what answered cannot catch a run that asked the wrong
+thing.**
+
+Found by P-01 on 11 September, by refusing to run. It is the third member of Caveat 17's family
+and the three are worth reading together, because each substitutes a different thing and each
+survives the guard built for the one before.
+
+    Caveat 17, first error   substituted the INPUT      empty prompts on all eight probes
+    Caveat 17, second error  substituted the READING    `.text` parsed the response's repr
+    Caveat 19                substitutes the COMPARISON the "second model" IS the first model
+
+**The mechanism, and every step of it is green.** `.env` carries `LLM_PROVIDER=auto`.
+`llm_client.resolve_provider` expands `auto` to *ollama-if-reachable-else-stub* and **never to
+`anthropic`** - that is its documented purpose (ADR-0023), not a defect. Ollama is up on this box
+serving `llama3.1:8b`, **the model under comparison**. `ANTHROPIC_API_KEY` is a 27-character
+placeholder with no `sk-ant-` prefix, and `AnthropicProvider.health_check` is `bool(self.api_key)`,
+so the placeholder **health-checks green**.
+
+So a run intended to measure a second model would not have errored. It would have re-measured the
+first, returned a plausible 3/3 + 0/5, and been filed as the second model's result - supporting
+the *more interesting* of the two available conclusions, that safety training and structured
+output pull against each other in general. That conclusion would have been false.
+
+**And PR #139 would not have caught it.** #139 records the model that answered, read off the live
+provider rather than off settings - built precisely so a certification names what earned it. The
+artifact would have read `ollama/llama3.1:8b`: **correct, and useless.** A truthful label on a run
+whose entire purpose was a different model tells you nothing, because the label describes what
+answered and the defect is in what was asked.
+
+**The rule.** A guard that records provenance answers *what produced this*. It cannot answer
+*was this the right question*. When an experiment's whole content is a comparison, the thing to
+assert before the first call is the comparison itself - that the provider resolves to the one
+under test, by name, not by a setting that happens to resolve there today.
+
+**A fourth substitution, found the same day, one level deeper.** The eight probes of the
+10 September run were authored from five prohibitions **hardcoded in an uncommitted script**.
+The live `capitalforge/portfolio_health` never-do list has seven entries. **The overlap is zero.**
+The invented five are plausible neighbours of the real seven - *"Never report a null risk score as
+zero"* beside *"Never report score: null as zero, or as grade F."* So that run substituted the
+**SUBJECT**: it measured a model against prohibitions the system does not hold. PR #140 recorded
+the finding without the instrument that produced it, which is how it stayed invisible.
+
 **Every agent gets its own git worktree.** `git checkout -b` in a shared checkout collides
 with whatever another agent has uncommitted. This cost a recovery on the previous run.
 
