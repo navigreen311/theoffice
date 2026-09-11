@@ -4067,3 +4067,129 @@ oversight.
 **The FunnelForge test command must run from `apps/api`** — it has its own `vitest.config.ts` and
 `tests/setup.ts`. From the repo root, setup is skipped and you get **59 spurious failures**: a
 phantom red that looks like a broken branch.
+
+## B41 — the correction to "the Compliance Library ships empty" carried a count that was never true of the commit it named, and the same stale sentence stands in two more files
+
+**Scope:** cross-cutting
+
+**`docs`** · Found 10 September 2026 by P-04, verifying B38 finding 4. **The correction
+landed and it was right about the thing that mattered.** Shared rule 10 no longer tells an
+agent the Library is empty, and no module manual ever carried the claim — swept across all
+nine, the shared rules, the scenario files and every docstring. What follows is what the
+correction got wrong on its way past, and two files it did not reach.
+
+### 1. The count is right and the commit it is attached to is not
+
+B38 finding 4 and the amended rule 10 both read *"holds nineteen entries ... and was committed
+on 31 August 2026 in `0bc65a1`"*. Nineteen is today's count. **`0bc65a1` committed seventeen.**
+Counted by loading the file at each commit that touched it, not by reading the diff:
+
+| commit | date | entries |
+|---|---|---|
+| `0bc65a1` | 31 Aug 2026 | **17** |
+| `239f89b` … `08b3e3e` | 31 Aug 2026 | 17 |
+| `78540f9` | 31 Aug 2026 | 18 |
+| `271be3a` | 31 Aug 2026 | 18 |
+| `d58b074` | 1 Sep 2026 | **16** — four template entries resolved: two written, one retired, one folded |
+| `de35f9a` | 3 Sep 2026 | **19** |
+
+**The load-bearing half survives intact**: the Library was not empty on 31 August, it held
+seventeen entries nine days before rule 10 was written, and it has not been empty since. The
+retraction stands. **But an agent sent to `0bc65a1` to check nineteen finds seventeen**, and a
+correction that does not survive being checked trains the next reader to stop checking — which
+is the failure that produced B38 in the first place, one layer up.
+
+**The shape, because it is the recurring one on this page.** A count is a claim about *now*
+and a commit is a claim about *then*, and joining them in one sentence makes a compound claim
+that is false the first time either half moves. B27, B31 and B38 are all the same rot in prose;
+this is that rot inside the sentence that fixed it.
+
+### 2. The same stale Pack comment stands in a second file, unrecorded
+
+B38 named `packs/burkham-wickmont.draft.yaml` as the source of the error and deliberately did
+not edit it — `packs/` was not P-16b's, and the record was judged worth more than the edit.
+**That judgement stands and P-04 has not edited it either.** But the sentence is in two files:
+
+- `packs/burkham-wickmont.draft.yaml` — named by B38
+- **`packs/burkham-wickmont.split.draft.yaml` — not named by anything until now**
+
+Both carry the identical comment above their `compliance_surface` block, saying
+`library_entry_ref` is omitted throughout and `library_gap: true` set instead *"because the
+Compliance Library ships EMPTY"*, and in both the rows beneath it now carry a
+`library_entry_ref`. **A reader who acts on B38 corrects one and leaves the other**, and the
+one left standing is the one that produced the original error.
+
+### 3. And the library file's own header says sixteen
+
+`packs/compliance-library/burkham-wickmont.yaml` opens `# SIXTEEN ENTRIES. NONE IS A TEMPLATE.`
+That was true at `d58b074` on 1 September and went stale at `de35f9a` on 3 September. B38 noted
+it in passing; rule 10 did not carry it. **So there are three stale counts, in three files,
+about one library, and they disagree in both directions** — the Pack comments say zero, the
+header says sixteen, the file holds nineteen.
+
+### 4. "The Compliance Library" is two things with two counts, and one of them is shared
+
+The *file* holds nineteen. The *table* `compliance_library_entry` holds **twenty-one**, read
+from the running database. The extra two are `compliance/ftc-tsr-v2` and
+`compliance/nv-two-party-consent-v1`, and they are **Greenstone's**, cited by
+`packs/greenstone.yaml`. The table is keyed on `entry_ref` with no venture column, which
+`scripts/load_compliance_library.py` documents at length and defends by upserting rather than
+truncating.
+
+**A newly found consequence, and it is Greenstone's rather than Burkham's.**
+`packs/compliance-library/` holds **exactly one file** — Burkham's. Greenstone's two entries
+exist only as rows; nothing in git would reproduce them. `generators/validator.py` resolves
+V28 against the *table*, so Greenstone stays green. **Rebuild that table from the repository
+and Greenstone's Pack cites two refs that resolve to nothing**, with no commit having changed
+anything about Greenstone. Recorded, not fixed: whether Greenstone's library is owed a file is
+Greenstone's decision, not a FunnelForge documentation package's.
+
+### What is consequential rather than cosmetic
+
+The entry the retracted sentence told agents not to look for is
+**`compliance/outbound-contact-boundary-v1`**, and it is a gate, not background —
+*"NO OUTBOUND CONTACT WITHOUT ALL THREE"*: **A** a documented relationship (with an
+eighteen-month former-client lookback), **B** the channel the person actually gave, **C** a
+purpose matching the initiating action. Plus *"A REFERRAL IS NOT CONSENT"* and *"COLD OUTREACH
+IS BANNED IN EVERY CHANNEL"*.
+
+**It does not bear equally on the six approved sends, and that is the part no document said.**
+Shared rule 10a now carries the per-send table. The two that matter:
+
+- **`followup_no_engagement` — Part C is the sharp one.** A follow-up whose purpose has
+  drifted from the scope of what the person actually downloaded fails the test however warm
+  the lead is thought to be. And escalation trigger 4 is written for *"take me off your list"*
+  while shared rule 7c means **there is no record to update**.
+- **`brief_cover` — Part A is a fact the module cannot reach.** A quarterly Brief goes to a
+  recipient whose engagement may have ended, so whether the eighteen-month lookback is still
+  open decides the send — **and nothing on that path reads engagement status.** An agent cannot
+  satisfy a test against evidence that does not arrive.
+
+The other four: `intake_acknowledgment` and `scheduling_confirmation` are satisfied by the
+occasion itself; `deliverable_cover` by the active engagement; `referrer_briefing` is satisfied
+for its recipient, where the trap is reading *"A REFERRAL IS NOT CONSENT"* as governing the
+partner rather than the person the partner names.
+
+### What now checks this instead of describing it
+
+`tests/test_funnelforge_manuals.py` gained four assertions that **read the library file**, and
+`tests/test_docs.py` gained the retracted sentence as a retired claim. Each was verified by
+watching it fail:
+
+| check | broken by |
+|---|---|
+| the count in rule 10 matches the file | prose edited to twenty; and an entry deleted from the file |
+| every `compliance/…` ref the nine manuals cite resolves | a manual citing an unwritten entry; and an entry renamed under the manuals |
+| rule 10a carries a **row** for every approved send | a send's row removed; rule 10a removed |
+| the exclusion list for Greenstone's two is still true | Burkham's file adopting one of them |
+| the retracted sentence has not returned | the sentence appended to the shared rules |
+
+**One of those five was found by the failure exercise rather than confirmed by it.** The gate
+table check first asked only whether the send's name appeared anywhere in the section, and a
+send whose row was deleted still
+passed, because it was named in the paragraph *below* the table. It now matches the row opener.
+A check that cannot fail is the thing this page is about, and it reached a commit's edge before
+anything caught it.
+
+**Not checked, deliberately.** The commit hashes and the dated history above are claims about
+the past, and the past does not drift. Only the count is a claim about now.

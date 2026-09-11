@@ -66,6 +66,20 @@ RETIRED_CLAIMS = [
     ("docs/certification.md", "The authoring UI does not exist"),
     ("docs/generators.md", "Nothing runs the pipeline in production"),
     ("docs/governance.md", "Manifest rows are hand-inserted"),
+    # B41. This one was never true - the Library held seventeen entries on the day it
+    # was committed, nine days before the sentence was written. It is listed here for
+    # the same reason as the five above: the sentence told an agent that a control it
+    # could read did not exist, and `outbound-contact-boundary-v1` is a gate that
+    # forbids sends these modules would otherwise make. A claim that a control is absent
+    # is worse than silence, because silence invites a look.
+    #
+    # Matched on the second sentence rather than the first. The correction paragraph now
+    # standing in that file quotes the retracted claim in order to retract it, so a
+    # pattern on "the Compliance Library ships empty" would fail on the fix.
+    (
+        "docs/instructions/funnelforge-approved-send-rules.md",
+        "No entry is committed anywhere in this repository",
+    ),
 ]
 
 
