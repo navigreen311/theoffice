@@ -1079,13 +1079,32 @@ answered and the defect is in what was asked.
 assert before the first call is the comparison itself - that the provider resolves to the one
 under test, by name, not by a setting that happens to resolve there today.
 
+**The guard that was watching did not fail. It was watching the wrong property.**
+
+Caveat 17 produced a rule - *assert every probe is non-empty before measuring* - and the
+10 September script **did assert it, and the probes WERE non-empty.** Non-empty was never the
+property that mattered; it was the property that had failed the time before. A guard written for
+the last substitution checks the last substitution.
+
+P-01, who was blocked twice in one day, put it better than this caveat can: *"both times I was
+blocked, I had aimed my prediction at the model's behaviour while the substitution sat in the
+setup."* Every one of these four errors is upstream of the thing being measured, and every guard
+so far has been pointed downstream of it.
+
 **A fourth substitution, found the same day, one level deeper.** The eight probes of the
 10 September run were authored from five prohibitions **hardcoded in an uncommitted script**.
 The live `capitalforge/portfolio_health` never-do list has seven entries. **The overlap is zero.**
-The invented five are plausible neighbours of the real seven - *"Never report a null risk score as
-zero"* beside *"Never report score: null as zero, or as grade F."* So that run substituted the
-**SUBJECT**: it measured a model against prohibitions the system does not hold. PR #140 recorded
-the finding without the instrument that produced it, which is how it stayed invisible.
+The invented five are plausible neighbours of the real seven without being near-duplicates of
+them - nearest-neighbour similarity **0.55**, close enough to read as sourced and far enough to be
+a different question. So that run substituted the **SUBJECT**: it measured a model against
+prohibitions the system does not hold. PR #140 recorded the finding without the instrument that
+produced it, which is how it stayed invisible.
+
+**The corroboration that settles it.** Running the invented five back through the real authoring
+path produces **8 probes, 5 `never_do_violation` + 3 `silent_failure`** - the exact shape of the
+recorded table. The live seven produce **12, at 7 + 5**. So the old numbers are not merely
+suspect, they are **not comparable**: the class split changes, and the first model has to be
+re-run against the new set before any second model means anything.
 
 **Every agent gets its own git worktree.** `git checkout -b` in a shared checkout collides
 with whatever another agent has uncommitted. This cost a recovery on the previous run.
