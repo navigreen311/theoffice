@@ -4193,3 +4193,162 @@ anything caught it.
 
 **Not checked, deliberately.** The commit hashes and the dated history above are claims about
 the past, and the past does not drift. Only the count is a claim about now.
+
+## B42 — the adapter stopped reporting its own execution as the outcome, and seventeen files now describe a flag that is not there
+
+**Scope:** cross-cutting
+
+**Written by P-06, 10 September 2026.** The one FunnelForge finding in this run that was a
+**live defect rather than a description of one**, and the only entry on this page that closes
+with code rather than with a decision somebody else has to take.
+
+**This is the fix for B33 Finding 1.** That entry raised it and sized it at "small" and could
+not take it: `adapters/funnelforge/` was P-13's. It has since been raised four more times —
+shared rule 1 of `docs/instructions/funnelforge-approved-send-rules.md`, eight of the nine
+module manuals, eight scenario files, and D-5 in `docs/coordination-plan-remaining.md`, which
+also records that D-5 was filed against FunnelForge and is in fact in this repository. **Nine instruction files and eight
+scenario files instruct agents to work around it, and none of them could change it.** B33 Finding
+1 is closed by this entry; B33 is left as written.
+
+### What it was
+
+`adapters/funnelforge/modules.py` answered with a literal above whatever the upstream said:
+
+```
+line 143:  "sent": True,
+line 185:  return {"booked": True, "upstream": answer}
+line 215:  return {"captured": True, "upstream": answer}
+```
+
+`app.py` wraps a handler's return in a 200 without consulting it, so against the FunnelForge
+running on 9 September 2026 — `RESEND_API_KEY` present and empty, no console fallback under
+`NODE_ENV=production`, so **all six approved sends are `500 SEND_FAILED`** — the adapter
+answered:
+
+```json
+{"template_id": "intake_acknowledgment", "sent": true,
+ "upstream": {"status": 500, "body": {"success": false,
+   "error": {"code": "SEND_FAILED", "message": "No email provider configured. ..."}}}}
+```
+
+**An agent reading `sent` reports an email that does not exist**, and the response is shaped to
+invite exactly that: the flag is the first plausible answer in the object and the disproof is
+the next key along. It is the fourth way in this estate that a call returns 200 while being
+wrong, and it was the only one that was live.
+
+### The decision: the flags are deleted, not derived — and the reasons, because the card asked
+
+`sent`, `booked` and `captured` were the adapter's contract with the agent, so removing them is
+a contract change and not a cleanup. Four reasons, in the order they decided it.
+
+**1. The flag was never a measurement, so there is nothing to make truthful.** A handler that
+declines raises `Refused` and `app.py` answers `422`. A `200` therefore *already* means "the
+handler ran and made the call" — which is exactly and only what the flag meant, as shared rule
+1 says in those words. A field with one possible value carries no information. The fix is not
+"make the bit correct"; the bit was never the problem.
+
+**2. A derived flag would carry less than the key beside it.** `HttpUpstream.__call__` already
+returns `{"status": ..., "body": ...}`, and `upstream.status` is in the same object. A boolean
+computed from it collapses three different things — the HTTP status, FunnelForge's envelope
+`success` field, and the domain outcome — into one bit, and leaves every reader to guess which
+of the three it collapsed. **A field that is a lossy function of its own sibling is not a
+contract, it is a footgun**, and getting the collapse subtly wrong would have reintroduced this
+same class of defect one level down, which is the shape this run keeps finding.
+
+**3. No function of the status can make the word true.** The strongest fact available at this
+seam is that FunnelForge's API accepted the request. `sent` says an email reached a person;
+`booked` says an appointment exists; `captured` says a lead row was written. The name is the
+problem, not the value. Renaming to something honest — `upstream_accepted` — would be
+`upstream.status` at a worse resolution, discarding the 404-vs-500-vs-429 distinction the
+manuals spend pages teaching an agent to read.
+
+**4. Absence cannot be misread; a derived flag is one careless edit from being a literal
+again.** An absent key makes `result.get("sent")` falsy, which fails closed. And **this file
+had already taken this decision once**: `_capture_contact` deliberately does not return `isNew`
+because the field does not mean what it says. `sent` is that same field one step further along,
+and the precedent was three lines of docstring away.
+
+**What replaces it is `upstream`, whole** — status and body exactly as returned, passed back
+untouched. `template_id` and `template_name` stay on the six sends: those name which approved
+copy the handler used, which is a statement about the handler's own act and something it
+observed. That is the line `OUTCOME_CLAIM_KEYS` draws — not *return less*, but **return nothing
+you did not see.**
+
+### What now enforces it
+
+`modules.py` declares `OUTCOME_CLAIM_KEYS` and
+`tests/adapters/test_funnelforge_truthfulness.py` runs **every one of the nine bound handlers**
+against a stub upstream and asserts none of those keys comes back. Three things about it are
+deliberate:
+
+- **Every handler, not a representative one.** `docs/forge-adapter.md` trap #4's lesson is that
+  fifteen correct bindings sat beside two wrong ones. Here it was three literals out of three.
+- **The 200 case is asserted as hard as the 500 case.** A status-derived flag passes a
+  500-only test. Pinning the 200 case is what makes a later move to derivation a deliberate act
+  with a failing test and a stated reason attached, in the house style of
+  `test_seven_modules_are_the_shape_v31_refuses_and_that_is_recorded`.
+- **A meta-test asserts the payload table covers `MODULES`**, so a tenth bound module fails by
+  name here rather than silently dropping out of the sweep.
+
+Both guards were verified by breaking what they guard — the literal reintroduced, then a
+`200 <= status < 300` derivation — and confirming each produced a failure naming the module,
+the key and this entry. `modules.py` was then restored and checked byte-identical by SHA-256.
+
+### Why this had to land before the idempotency key
+
+`modules.py`'s own docstring sizes the FunnelForge idempotency finding: seven of the nine
+modules are `is_mutating=True, idempotency_support="at_most_once"`, V31 refuses `auto_execute`
+over exactly that shape, and **an idempotency key on FunnelForge's send path is what would
+change it.** That work is in another repository.
+
+**It could not have been done first.** An idempotency key protects a send path from sending
+twice. A send path whose return value reports success over a 500 defeats it from the other
+side: the key would be correct, the duplicate would be suppressed, and the caller would still
+be told an email was sent when none was. The guarantee would have been real and unreportable.
+The truthful return is the precondition for the key meaning anything, not a tidy-up beside it.
+
+### What became wrong, and is not P-06's to fix
+
+**Every one of these is stale in the same direction: it describes a flag that is no longer
+there. None of them instructs an act that has become wrong** — all five tell an agent to read
+`upstream.status`, which is unchanged and is now the only thing available. Stale, not
+dangerous, and listed here rather than edited because each file belongs to another package.
+
+| file | what is now wrong |
+|---|---|
+| `docs/instructions/funnelforge-approved-send-rules.md` | **Rule 1 in its entirety** — its title, its worked example, its "written as a literal `True` in the handler", and its "DEFECT, raised not fixed" paragraph. Rule 3's "the adapter reports `sent: true` over the top of it" goes with it |
+| `docs/instructions/funnelforge-capture-contact.md` | §"It does not tell you whether a contact was recorded — `captured: true` is a constant", and two more references |
+| `docs/instructions/funnelforge-schedule-blueprint-call.md` | four references to `booked` as a literal |
+| `docs/instructions/funnelforge-send-intake-acknowledgment.md` | four references |
+| `docs/instructions/funnelforge-send-scheduling-confirmation.md` | three references |
+| `funnelforge-send-brief-cover.md`, `-send-deliverable-cover.md`, `-send-followup-no-engagement.md`, `-distribute-referrer-briefing.md` | two, two, two and one |
+| `scenarios/*.yaml` — eight files | **the sharper problem.** `send_intake_acknowledgment.yaml` alone has eight, and several are inside `situation` and `expected_behavior` prose that quotes the response body verbatim: *"the adapter answers `200` with `sent: true` and `upstream.status: 500`"*. That is graded curriculum stating a fact about a response shape that no longer occurs |
+| `docs/coordination-plan-remaining.md` | the D-5 row |
+| `PARALLEL_BUILD.md` line 1289 | names the literals by line number |
+
+`docs/instructions/funnelforge-read-funnel-analytics.md` and `scenarios/read_funnel_analytics.yaml`
+are unaffected — that module never had a flag, which is the shape the other eight now have.
+
+**The scenario files are the item worth a decision rather than a sweep.** A scenario whose
+prose asserts a response shape that no longer exists is not merely out of date: it teaches an
+agent to expect a key, and `tests/golden/` hashes the curriculum, so the text and its hash move
+together or the change is refused. Whoever unwinds this should decide whether the eight
+scenarios keep the defect as a *historical* occasion — an agent that must not trust a flag is
+still a real thing to grade, and the response shape is now counterfactual — or are re-authored
+against the current one. **Both are defensible and it is not a mechanical edit.**
+
+### What this does not close
+
+**`RESEND_API_KEY` is still the empty string on the running `funnelforge-api` container, and
+all six approved sends still return `500 SEND_FAILED`.** P-06 reports that and did not change
+it: `.env` is nobody's package to edit, and configuring the provider now would turn six failing
+sends into six succeeding ones, three of which say *"your Blueprint is attached"* over a
+transport with no attachment support at any layer (B33 Finding 3, B38). **The order matters:
+that copy decision comes before the provider variable, not after.** What this entry changes is
+only that the adapter no longer claims the send happened — which makes the failure visible to
+an agent that reads the response at all, instead of visible only to one that had read the
+manual first.
+
+**And it does not make the adapter's `200` mean the act succeeded.** It means the handler ran
+and here is what came back. That was always the only thing it meant; the difference is that the
+response now says so.
