@@ -3442,10 +3442,44 @@ So unit B needs a different source for the same fact.
 **P-04 locked the refusal in a test rather than reaching into P-03's files.** That is the right
 call — the failing behaviour is now pinned, so whoever fixes it cannot do so silently.
 
-### Why neither is a small fix
+### Half two — CLOSED 11 September 2026, migration 0037
 
-**Half two is a few lines and a decision** — which source, and whether a live api_version can
-stand as a judged one.
+**Ruled: store the members, and refuse on disagreement.**
+
+The set is stored (`curriculum_submission_module`), written by `_record_submission` in the same
+transaction as the parent row, for unit B only. The cheaper variant — writing `department` onto
+the unit-A rows and recovering the set with one query and no new table — **was refused**: it
+costs *"`module_id` and `department` are the unit, and this function's callers pass exactly one
+of the two"*, which is the sentence that makes `submission_unit` readable. Buying a schema
+saving with a sentence that stops being true is the trade this project keeps declining.
+
+`certification.department_api_version` resolves each member through
+`forge_api_version_in_force` — the same reconstruction unit A uses, on that member's own hash —
+and **requires them to agree**. One distinct value records. More than one refuses, naming both
+versions and which modules carried them. Zero members refuses, which is every unit-B row written
+before 0037.
+
+**Not `max()` and not a first row.** The set IS the basis, so when the members disagree there is
+no single version the department was judged against and choosing one makes the basis an artefact
+of query order. **`forge_registry.api_version` was not taken** — it is the version live now,
+not the version anything was judged against, which is the staleness
+`certified_records_its_basis` exists to prevent. The amendment above called it *"the obvious
+candidate"*; that is withdrawn.
+
+**Every Forge in this database carries exactly one live `forge_api_version` today, so nothing in
+the real data exercises the disagreement.** That is a fact about four Forges on one day, not a
+property of the schema — `forge_api_version` is NOT NULL per
+`(forge_id, module_id, instruction_version)` row and nothing constrains two modules of one
+department to agree. The test constructs the disagreement, and was verified by replacing the
+refusal with `max()` and watching it fail.
+
+`tests/contract/test_unit_b_certification.py` locked the old refusal and said *"when it is
+fixed, this test is the one that tells you"*. That hand-off has been taken.
+
+### Why half one is still not a small fix
+
+**Half two was a few lines and a decision** — which source, and whether a live api_version can
+stand as a judged one. It is closed.
 
 **Half one is a component that does not exist.** A runner that holds an agent, receives probes
 one at a time through P-05b's `ask` callback, scores them, and posts the result. ADR-0050

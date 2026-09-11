@@ -900,6 +900,7 @@ async def _record_submission(
     ctx: _Context, *, forge_id: str, module_id: str | None, department: str | None,
     scenario_pack_ref: str, scenario_count: int, coverage_denominator: int,
     instruction_content_hash: str, run_ref: str | None,
+    members: dict[str, str] | None = None,
 ) -> None:
     """The one place Gate 8 writes a `curriculum_submission` row, for either unit.
 
@@ -914,7 +915,19 @@ async def _record_submission(
     `certification`, NOT on this table - `curriculum_submission` has no unit constraint
     at all and both columns are nullable. So the rule lives where it always did, in
     `submission_unit`, and this function's callers pass exactly one of the two.
+
+    `members` is `{module_id: instruction_content_hash}` and is **unit B's only**, for
+    the same reason: a unit-A submission already names its one module in a column, and
+    writing it here as well would be a second spelling of the same fact. A unit-B
+    submission's `instruction_content_hash` is a composite over this set
+    (`simforge.department_basis_hash`) and the composite is one-way, so without these
+    rows nothing downstream can recover which instructions the department was judged
+    against - which is B36 half two, and the reason the sweep could not record a
+    unit-B PASS. Written in the SAME transaction as the parent row: a submission whose
+    members are missing is a basis that cannot be recovered, and two statements that can
+    half-succeed would produce exactly that.
     """
+    submission_id = uuid.uuid4()
     async with ctx.conn.cursor() as cur:
         await cur.execute(
             """
@@ -925,11 +938,20 @@ async def _record_submission(
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
-                uuid.uuid4(), ctx.venture_id, forge_id, module_id, department,
+                submission_id, ctx.venture_id, forge_id, module_id, department,
                 scenario_pack_ref, scenario_count, coverage_denominator,
                 instruction_content_hash, ctx.actor, run_ref,
             ),
         )
+        if members:
+            await cur.executemany(
+                """
+                INSERT INTO curriculum_submission_module
+                  (submission_id, module_id, instruction_content_hash)
+                VALUES (%s, %s, %s)
+                """,
+                [(submission_id, m, h) for m, h in sorted(members.items())],
+            )
 
 
 def _department_forge_modules(
@@ -1101,6 +1123,10 @@ async def _open_department_units(
             coverage_denominator=len(modules),
             instruction_content_hash=basis,
             run_ref=run_ref,
+            # The same mapping `basis` was computed from, stored rather than re-derived.
+            # `department_basis_hash` is one-way, so this is the only record of what the
+            # composite was composed of.
+            members={m: accepted[m]["instruction_content_hash"] for m in covered},
         )
         entry["run_ref"] = run_ref
         units.append(entry)

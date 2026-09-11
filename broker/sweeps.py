@@ -541,9 +541,17 @@ async def _ingest_one(
 
     unit, _rubric_kind = simforge.submission_unit(sub["module_id"])
 
+    # Both units recover it, and they ask different questions. Unit A reconstructs the
+    # instruction row in force at `submitted_at` from the module's own content hash.
+    # Unit B has no single module: its hash is a composite over the department's member
+    # instructions, so the members are read back and their api_versions must AGREE - the
+    # set is the basis, and a basis with two answers is not one. This branch was gated on
+    # `unit == "A"` until B36 half two; a unit-B result therefore reached `record_result`
+    # with no api_version, `certified_records_its_basis` refused it, and the sweep
+    # reported `failed` - a guard doing its job over an omission.
     api_version: str | None = None
-    if unit == "A":
-        try:
+    try:
+        if unit == "A":
             api_version = await certification.forge_api_version_in_force(
                 conn,
                 forge_id=sub["forge_id"],
@@ -551,14 +559,21 @@ async def _ingest_one(
                 content_hash=sub["instruction_content_hash"],
                 at=sub["submitted_at"],
             )
-        except certification.CertificationError as exc:
-            # Not fatal here, and NOT substituted. A verdict whose basis cannot be
-            # recovered may still be recordable - a FAIL records that an agent was
-            # tested and did not pass, a claim that cannot go stale and therefore needs
-            # no basis - so the write is attempted and `record_result`'s guard decides.
-            findings["basis_unrecoverable"].append(
-                {"submission_id": str(submission_id), "reason": str(exc)}
+        else:
+            api_version = await certification.department_api_version(
+                conn,
+                submission_id=submission_id,
+                forge_id=sub["forge_id"],
+                at=sub["submitted_at"],
             )
+    except certification.CertificationError as exc:
+        # Not fatal here, and NOT substituted. A verdict whose basis cannot be
+        # recovered may still be recordable - a FAIL records that an agent was
+        # tested and did not pass, a claim that cannot go stale and therefore needs
+        # no basis - so the write is attempted and `record_result`'s guard decides.
+        findings["basis_unrecoverable"].append(
+            {"submission_id": str(submission_id), "reason": str(exc)}
+        )
 
     if unit == "A":
         holders = await _grant_holders(
