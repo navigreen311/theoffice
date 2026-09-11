@@ -14,7 +14,7 @@ the running FunnelForge stack
 > them needs a second email transport in FunnelForge and *"that shouldn't happen as a side
 > effect of an attachment promise"*. The body quoted in §1 below is the current one.
 >
-> **Superseded in premise: every passage describing the second paragraph's reply instruction. **That paragraph is gone.** D-1 removed it.**
+> **SUPERSEDED BY THE RULING:** every passage describing the second paragraph's reply instruction. **That paragraph is gone.** D-1 removed it.
 >
 > **What did not change: the transport.** Every statement in this manual about what the send
 > path cannot do is still true, and every rule in §7 still stands — an agent must not say by

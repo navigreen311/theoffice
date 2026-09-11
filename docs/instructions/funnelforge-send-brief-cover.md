@@ -14,7 +14,7 @@
 > them needs a second email transport in FunnelForge and *"that shouldn't happen as a side
 > effect of an attachment promise"*. The body quoted in §1 below is the current one.
 >
-> **Superseded in premise, kept as the evidence that produced the ruling: **§2 *It does not attach the Brief***. The copy no longer claims an enclosure.**
+> **SUPERSEDED BY THE RULING, kept as the evidence that produced it:** **§2 *It does not attach the Brief***. The copy no longer claims an enclosure.
 >
 > **What did not change: the transport.** Every statement in this manual about what the send
 > path cannot do is still true, and every rule in §7 still stands — an agent must not say by
@@ -55,7 +55,7 @@ Subject: *"This quarter's Capital Command Brief"*. Body, in full:
 >
 > It is written to be read in ten minutes and acted on in one conversation.
 
-That is the entire message. One statement about an enclosure and one about how to read it.
+That is the entire message. One statement that the Brief exists and one about how to read it — **and since B43 nothing that says how to obtain it.**
 
 **Who receives it.** A client with an engagement — §3.3 of the marketing-plan intake files this
 under *"Post-engagement client comms (Capital Command Brief, etc.)"*, worker-autonomous in a

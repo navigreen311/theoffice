@@ -14,7 +14,7 @@
 > them needs a second email transport in FunnelForge and *"that shouldn't happen as a side
 > effect of an attachment promise"*. The body quoted in §1 below is the current one.
 >
-> **Superseded in premise, kept as the evidence that produced the ruling: **§2 *It does not attach the Blueprint*** and **§2 *It does not give the client a way to reach the team that wrote it***. The copy no longer makes either claim.**
+> **SUPERSEDED BY THE RULING, kept as the evidence that produced it:** **§2 *It does not attach the Blueprint*** and **§2 *It does not give the client a way to reach the team that wrote it***. The copy no longer makes either claim.
 >
 > **What did not change: the transport.** Every statement in this manual about what the send
 > path cannot do is still true, and every rule in §7 still stands — an agent must not say by

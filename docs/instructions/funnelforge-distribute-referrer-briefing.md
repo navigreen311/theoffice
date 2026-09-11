@@ -14,7 +14,7 @@ the running FunnelForge stack
 > them needs a second email transport in FunnelForge and *"that shouldn't happen as a side
 > effect of an attachment promise"*. The body quoted in §1 below is the current one.
 >
-> **Superseded in premise, kept as the evidence that produced the ruling: item 3 of the opening list and the enclosure paragraphs of **§2**. The copy no longer claims an enclosure.**
+> **SUPERSEDED BY THE RULING, kept as the evidence that produced it:** item 3 of the opening list and the enclosure paragraphs of **§2**. The copy no longer claims an enclosure.
 >
 > **What did not change: the transport.** Every statement in this manual about what the send
 > path cannot do is still true, and every rule in §7 still stands — an agent must not say by
@@ -52,7 +52,7 @@ Subject: *"Quarterly briefing for referring partners"*. Body, in full:
 > The quarterly briefing for referring partners is ready, covering what we are seeing in
 > the market and what we are able to place.
 
-That is the entire message. One sentence, one claim, one reference to an enclosure.
+That is the entire message. One sentence and one claim — **and since B43 the claim arrives with nothing substantiating it**, because the reference to an enclosure is what was removed.
 
 **Who receives it.** A referring partner on the banker distribution list — SBA preferred
 lenders, commercial-bank business banking officers, CDFI loan officers, online-lender

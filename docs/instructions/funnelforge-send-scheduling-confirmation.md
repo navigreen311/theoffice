@@ -14,7 +14,7 @@
 > them needs a second email transport in FunnelForge and *"that shouldn't happen as a side
 > effect of an attachment promise"*. The body quoted in §1 below is the current one.
 >
-> **Superseded in premise: **§2 *It does not give the client a way to reply to Burkham***. D-1 removed the reply instruction. **§2 *It does not put the details in the email*** and **§2 *It does not send a calendar invitation*** are NOT superseded — B43's D-2 is still open and both sentences are still in the copy.**
+> **SUPERSEDED BY THE RULING:** **§2 *It does not give the client a way to reply to Burkham***. D-1 removed the reply instruction. **§2 *It does not put the details in the email*** and **§2 *It does not send a calendar invitation*** are NOT superseded — B43's D-2 is still open and both sentences are still in the copy.
 >
 > **What did not change: the transport.** Every statement in this manual about what the send
 > path cannot do is still true, and every rule in §7 still stands — an agent must not say by
@@ -46,7 +46,7 @@ Subject: *"Your Blueprint call is confirmed"*. Body, in full:
 > Your Blueprint call is confirmed. The details are below, and a calendar invitation follows
 > separately.
 
-That is the entire message. Two sentences and a closing line.
+That is the entire message. Two sentences — **since B43 the closing line is gone, and with it the only remedy this message offered.**
 
 **Who receives it.** A client who has paid for the Funding Readiness Score Blueprint — $497
 Standard or $997 Comprehensive — and has just taken a time
