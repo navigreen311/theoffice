@@ -28,9 +28,27 @@ from typing import Any
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 
+from broker import revocation
 from broker.errors import OfficeError
 from generators.pack import BusinessPack
 from generators.validator import Verdict, validate
+
+# `live_grants` means "a grant no live revocation covers". The four-scope rule that
+# decides that has exactly one copy - `revocation._covers`, the same text
+# `check_revocations` enforces on every call and `covered_grants` reports to Gate 7. It
+# is called here rather than re-spelled, because that module says in its own docstring
+# that a second spelling is how two answers to one question ship, each passing its own
+# tests. `covered_grants` itself does not fit these callers: it answers per venture, and
+# not one counter below is a single-venture call. See blocking.md B40. The
+# `FILTER (WHERE g.revoked_at IS NULL)` this replaces never did any of this work - that
+# column had no writer, was true for every row ever written, and 0036 dropped it (B37).
+_NOT_REVOKED = f"""NOT EXISTS (
+                SELECT 1 FROM revocation r
+                WHERE {revocation._covers(
+                    agent="g.office_agent_id", forge="g.forge_id",
+                    module="g.module_id", venture="g.venture_id",
+                )}
+              )"""
 
 
 class VentureError(OfficeError):
@@ -324,7 +342,7 @@ async def directory(conn: AsyncConnection) -> dict[str, Any]:
         registered = {r["slug"]: dict(r) for r in await cur.fetchall()}
 
         await cur.execute(
-            """
+            f"""
             SELECT v.venture_id,
                    -- count(g.grant_id), not count(*). A LEFT JOIN that matches
                    -- nothing still produces one row with every g column NULL, which
@@ -332,8 +350,15 @@ async def directory(conn: AsyncConnection) -> dict[str, Any]:
                    -- none. Counting a column skips the null row, which is the whole
                    -- difference. The `revoked_at` filter that used to sit here did no
                    -- part of that work (migration 0036, B37).
+                   -- `assignable_grants` is NOT revocation-filtered, and the status
+                   -- ladder below reads it. `is_assignable` is GENERATED from the
+                   -- certification refs and `activated_at` - "was this grant ever
+                   -- fit to assign", which a revoked grant still satisfies. Whether
+                   -- a venture whose every grant is revoked should still report
+                   -- "live" is a status rule and a separate decision; B40 is the
+                   -- naming defect in the field below. Left alone, and said so.
                    count(g.grant_id) FILTER (WHERE g.is_assignable) AS assignable_grants,
-                   count(g.grant_id)                                     AS live_grants,
+                   count(g.grant_id) FILTER (WHERE {_NOT_REVOKED})        AS live_grants,
                    count(DISTINCT g.office_agent_id) FILTER (WHERE g.is_assignable)
                      AS agents_appointed,
                    b.monthly_usd_cap, b.hard_cap_action, b.soft_cap_pct,

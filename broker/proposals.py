@@ -37,7 +37,24 @@ from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from broker import audit, incidents
+from broker import audit, incidents, revocation
+
+# `live_grants` means "a grant no live revocation covers". The four-scope rule that
+# decides that has exactly one copy - `revocation._covers`, the same text
+# `check_revocations` enforces on every call and `covered_grants` reports to Gate 7. It
+# is called here rather than re-spelled, because that module says in its own docstring
+# that a second spelling is how two answers to one question ship, each passing its own
+# tests. `covered_grants` itself does not fit these callers: it answers per venture, and
+# not one counter below is a single-venture call. See blocking.md B40. The
+# `FILTER (WHERE g.revoked_at IS NULL)` this replaces never did any of this work - that
+# column had no writer, was true for every row ever written, and 0036 dropped it (B37).
+_NOT_REVOKED = f"""NOT EXISTS (
+                SELECT 1 FROM revocation r
+                WHERE {revocation._covers(
+                    agent="g.office_agent_id", forge="g.forge_id",
+                    module="g.module_id", venture="g.venture_id",
+                )}
+              )"""
 
 AUTO_EXECUTE = "auto_execute"
 PROPOSE = "propose"
@@ -325,15 +342,20 @@ async def queue(conn: AsyncConnection) -> dict[str, Any]:
         # Why the queue is empty, when it is. These are the facts that distinguish "no
         # reviewer is needed" from "nothing in this system can act yet".
         await cur.execute(
-            """
+            f"""
             SELECT
-              -- Every grant on record. It does NOT consult the `revocation` table,
-              -- so a revoked agent's grant is still counted here - see blocking.md B40.
-              -- The `WHERE revoked_at IS NULL` that used to stand here did not make it
-              -- true either; that column had no writer and was dropped in 0036 (B37).
-              (SELECT count(*) FROM agent_forge_grant)          AS live_grants,
-              (SELECT count(*) FROM agent_forge_grant
-                WHERE trust_tier <> 'auto_execute')             AS grants_below_auto,
+              -- Grants no live revocation covers. This was every grant on record:
+              -- the `WHERE revoked_at IS NULL` that used to stand here did no work,
+              -- because that column had no writer and 0036 dropped it (B37). B40.
+              (SELECT count(*) FROM agent_forge_grant g
+                WHERE {_NOT_REVOKED})                           AS live_grants,
+              -- The same predicate, and it has to be. `_empty_reason` concludes
+              -- "every live grant is at auto_execute" by comparing these two
+              -- numbers. Counted over different populations they can contradict
+              -- each other, and the sentence would name a cause not in force.
+              (SELECT count(*) FROM agent_forge_grant g
+                WHERE trust_tier <> 'auto_execute'
+                  AND {_NOT_REVOKED})                           AS grants_below_auto,
               (SELECT count(*) FROM agent_call_ledger)          AS calls_ever,
               (SELECT count(*) FROM proposal
                 WHERE created_at >= date_trunc('day', now()))   AS proposals_today

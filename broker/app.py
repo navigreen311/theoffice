@@ -88,6 +88,23 @@ from generators.validator import validate as validate_pack
 # is the condition this exists to detect.
 EXPECTED_SCHEMA_REVISION = "0037"
 
+# `live_grants` means "a grant no live revocation covers". The four-scope rule that
+# decides that has exactly one copy - `revocation._covers`, the same text
+# `check_revocations` enforces on every call and `covered_grants` reports to Gate 7. It
+# is called here rather than re-spelled, because that module says in its own docstring
+# that a second spelling is how two answers to one question ship, each passing its own
+# tests. `covered_grants` itself does not fit these callers: it answers per venture, and
+# not one counter below is a single-venture call. See blocking.md B40. The
+# `FILTER (WHERE g.revoked_at IS NULL)` this replaces never did any of this work - that
+# column had no writer, was true for every row ever written, and 0036 dropped it (B37).
+_NOT_REVOKED = f"""NOT EXISTS (
+                SELECT 1 FROM revocation r
+                WHERE {revocation._covers(
+                    agent="g.office_agent_id", forge="g.forge_id",
+                    module="g.module_id", venture="g.venture_id",
+                )}
+              )"""
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -408,9 +425,10 @@ async def list_agents(conn: DB, _me: ME) -> list[dict[str, Any]]:
     """
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
-            """
+            f"""
             SELECT i.office_agent_id, i.agent_name, i.department, i.status,
-                   count(DISTINCT g.grant_id)                  AS live_grants,
+                   count(DISTINCT g.grant_id)
+                     FILTER (WHERE {_NOT_REVOKED})             AS live_grants,
                    count(DISTINCT c.cert_id) FILTER (WHERE c.state = 'certified')
                      AS certifications,
                    array_remove(array_agg(DISTINCT c.state), NULL) AS cert_states,
@@ -619,10 +637,11 @@ async def agent_detail(office_agent_id: uuid.UUID, conn: DB, _me: ME) -> dict[st
 async def list_ventures(conn: DB, _me: ME) -> list[dict[str, Any]]:
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
-            """
+            f"""
             SELECT v.venture_id,
                    count(DISTINCT g.office_agent_id) AS agents,
-                   count(DISTINCT g.grant_id)                  AS live_grants,
+                   count(DISTINCT g.grant_id)
+                     FILTER (WHERE {_NOT_REVOKED})             AS live_grants,
                    b.monthly_usd_cap, b.hard_cap_reversed_at
             FROM (SELECT DISTINCT venture_id FROM agent_forge_grant
                   UNION SELECT DISTINCT venture_id FROM venture_forge_manifest
