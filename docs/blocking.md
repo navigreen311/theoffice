@@ -28,6 +28,29 @@ are not obvious — which is the same guessing that produced the department mapp
 decisions entry 12. They stay as they are. **B-numbering continues unbroken**: the next
 item is B18 and nothing is renumbered.
 
+### An entry heading has TWO shapes, and a check that assumes one is wrong
+
+Read this before writing anything that counts, finds or audits entries on this page.
+
+```
+## B<n> — <title>              an entry
+## B<n> closure — <title>      a second heading ABOUT that entry
+```
+
+**B35 has both.** So does B46. A closure is not a duplicate of its entry and not a new
+entry; it is the same blocker being closed, and it is written this way on purpose.
+
+**Three checks have now returned a false answer by assuming only the first form.** A
+merge-conflict resolver reported `B35` as a duplicate and refused; an applier reported
+`B46` absent when it was present; a count of entries came out one high. Each was a
+different author writing the obvious regex, and each was wrong in a different direction —
+one refused to proceed, one under-reported, one over-reported.
+
+**The fact is small and the cost of not knowing it is three separate hours.** It is
+written here rather than wrapped in a helper because the next check will be written in a
+hurry by somebody who greps this file for `^## B`, and what they need is to know the
+answer, not to find a function.
+
 ### The drift, recorded because the shape recurs
 
 Nothing announced that the scope had moved. The page kept a title naming one venture while
@@ -4671,3 +4694,89 @@ transactional**, which decides whether §6.5's one-click unsubscribe was ever ow
 three cost findings close when somebody supplies a place to put a document and a channel a
 recipient can use** — which is one decision, not three, and is the thing the copy was written
 assuming existed.
+
+---
+
+## B44 — FunnelForge `/api/emails/send` cannot carry Reply-To or attachments; the capable transport is not on the send path
+
+**Status:** BLOCKED — needs an allocation covering `apps/email-engine/**`
+**Repo:** funnelforge · **Raised by:** P-08 · **Related:** P-07 (copy-side cost of the same promise)
+
+The remaining-work document states that no attachment field exists "in the schema, the types, or any provider call". The first two are correct; **the third is wrong, and the correction makes the problem worse, not smaller.**
+
+`apps/api/src/services/email/multi-provider.ts` fully supports `replyTo` and `attachments` across six providers (Resend, SendGrid, Mailgun, Postmark, SparkPost, Mandrill). **It is not on the send path.** Its only consumer is `apps/api/src/services/email/test-sender.ts`.
+
+`/api/emails/send` — the route theoffice's adapter calls via `adapters/funnelforge/upstream.py::EMAILS_SEND` — uses `emailSender` from `@funnelforge/email-engine` (`apps/email-engine/src/services/email-sender.ts`), which carries neither field at four layers: `SendEmailOptions`, the `send()` destructure, `sendViaProvider`'s inline type, and all five provider methods. A third transport, `apps/api/src/services/email-engine-client.ts`, also carries neither.
+
+**Consequence for the copy ruling:** the transport-side cost of keeping the attachment promise is higher than assumed. It is not a route-schema addition; it is extending a second email transport, including its separate `sendAMPEmail()` branch. Ivan's ruling on whether the approved templates keep promising an attachment should be made against this cost, not the documented one.
+
+**Unblocks with:** an allocation over `apps/email-engine/src/types.ts` plus `apps/email-engine/src/services/email-sender.ts` (both additive, both optional fields, no signature breaks). P-08's own ~20-line route change lands immediately after.
+
+**Rejected option, recorded so it is not rediscovered:** repointing `/send` at `multiEmailProvider` looks cheaper but regresses behaviour — `emailSender.send` runs `personalizeContent` over subject/html/text (merge-field substitution, `email-sender.ts:133–135`) and falls back through a configured provider priority list; `multiEmailProvider` does neither. It would silently break merge-field personalization on every transactional send. This is an architectural ruling, not a plumbing choice.
+
+**Open question above the package:** this repo has three parallel email transports and the most capable is reachable only from a test-send helper. Consolidation is a coordinator/Ivan call.
+
+**Applied by the coordinator 11 September 2026** from funnelforge#155, where P-08 raised it. A package outside this repository cannot write this ledger, so it wrote the entry and the coordinator carried it — and then four of them sat unapplied in four PR bodies, which is the failure Caveat 18 describes with the numbers already allocated.
+
+---
+
+## B46 closure — P-10: the booking route's second ungated send is gated, checked and reported at the source
+
+**`funnelforge`** · Fixed 10 September 2026 by P-10, in `navigreen311/funnelforge`, branch `feature/p-10-booking-ungated-send`. **Closes the FunnelForge half of the hole recorded in `docs/instructions/funnelforge-schedule-blueprint-call.md` §2. Does not close the `§4.5` copy question, and does not touch any template.**
+
+`POST /api/scheduling/public/:businessId/:slug/book` mailed the client on every successful booking with FunnelForge's own `templates.appointmentConfirmation` — copy that is not in `adapters/funnelforge/templates.py`, was never reviewed under §4.5, and that `assert_sendable` cannot reach because no module names it. The send's only condition was `if (clientEmail)`, and the route's own body schema makes `clientEmail` **required**, so the condition was always true.
+
+**Three defects, now separable in the code as they were in the finding.**
+
+| | before | after |
+|---|---|---|
+| gate | none; `if (clientEmail)` was always true | opt-in per appointment type, `AppointmentType.settings.sendClientConfirmation === true`, **off by default** |
+| result | `emailResult.success` logged, never read; message read *"Appointment confirmation email sent"* when it was not | read; response carries `data.confirmationEmail = { enabled, attempted, sent, reason }` |
+| a throw | escaped into the handler's single `try` → `500 "Failed to book appointment"` over a committed row | caught locally; reported as `send_failed`, booking stands |
+
+**The behaviour change is observable to zero clients today, which is why the default could be flipped to off.** No provider is configured — `.env` defines only `DATABASE_URL` and `REDIS_URL`, `docker-compose.yml` runs `NODE_ENV=production` with an empty `RESEND_API_KEY`, so `EmailSender.initializeProviders()` produces an empty list and `send()` returns `{ success: false, error: 'No email provider configured…' }` without throwing. Every booking since this route shipped has mailed nothing and reported success. Shared rule 3 is confirmed from FunnelForge's side.
+
+**What this changes for The Office.** `send_scheduling_confirmation` is now, by default, the **only** confirmation a booked client receives, and the first. The two-confirmations-for-one-appointment question in §2 OPEN is no longer a live risk at provisioning time: configuring a provider no longer fires unreviewed copy at every booking. **Which of the two should exist remains a §4.5 decision and is still open** — it has been de-urgented, not answered.
+
+**What this changes for `schedule_blueprint_call`.** Nothing that breaks it: `_schedule_blueprint_call` returns a constant `booked: True` and reads nothing else from the upstream body, so `data.confirmationEmail` is additive and inert. **But the manual's §2 statement — *"an agent does not know whether the client was emailed, and cannot find out from this module"* — is now false at the upstream, and true only because the adapter does not forward the field.** Whether it should is a surface decision for The Office and was deliberately left alone: P-10 may not modify theoffice.
+
+**What it does not affect.** No template copy changed (P-07 owns `scheduling_confirmation`). `apps/api/src/modules/emails/routes.ts` untouched (P-08). `multi-provider.ts` untouched. No `.env`, no `RESEND_API_KEY` — **provisioning the provider is still Ivan's, and P-07/P-08's reason to defer it stands.** Nothing was done about availability, collisions, dedupe, payment, meeting links or timezones on this route; all still as §3 describes them.
+
+**The first hole of this shape is still open.** `capture_contact`'s WELCOME enrolment (`docs/plans/funnelforge-binding-RECORD.md`) is a separate route and was not in P-10's scope. **It is conditional on a WELCOME sequence existing, where this one was unconditional — but the shape is identical and the same fix applies.**
+
+**Applied by the coordinator 11 September 2026** from funnelforge#156, where P-10 raised it. A package outside this repository cannot write this ledger, so it wrote the entry and the coordinator carried it — and then four of them sat unapplied in four PR bodies, which is the failure Caveat 18 describes with the numbers already allocated.
+
+---
+
+## B47 — the second `rate_limited` exception is recorded, but not where the ruling is, and the ruling still states the universal it breaks
+
+**Found by P-11, 2026-09-10, verifying an item the remaining-work document listed as done.** The item is done. The recording of it is not.
+
+**What is true.** `rate_limited` is authored, with substantive content, on **all nine** FunnelForge modules — the five from P-16 (#87) and the four from P-16b (#102). Every source-side claim behind it was re-verified against `funnelforge` at `ec11a89` and is exactly correct: global `preHandler` at `apps/api/src/index.ts:729-738`, `/health` exempted at `rate-limit-service.ts:279-281`, the 429 body shape at `:315-330`, all four module routes categorised `general`, and `distributedRateLimitHook` / `checkLeadQuota` / `checkAICredits` exported and called from nowhere. The probe transcript in `docs/instructions/funnelforge-approved-send-rules.md` section 4 is sound.
+
+**What is wrong.** `docs/blocking.md:3005-3006` states that the second exception is *"recorded beside the first, which is what this paragraph is."* It is not beside the first. The ruling lives in `docs/scenario-generation.md` section 3 and `docs/decisions.md` section 21; the correction lives here, under a FunnelForge item, in a ledger nobody reading the ruling is sent to.
+
+**Four sentences are now false, and three of them are load-bearing:**
+- `docs/scenario-generation.md:123-125` — *"no source"*, *"No manual describes a rate limit, a quota, a 429 or a backoff"*
+- `docs/scenario-generation.md:133` — *"Every module declares `rate_limited` as `not_applicable`"*
+- `docs/decisions.md:1964` — *"One of nineteen live instructions"*, which is section 21's stated reason for refusing the ninth section
+- `docs/blocking.md:1039` — *"absent from every manual … a uniform absence"*, inside B16's contrast with B15
+
+**Why it persists.** `generators/scenario_content.py:52` and all nine FunnelForge scenario headers point readers at `scenario-generation.md` section 3 — the stale text — and at nothing else. `tests/test_funnelforge_manuals.py` references neither `rate_limited` nor the ruling, so nothing goes red.
+
+**The shape.** This is the known pattern where one package closes another's gap and the first package's refusal constant goes stale — the refusal was correct over the eleven CapitalForge modules and is still correct over them; it is the *universal quantifier* that broke when FunnelForge arrived, not the ruling.
+
+**The fix, and it is small.** Amend section 3 of `docs/scenario-generation.md` and section 21 of `docs/decisions.md` in place — each gains a named second exception and a scope qualifier ("over the eleven CapitalForge modules") in place of "every"/"any"/"nineteen". Correct `docs/blocking.md:1039`'s "uniform absence". Then reduce `blocking.md:2982-3008` to a pointer, since its content will live at the ruling. Optionally assert in `tests/test_funnelforge_manuals.py` that all nine author `rate_limited`, so the next divergence is loud.
+
+**Not P-11's to apply** — P-11 holds a `funnelforge` worktree and may not write to `theoffice`. No `funnelforge` change is implicated.
+
+**Applied by the coordinator 11 September 2026** from funnelforge#154, where P-11 raised it. A package outside this repository cannot write this ledger, so it wrote the entry and the coordinator carried it — and then four of them sat unapplied in four PR bodies, which is the failure Caveat 18 describes with the numbers already allocated.
+
+---
+
+## B48 — an unconfigured Office bridge answered 401 under test, because `@prisma/client` reloads `.env` at import and dotenv fills what the suite deleted
+
+**`capitalforge`** · capitalforge: an unconfigured Office bridge answered `401 OFFICE_CREDENTIAL_REJECTED` under test on any checkout whose `.env` configures the bridge, because `@prisma/client` loads `.env` at import time and dotenv *fills* an absent variable. The suite deleted the three `OFFICE_*` variables and then imported the router, which re-populated them, so the "unconfigured" app mounted the real bridge. The reload fires once per worker, so only the *first*-built state was affected — the unconfigured one, which is the state the file exists to assert. Result: 11/11 green on CI (no `.env`) and 5 failures on any onboarded developer machine. Resolved by importing `@prisma/client` before establishing the environment, and by asserting the precondition *after* the router import rather than before it — a check placed before the import reads an environment nothing has consumed yet and passes while the router sees something else. Production code unchanged; `index.ts` byte-identical. Cross-ref capitalforge#92, PR #94 (P-01).
+
+
+**Applied by the coordinator 11 September 2026** from capitalforge#95, where P-12 raised it. A package outside this repository cannot write this ledger, so it wrote the entry and the coordinator carried it — and then four of them sat unapplied in four PR bodies, which is the failure Caveat 18 describes with the numbers already allocated.
