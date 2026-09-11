@@ -8,6 +8,21 @@
 `ac6475c`
 **Status:** draft, pending Compliance Review Board
 
+> **AMENDED 10 SEPTEMBER 2026 — THE APPROVED COPY CHANGED UNDER `docs/blocking.md` B43.**
+> The §4.5 gate ruled on B43's D-6 (the attachment promise) and D-1 (the reply instruction)
+> and **removed both from the copy rather than building the transport**, because carrying
+> them needs a second email transport in FunnelForge and *"that shouldn't happen as a side
+> effect of an attachment promise"*. The body quoted in §1 below is the current one.
+>
+> **Superseded in premise: **§2 *It does not give the client a way to reply to Burkham***. D-1 removed the reply instruction. **§2 *It does not put the details in the email*** and **§2 *It does not send a calendar invitation*** are NOT superseded — B43's D-2 is still open and both sentences are still in the copy.**
+>
+> **What did not change: the transport.** Every statement in this manual about what the send
+> path cannot do is still true, and every rule in §7 still stands — an agent must not say by
+> hand what the copy no longer says. **What changed is only that the copy no longer says it.**
+>
+> **AND THE RULING LEFT THIS TEMPLATE WORSE ON ONE AXIS, WHICH B43 RECORDS RATHER THAN HIDES.** *"reply here and we will move it"* was the only remedy the message offered a client whose appointment time is wrong. It did not work — it reached FunnelForge, and there is no reschedule module — but it was the only thing there. **The message now offers no remedy at all**, while still saying the details are below and still promising a calendar invitation. B43 records `send_scheduling_confirmation` as a module that should not be sent until D-2 is ruled.
+
+
 Read `funnelforge-approved-send-rules.md` first, and
 `funnelforge-send-intake-acknowledgment.md` second — that is the canonical manual for the six
 approved sends, and the request shape, the two refusals, the adapter failure table and the
@@ -30,8 +45,6 @@ Subject: *"Your Blueprint call is confirmed"*. Body, in full:
 
 > Your Blueprint call is confirmed. The details are below, and a calendar invitation follows
 > separately.
->
-> If the time no longer works, reply here and we will move it.
 
 That is the entire message. Two sentences and a closing line.
 

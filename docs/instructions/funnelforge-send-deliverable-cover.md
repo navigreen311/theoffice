@@ -8,6 +8,21 @@
 `ac6475c`
 **Status:** draft, pending Compliance Review Board
 
+> **AMENDED 10 SEPTEMBER 2026 — THE APPROVED COPY CHANGED UNDER `docs/blocking.md` B43.**
+> The §4.5 gate ruled on B43's D-6 (the attachment promise) and D-1 (the reply instruction)
+> and **removed both from the copy rather than building the transport**, because carrying
+> them needs a second email transport in FunnelForge and *"that shouldn't happen as a side
+> effect of an attachment promise"*. The body quoted in §1 below is the current one.
+>
+> **Superseded in premise, kept as the evidence that produced the ruling: **§2 *It does not attach the Blueprint*** and **§2 *It does not give the client a way to reach the team that wrote it***. The copy no longer makes either claim.**
+>
+> **What did not change: the transport.** Every statement in this manual about what the send
+> path cannot do is still true, and every rule in §7 still stands — an agent must not say by
+> hand what the copy no longer says. **What changed is only that the copy no longer says it.**
+>
+> **AND A COST THE RULING CREATED, WHICH §2 DOES NOT YET DESCRIBE.** This message now tells a client who paid $497 or $997 that their Blueprint is ready and gives them **no way to obtain it and no way to ask** — no enclosure, no link, no address. B43 records `send_deliverable_cover` as a module that should not be sent until a delivery channel exists. **Read B43 before calling it.**
+
+
 Read `funnelforge-approved-send-rules.md` first, and
 `funnelforge-send-intake-acknowledgment.md` second — the request shape, the two refusals, the
 adapter failure table and the retry rule are identical here and are not repeated. **This manual
@@ -28,10 +43,8 @@ Sends one fixed email to one named person: the Blueprint deliverable cover note.
 
 Subject: *"Your Blueprint is ready"*. Body, in full:
 
-> Your Blueprint is attached. It sets out what we found and what we recommend, in the order we
+> Your Blueprint is ready. It sets out what we found and what we recommend, in the order we
 > would act on it.
->
-> Questions are welcome; reply here and they reach the team that wrote it.
 
 That is the entire message.
 

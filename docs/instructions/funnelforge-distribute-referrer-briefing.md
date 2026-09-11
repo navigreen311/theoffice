@@ -8,6 +8,21 @@
 the running FunnelForge stack
 **Status:** draft, pending Compliance Review Board
 
+> **AMENDED 10 SEPTEMBER 2026 — THE APPROVED COPY CHANGED UNDER `docs/blocking.md` B43.**
+> The §4.5 gate ruled on B43's D-6 (the attachment promise) and D-1 (the reply instruction)
+> and **removed both from the copy rather than building the transport**, because carrying
+> them needs a second email transport in FunnelForge and *"that shouldn't happen as a side
+> effect of an attachment promise"*. The body quoted in §1 below is the current one.
+>
+> **Superseded in premise, kept as the evidence that produced the ruling: item 3 of the opening list and the enclosure paragraphs of **§2**. The copy no longer claims an enclosure.**
+>
+> **What did not change: the transport.** Every statement in this manual about what the send
+> path cannot do is still true, and every rule in §7 still stands — an agent must not say by
+> hand what the copy no longer says. **What changed is only that the copy no longer says it.**
+>
+> **AND THE COST IS SHARPEST ON THIS MODULE.** The body's whole content was a description of an enclosure. With the enclosure promise removed it announces a briefing a referring partner cannot read, and the capability claim *"what we are able to place"* now ships with nothing substantiating it — which `compliance/own-claims-and-pricing-v1` cares about. B43 records it.
+
+
 Read `funnelforge-approved-send-rules.md` first, and
 `funnelforge-send-intake-acknowledgment.md` second — that is the canonical manual for the six
 approved sends, and everything it says about the request shape, the two refusals, the adapter
@@ -34,7 +49,7 @@ Sends one fixed email to one referring partner: the quarterly briefing cover not
 
 Subject: *"Quarterly briefing for referring partners"*. Body, in full:
 
-> The quarterly briefing for referring partners is attached, covering what we are seeing in
+> The quarterly briefing for referring partners is ready, covering what we are seeing in
 > the market and what we are able to place.
 
 That is the entire message. One sentence, one claim, one reference to an enclosure.

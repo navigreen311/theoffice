@@ -4352,3 +4352,247 @@ manual first.
 **And it does not make the adapter's `200` mean the act succeeded.** It means the handler ran
 and here is what came back. That was always the only thing it meant; the difference is that the
 response now says so.
+
+---
+
+## B43 — P-07: two of the four unkeepable promises are removed from the approved copy, and the three sends they leave behind should not be sent
+
+**Scope:** venture-scoped: burkham-wickmont
+
+**`call-path`** · Written by P-07, 10 September 2026. **D-6 and D-1 are ruled and applied.
+D-2 and D-3 remain open.** Five sentences were removed from four approved templates. The
+transport was not changed and could not be changed from here.
+
+B33 finding 3 raised the attachments. B38 raised the reply channel, the self-referential
+contents and the unsubscribe, and closed by saying the four *"retire together or not at all,
+because they are one question wearing four faces."* **Two of the four faces turned out to be
+the same face**, which is why they could be ruled together and the other two could not.
+
+### The ruling, and the reasoning, because the reasoning decides the next case too
+
+**Ivan ruled: remove the promises from the copy rather than build the transport.** The
+argument, in substance as given:
+
+> The number was wrong and the correction makes the lean stronger, not weaker — **a second
+> transport plus a separate `sendAMPEmail()` branch is choosing which transport FunnelForge
+> has, and that shouldn't happen as a side effect of an attachment promise.**
+
+**That is the part worth carrying forward.** Keeping the promise would have forced an
+architectural decision about FunnelForge's email transport **as a consequence of a line of
+marketing copy**. The decision may well be right on its own merits and it is *not* refused —
+it is separated, so that it can be made deliberately by whoever owns that transport rather
+than fall out of a template nobody thought of as architectural.
+
+### The measurement the ruling was nearly made on, and the correction
+
+**The dispatched cost estimate was wrong, and it was wrong in the direction that would have
+changed the ruling.** It read:
+
+> Not true of the provider layer — `multi-provider.ts` carries `replyTo` and `attachments`
+> and maps them for all four providers. What is missing is `sendEmailSchema` one layer up.
+> **Carrying an attachment is plumbing through two layers, not building support.**
+
+**Every fact in that paragraph is true about
+`apps/api/src/services/email/multi-provider.ts`, and that file is not on the send path.**
+Read from the receiving side rather than from the filename:
+
+    apps/api/src/modules/emails/routes.ts:4
+      import { sequenceProcessor, broadcastProcessor, emailSender }
+        from '@funnelforge/email-engine';
+      ...:720  const result = await emailSender.send({ ... })
+
+    multi-provider.ts is imported by exactly two things, neither of them this route:
+      apps/api/src/services/email/index.ts        — a barrel re-export
+      apps/api/src/services/email/test-sender.ts  — the "send yourself a test" feature
+
+    apps/email-engine/src (nine .ts files, the sender that IS on the path):
+      grep -rni "attach"  -> no match, exit 1
+      grep -rni "reply"   -> Fastify's `reply` handler object only. No Reply-To.
+      SendEmailOptions    -> to, from, content, tags, metadata
+      send() at :124      -> branches at :129 into sendAMPEmail() at :382, and the two
+                             halves have SEPARATE provider handling — sendViaResend /
+                             SendGrid / SES / Console / SMTPBasic on one side,
+                             sendViaSMTP on the other
+
+**Found independently by P-07 from the route and by P-08 from the FunnelForge side; the
+coordinator withdrew the two-layer estimate on both.** P-08 adds that `multi-provider.ts`
+maps the two fields across **six** providers rather than four, and that **FunnelForge has
+three parallel email transports of which the only capable one is reachable solely from a
+test-send helper.** P-08 shipped no code and escalated rather than build around it, so
+`/api/emails/send` still carries neither field.
+
+**Shared rule 7f was right about the path the adapter actually uses** and named this sender
+correctly. The correction replaced an accurate reading of the right file with an accurate
+reading of the wrong one, on the strength of a filename that sounded like the layer in
+question. **That is the same error this run was dispatched to fix — findings filed against
+the wrong repo because names were read instead of schemas — arriving one level down, in the
+measurement meant to settle them.**
+
+**And it is what made D-1 and D-6 one ruling.** Reply-To is missing from the identical
+sender, at the identical layer, across the identical two branches. Not two adjacent items —
+**the same missing field.** One ruling closed both.
+
+**The three-transports problem itself is recorded separately with its own owner as B45.**
+D-1 and D-6 are what it was blocking. **It is not P-07's and is not named here as future
+work.**
+
+### The counts, read rather than grepped
+
+The dispatch counted four `attached` and three `reply`. Both are right as greps and **both
+are wrong as exposures, in opposite directions.**
+
+**`attached`: four sentences, three exposures.** `engagement_letter_cover` carries the
+fourth and **it was deliberately left alone.** It is `human_approve`, bound to no module, and
+refused twice — at import by `assert_bindable`, at call by `refuse_unless_autonomous`. §4.5
+routes it through Deliverable Approval Workflow (Console module 3.4), **where a human sends
+it and can genuinely enclose the letter.** It is not sent by this transport, so this
+transport's missing field is not a defect in it, and removing its promise would have applied
+a constraint from a path it never takes.
+
+**`reply`: three occurrences, four dependent templates.** `followup_no_engagement` says
+*"if the timing is wrong, say so and we will leave it there"* — it never uses the word, so a
+grep misses it, and **it names no channel at all**, which makes a reply the only way to act
+on it. D-1 did not touch its text. **It is nonetheless the template the ruling damaged
+most**, and it is the third cost finding below.
+
+### What changed, exactly
+
+| template | removed | now reads |
+|---|---|---|
+| `intake_acknowledgment` | D-1 — the whole second paragraph | *"…someone will be in touch about next steps."* |
+| `scheduling_confirmation` | D-1 — *"If the time no longer works, reply here and we will move it."* | unchanged first paragraph only |
+| `deliverable_cover` | D-6 *"is attached"* → *"is ready"*; D-1 — the whole second paragraph | *"Your Blueprint is ready. It sets out what we found and what we recommend…"* |
+| `brief_cover` | D-6 *"is attached"* → *"is ready"* | *"This quarter's Capital Command Brief is ready."* |
+| `referrer_briefing` | D-6 *"is attached"* → *"is ready"* | *"…is ready, covering what we are seeing in the market…"* |
+
+**No substitute channel was written in, and that was not laziness.** The only Burkham
+channel documented anywhere in this repository is `privacy@burkhamwickmont.com` with
+`burkhamwickmont.com/privacy-request` — the §6.5 removal desk, staffed by Compliance &
+Evidence. **It is not a place to ask for a Blueprint.** Naming any other address would have
+been inventing a fact, which is the error this entire run exists to correct.
+`test_no_approved_body_names_an_undocumented_channel` now enforces that.
+
+### Three sends that should not be sent in this state
+
+**This is a finding, not a failure, and it is the honest half of the ruling.** Removing an
+unkeepable promise makes a message true. It does not make it useful, and on three of these it
+leaves the recipient nowhere to go.
+
+**1. `send_deliverable_cover` — the worst of the three.** A client who paid $497 or $997 is
+now told their Blueprint is ready and given **no enclosure, no link, no address and no
+reply.** Burkham's own funnel defines this send as the act by which the deliverable is
+delivered (marketing plan Part 6, *Blueprint Paid → Blueprint Delivered*). It now delivers an
+announcement. **Before the ruling the message was false; after it the message is true and
+inert.**
+
+**2. `send_scheduling_confirmation` — worse on one axis than before, and this is recorded
+rather than hidden.** *"reply here and we will move it"* was the only remedy offered to a
+client whose appointment time is wrong. It did not work — it reached `hello@funnelforge.ai`,
+and there is no reschedule module — but it was the only thing there. **The message now offers
+no remedy at all**, while D-2 remains open and it still says the details are below and still
+promises a calendar invitation. **This template should not be sent until D-2 is ruled.**
+
+**3. `send_followup_no_engagement` — the sharpest, and D-1 never touched its text.** It is the
+one approved send that answers no act of the recipient's, and *"say so and we will leave it
+there"* is the recipient asking not to be contacted again. It has no link (D-3), no record
+(shared rule 7c writes nothing), and now no working channel anywhere in the inventory to
+"say so" through. **`compliance/outbound-contact-boundary-v1`'s escalation trigger 4 is
+written for exactly this moment** — *"take me off your list. End the call, update the
+record"* — **and there is no record to update and no way for the client to say it.**
+
+**The gate cannot enforce any of this.** `assert_sendable` checks approval scope and
+compliance state; neither says whether a message leaves its reader anywhere to go. The
+templates' docstring and `tests/adapters/test_funnelforge_approved_copy.py` carry the warning
+instead, and each of the three has a test that **fails when a channel is added**, so closing
+the cost finding is visible rather than silent.
+
+### The compliance entries the removals touch
+
+Read out of `packs/compliance-library/burkham-wickmont.yaml`, which holds nineteen entries
+and does not ship empty — B38 finding 4, and P-04 is establishing the same thing.
+
+**`compliance/own-claims-and-pricing-v1` supports the removal and is the strongest argument
+for it.** *"NO SAFE HARBOUR… The standard is whether a reasonable consumer would be misled,
+so this entry is mostly about what is never said."* A cover note stating a document is
+attached when nothing is attached is deceptive content under that standard, and no disclosure
+rescues it. **The same entry also protects what was kept:** *"DELIVERABLE PROMISES ARE
+PERMITTED. The Blueprint may promise its own contents."* That is why *"It sets out what we
+found and what we recommend, in the order we would act on it"* stayed — it describes the
+artifact, not an outcome.
+
+**And it is the entry that now cuts the other way on `referrer_briefing`.** *"what we are
+able to place"* is a capability claim that previously travelled with the document
+substantiating it. It now ships alone. Firm-scale rather than pointed at an individual, so it
+is not banned by the classification rule — but *"SUBSTANTIATION IS A PRECONDITION, NOT A
+DISCLAIMER"* applies, and the substantiation was the enclosure.
+
+**`compliance/outbound-contact-boundary-v1`** is unchanged by the copy either way — it gates
+whether a send may happen, not what it encloses — **except through escalation trigger 4**,
+which the follow-up finding above turns from a documented procedure into an unreachable one.
+
+### The interaction with P-10's booking route — reported, not fixed
+
+**`send_scheduling_confirmation` is never the first confirmation the client receives**, so
+the reviewed message is the duplicate and the unreviewed one is the original.
+`POST /api/scheduling/public/:businessId/:slug/book` calls `sendAppointmentConfirmationEmail`
+on every successful booking, guarded only by `if (clientEmail)`, which its own schema
+requires (B33 finding 4). That copy is FunnelForge's `templates.appointmentConfirmation` —
+not on the approved list, never reviewed under §4.5, unreachable by either refusal in
+`gate.py`.
+
+**Why it belongs here now that the copy has changed.** The ruling improved the second email a
+client receives and left the first one untouched. **A client with a wrong appointment time now
+receives an unreviewed confirmation followed by a reviewed one that offers them no remedy.**
+P-10 owns that route; P-07 changed nothing about it and makes no recommendation on it beyond
+recording that D-2 cannot be fully closed from `templates.py` whichever way it is ruled.
+
+### Two documents this change made stale that P-07 may not touch
+
+**Both are reported rather than fixed, because they are another package's.**
+
+1. **`docs/instructions/funnelforge-approved-send-rules.md` rule 7f is now stale.** Its
+   heading reads *"THERE ARE NO ATTACHMENTS, AND THREE OF THE SIX APPROVED TEMPLATES SAY
+   THERE ARE"*, and its table quotes all four removed sentences. **The first half is still
+   true; the second half is not.** The rule's standing instruction to agents — *"never say
+   the document was sent"* — **remains necessary verbatim**, because the module is still
+   called `send_deliverable_cover`, still answers `sent: true`, and the client still has no
+   document. **P-04 owns that file.**
+2. **`scenarios/send_deliverable_cover.yaml` quotes the old body** (and the scheduling
+   scenario describes the old one at lines 50 and 227). **`scenarios/` is in no package's
+   MUST-MODIFY list in this run.** They need an owner.
+
+### What this package did
+
+`adapters/funnelforge/templates.py` — five copy edits, and a docstring recording the ruling,
+the corrected transport fact, why `engagement_letter_cover` was left, and why no merge field
+may be added here.
+
+`tests/adapters/test_funnelforge_approved_copy.py` — new, 28 tests, all passing, in three
+groups. **Removal guards** fail if `attached` or `reply` returns to any autonomous template,
+naming B43 and the reason. **Open-item characterisations** pin D-2 and D-3 as they stand so
+neither can be edited silently while unruled. **Cost-finding guards** pin the three sends
+above and fail when a channel is added — so the finding closes visibly.
+
+Five module manuals amended, each because this copy change made its quoted body wrong:
+`send-deliverable-cover`, `send-brief-cover`, `distribute-referrer-briefing`,
+`send-intake-acknowledgment`, `send-scheduling-confirmation`. **Their §2 analyses were kept,
+not deleted** — that reasoning is the evidence that produced the ruling — and each carries an
+amendment banner naming which of its sections are superseded in premise and which are not.
+
+**Verified by watching the guards fail.** Restoring *"is attached"* and *"reply here"* to
+`deliverable_cover` fails three tests, each naming the template and this entry; adding
+`{{date}}` to `scheduling_confirmation` fails the merge-tag invariant with the reason an
+unmatched tag ships to the client verbatim. `templates.py` was restored byte-identical after
+each, checked by sha256.
+
+### What closes the rest
+
+**D-2** needs a ruling on *"the details are below"* and the calendar invitation. Note that no
+transport decision can make the first one true: the body is a fixed string, and the obvious
+repair is unsafe because `personalizeContent` leaves an unmatched `{{tag}}` in the body
+verbatim while `context` is optional on every send handler. **D-3** needs the prior question
+B38 raised and nobody has answered: **whether `followup_no_engagement` is commercial or
+transactional**, which decides whether §6.5's one-click unsubscribe was ever owed. **And the
+three cost findings close when somebody supplies a place to put a document and a channel a
+recipient can use** — which is one decision, not three, and is the thing the copy was written
+assuming existed.
