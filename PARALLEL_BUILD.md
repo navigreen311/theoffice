@@ -1079,6 +1079,42 @@ answered and the defect is in what was asked.
 assert before the first call is the comparison itself - that the provider resolves to the one
 under test, by name, not by a setting that happens to resolve there today.
 
+### Every guard in this family points downstream. Every failure has been upstream.
+
+Five instances now, and the shape is identical in all five. Listed so the count is checkable
+rather than asserted:
+
+| # | what was substituted | the guard that existed, or followed |
+|---|---|---|
+| 1 | the **input** - empty prompts on eight probes | *assert every probe is non-empty* |
+| 2 | the **reading** - `.text` parsed the response's repr | *read the field off the dataclass* |
+| 3 | the **comparison** - `auto` resolved to the model under test | #139's recorded provider label |
+| 4 | the **subject** - five invented prohibitions, zero overlap with the live seven | the provenance rule, written 11 September |
+| 5 | the **sink** - a suite mocking `emailSender.send` wholesale (B45, P-08) | 81 green tests |
+
+**Each of those guards checks that the instrument ran correctly on whatever it was given. Not one
+of them asks whether the subject was the right one.** Non-empty probes were non-empty. The
+provider label was accurate. The field was read rather than defaulted. The eighty-one tests passed.
+Every guard did its job, and in four of the five cases the answer was still wrong - in the fifth it
+would have shipped an API that advertised attachment support and silently discarded attachments.
+
+### The check that would have caught all five is one check
+
+**Name the thing you are measuring, from the system, before you measure it.** A `forge_id`. A
+`module_id`. A `content_hash`. The provider, by name, not by a setting that resolves to it today.
+The real sink, not a mock standing in for it.
+
+The provenance rule this run produced - *record which never-do list authored these probes, and
+where it came from* - is that check for probes specifically. **It generalises, and that is the
+point of writing it here rather than only in the calibration doc.**
+
+**The guard belongs at the point where the subject is chosen, not at the point where the reading
+is taken.** Everything downstream of that point can be correct and the result still be about the
+wrong thing - which is exactly what happened five times, and what no amount of care at the reading
+end would have prevented.
+
+
+
 **The guard that was watching did not fail. It was watching the wrong property.**
 
 Caveat 17 produced a rule - *assert every probe is non-empty before measuring* - and the
