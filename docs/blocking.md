@@ -28,6 +28,29 @@ are not obvious — which is the same guessing that produced the department mapp
 decisions entry 12. They stay as they are. **B-numbering continues unbroken**: the next
 item is B18 and nothing is renumbered.
 
+### An entry heading has TWO shapes, and a check that assumes one is wrong
+
+Read this before writing anything that counts, finds or audits entries on this page.
+
+```
+## B<n> — <title>              an entry
+## B<n> closure — <title>      a second heading ABOUT that entry
+```
+
+**B35 has both.** So does B46. A closure is not a duplicate of its entry and not a new
+entry; it is the same blocker being closed, and it is written this way on purpose.
+
+**Three checks have now returned a false answer by assuming only the first form.** A
+merge-conflict resolver reported `B35` as a duplicate and refused; an applier reported
+`B46` absent when it was present; a count of entries came out one high. Each was a
+different author writing the obvious regex, and each was wrong in a different direction —
+one refused to proceed, one under-reported, one over-reported.
+
+**The fact is small and the cost of not knowing it is three separate hours.** It is
+written here rather than wrapped in a helper because the next check will be written in a
+hurry by somebody who greps this file for `^## B`, and what they need is to know the
+answer, not to find a function.
+
 ### The drift, recorded because the shape recurs
 
 Nothing announced that the scope had moved. The page kept a title naming one venture while

@@ -1116,6 +1116,13 @@ rather than asserted:
 | 3 | the **comparison** - `auto` resolved to the model under test | #139's recorded provider label |
 | 4 | the **subject** - five invented prohibitions, zero overlap with the live seven | the provenance rule, written 11 September |
 | 5 | the **sink** - a suite mocking `emailSender.send` wholesale (B45, P-08) | 81 green tests |
+| 6 | the **title** - an applier that found where a heading comes from, not what one is | it reported success |
+
+**#6 arrived while applying B44-B48 and belongs in the list rather than in a commit message.**
+B48's source was a single bold paragraph with no heading, unlike its three siblings. The applier
+took the first line as the title and produced a **700-character `## B48` heading**, then reported
+success - it had verified *where* a title comes from and never *what one looks like*. Caught by
+reading the applied entries, which is the only reason it is not in the ledger that way now.
 
 **Each of those guards checks that the instrument ran correctly on whatever it was given. Not one
 of them asks whether the subject was the right one.** Non-empty probes were non-empty. The
