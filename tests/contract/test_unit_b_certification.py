@@ -18,16 +18,23 @@ WHAT THIS ESTABLISHES, AND WHY EACH IS A SEPARATE TEST
     `appointment.generate` refuses the candidates as `missing_unit_b`. A refusal is the
     correct output. A crash, or a certification issued to get past it, would not be.
 
-    **A unit-B PASS cannot be recorded today, and the sweep says so rather than writing
-    a certification with no basis.** `sweeps._ingest_one` recovers `forge_api_version`
-    only when `unit == "A"` - a department has no module and therefore no
-    `forge_operating_instruction` row to recover one from - so a unit-B PASS reaches
-    `record_result` with `forge_api_version=None` and the `certified_records_its_basis`
-    guard refuses it. That is correct behaviour for a guard and it is also a blocker:
-    **no unit-B PASS can be certified until somebody decides where a department's Forge
-    api_version comes from.** `forge_registry.api_version` is the obvious answer and
-    `broker/sweeps.py` is P-03's, so this file locks the refusal rather than reaching
-    for it. When it is fixed, this test is the one that tells you.
+    **A unit-B PASS records, as of B36 half two, and the basis is the SET.** This file
+    used to lock a refusal here: `sweeps._ingest_one` recovered `forge_api_version` only
+    when `unit == "A"`, so a unit-B PASS reached `record_result` with
+    `forge_api_version=None` and `certified_records_its_basis` refused it. The guard was
+    right and the omission was the defect.
+
+    **The department's members are now stored** (`curriculum_submission_module`,
+    migration 0037), because `department_basis_hash` is one-way and the composite cannot
+    name what it was composed of. Each member resolves through the same reconstruction
+    unit A uses - the instruction row in force at `submitted_at` - and
+    `certification.department_api_version` requires them to AGREE.
+
+    **`forge_registry.api_version` was NOT taken**, though it is available and was once
+    called the obvious answer. It is the version live now, not the version anything was
+    judged against, which is the staleness `certified_records_its_basis` exists to
+    prevent. The tests below cover both halves of the rule: agreement records, and
+    disagreement refuses rather than picking one.
 """
 
 from __future__ import annotations
@@ -48,6 +55,37 @@ pytestmark = [requires_db, pytest.mark.db]
 VENTURE = "unit-b-venture"
 DEPARTMENT = "administration"
 BASE_URL = "http://simforge.invalid/office"
+
+#: The department's two modules. Their instruction hashes are NOT written here: a
+#: `BEFORE INSERT` trigger computes `content_hash` from `content`, so a literal would be
+#: a value the database immediately overrules - and the `forge` fixture below already
+#: says "rows, never hardcoded". The hashes come back from `RETURNING content_hash` and
+#: reach the tests through the `members` fixture.
+MEMBER_MODULES = ("draw_request", "covenant_check")
+
+#: What both members' instructions carry, and therefore what a department certified from
+#: them must record. Deliberately NOT the `forge_registry.api_version` the fixture sets,
+#: so a test asserting this cannot be satisfied by the weaker source.
+MEMBER_API_VERSION = "2.2.0"
+
+
+def _instruction_content(module_id: str) -> dict:
+    """A valid operating instruction. `instruction_has_all_sections` requires all eight.
+
+    The text differs per module so the two get DIFFERENT content hashes - which is the
+    point of a set, and a shared hash would make a two-member basis indistinguishable
+    from a one-member one.
+    """
+    return {
+        "what_it_does": f"Handles {module_id.replace('_', ' ')} for the department.",
+        "what_it_does_not_do": f"Does not decide anything outside {module_id}.",
+        "inputs": {"reference": "an opaque id"},
+        "correct_sequence": ["receive", module_id, "return"],
+        "failure_signatures": {"silent_partial": "200 with an empty body"},
+        "retry_vs_escalate": "Retry 5xx twice; escalate any 4xx.",
+        "never_do": [f"Never {module_id} twice for one reference"],
+        "compliance_coupling": [],
+    }
 
 
 def _domain_result(verdict: str, *, run_ref: str, tier: str | None = None) -> GateResult:
@@ -108,7 +146,7 @@ def forge(admin: psycopg.Connection):
             """,
             (forge_id, BASE_URL),
         )
-        for module_id in ("draw_request", "covenant_check"):
+        for module_id in MEMBER_MODULES:
             cur.execute(
                 """
                 INSERT INTO forge_module_registry
@@ -121,6 +159,59 @@ def forge(admin: psycopg.Connection):
     admin.commit()
     yield forge_id
     drop_forge(admin, forge_id)
+
+
+@pytest.fixture
+def members(admin: psycopg.Connection, forge: str) -> dict[str, str]:
+    """`{module_id: content_hash}` for the department's two modules.
+
+    The instruction each module was handed over under, authored two days ago so it is in
+    force at any `submitted_at` these tests use and never superseded - the unit-A
+    recovery this reuses asks for the row in force AT THE SUBMISSION, not the row live
+    today. The hash is read back from the trigger rather than supplied, because
+    supplying one writes a value the database overrules and the test would then be
+    resolving a hash no row carries.
+    """
+    return author_instructions(admin, forge, MEMBER_API_VERSION)
+
+
+def author_instructions(
+    admin: psycopg.Connection, forge_id: str, api_version: str | dict[str, str]
+) -> dict[str, str]:
+    """Author one instruction per member module and return their content hashes.
+
+    `api_version` may be one string for both, or a per-module mapping - which is what
+    the disagreement test needs, and the reason this is a function rather than only a
+    fixture.
+    """
+    versions = (
+        api_version if isinstance(api_version, dict)
+        else dict.fromkeys(MEMBER_MODULES, api_version)
+    )
+    hashes: dict[str, str] = {}
+    with admin.cursor() as cur:
+        for module_id in MEMBER_MODULES:
+            cur.execute(
+                """
+                INSERT INTO forge_operating_instruction
+                  (forge_id, module_id, instruction_version, forge_api_version,
+                   version_sensitivity, content, content_hash, authored_by, authored_at)
+                VALUES (%s, %s, '1.0.0', %s, 'major.minor', %s, '', %s, %s)
+                RETURNING content_hash
+                """,
+                (forge_id, module_id, versions[module_id],
+                 psycopg.types.json.Jsonb(_instruction_content(module_id)),
+                 uuid.uuid4(), datetime.now(UTC) - timedelta(days=2)),
+            )
+            row = cur.fetchone()
+            assert row is not None
+            hashes[module_id] = row[0]
+    admin.commit()
+    assert len(set(hashes.values())) == len(MEMBER_MODULES), (
+        "the two members got the same content hash, so a two-member basis is "
+        "indistinguishable from a one-member one and the test proves less than it says"
+    )
+    return hashes
 
 
 @pytest.fixture(autouse=True)
@@ -143,16 +234,26 @@ def _clean(admin: psycopg.Connection):
 
 
 def submit_department(
-    conn: psycopg.Connection, *, forge_id: str, run_ref: str | None, hours_ago: float = 1.0
+    conn: psycopg.Connection, *, forge_id: str, run_ref: str | None, hours_ago: float = 1.0,
+    members: dict[str, str] | None = None,
 ) -> tuple[uuid.UUID, str]:
     """The row P-04's Gate 8 writes for a department: no module, a department, a basis.
 
     The basis is a `department_basis_hash` and NOT a `forge_operating_instruction`
     hash, which is the honest shape: a department has no operating instruction, so it
     is the set its accepted modules were handed over under.
+
+    **And the members, in the same transaction** (migration 0037). Passing `members=None`
+    writes none, which is not a convenience - it is the shape of every unit-B row
+    submitted before 0037, and one test needs exactly that row to prove those still
+    refuse rather than certifying against a set nobody recorded.
     """
     submission_id = uuid.uuid4()
-    basis = department_basis_hash({"draw_request": "aa" * 32, "covenant_check": "bb" * 32})
+    members = {} if members is None else members
+    # A submission with no members still needs a basis - that is the pre-0037 shape, and
+    # the placeholder is what such a row actually carried: a composite over hashes that
+    # nothing recorded.
+    basis = department_basis_hash(members or {"draw_request": "aa" * 32})
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -168,6 +269,12 @@ def submit_department(
                 datetime.now(UTC) - timedelta(hours=hours_ago), run_ref,
             ),
         )
+        for module_id, content_hash in sorted(members.items()):
+            cur.execute(
+                "INSERT INTO curriculum_submission_module "
+                "(submission_id, module_id, instruction_content_hash) VALUES (%s,%s,%s)",
+                (submission_id, module_id, content_hash),
+            )
     conn.commit()
     return submission_id, basis
 
@@ -278,7 +385,7 @@ async def test_a_unit_b_verdict_lands_as_a_department_certification(
 
 
 async def test_the_unit_a_path_is_untouched_by_a_unit_b_submission(
-    admin: psycopg.Connection, forge: str
+    admin: psycopg.Connection, forge: str, members: dict[str, str]
 ):
     """A department submission must not produce an agent's certification.
 
@@ -289,17 +396,17 @@ async def test_the_unit_a_path_is_untouched_by_a_unit_b_submission(
     never had any.
     """
     run_ref = f"office:{VENTURE}:{forge}:dept:{DEPARTMENT}:abcdef012345"
-    submit_department(admin, forge_id=forge, run_ref=run_ref)
+    submit_department(admin, forge_id=forge, run_ref=run_ref, members=members)
     fake = FakeSimForge({run_ref: _domain_result("FAIL", run_ref=run_ref)})
 
     async with connection() as conn:
         result = await sweeps.sweep_verdict_ingest(conn, client=fake)
 
     assert result.findings["no_grant_holders"] == []
-    assert result.findings["basis_unrecoverable"] == [], (
-        "the sweep tried to recover a Forge api_version for a department, which has no "
-        "module to recover one from"
-    )
+    # The basis IS recoverable now (B36 half two): the members are stored and their
+    # instructions agree. This assertion used to read "a department has no module to
+    # recover one from", which was true of the old gate and is not true of this one.
+    assert result.findings["basis_unrecoverable"] == [], result.findings
     with admin.cursor() as cur:
         cur.execute("SELECT count(*) FROM certification WHERE unit = 'A' "
                     "AND forge_id = %s", (forge,))
@@ -390,27 +497,30 @@ async def test_an_unanswered_department_run_times_out_as_b_and_domain(
     )
 
 
-async def test_a_unit_b_pass_is_refused_rather_than_certified_without_a_basis(
+async def test_members_judged_against_different_api_versions_are_refused(
     admin: psycopg.Connection, forge: str
 ):
-    """**The successor blocker, measured rather than argued.**
+    """**The half of the rule with no natural fixture, and the reason it is a rule.**
 
-    A `certified` certification must record the instruction hash, the Forge api_version
-    and the certified tier, or staleness is uncomputable and the certification is
-    permanent by accident. `sweeps._ingest_one` recovers the api_version only for
-    unit A - a department has no module and therefore no `forge_operating_instruction`
-    row - so a unit-B PASS arrives with `forge_api_version=None` and is refused.
+    Every Forge in this database carries exactly one live `forge_api_version` today, so
+    nothing in the real data exercises this. That is a fact about four Forges on one
+    day, not a property: `forge_api_version` is NOT NULL per
+    `(forge_id, module_id, instruction_version)` row and nothing constrains two modules
+    of one department to agree. So the disagreement is constructed.
 
-    **The refusal is right and the gap is real.** No department can be certified until
-    somebody rules where a department's Forge api_version comes from;
-    `forge_registry.api_version` is already read by `SimForgeClient._registry` and is
-    the obvious answer. `broker/sweeps.py` and `broker/certification.py` are P-03's, so
-    this locks the current behaviour instead: **the sweep must never resolve this by
-    writing a certified row with no basis.** When the gap is closed, this test is what
-    tells whoever closed it that the behaviour changed on purpose.
+    **The set IS the basis.** When the members disagree there is no single version the
+    department was judged against, and `max()` or a first row would make the basis an
+    artefact of query order - which is the argument `forge_api_version_in_force` already
+    makes one level down, about two instructions carrying one hash.
+
+    A FAIL would still be recordable (a FAIL cannot go stale and needs no basis); this
+    uses a PASS because that is the verdict the guard exists to stop.
     """
+    disagreeing = author_instructions(
+        admin, forge, {"draw_request": "2.2.0", "covenant_check": "3.0.0"}
+    )
     run_ref = f"office:{VENTURE}:{forge}:dept:{DEPARTMENT}:abcdef012345"
-    submit_department(admin, forge_id=forge, run_ref=run_ref)
+    submit_department(admin, forge_id=forge, run_ref=run_ref, members=disagreeing)
     fake = FakeSimForge(
         {run_ref: _domain_result("PASS", run_ref=run_ref, tier="propose")}
     )
@@ -419,12 +529,98 @@ async def test_a_unit_b_pass_is_refused_rather_than_certified_without_a_basis(
         result = await sweeps.sweep_verdict_ingest(conn, client=fake)
 
     assert certifications(admin) == [], (
-        "a department was certified with no Forge api_version: the certification's "
-        "basis is unknown and it can never be recomputed or expired"
+        "a department was certified against one of two api_versions its modules were "
+        "judged under - the basis has two answers and is therefore not a basis"
     )
-    assert result.findings["refused"], "the refusal was not reported"
-    assert "api_version" in result.findings["refused"][0]["reason"]
-    assert result.status == "failed", (
-        "a verdict arrived and no certification could be written for it - that is this "
-        "sweep failing at its one job, and it must say so"
+    unrecoverable = result.findings["basis_unrecoverable"]
+    assert len(unrecoverable) == 1, result.findings
+    reason = unrecoverable[0]["reason"]
+    # Names BOTH versions and which modules carried them. A refusal that said only
+    # "could not recover" would send a reader to look for a missing row.
+    assert "2 different Forge api_versions" in reason, reason
+    assert "2.2.0: draw_request" in reason and "3.0.0: covenant_check" in reason, reason
+
+
+async def test_a_submission_with_no_members_is_refused_rather_than_guessed(
+    admin: psycopg.Connection, forge: str
+):
+    """Every unit-B row written before migration 0037 has this shape.
+
+    The composite hash does not name what it was composed of, so there is nothing to
+    resolve and nothing to fall back to - `forge_registry.api_version` would answer with
+    the version live today, which is not the version anything was judged against.
+
+    **Refused, not guessed.** A certification whose basis was supplied to satisfy the
+    guard is the permanent-by-accident row the guard exists to prevent.
+    """
+    run_ref = f"office:{VENTURE}:{forge}:dept:{DEPARTMENT}:abcdef012345"
+    submit_department(admin, forge_id=forge, run_ref=run_ref, members=None)
+    fake = FakeSimForge(
+        {run_ref: _domain_result("PASS", run_ref=run_ref, tier="propose")}
     )
+
+    async with connection() as conn:
+        result = await sweeps.sweep_verdict_ingest(conn, client=fake)
+
+    assert certifications(admin) == []
+    assert len(result.findings["basis_unrecoverable"]) == 1, result.findings
+    assert "no member modules" in result.findings["basis_unrecoverable"][0]["reason"]
+
+
+async def test_a_unit_b_pass_records_the_api_version_its_members_agree_on(
+    admin: psycopg.Connection, forge: str, members: dict[str, str]
+):
+    """**B36 half two, closed.** This test used to lock the refusal it now replaces.
+
+    A `certified` certification must record the instruction hash, the Forge api_version
+    and the certified tier, or staleness is uncomputable and the certification is
+    permanent by accident. The sweep recovered the api_version only for unit A, so a
+    unit-B PASS arrived with `forge_api_version=None` and `certified_records_its_basis`
+    refused it. **The guard was right and the omission was the defect.**
+
+    A department has no operating instruction, so there is nothing to look up - but its
+    members do, and migration 0037 stores which members composed the basis because
+    `department_basis_hash` is one-way. Each resolves through the SAME reconstruction
+    unit A uses, and when they agree that value is what the department was judged
+    against.
+
+    The assertion that matters is the last one: the version recorded is the members'
+    (`1.4.0` from their instructions), not the Forge's live
+    `forge_registry.api_version`. Those are equal here by construction of the fixture,
+    so the test pins the row the value came FROM rather than the value itself - a test
+    that only checked the string would pass just as well against the weaker source.
+    """
+    run_ref = f"office:{VENTURE}:{forge}:dept:{DEPARTMENT}:abcdef012345"
+    _submission_id, basis = submit_department(
+        admin, forge_id=forge, run_ref=run_ref, members=members
+    )
+    fake = FakeSimForge(
+        {run_ref: _domain_result("PASS", run_ref=run_ref, tier="propose")}
+    )
+
+    async with connection() as conn:
+        result = await sweeps.sweep_verdict_ingest(conn, client=fake)
+
+    assert not result.findings.get("refused"), result.findings
+    assert not result.findings.get("basis_unrecoverable"), result.findings
+
+    rows = certifications(admin)
+    assert len(rows) == 1, rows
+    row = rows[0]
+    assert row["state"] == "certified", row
+    assert row["forge_api_version"] == MEMBER_API_VERSION
+    assert row["instruction_content_hash"] == basis, (
+        "the certification must record the COMPOSITE as its hash - the department was "
+        "judged against the set, and a member's hash would name one of them"
+    )
+
+    # Where the value came from, not merely what it is. Both members' instructions are
+    # read; the registry row is a different fact and is not consulted.
+    with admin.cursor() as cur:
+        cur.execute(
+            "SELECT DISTINCT forge_api_version FROM forge_operating_instruction "
+            "WHERE forge_id = %s AND module_id = ANY(%s)",
+            (forge, sorted(members)),
+        )
+        from_members = sorted(r[0] for r in cur.fetchall())
+    assert from_members == [MEMBER_API_VERSION], from_members

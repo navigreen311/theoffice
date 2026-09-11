@@ -247,6 +247,100 @@ async def forge_api_version_in_force(
     return str(in_force[0]["forge_api_version"])
 
 
+
+async def department_api_version(
+    conn: AsyncConnection,
+    *,
+    submission_id: uuid.UUID,
+    forge_id: str,
+    at: datetime,
+) -> str:
+    """The `forge_api_version` a DEPARTMENT certification was earned against.
+
+    The unit-B counterpart to `forge_api_version_in_force`, and it is a different
+    question rather than the same one with a NULL module. A department is not a module:
+    it has no single operating instruction, so its basis is the SET of instructions its
+    modules were handed over under, and `simforge.department_basis_hash` names that set
+    in one column by hashing it. That composite is one-way, which is why
+    `curriculum_submission_module` exists - the members are stored because they cannot
+    be recovered from the hash (B36 half two).
+
+    THE RULE: AGREE AND IT RECORDS, DISAGREE AND IT REFUSES
+    =======================================================
+
+        Each member resolves through `forge_api_version_in_force` on its OWN content
+        hash, which is the same reconstruction unit A does - the row in force at
+        `submitted_at`, the one whose api_version SimForge was told about. One distinct
+        value across the members is the answer. More than one is a refusal.
+
+        **Not `max()`, and not the first row.** There is no single version a department
+        was judged against when its modules disagree; a certification basis with two
+        answers is not a basis, and picking one makes it a basis decided by whatever
+        order the planner returned. That is the argument `forge_api_version_in_force`
+        already makes one level down, applied to the set.
+
+        Four Forges each carry exactly one live `forge_api_version` today. **That is a
+        fact about four Forges on one day, not a property of the schema** -
+        `forge_api_version` is NOT NULL per `(forge_id, module_id, instruction_version)`
+        row and nothing constrains two modules of one department to agree. A rule that
+        is only correct while the data happens to be uniform is not a rule.
+
+    WHY NOT `forge_registry.api_version`
+    ====================================
+
+        It is available and it is honest about being weaker: the version live NOW,
+        which is not the version anything was judged against. It would make a
+        certification's basis a fact about today rather than about the run - the exact
+        staleness `certified_records_its_basis` exists to prevent. If it is ever chosen
+        the certification should say that is what it means; this does not choose it.
+
+    Refuses on an empty member set as well. A unit-B submission with no members is one
+    whose basis was never recorded, and answering for it would be inventing the set.
+    """
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT module_id, instruction_content_hash "
+            "FROM curriculum_submission_module WHERE submission_id = %s "
+            "ORDER BY module_id",
+            (submission_id,),
+        )
+        members = [dict(r) for r in await cur.fetchall()]
+
+    if not members:
+        raise CertificationError(
+            f"submission {submission_id} records no member modules, so the department's "
+            "basis cannot be recovered; the composite hash does not name what it was "
+            "composed of (see blocking.md B36)"
+        )
+
+    by_version: dict[str, list[str]] = {}
+    for member in members:
+        # Per member, on its own hash. A failure here is a member whose instruction
+        # cannot be reconstructed, and it propagates unchanged: the caller already
+        # treats `CertificationError` as "basis unrecoverable", and rewording it would
+        # hide which of the two ambiguities was hit.
+        version = await forge_api_version_in_force(
+            conn,
+            forge_id=forge_id,
+            module_id=str(member["module_id"]),
+            content_hash=str(member["instruction_content_hash"]),
+            at=at,
+        )
+        by_version.setdefault(version, []).append(str(member["module_id"]))
+
+    if len(by_version) != 1:
+        detail = "; ".join(
+            f"{version}: {', '.join(mods)}" for version, mods in sorted(by_version.items())
+        )
+        raise CertificationError(
+            f"the {len(members)} module(s) of this department on {forge_id} were judged "
+            f"against {len(by_version)} different Forge api_versions - {detail}. The set "
+            "IS the basis, so there is no single version this department was certified "
+            "against, and choosing one would make the basis an artefact of query order"
+        )
+
+    return next(iter(by_version))
+
 async def record_result(
     conn: AsyncConnection,
     *,
