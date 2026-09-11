@@ -88,7 +88,6 @@ SELECT
     g.trust_tier,
     g.operation_cert_ref,
     g.dept_context_cert_ref,
-    g.revoked_at              AS grant_revoked_at,
     i.agent_name,
     i.department,
     i.status                  AS identity_status,
@@ -218,12 +217,10 @@ async def resolve_grant(
             identity_status=row["identity_status"],
         )
 
-    if row["grant_revoked_at"] is not None:
-        raise NotGranted(
-            "grant is revoked",
-            grant_id=str(row["grant_id"]),
-            revoked_at=row["grant_revoked_at"].isoformat(),
-        )
+    # A revoked grant is refused by `check_revocations` above, against the
+    # `revocation` table. There is no second answer here: `agent_forge_grant.revoked_at`
+    # was dropped in migration 0036 (B37) because nothing ever wrote it and a value in
+    # it was a stop with no reason, no actor and no reinstatement path.
 
     if row["operation_cert_ref"] is None or row["dept_context_cert_ref"] is None:
         raise NotCertified(

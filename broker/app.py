@@ -86,7 +86,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0035"
+EXPECTED_SCHEMA_REVISION = "0036"
 
 
 @asynccontextmanager
@@ -410,8 +410,7 @@ async def list_agents(conn: DB, _me: ME) -> list[dict[str, Any]]:
         await cur.execute(
             """
             SELECT i.office_agent_id, i.agent_name, i.department, i.status,
-                   count(DISTINCT g.grant_id) FILTER (WHERE g.revoked_at IS NULL)
-                     AS live_grants,
+                   count(DISTINCT g.grant_id)                  AS live_grants,
                    count(DISTINCT c.cert_id) FILTER (WHERE c.state = 'certified')
                      AS certifications,
                    array_remove(array_agg(DISTINCT c.state), NULL) AS cert_states,
@@ -466,7 +465,7 @@ async def agent_detail(office_agent_id: uuid.UUID, conn: DB, _me: ME) -> dict[st
         await cur.execute(
             """
             SELECT g.grant_id, g.forge_id, g.module_id, g.venture_id, g.trust_tier,
-                   g.is_assignable, g.revoked_at,
+                   g.is_assignable,
                    ca.state AS unit_a_state, ca.certified_tier
             FROM agent_forge_grant g
             LEFT JOIN certification ca
@@ -554,8 +553,7 @@ async def agent_detail(office_agent_id: uuid.UUID, conn: DB, _me: ME) -> dict[st
     # directly above three Forges marked GREEN.
     live_by_forge: dict[str, int] = {}
     for grant in grants:
-        if grant["revoked_at"] is None:
-            live_by_forge[grant["forge_id"]] = live_by_forge.get(grant["forge_id"], 0) + 1
+        live_by_forge[grant["forge_id"]] = live_by_forge.get(grant["forge_id"], 0) + 1
 
     forge_access = [
         {
@@ -624,8 +622,7 @@ async def list_ventures(conn: DB, _me: ME) -> list[dict[str, Any]]:
             """
             SELECT v.venture_id,
                    count(DISTINCT g.office_agent_id) AS agents,
-                   count(DISTINCT g.grant_id) FILTER (WHERE g.revoked_at IS NULL)
-                     AS live_grants,
+                   count(DISTINCT g.grant_id)                  AS live_grants,
                    b.monthly_usd_cap, b.hard_cap_reversed_at
             FROM (SELECT DISTINCT venture_id FROM agent_forge_grant
                   UNION SELECT DISTINCT venture_id FROM venture_forge_manifest
@@ -781,7 +778,7 @@ async def gates(venture_id: str, conn: DB, _me: ME) -> dict[str, Any]:
         signoffs = [dict(r) for r in await cur.fetchall()]
         await cur.execute(
             "SELECT count(*) AS unassignable FROM agent_forge_grant "
-            "WHERE venture_id = %s AND revoked_at IS NULL AND NOT is_assignable",
+            "WHERE venture_id = %s AND NOT is_assignable",
             (venture_id,),
         )
         unassignable = await cur.fetchone()
@@ -3025,7 +3022,6 @@ async def compliance_overview(conn: DB, _me: ME) -> dict[str, Any]:
                   UNION SELECT venture_id FROM venture_budget
                   UNION SELECT venture_id FROM business_pack) v
             LEFT JOIN agent_forge_grant g ON g.venture_id = v.venture_id
-                   AND g.revoked_at IS NULL
             GROUP BY v.venture_id ORDER BY v.venture_id
             """
         )

@@ -480,10 +480,11 @@ async def _gate_7(ctx: _Context) -> GateOutcome:
     ==============================================================
 
         This counted `WHERE revoked_at IS NULL`, which reads as "grants still live" and
-        is not. **Nothing in the broker writes `agent_forge_grant.revoked_at`** - the
-        only writers in the repository are two test fixtures, and the single production
-        `UPDATE agent_forge_grant` sets `activated_at`. So the filter removed nothing a
-        revocation put there, and the gate counted every grant ever issued, forever.
+        was not. **Nothing in the broker ever wrote `agent_forge_grant.revoked_at`** -
+        the only writers in the repository were two test fixtures, and the single
+        production `UPDATE agent_forge_grant` sets `activated_at`. So the filter removed
+        nothing a revocation put there, and the gate counted every grant ever issued,
+        forever.
 
         `burkham-wickmont` is where that landed: two grants, both activated by Phase
         0's bootstrap, which is the record of the first real brokered call. A run that
@@ -506,17 +507,16 @@ async def _gate_7(ctx: _Context) -> GateOutcome:
         that matters here is the one asserting a live active grant still BLOCKS:
         without it this is a gate that passes.
 
-    `revoked_at IS NULL` stays in the SQL below as a term, and today it is a no-op.
-    It is left because removing a column read that `broker/app.py` and
-    `broker/grants.py` also perform is a wider change than this gate, and because the
-    column is not empty in the live database - two `burkham-wickmont` rows carry a
-    hand-written value with no `revocation` row and no audit event behind it. See
-    `docs/blocking.md` B35 for the proposal that narrows it.
+    **The `revoked_at IS NULL` term that used to sit in the SQL below is gone.** This
+    docstring deferred removing it - *"a wider change than this gate"*, and the column
+    was not empty at the time. Both reasons expired: the two hand-written
+    `burkham-wickmont` values were cleared, and migration 0036 is that wider change.
+    The column no longer exists. B37.
     """
     async with ctx.conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
             "SELECT grant_id, activated_at IS NOT NULL AS active "
-            "FROM agent_forge_grant WHERE venture_id = %s AND revoked_at IS NULL",
+            "FROM agent_forge_grant WHERE venture_id = %s",
             (ctx.venture_id,),
         )
         rows = await cur.fetchall()
@@ -1340,7 +1340,7 @@ async def _gate_9(ctx: _Context) -> GateOutcome:
               ON ca.unit = 'A' AND ca.cert_id::text = g.operation_cert_ref
             LEFT JOIN certification cb
               ON cb.unit = 'B' AND cb.cert_id::text = g.dept_context_cert_ref
-            WHERE g.venture_id = %s AND g.revoked_at IS NULL
+            WHERE g.venture_id = %s
             ORDER BY g.grant_id
             """,
             (ctx.venture_id,),
@@ -1511,7 +1511,7 @@ async def _gate_11(ctx: _Context) -> GateOutcome:
     async with ctx.conn.cursor() as cur:
         await cur.execute(
             "UPDATE agent_forge_grant SET activated_at = now(), activated_by = %s "
-            "WHERE venture_id = %s AND revoked_at IS NULL AND activated_at IS NULL",
+            "WHERE venture_id = %s AND activated_at IS NULL",
             (ctx.actor, ctx.venture_id),
         )
         activated = cur.rowcount
@@ -1529,7 +1529,7 @@ async def _gate_12(ctx: _Context) -> GateOutcome:
     async with ctx.conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
             "SELECT count(*) FILTER (WHERE is_assignable) AS assignable, count(*) AS total "
-            "FROM agent_forge_grant WHERE venture_id = %s AND revoked_at IS NULL",
+            "FROM agent_forge_grant WHERE venture_id = %s",
             (ctx.venture_id,),
         )
         row = await cur.fetchone()
