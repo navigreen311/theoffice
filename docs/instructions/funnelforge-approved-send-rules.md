@@ -357,10 +357,28 @@ credit data to segment marketing sequences."* Nothing any of these nine modules 
 bureau-derived or account-derived. Stated because a marketing surface inside a capital
 business is exactly where somebody would reasonably look for one.
 
-**The Compliance Library ships empty.** No entry is committed anywhere in this repository, so
-every ref above names an entry an agent cannot read. That is a Pack-level gap recorded in
-`packs/burkham-wickmont.draft.yaml` itself, not a defect in this manual, and it means an agent
-told to consult one of these entries has nothing to consult.
+**CORRECTED 10 September 2026 by P-16b. The paragraph that stood here said the Compliance
+Library ships empty and that every ref above names an entry an agent cannot read. That was
+wrong when it was written.** `packs/compliance-library/burkham-wickmont.yaml` holds nineteen
+entries and was committed on 31 August 2026 in `0bc65a1`, nine days earlier. Every ref cited in
+this file and in the nine manuals resolves.
+
+**Where the error came from, because it will be met again.**
+`packs/burkham-wickmont.draft.yaml` carries a comment above its `compliance_surface` block
+saying `library_entry_ref` is omitted throughout and `library_gap: true` set instead *"because
+the Compliance Library ships EMPTY"*. **The comment is stale and the rows beneath it are
+current** - all but one now carry a `library_entry_ref`. P-16 read the comment rather than the
+rows. The Pack comment is not corrected here: `packs/` is not this package's, and
+`docs/blocking.md` B38 records it so the next reader of that comment reads this first.
+
+**So the rule is the opposite of what stood here: read the entry.**
+`compliance/outbound-contact-boundary-v1` is not background for these six sends, it is a gate -
+*"NO OUTBOUND CONTACT WITHOUT ALL THREE"*, being a documented relationship, the channel the
+person actually gave, and a purpose matching the initiating action, with an eighteen-month
+former-client lookback and *"A REFERRAL IS NOT CONSENT"*. **It forbids sends these modules would
+otherwise make.** The four manuals authored by P-16b apply it per module rather than restating
+it; the five authored by P-16 predate this correction and cite the entry without leaning on its
+test.
 
 ## 11. OPEN
 
