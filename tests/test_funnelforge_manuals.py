@@ -64,6 +64,7 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 from adapters.funnelforge.modules import MODULES
 from broker.instructions import REQUIRED_SECTIONS
@@ -72,6 +73,60 @@ from generators.scenario_content import SUBMITTABLE_CLASSES, load_module
 ROOT = Path(__file__).resolve().parents[1]
 INSTRUCTIONS = ROOT / "docs" / "instructions"
 SCENARIOS = ROOT / "scenarios"
+
+#: Burkham's Compliance Library, as a file. **Not the table.** `compliance_library_entry`
+#: is keyed on `entry_ref` with no venture column and is shared across ventures, so it
+#: holds this file's entries plus Greenstone's two - a count read from the table is a
+#: different number and answers a different question. These checks read the file, which
+#: is what shared rule 10 makes a claim about.
+LIBRARY = ROOT / "packs" / "compliance-library" / "burkham-wickmont.yaml"
+
+#: Shared rule 10 states the entry count in words. This is what lets a test compare a
+#: sentence to the file it describes. Deliberately small: if the library grows past
+#: twenty-five, extending this is the moment somebody re-reads the sentence.
+NUMBER_WORDS: dict[str, int] = {
+    "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16,
+    "seventeen": 17, "eighteen": 18, "nineteen": 19, "twenty": 20,
+    "twenty-one": 21, "twenty-two": 22, "twenty-three": 23, "twenty-four": 24,
+    "twenty-five": 25,
+}
+
+#: The sentence in shared rule 10 that states the count, as a pattern rather than as a
+#: number, so the test reads what the prose currently claims instead of hard-coding it.
+LIBRARY_COUNT_CLAIM = re.compile(r"\*\*holds ([a-z-]+) entries\*\*")
+
+#: Any `compliance/<name>-v<n>` ref, wherever a FunnelForge doc cites one.
+COMPLIANCE_REF = re.compile(r"compliance/[a-z0-9-]+v\d")
+
+#: Refs a FunnelForge doc may name WITHOUT them being Burkham's, and the reason.
+#:
+#: Shared rule 10 names these two to make the point that `compliance_library_entry` is
+#: keyed on `entry_ref` with no venture column, so a ref resolving in the table says
+#: nothing about whose entry answered. They are **Greenstone's**, cited by
+#: `packs/greenstone.yaml`.
+#:
+#: **Neither has a library file anywhere in this repository.** `packs/compliance-library/`
+#: holds exactly one file, Burkham's. These two exist only as rows - seeded, not authored
+#: from git - which is recorded in `docs/blocking.md` B41 and is why they cannot simply be
+#: resolved against the directory.
+#:
+#: The exclusion is asserted rather than trusted: `test_the_greenstone_refs_are_still_not
+#: _burkhams` fails if either is ever written into Burkham's file, at which point the name
+#: belongs in the check above rather than in this list.
+NOT_BURKHAMS: frozenset[str] = frozenset(
+    {"compliance/ftc-tsr-v2", "compliance/nv-two-party-consent-v1"}
+)
+
+
+def _library_entry_refs() -> set[str]:
+    """Every `entry_ref` in Burkham's library file. Loaded, not counted by grep."""
+    doc = yaml.safe_load(LIBRARY.read_text(encoding="utf-8")) or {}
+    entries = doc.get("entries") or []
+    return {
+        e["entry_ref"]
+        for e in entries
+        if isinstance(e, dict) and e.get("entry_ref")
+    }
 
 #: Copied from `scripts/check_module_manuals.py` deliberately rather than imported.
 #: That file is a script, not a module - importing it by path would drag
@@ -451,3 +506,183 @@ def test_the_six_approved_sends_are_the_six_the_manual_set_says_they_are():
             "retry rule are written on `at_most_once`, and V31's refusal is over "
             "exactly that shape - a change here changes what those manuals teach."
         )
+
+
+# ------------------------------------------- the library, read rather than described
+
+
+def test_the_library_file_is_there_and_is_not_empty():
+    """A meta-test, because every check below would pass over a missing file.
+
+    `_library_entry_refs` returns an empty set for a file that is absent, a file whose
+    `entries` key is gone, and a file that genuinely holds nothing - and an empty set
+    satisfies a subset check vacuously. This is what stops the two tests below from
+    reporting green over exactly the state shared rule 10 once wrongly described.
+    """
+    assert LIBRARY.exists(), (
+        f"{LIBRARY.name} is missing. Shared rule 10 tells an agent to read the entry, "
+        "and every ref the nine manuals cite would resolve to nothing."
+    )
+    assert len(_library_entry_refs()) >= 12, (
+        "Burkham's Compliance Library holds fewer than twelve entries. That is either a "
+        "real regression or a parse failure, and both need a human before this is edited "
+        "to match."
+    )
+
+
+def test_shared_rule_10_states_the_entry_count_the_library_actually_holds():
+    """The claim that went stale, now checked against the thing it claims about.
+
+    Rule 10 said the Library ships empty while nineteen entries sat in git - the error
+    the correction paragraph records. Then the correction *itself* paired today's count
+    with the first commit, where the count was seventeen. Both failures are the same
+    failure: **a number about a file, written in prose, with nothing reading the file.**
+
+    So this reads the file. If somebody adds a twentieth entry, the sentence in shared
+    rule 10 stops being true and this says so on the commit that made it untrue, rather
+    than nine days later in a manual that inherited it.
+
+    It deliberately does NOT check the commit hashes or the dated history in that
+    paragraph. Those are claims about the past and the past does not drift; the count is
+    a claim about now, and now is what goes stale.
+    """
+    prose = _text(INSTRUCTIONS / SHARED_RULES)
+    match = LIBRARY_COUNT_CLAIM.search(prose)
+    assert match is not None, (
+        f"{SHARED_RULES} no longer states the library's entry count in the form "
+        "`**holds <word> entries**`. The sentence is what this test compares against "
+        "the file - if it was rewritten, update the pattern deliberately; if it was "
+        "deleted, the count claim is back to being unchecked prose."
+    )
+    word = match.group(1)
+    assert word in NUMBER_WORDS, (
+        f"{SHARED_RULES} states the count as {word!r}, which is not in NUMBER_WORDS. "
+        "Add it if the library really grew; do not delete this assertion."
+    )
+    claimed = NUMBER_WORDS[word]
+    actual = len(_library_entry_refs())
+    assert claimed == actual, (
+        f"{SHARED_RULES} says the Compliance Library holds {word} ({claimed}) entries "
+        f"and {LIBRARY.name} holds {actual}. The prose is the thing that is wrong here "
+        "unless an entry was deleted - read the file, then fix the sentence. This is the "
+        "B41 shape: a count in a manual that nothing was checking."
+    )
+
+
+def test_every_compliance_ref_the_funnelforge_docs_cite_resolves_in_the_library():
+    """What rule 10's original error would have caused, had it been true.
+
+    The retracted sentence said *"every ref above names an entry an agent cannot read"*.
+    It was false - every ref resolved - but nothing in this suite could have told the
+    difference, which is why it survived into a shared-rules file that all nine manuals
+    point at. An agent told an entry is unreadable does not go and read it.
+
+    This checks the refs rather than the sentence, across the shared rules and all nine
+    manuals at once. A manual that cites an entry nobody wrote fails here, and so does a
+    library edit that renames or removes an entry a manual depends on - which is the
+    direction that would otherwise go unnoticed, because the manual is not touched by it.
+
+    Scope is the FunnelForge set. V28 checks Pack rows against the *table*; nothing
+    checked manual prose against anything.
+    """
+    library = _library_entry_refs()
+    cited: dict[str, list[str]] = {}
+    for path in sorted(INSTRUCTIONS.glob("funnelforge-*.md")):
+        for ref in COMPLIANCE_REF.findall(_text(path)):
+            cited.setdefault(ref, []).append(path.name)
+
+    assert cited, (
+        "no compliance refs found in any funnelforge-*.md. Every send manual's "
+        "`WHICH LAWS THIS TOUCHES` section names at least one, so finding none means "
+        "this test stopped looking rather than that the manuals stopped citing."
+    )
+
+    unresolved = {
+        ref: sorted(set(files))
+        for ref, files in cited.items()
+        if ref not in library and ref not in NOT_BURKHAMS
+    }
+    assert not unresolved, (
+        "these compliance refs are cited by FunnelForge manuals and are absent from "
+        f"{LIBRARY.name}: "
+        + "; ".join(f"{ref} (cited by {', '.join(f)})" for ref, f in sorted(unresolved.items()))
+        + ". Either the entry was renamed or removed and the manuals were not "
+        "followed through, or a manual cites an entry nobody wrote. An agent told to "
+        "read the entry would find nothing."
+    )
+
+
+def test_the_shared_rules_name_the_gate_per_send_rather_than_once():
+    """Rule 10a exists because "it applies to all six" is how a gate becomes a formality.
+
+    `outbound-contact-boundary-v1` bears differently on the six: satisfied by the
+    occasion on the two transactional sends, doing real work on the follow-up, and
+    marking a boundary `brief_cover` **cannot see** because nothing on that path reads
+    engagement status. A reader who meets the entry once, in a list of laws, learns that
+    it applies and not where it bites.
+
+    This cannot check the table is *right*. It checks that every send is named in it, so
+    a seventh approved send cannot be added without somebody deciding what the gate does
+    to it.
+    """
+    prose = _text(INSTRUCTIONS / SHARED_RULES)
+    assert "### 10a." in prose, (
+        f"{SHARED_RULES} has lost rule 10a, the per-send gate table. Without it the "
+        "governing entry is named once for all six and an agent cannot tell which of "
+        "them it actually refuses."
+    )
+    section = prose.split("### 10a.", 1)[1]
+
+    # **Row-wise, not section-wise, and that distinction was found by watching this
+    # test fail to fail.** Checking `f"`{send}`" in section` passes for a send that has
+    # lost its table row and is merely *mentioned* in the prose underneath - which is
+    # the state this test exists to catch, and it reported green on it. The name must
+    # open a row.
+    rows = {
+        m.group(1)
+        for m in re.finditer(r"^\|\s*`([a-z0-9_]+)`\s*\|", section, re.MULTILINE)
+    }
+    sends = sorted(
+        MODULES[m].template_id
+        for m in MODULES
+        if MODULES[m].template_id is not None
+    )
+    missing = [s for s in sends if s not in rows]
+    assert not missing, (
+        f"rule 10a has no table row for {missing} against "
+        "`compliance/outbound-contact-boundary-v1`. Every approved send is "
+        "Burkham-initiated contact with an individual, so the gate applies to it - what "
+        "the table records is whether the occasion supplies the evidence or the module "
+        "is blind to it. A send with no row has had that question skipped. (Being named "
+        "in the paragraph below the table is not a row.)"
+    )
+    assert not rows - set(sends), (
+        f"rule 10a has rows for {sorted(rows - set(sends))}, which are not approved "
+        "sends. The table is about the six; a row for anything else means a binding "
+        "changed or the table drifted from the dispatch map."
+    )
+
+
+def test_the_greenstone_refs_are_still_not_burkhams():
+    """The exclusion list above, checked rather than trusted.
+
+    `NOT_BURKHAMS` exists so that shared rule 10 can name two entries as an example of
+    the venture-blindness of `compliance_library_entry` without the ref check reading
+    them as Burkham citations. An exclusion list is a claim like any other, and this is
+    the claim: these two are not in Burkham's file.
+
+    If Burkham ever adopts one - two ventures under one compliance regime arguably
+    *should* share a row, which `scripts/load_compliance_library.py` records as an open
+    decision - this fails, and the fix is to take the name out of `NOT_BURKHAMS` so the
+    ref check starts covering it. Without this, that adoption would silently leave a
+    genuine Burkham entry permanently unchecked.
+    """
+    library = _library_entry_refs()
+    adopted = sorted(NOT_BURKHAMS & library)
+    assert not adopted, (
+        f"{adopted} is in {LIBRARY.name} and is also listed in NOT_BURKHAMS as another "
+        "venture's. One of the two is now wrong. If Burkham has adopted the entry, "
+        "remove it from NOT_BURKHAMS so the ref check covers it; if the file grew it by "
+        "accident, that is a venture writing over a shared row - read "
+        "scripts/load_compliance_library.py before resolving it either way."
+    )

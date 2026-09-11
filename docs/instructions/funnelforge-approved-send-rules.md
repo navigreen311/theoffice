@@ -357,28 +357,76 @@ credit data to segment marketing sequences."* Nothing any of these nine modules 
 bureau-derived or account-derived. Stated because a marketing surface inside a capital
 business is exactly where somebody would reasonably look for one.
 
-**CORRECTED 10 September 2026 by P-16b. The paragraph that stood here said the Compliance
-Library ships empty and that every ref above names an entry an agent cannot read. That was
-wrong when it was written.** `packs/compliance-library/burkham-wickmont.yaml` holds nineteen
-entries and was committed on 31 August 2026 in `0bc65a1`, nine days earlier. Every ref cited in
-this file and in the nine manuals resolves.
+**CORRECTED 10 September 2026 by P-16b, and the correction itself corrected 10 September 2026
+by P-04. The paragraph that stood here said the Compliance Library ships empty and that every
+ref above names an entry an agent cannot read. That was wrong when it was written.**
+`packs/compliance-library/burkham-wickmont.yaml` **holds nineteen entries** today. All eight
+refs cited in this file and in the nine manuals resolve, checked against the file rather than
+asserted - `test_funnelforge_manuals.py` now does that check on every run.
+
+**The count and the commit are two facts and P-16b joined them wrongly.** Its correction read
+*"holds nineteen entries and was committed on 31 August 2026 in `0bc65a1`"*, which pairs today's
+count with the first commit. **At `0bc65a1` the file held seventeen.** It reached eighteen later
+the same day, **fell to sixteen on 1 September** in `d58b074` when four template entries were
+resolved in three directions - two written, one retired, one folded - and reached **nineteen on
+3 September** in `de35f9a`. The load-bearing half is unchanged and is the half that matters: the
+Library was **not empty on 31 August**, nine days before rule 10 was written, and it has not been
+empty since. But an agent reading "nineteen, committed in `0bc65a1`" and going to look would find
+seventeen, and a number that does not survive being checked teaches a reader to stop checking.
+
+**"The Compliance Library" names two things that hold different numbers.** Burkham's *file* holds
+nineteen. The *table* `compliance_library_entry` holds **twenty-one**, because it is keyed on
+`entry_ref` with no venture column and is shared across ventures: the extra two,
+`compliance/ftc-tsr-v2` and `compliance/nv-two-party-consent-v1`, are **Greenstone's**.
+`scripts/load_compliance_library.py` documents this and upserts rather than truncating precisely
+so that loading one venture's file cannot delete another's. When this file says nineteen it means
+Burkham's file. **A ref resolving in that table is not evidence the entry is Burkham's** - that is
+the same trap `broker/compliance_couplings.py` records under A REF THAT RESOLVES TELLS YOU NOTHING
+ABOUT WHOSE IT IS.
 
 **Where the error came from, because it will be met again.**
 `packs/burkham-wickmont.draft.yaml` carries a comment above its `compliance_surface` block
 saying `library_entry_ref` is omitted throughout and `library_gap: true` set instead *"because
 the Compliance Library ships EMPTY"*. **The comment is stale and the rows beneath it are
 current** - all but one now carry a `library_entry_ref`. P-16 read the comment rather than the
-rows. The Pack comment is not corrected here: `packs/` is not this package's, and
-`docs/blocking.md` B38 records it so the next reader of that comment reads this first.
+rows. **The same sentence appears a second time**, at `packs/burkham-wickmont.split.draft.yaml`,
+which B38 did not name; a reader who corrects only the one B38 names leaves the other standing.
+**And the library file's own header comment says `SIXTEEN ENTRIES`** - true on 1 September,
+stale since 3 September, and wrong in the opposite direction to rule 10's original error. Three
+stale counts, in three files, about one library. None is corrected here: `packs/` is not this
+package's, and `docs/blocking.md` B41 records all three so the next reader of any of them reads
+this first.
 
 **So the rule is the opposite of what stood here: read the entry.**
 `compliance/outbound-contact-boundary-v1` is not background for these six sends, it is a gate -
-*"NO OUTBOUND CONTACT WITHOUT ALL THREE"*, being a documented relationship, the channel the
-person actually gave, and a purpose matching the initiating action, with an eighteen-month
-former-client lookback and *"A REFERRAL IS NOT CONSENT"*. **It forbids sends these modules would
-otherwise make.** The four manuals authored by P-16b apply it per module rather than restating
-it; the five authored by P-16 predate this correction and cite the entry without leaning on its
-test.
+*"NO OUTBOUND CONTACT WITHOUT ALL THREE"*, being **A** a documented relationship, **B** the
+channel the person actually gave, and **C** a purpose matching the initiating action, with an
+eighteen-month former-client lookback and *"A REFERRAL IS NOT CONSENT"*. **It forbids sends these
+modules would otherwise make.** The four manuals authored by P-16b apply it per module rather than
+restating it; the five authored by P-16 predate this correction and cite the entry without leaning
+on its test.
+
+### 10a. WHICH ENTRY GATES WHICH SEND
+
+**The gate does not bear equally on the six, and reading it as a formality on all six is the
+error this table exists to prevent.** Every send is Burkham-initiated contact with an individual,
+so `outbound-contact-boundary-v1` applies to all six; what differs is whether the occasion
+*supplies* the evidence for A, B and C or whether the module is **blind to it**.
+
+| send | outbound-contact-boundary-v1 | the other entries that bite |
+|---|---|---|
+| `intake_acknowledgment` | **Satisfied by the occasion.** The form submission is the documented initiating action (A), it supplied the email (B), and acknowledging it is the matching purpose (C). | `own-claims-and-pricing-v1`, `consumer-privacy-rights-v1` |
+| `scheduling_confirmation` | **Satisfied by the occasion.** The booking is the initiating action and the confirmation is its matching purpose. | `own-claims-and-pricing-v1`, `estimate-not-offer-v1`, `client-interest-standard-v1` |
+| `followup_no_engagement` | **Doing real work.** The initiating action may be months old, so A's eighteen-month lookback bears; and **C is the sharp one** - a follow-up whose purpose has drifted from the scope of what the person actually downloaded fails Part C however warm the lead is thought to be. Escalation trigger 4 is written for *"take me off your list"* and **there is no record to update** (rule 7c writes nothing). | `client-interest-standard-v1`, `own-claims-and-pricing-v1` |
+| `deliverable_cover` | **Satisfied** by the active engagement; C matches, it is their own Blueprint. | `client-interest-standard-v1`, `estimate-not-offer-v1`, `facilitator-not-broker-v1` - and **7f**: the copy says the Blueprint is attached and nothing can attach it |
+| `brief_cover` | **Marks a boundary the module cannot see.** A quarterly Brief goes to a recipient whose engagement may have ended, so whether the eighteen-month lookback is still open is the live question - **and nothing on this path reads engagement status.** C is the second question: a quarterly brief sits closer to cross-sell than to the original initiating action, and *"A Blueprint client may be contacted about their Blueprint, not cross-sold a partner's product"* is the entry's own example. | `client-interest-standard-v1`, `estimate-not-offer-v1`, `facilitator-not-broker-v1` - and **7f** |
+| `referrer_briefing` | **Satisfied for the recipient, and the trap is conflating two people.** The recipient is the referring institution, with which Burkham has its own relationship. *"A REFERRAL IS NOT CONSENT"* governs contacting the person the partner **names**, not the partner - an agent that reads it as blocking this send has read it about the wrong party. | `facilitator-not-broker-v1`, `reg-z-advertising-boundary-v1`, `own-claims-and-pricing-v1` - and **REFERRAL_FEE_REGULATION is a real `library_gap`**, so nothing authoritative answers a question about the commercial terms |
+
+**The two that most need reading are `followup_no_engagement` and `brief_cover`**, and they fail
+differently: the follow-up's Part C is a judgement the agent can make from what it has, and the
+Brief cover's Part A is a fact the module **cannot** reach. An agent cannot satisfy a test against
+evidence that does not arrive, and shared rule 7c means nothing it sends leaves a record to check
+afterwards either.
 
 ## 11. OPEN
 
