@@ -117,7 +117,7 @@ async def run(confirm: bool) -> int:
     if v31.verdict.value == "FAIL":
         print(
             "That refusal is the finding, not a regression. Do not soften the tier "
-            "or the rule to clear it - see docs/blocking.md B38."
+            "or the rule to clear it - see docs/blocking.md B39."
         )
     return 0
 

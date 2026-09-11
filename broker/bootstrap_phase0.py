@@ -132,8 +132,7 @@ async def _already_granted(
     async with conn.cursor() as cur:
         await cur.execute(
             "SELECT grant_id FROM agent_forge_grant "
-            "WHERE office_agent_id = %s AND forge_id = %s AND module_id = %s "
-            "  AND revoked_at IS NULL",
+            "WHERE office_agent_id = %s AND forge_id = %s AND module_id = %s",
             (office_agent_id, FORGE_ID, MODULE_ID),
         )
         row = await cur.fetchone()

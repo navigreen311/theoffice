@@ -33,6 +33,9 @@ import re
 
 import pytest
 
+from broker.db import connection
+from tests.conftest import requires_db
+
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PACKAGES = ("broker", "client", "generators")
 
@@ -167,3 +170,122 @@ def test_both_detectors_catch_the_shapes_that_actually_shipped():
         "bool_or(c.state = 'certified')", "COALESCE(bool_or(c.state = 'certified'), false)"
     )
     assert len(BOOL_AGG.findall(fixed)) == len(COALESCED_BOOL_AGG.findall(fixed))
+
+
+# =================================================================================================
+# B37 / migration 0036 - `agent_forge_grant.revoked_at` is gone, and stays gone
+# =================================================================================================
+
+# A grant alias dereferenced (`g.revoked_at`), or the table and the column named in one
+# line. NOT a ban on `revoked_at` itself: `office_human_role`, `playbook_share`,
+# `revocation` and `office_agent_identity` each have one and all four are live. What is
+# banned is reaching for it through a grant.
+#: A backticked span - how this codebase names code inside prose.
+BACKTICKED = re.compile(r"`[^`]*`")
+
+GRANT_REVOKED_AT = re.compile(
+    r"\bg\.revoked_at\b|agent_forge_grant[^\n]{0,80}?\brevoked_at\b", re.IGNORECASE
+)
+
+
+
+def _docstring_lines(text: str) -> set[int]:
+    """Every line number occupied by a docstring. Empty set if the file will not parse."""
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return set()
+    lines: set[int] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef,
+                                 ast.AsyncFunctionDef)):
+            continue
+        body = getattr(node, "body", None)
+        if not body:
+            continue
+        first = body[0]
+        if (isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant)
+                and isinstance(first.value.value, str)):
+            lines.update(range(first.lineno, (first.end_lineno or first.lineno) + 1))
+    return lines
+
+def test_no_source_file_reads_agent_forge_grant_revoked_at():
+    """The column was a second way to stop an agent, and it had no writer.
+
+    `revoke()` inserts a `revocation` row. Nothing in the broker ever wrote this column;
+    the only writers in the repository were two test fixtures, which is what made a dead
+    column look load-bearing - the kill switch had a test, and the test was operating a
+    switch the product does not have.
+
+    **A text check on purpose.** The database no longer has the column, so any query
+    naming it raises `UndefinedColumn` - but only when that line executes. Of the
+    twenty-seven sites removed in 0036, several sat in console read-paths that no test
+    asserts a number from, and one sat in a test helper the suite reached only through a
+    fixture ordering: it went unnoticed through a full green run. A grep reads every file
+    whether or not anything calls it.
+    """
+    offenders: list[str] = []
+
+    for folder in ("broker", "generators", "adapters", "scripts", "client", "tests"):
+        base = ROOT / folder
+        if not base.exists():
+            continue
+        for path in sorted(base.rglob("*.py")):
+            if "__pycache__" in str(path) or path.name == "test_sql_shapes.py":
+                continue
+            text = path.read_text(encoding="utf-8", errors="replace")
+            if "revoked_at" not in text:
+                continue
+            prose = _docstring_lines(text)
+            for n, line in enumerate(text.splitlines(), 1):
+                # Prose about the removal is fine, and is most of what makes it
+                # legible. Docstring ranges come from the AST rather than from a
+                # line prefix: a continuation line inside a docstring starts with an
+                # ordinary word, and the first version of this check flagged six of
+                # them. SQL is never in a docstring, so excluding them is free.
+                if n in prose or line.lstrip().startswith(("#", "--")):
+                    continue
+                # Backticked spans are this codebase's convention for naming code
+                # inside prose - `audit_events.py` describes the dropped column in a
+                # glossary entry, and `components/term.tsx` renders those spans as
+                # identifiers for exactly this reason. Stripped before matching, so a
+                # sentence ABOUT the column is not mistaken for a read OF it.
+                if GRANT_REVOKED_AT.search(BACKTICKED.sub("", line)):
+                    offenders.append(f"{path.relative_to(ROOT)}:{n}: {line.strip()}")
+
+    assert not offenders, (
+        "these read agent_forge_grant.revoked_at, dropped by migration 0036:\n  "
+        + "\n  ".join(offenders)
+        + "\nRevocation is a separate table, consulted per call - "
+        "revocation.covered_grants()."
+    )
+
+
+@requires_db
+@pytest.mark.db
+async def test_the_grant_table_has_no_revoked_at_and_is_assignable_does_not_read_one():
+    """The schema half, because the text check cannot see a generated column.
+
+    `is_assignable` is `GENERATED ALWAYS AS (...)` and carried `revoked_at IS NULL` as a
+    term - which is why `DROP COLUMN` refused until 0036 redefined it. That expression
+    lives in the catalogue rather than in any `.py`, so the grep above is blind to it.
+    """
+    async with connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name = 'agent_forge_grant' AND column_name = 'revoked_at'"
+        )
+        assert await cur.fetchone() is None, (
+            "agent_forge_grant.revoked_at is back. It has no writer and refuses agents "
+            "on read - see blocking.md B37."
+        )
+
+        await cur.execute(
+            "SELECT generation_expression FROM information_schema.columns "
+            "WHERE table_name = 'agent_forge_grant' AND column_name = 'is_assignable'"
+        )
+        row = await cur.fetchone()
+        assert row is not None, "is_assignable is missing"
+        assert "revoked_at" not in (row[0] or ""), (
+            f"is_assignable is generated from revoked_at again: {row[0]}"
+        )

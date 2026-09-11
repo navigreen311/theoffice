@@ -195,10 +195,27 @@ async def operator(admin: psycopg.Connection):
 
 
 def _live_grants(conn: psycopg.Connection, agent_id: uuid.UUID) -> int:
+    """Grants this agent holds that no live revocation covers.
+
+    Was `count(*) ... WHERE revoked_at IS NULL` against a column nothing wrote, so it
+    counted every grant ever issued and the name was never true. Migration 0036 dropped
+    the column (B37); this asks the `revocation` table, which is where the answer has
+    always been. `agent` and `agent_module` are the two scopes a departure can produce.
+    """
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT count(*) FROM agent_forge_grant "
-            "WHERE office_agent_id = %s AND revoked_at IS NULL",
+            """
+            SELECT count(*) FROM agent_forge_grant g
+            WHERE g.office_agent_id = %s
+              AND NOT EXISTS (
+                    SELECT 1 FROM revocation r
+                    WHERE r.reinstated_at IS NULL
+                      AND r.office_agent_id = g.office_agent_id
+                      AND (r.scope = 'agent'
+                           OR (r.scope = 'agent_module'
+                               AND r.forge_id = g.forge_id
+                               AND r.module_id = g.module_id)))
+            """,
             (agent_id,),
         )
         return int(cur.fetchone()[0])

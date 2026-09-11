@@ -22,6 +22,7 @@ from broker.errors import (
     IdentityInactive,
     NotCertified,
     NotGranted,
+    Revoked,
     UnknownForge,
 )
 from broker.executor import HEADER_AGENT, HEADER_IDEMPOTENCY, HEADER_TRACE, HEADER_VENTURE
@@ -97,6 +98,13 @@ async def test_revoking_the_grant_fails_the_very_next_call(
     Deliberately uses one client instance across both calls. A cached grant would
     make this pass if the revocation happened before construction, so it happens
     in between.
+
+    Revokes by inserting a `revocation` row, which is what `revoke()` does. It used to
+    stamp `agent_forge_grant.revoked_at` instead - and that column was dropped in
+    migration 0036 (B37) precisely because nothing in the broker ever wrote it. This
+    test and one in `test_module_exclusion.py` were the only writers in the repository,
+    which is what made a dead column look load-bearing: the kill switch had a test, and
+    the test was operating a switch the product does not have.
     """
     _, forge_id, module_id = granted_agent
 
@@ -105,16 +113,24 @@ async def test_revoking_the_grant_fails_the_very_next_call(
 
     with admin.cursor() as cur:
         cur.execute(
-            "UPDATE agent_forge_grant SET revoked_at = now() "
-            "WHERE office_agent_id = %s AND forge_id = %s",
-            (agent_ctx.office_agent_id, forge_id),
+            """
+            INSERT INTO revocation (revocation_id, scope, office_agent_id, forge_id,
+                                    module_id, reason, revoked_by, revoked_by_role)
+            VALUES (%s, 'agent_module', %s, %s, %s, 'B2: the next call must fail', %s,
+                    'venture_operator')
+            """,
+            (str(uuid.uuid4()), agent_ctx.office_agent_id, forge_id, module_id,
+             str(uuid.uuid4())),
         )
     admin.commit()
 
-    with pytest.raises(NotGranted) as exc:
+    with pytest.raises(Revoked) as exc:
         await office.call(forge_id, module_id, {"n": 2}, agent_ctx=agent_ctx)
 
-    assert "revoked" in str(exc.value)
+    # Names the SCOPE that stopped it. The dropped column could not: a timestamp says
+    # something happened and not what, and that is most of why it was the wrong home
+    # for this fact.
+    assert "agent_module" in str(exc.value)
     assert stub_forge.call_count == 1, "the Forge must not have been contacted"
 
 

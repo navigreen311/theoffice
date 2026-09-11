@@ -218,7 +218,7 @@ async def sweep_certification_staleness(conn: AsyncConnection) -> SweepResult:
                 SELECT count(*) FROM agent_forge_grant g
                 JOIN certification c
                   ON c.cert_id::text IN (g.operation_cert_ref, g.dept_context_cert_ref)
-                WHERE c.cert_id = ANY(%s::uuid[]) AND g.revoked_at IS NULL
+                WHERE c.cert_id = ANY(%s::uuid[])
                 """,
                 (newly_stale,),
             )
@@ -379,7 +379,6 @@ async def _grant_holders(
         await cur.execute(
             "SELECT DISTINCT office_agent_id FROM agent_forge_grant "
             "WHERE venture_id = %s AND forge_id = %s AND module_id = %s "
-            "  AND revoked_at IS NULL "
             "ORDER BY office_agent_id",
             (venture_id, forge_id, module_id),
         )

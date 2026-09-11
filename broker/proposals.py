@@ -327,11 +327,13 @@ async def queue(conn: AsyncConnection) -> dict[str, Any]:
         await cur.execute(
             """
             SELECT
+              -- Every grant on record. It does NOT consult the `revocation` table,
+              -- so a revoked agent's grant is still counted here - see blocking.md B40.
+              -- The `WHERE revoked_at IS NULL` that used to stand here did not make it
+              -- true either; that column had no writer and was dropped in 0036 (B37).
+              (SELECT count(*) FROM agent_forge_grant)          AS live_grants,
               (SELECT count(*) FROM agent_forge_grant
-                WHERE revoked_at IS NULL)                       AS live_grants,
-              (SELECT count(*) FROM agent_forge_grant
-                WHERE revoked_at IS NULL AND trust_tier <> 'auto_execute')
-                                                                AS grants_below_auto,
+                WHERE trust_tier <> 'auto_execute')             AS grants_below_auto,
               (SELECT count(*) FROM agent_call_ledger)          AS calls_ever,
               (SELECT count(*) FROM proposal
                 WHERE created_at >= date_trunc('day', now()))   AS proposals_today

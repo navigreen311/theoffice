@@ -498,7 +498,7 @@ async def _live_grants(
     async with conn.cursor() as cur:
         await cur.execute(
             "SELECT count(*) FROM agent_forge_grant "
-            "WHERE office_agent_id = %s AND venture_id = %s AND revoked_at IS NULL",
+            "WHERE office_agent_id = %s AND venture_id = %s",
             (office_agent_id, venture_id),
         )
         row = await cur.fetchone()

@@ -322,7 +322,7 @@ async def _revoke_departed(
             SELECT i.office_agent_id, i.agent_name, count(g.grant_id) AS grants
               FROM office_agent_identity i
               JOIN agent_forge_grant g ON g.office_agent_id = i.office_agent_id
-             WHERE i.village_agent_ref = ANY(%s) AND g.revoked_at IS NULL
+             WHERE i.village_agent_ref = ANY(%s)
              GROUP BY i.office_agent_id, i.agent_name
              ORDER BY i.office_agent_id
             """,

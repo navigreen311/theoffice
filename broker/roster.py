@@ -124,11 +124,12 @@ async def diff(
             """
             SELECT i.village_agent_ref,
                    -- `count(g.grant_id)`, not `count(*)`: the LEFT JOIN gives an
-                   -- identity with no grants one all-NULL row, and `g.revoked_at
-                   -- IS NULL` is true of it - so `count(*)` reports 1 for an agent
-                   -- holding none, in the diff somebody confirms a departure from.
-                   count(g.grant_id) FILTER (WHERE g.revoked_at IS NULL)
-                     AS live_grants
+                   -- identity with no grants one all-NULL row, which `count(*)` counts
+                   -- - reporting 1 for an agent holding none, in the diff somebody
+                   -- confirms a departure from. Counting the column skips the null row.
+                   -- This is what kept the count honest; the `revoked_at` filter that
+                   -- used to sit beside it never did (migration 0036, B37).
+                   count(g.grant_id) AS live_grants
             FROM office_agent_identity i
             LEFT JOIN agent_forge_grant g ON g.office_agent_id = i.office_agent_id
             WHERE i.village_agent_ref IS NOT NULL
@@ -399,9 +400,9 @@ async def directory(
                    i.office_agent_id::text AS office_agent_id,
                    i.status AS identity_status,
                    count(DISTINCT g.grant_id)
-                     FILTER (WHERE g.revoked_at IS NULL)          AS live_grants,
+                                                                 AS live_grants,
                    count(DISTINCT g.grant_id)
-                     FILTER (WHERE g.revoked_at IS NULL AND g.is_assignable)
+                     FILTER (WHERE g.is_assignable)
                                                                   AS assignable_grants,
                    count(DISTINCT c.cert_id)
                      FILTER (WHERE c.state = 'certified')          AS certifications,
@@ -430,9 +431,9 @@ async def directory(
             SELECT i.office_agent_id::text AS office_agent_id, i.agent_name,
                    i.department, i.village_agent_ref, i.status AS identity_status,
                    count(DISTINCT g.grant_id)
-                     FILTER (WHERE g.revoked_at IS NULL)          AS live_grants,
+                                                                 AS live_grants,
                    count(DISTINCT g.grant_id)
-                     FILTER (WHERE g.revoked_at IS NULL AND g.is_assignable)
+                     FILTER (WHERE g.is_assignable)
                                                                   AS assignable_grants,
                    count(DISTINCT c.cert_id)
                      FILTER (WHERE c.state = 'certified')          AS certifications,

@@ -20,7 +20,7 @@
 # `git apply docs/plans/funnelforge-position-DEFERRED.patch` failed for everyone who ran
 # it there while working on Linux. The test that exists to stop that patch rotting read
 # the module names out of it and never tried to apply it, so it stayed green throughout.
-# See B38.
+# See B39.
 *.patch text eol=lf
 *.diff text eol=lf
 

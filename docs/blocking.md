@@ -3799,3 +3799,69 @@ landing script refuses on this first and says so in those terms.
 No FunnelForge manual, no scenario set, and not `tests/test_funnelforge_manuals.py` — P-16b owns
 those and was running concurrently. No rule was weakened. `packs/burkham-wickmont.draft.yaml` is
 unchanged.
+
+
+---
+
+## B40 — `live_grants` counts every grant ever issued, on four screens, and one of them says "Revoke them"
+
+**`console`** · Found 10 September 2026 by the coordinator while building B37's migration.
+**Pre-existing. B37 did not create it and does not close it** — it removes the filter that
+made it look closed.
+
+Six queries compute a field called `live_grants` or `assignable_grants`, and until migration
+0036 each did it as `count(...) FILTER (WHERE g.revoked_at IS NULL)`:
+
+| site | field | reaches |
+|---|---|---|
+| `broker/roster.py` ×2 | `live_grants` | the roster diff, and the orphan-identity list |
+| `broker/ventures.py` | `live_grants` | the ventures table |
+| `broker/app.py` ×2 | `live_grants` | the agent roster, the venture list |
+| `broker/proposals.py` | `live_grants` | the empty-queue explanation |
+
+**The filter never did any work.** `agent_forge_grant.revoked_at` had no writer — that is B37,
+and it is why 0036 dropped the column. `NULL IS NULL` is true, so the predicate was true for
+every row that has ever existed and each of these counted **every grant on record, forever**.
+Removing it in 0036 changed no number, which is provable rather than argued: the column was NULL
+on every row of both databases at the time, checked before the migration was written.
+
+**What makes this worth a blocker rather than a comment is the sentence it feeds.**
+`console/app/agents/roster-controls.tsx` renders, for an agent who has departed the Village:
+
+> — holds an Office identity **and 2 live grants. Revoke them.**
+
+That is an instruction to a human, derived from a number that does not mean what it says. An
+agent whose grants were revoked an hour ago reads identically to one whose grants are live. The
+reviewer is told to revoke what is already revoked, and — worse in the other direction — a
+departed agent covered by a `venture` revocation still appears to hold live authority.
+
+**The answer already exists and is one call away.** `revocation.covered_grants(conn,
+venture_id=...)` returns which of a venture's grants a live revocation covers, using the same
+predicate and breadth ordering as the per-call check, so a grant appears there exactly when a
+call against it would raise `Revoked`. P-17 built it for Gate 7, which is the one place in the
+system that now asks the right question.
+
+**Why it was not fixed in B37.** Two reasons, both worth stating rather than assuming.
+
+1. **It is a behaviour change, and B37 is not.** Every edit in 0036 is provably
+   number-preserving. Re-pointing these six at the revocation table would move numbers on four
+   screens in the same commit that drops a column, and a migration whose diff mixes "this
+   changes nothing" with "this changes what the console reports" cannot be reviewed as either.
+
+2. **`covered_grants` is venture-scoped and these are not.** The roster and agent-list queries
+   aggregate across every venture in one SQL statement; the function answers per venture and
+   returns a dict. Three of the six would become a query plus a Python join, which is a design
+   question — whether the predicate belongs in SQL as a `NOT EXISTS` over `revocation`, or
+   whether these views should be venture-scoped in the first place — and not a mechanical edit.
+
+**What closes it.** The six sites asking the revocation table, and `live_grants` meaning what
+its name says. `tests/contract/test_departure_revokes.py::_live_grants` is already written that
+way as of 0036 — a `NOT EXISTS` over the `agent` and `agent_module` scopes — because the test
+helper was reading the dropped column and had to be repointed rather than deleted. **That helper
+is the shape the six production queries want**, and it is worth reading before writing them
+again from scratch.
+
+**What it does not affect.** `resolve_grant` refuses a revoked grant on every call, against the
+`revocation` table, and always has. Gate 7 asks the same source. **No agent can act on a revoked
+grant because of this** — the defect is entirely in what a human is told, which is why it is a
+`console` item and not a `call-path` one.

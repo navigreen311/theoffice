@@ -26,7 +26,6 @@ from typing import Any
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 
-from broker import audit
 from broker.errors import NotAuthorized, Revoked
 
 # Ordered weakest to strongest. A stronger role may act at a weaker scope.
@@ -158,11 +157,11 @@ async def covered_grants(
     WHY THIS IS NOT A COLUMN ON THE GRANT
     =====================================
 
-        Because `agent_forge_grant.revoked_at` looks like it already answers this and
-        does not. Nothing in the broker writes it; the only writers in the repository
-        are two test fixtures. On 3 September two `burkham-wickmont` grants acquired a
-        `revoked_at` by hand, with no `revocation` row, no reason, no named human and
-        no audit event - and every `WHERE revoked_at IS NULL` in this codebase has been
+        Because `agent_forge_grant.revoked_at` looked like it already answered this
+        and did not. Nothing in the broker ever wrote it. On 3 September two
+        `burkham-wickmont` grants acquired a `revoked_at` by hand, with no `revocation`
+        row, no reason, no named human and no audit event - and every
+        `WHERE revoked_at IS NULL` in this codebase had been
         reporting that hand-edit as authority state since.
 
         Read this module's header for the other half: a venture-scope revocation must
@@ -273,90 +272,6 @@ async def revoke(
     if commit:
         await conn.commit()
     return revocation_id
-
-
-async def clear_grant_tombstone(
-    conn: AsyncConnection,
-    *,
-    grant_id: uuid.UUID,
-    cleared_by: uuid.UUID,
-    venture_id: str,
-    reason: str,
-) -> bool:
-    """Remove a hand-set `agent_forge_grant.revoked_at`, and record the removal.
-
-    **This is not `reinstate()` and must not grow into it.** `reinstate()` lifts a
-    declared revocation: a `revocation` row with a scope, an actor, a blast radius and
-    a reason, which this function never touches. A tombstone has none of those - it is
-    a bare timestamp in a column `revoke()` does not write and nothing else clears.
-
-    **Why it exists at all.** `resolve_grant` raises `NotGranted("grant is revoked")` on
-    a non-null `revoked_at`, on every call. So a value set by hand stops an agent for as
-    long as it sits there, with nothing to read and no path to lift it. Two of them sat
-    on Burkham's grants for fifteen days. Removing one by hand would repeat the mistake
-    in the other direction: an unrecorded stop undone by an unrecorded start.
-
-    **What it deliberately does not do.** It does not write a `revocation` row, and a
-    caller must not write one to make the history look tidy. Fabricating a declared stop
-    that never happened - and then lifting it - would leave a reader believing a
-    revocation was reasoned and reviewed. The honest record is that the stamp had no
-    record, and that is what the audit entry says.
-
-    **This function is a consequence of a defect, not a feature.** blocking.md B37 is the
-    item: the column is a second, ritual-free way to stop an agent, and the fix is that
-    it stops being one - either `revoke()` writes both, or `resolve_grant` reads only the
-    `revocation` table. **When that lands, this function should go with it.**
-
-    Returns True if a tombstone was cleared, False if there was nothing to clear.
-    """
-    if not reason.strip():
-        raise ValueError(
-            "clearing a tombstone requires a reason. The stamp being removed had none; "
-            "adding a second unexplained act is not a repair"
-        )
-
-    async with conn.cursor(row_factory=dict_row) as cur:
-        await cur.execute(
-            "SELECT office_agent_id, forge_id, module_id, revoked_at "
-            "FROM agent_forge_grant WHERE grant_id = %s AND revoked_at IS NOT NULL",
-            (grant_id,),
-        )
-        row = await cur.fetchone()
-
-    if row is None:
-        return False
-
-    async with conn.cursor() as cur:
-        await cur.execute(
-            "UPDATE agent_forge_grant SET revoked_at = NULL "
-            "WHERE grant_id = %s AND revoked_at IS NOT NULL",
-            (grant_id,),
-        )
-        if cur.rowcount != 1:
-            raise RuntimeError(
-                f"expected to clear exactly one grant, cleared {cur.rowcount}"
-            )
-
-    await audit.write_event(
-        event_type="grant_tombstone_cleared",
-        actor_type="human",
-        actor_id=cleared_by,
-        venture_id=venture_id,
-        subject={
-            "grant_id": str(grant_id),
-            "office_agent_id": str(row["office_agent_id"]),
-            "forge_id": row["forge_id"],
-            "module_id": row["module_id"],
-            "revoked_at_cleared": row["revoked_at"].isoformat(),
-            #: Stated as data, not prose, because it is the fact that makes this
-            #: entry the FIRST record of the stop as well as of its removal.
-            "had_revocation_row": False,
-            "had_audit_event": False,
-            "reason": reason,
-        },
-        conn=conn,
-    )
-    return True
 
 
 async def reinstate(
@@ -484,7 +399,7 @@ async def blast_radius(
                    count(DISTINCT g.office_agent_id) AS agents,
                    count(DISTINCT g.venture_id) AS ventures
             FROM agent_forge_grant g
-            WHERE g.revoked_at IS NULL AND {where}
+            WHERE {where}
             """,
             params,
         )
@@ -642,7 +557,6 @@ async def targets(conn: AsyncConnection) -> dict[str, list[dict[str, Any]]]:
             SELECT DISTINCT g.forge_id, g.module_id,
                    g.office_agent_id::text AS office_agent_id
             FROM agent_forge_grant g
-            WHERE g.revoked_at IS NULL
             ORDER BY g.forge_id, g.module_id
             """
         )

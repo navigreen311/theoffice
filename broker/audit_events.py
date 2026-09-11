@@ -86,12 +86,18 @@ EVENTS: tuple[Event, ...] = (
     Event("console_incident_account_appended", "Incident account appended",
           "One stage of an incident response was written down.",
           "broker.app", CONSOLE),
+    # Kept although nothing writes it any more, and that is not an oversight. Two
+    # `audit_log` rows carry this type; an event the glossary stops describing renders
+    # on /audit as a raw identifier, which is the defect this file exists to fix. The
+    # walker in `test_every_audit_event_written_in_the_source_is_published` checks
+    # written-implies-published, so a published event with no writer is legal.
     Event("grant_tombstone_cleared", "Grant tombstone cleared",
-          "A hand-set `agent_forge_grant.revoked_at` was removed. That column is "
-          "enforced by `resolve_grant` on every call but is never written by "
-          "`revoke()`, so a value in it is a stop with no reason, no actor and no "
+          "A hand-set `agent_forge_grant.revoked_at` was removed. That column was "
+          "enforced by `resolve_grant` on every call and was never written by "
+          "`revoke()`, so a value in it was a stop with no reason, no actor and no "
           "reinstatement path. This entry is the record the original stamp did not "
-          "have. See blocking.md B37.",
+          "have. **The column itself was dropped in migration 0036**, so nothing can "
+          "write this event again and nothing needs to. See blocking.md B37.",
           "broker.revocation", SYSTEM),
     Event("console_revocation_created", "Revocation issued",
           "The kill switch. Takes effect on the target's next call.",

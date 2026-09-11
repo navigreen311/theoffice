@@ -99,11 +99,20 @@ def test_an_existing_grant_for_an_excluded_module_can_still_be_revoked(
 
     _exclude(admin, forge_id, module_id)
 
+    # Through the declared path. This used to stamp `agent_forge_grant.revoked_at`,
+    # a column migration 0036 dropped because nothing in the broker wrote it (B37).
+    # The claim - an excluded module's existing grant stays revokable - is unchanged
+    # and is now asserted against the mechanism that actually revokes.
     with admin.cursor() as cur:
         cur.execute(
-            "UPDATE agent_forge_grant SET revoked_at = now() "
-            "WHERE office_agent_id = %s AND forge_id = %s",
-            (seed_agent, forge_id),
+            """
+            INSERT INTO revocation (revocation_id, scope, office_agent_id, forge_id,
+                                    module_id, reason, revoked_by, revoked_by_role)
+            VALUES (%s, 'agent_module', %s, %s, %s,
+                    'an excluded module must not become unrevokable', %s,
+                    'venture_operator')
+            """,
+            (str(uuid.uuid4()), seed_agent, forge_id, module_id, str(uuid.uuid4())),
         )
         assert cur.rowcount == 1
     admin.commit()

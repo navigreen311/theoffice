@@ -146,7 +146,7 @@ def split_hunks(patch_text: str) -> tuple[str, str]:
             raise LandingError(
                 f"expected exactly one hunk adding {marker!r} in {PATCH_PATH.name}, "
                 f"found {len(chosen)}. The patch has been edited into a shape this "
-                "splitter cannot read; land it by hand in the order B38 states, or fix "
+                "splitter cannot read; land it by hand in the order B39 states, or fix "
                 "the splitter - do not apply the whole patch to get past this."
             )
         return "\n".join(header + chosen[0]) + "\n"
@@ -338,7 +338,7 @@ async def run(confirm: bool) -> int:
                     },
                     "note": (
                         "A V31 FAIL here is the honest verdict, not a landing error. "
-                        "See B38 and docs/plans/funnelforge-binding-RECORD.md."
+                        "See B39 and docs/plans/funnelforge-binding-RECORD.md."
                     ),
                 },
                 indent=2,

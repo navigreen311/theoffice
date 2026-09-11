@@ -327,12 +327,13 @@ async def directory(conn: AsyncConnection) -> dict[str, Any]:
             """
             SELECT v.venture_id,
                    -- count(g.grant_id), not count(*). A LEFT JOIN that matches
-                   -- nothing still produces one row with every g column NULL, and
-                   -- `g.revoked_at IS NULL` is TRUE for it - so count(*) reported one
-                   -- live grant for a venture that has none. Counting a column skips
-                   -- the null row, which is the whole difference.
+                   -- nothing still produces one row with every g column NULL, which
+                   -- count(*) counts - reporting one live grant for a venture that has
+                   -- none. Counting a column skips the null row, which is the whole
+                   -- difference. The `revoked_at` filter that used to sit here did no
+                   -- part of that work (migration 0036, B37).
                    count(g.grant_id) FILTER (WHERE g.is_assignable) AS assignable_grants,
-                   count(g.grant_id) FILTER (WHERE g.revoked_at IS NULL) AS live_grants,
+                   count(g.grant_id)                                     AS live_grants,
                    count(DISTINCT g.office_agent_id) FILTER (WHERE g.is_assignable)
                      AS agents_appointed,
                    b.monthly_usd_cap, b.hard_cap_action, b.soft_cap_pct,
