@@ -1117,6 +1117,25 @@ rather than asserted:
 | 4 | the **subject** - five invented prohibitions, zero overlap with the live seven | the provenance rule, written 11 September |
 | 5 | the **sink** - a suite mocking `emailSender.send` wholesale (B45, P-08) | 81 green tests |
 | 6 | the **title** - an applier that found where a heading comes from, not what one is | it reported success |
+| 7 | the **subject entirely** - `email-sender.test.ts` never imports `EmailSender` (B50) | a green test file named for it |
+
+**#7 is the deepest of the seven, and it is worth stating why it is worse than #5.**
+
+`apps/email-engine/tests/email-sender.test.ts` **never imports `EmailSender`.** Its only import is
+from `vitest`. It defines a mock locally, with a different interface, and tests that. So
+`personalizeContent` - the one function the whole B50 migration turned out to hinge on - **had
+never been executed by any test**, in a file named for the class that contains it.
+
+**#5 mocked the real sink. #7 never reached it.** Those eighty-one tests in `emails.test.ts` at
+least stood in for `emailSender.send`: they replaced a real thing with a stand-in, and the
+complaint is that a stand-in receiving a field says nothing about what the real one does with it.
+This is a category further out. **The guard did not substitute for the subject; it never made
+contact with it**, and the filename asserted otherwise to every reader who has opened that
+directory since.
+
+A mocked sink is a test that proves less than it appears to. A test file named for a class it does
+not import is a test that proves **nothing about that class at all**, while occupying the place
+where a reader looks to find out whether it is covered.
 
 **#6 arrived while applying B44-B48 and belongs in the list rather than in a commit message.**
 B48's source was a single bold paragraph with no heading, unlike its three siblings. The applier

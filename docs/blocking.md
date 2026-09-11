@@ -4780,3 +4780,91 @@ The remaining-work document states that no attachment field exists "in the schem
 
 
 **Applied by the coordinator 11 September 2026** from capitalforge#95, where P-12 raised it. A package outside this repository cannot write this ledger, so it wrote the entry and the coordinator carried it — and then four of them sat unapplied in four PR bodies, which is the failure Caveat 18 describes with the numbers already allocated.
+
+---
+
+## B50 — `/api/emails/send` moved onto `multi-provider.ts`, personalisation intact.
+
+**`funnelforge`** · RESOLVED 11 September 2026 by the transport package, in `navigreen311/funnelforge` PR #157.
+P-08 (B44) escalated rather than repoint this route, having established that `/api/emails/send` calls `emailSender` from `@funnelforge/email-engine`, not `multi-provider.ts`, and that a cast past the type error compiles and keeps all 81 tests green while the real sink drops the extra keys. That finding is upheld in full by independent read.
+
+The delta between the two senders is recorded at `docs/email-send-transport-delta.md` in funnelforge — twelve items, sorted by whether `/api/emails/send` can exercise them. The blocking delta is **one content-preparation stage**: merge-field personalisation plus the plain-text derivation that accompanies it. It is not a missing function on the destination but a contract mismatch — `SendEmailOptions.to` is a person, `EmailMessage.to` is an address — so a naive repoint deletes personalisation's inputs rather than degrading them.
+
+Resolved with an adapter (`apps/api/src/services/email/transactional-sender.ts`) that personalises before hand-off, preserving the existing camelCase tag vocabulary and fallbacks exactly. Neither sender was edited. `replyTo` and `attachments` were **not** plumbed through; those promises were removed from the approved copy in B43 and nothing is waiting on them.
+
+Two further findings, recorded but not acted on:
+- `multi-provider.ts` had **zero tests and no registered consumer** — its only route module, `modules/email/` (singular), is never registered, while the live routes come from `modules/emails/` (plural), a different file exporting the same symbol name. This change is its first production traffic.
+- `apps/email-engine/tests/email-sender.test.ts` never imports `EmailSender`; it tests a locally-defined mock with a different interface, so `personalizeContent` had never been executed by any test.
+
+Two dormant defects in `multi-provider.ts` left in place, out of scope: `addProvider` has **no `smtp` case** (the type union advertises it), and **no `ses` case** despite `initializeDefaultProviders` registering `ses` when `AWS_SES_ACCESS_KEY_ID` is set — that dead provider still scores in `selectProvider` and can consume a retry attempt. Neither transport is provisioned for the `api` service, so neither is live.
+
+`RESEND_API_KEY` is **absent entirely** from the local `.env`, not merely empty — that file carries only `DATABASE_URL` and `REDIS_URL`. So locally `multiEmailProvider` registers **zero** providers and every send fails. The previous sender failed on the same input for the same reason, so this is not a regression, but the operator-facing message degrades from one naming the env vars to set to a bare `All email providers failed` (delta item K). `.env` was **not** edited.
+
+---
+
+## B51 — two directories, one exported symbol name, and the registered one is the plural
+
+**`funnelforge`** · **`architecture`** · Found 11 September 2026 by the B50 transport package,
+which needed `multi-provider.ts` and found it had never run.
+
+    apps/api/src/modules/email/      SINGULAR  - never registered
+    apps/api/src/modules/emails/     PLURAL    - registered at index.ts:815
+
+**Both export a symbol by the same name.** The live routes come from the plural one;
+`index.ts:815` is `server.register(emailRoutes, { prefix: '/api/emails' })`, importing from
+`./modules/emails/routes`. Nothing anywhere imports the singular directory. Verified by the
+coordinator: a grep for `modules/email'` excluding `modules/emails` returns nothing.
+
+**This is why `multi-provider.ts` had never executed.** 1013 lines, six providers, the only
+transport in the repository carrying `replyTo` and `attachments` — the two fields four separate
+findings went looking for — **and no path reached it.** Its single consumer was a route module
+nobody had registered.
+
+### Why this is its own entry and not a line in B50
+
+**It is a discovery mechanism, not a transport detail.** B50 is about which sender
+`/api/emails/send` uses. This is about how a thousand lines of working, wanted code stayed
+invisible to four separate investigations — B44, B45, B50 and the coordinator's own wrong
+"correction" that the carrier existed one layer down.
+
+**Every one of those searches found the file.** None of them established that nothing called it,
+because the file was plainly there and plainly capable, and *capable* reads as *used*. The
+question nobody asked was which of the two directories the server registers.
+
+**It belongs where somebody hunting dead code looks**, which is not inside an entry about a
+transport migration. A singular/plural pair exporting one symbol name defeats the two cheapest
+checks available - grep for the symbol, grep for the directory - because both return a hit, and
+the hit is the wrong one.
+
+### Not fixed here
+
+B50 was scoped to the send path and correctly did not touch it. What to do with the unregistered
+`modules/email/` — delete it, register it, or rename one of the pair so the collision cannot
+recur — is a decision with no owner yet.
+
+---
+
+## B52 — `addProvider` has no `smtp` or `ses` case, and `initializeDefaultProviders` registers `ses` anyway
+
+**`funnelforge`** · Found 11 September 2026 by the B50 transport package. **Out of scope for
+B50 and correctly left in place** — recorded here because it needs a home rather than a fix
+smuggled into a migration.
+
+Two defects in `apps/api/src/services/email/multi-provider.ts`, in the same mechanism:
+
+1. **`addProvider` has no `smtp` case**, though the provider type union advertises one.
+2. **`addProvider` has no `ses` case either — and `initializeDefaultProviders` registers `ses`
+   when `AWS_SES_ACCESS_KEY_ID` is set.**
+
+**The second is the live one.** A registered provider with no constructor case becomes an entry
+that `selectProvider` still scores and still hands traffic to. **A dead provider can win a
+selection and consume a retry attempt**, and the send fails in a way that reads as a provider
+outage rather than as a provider that was never built.
+
+**Dormant today, not fixed.** Neither transport is provisioned for the `api` service —
+`AWS_SES_ACCESS_KEY_ID` is set nowhere, `SMTP_HOST` reaches only `outreach-messaging` — so
+neither case is reachable. **It arms the moment somebody provisions SES**, which is a
+configuration change nobody would expect to need a code change beside it.
+
+That is the shape worth recording: the defect is invisible while the feature is unconfigured, and
+the act that makes it visible is the act that makes it urgent.
