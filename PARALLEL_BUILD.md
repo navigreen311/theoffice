@@ -1015,6 +1015,36 @@ answer — instead of reading the run's own log lines, which were on screen and 
 **Recorded rather than quietly corrected**, because a caveat about unexamined plausibility that
 hid its own unexamined plausibility would be worth less than nothing.
 
+**Caveat 18 — "zero file overlap" was never achievable for the ledger, and the number in it
+has to be allocated before dispatch, not chosen during it.**
+
+P-16b and P-13b were dispatched in parallel with the standing instruction *"zero file overlap
+required"*, and both came back having written `docs/blocking.md` — **both allocating B38**, to
+different findings. Neither agent did anything wrong. Neither could see the other's tree, and
+each picked the next free number from the main it was cut from, which was the same number.
+
+**The ledger is the one file every package writes.** That is what a ledger is for. So the
+overlap rule has an exception it never stated, and stating it as an absolute made it useless
+exactly where it mattered: an agent reading "zero file overlap" and needing to record a finding
+either breaks the rule or does not record the finding, and both are worse than a conflict.
+
+**What P-00 did for the last wave and this dispatch did not: allocate the blocker numbers up
+front.** A package told *"your finding is B39"* cannot collide, needs no coordination at write
+time, and the conflict never forms. A package told *"pick the next one"* is being asked to
+guess what a sibling it cannot see will guess.
+
+**The rule, restated so it is usable:** zero overlap on code and on documents a package owns;
+**the ledger is shared by construction**, and the coordinator allocates each package its entry
+number in the dispatch prompt. A conflict in `blocking.md` is then a coordination failure with a
+name, rather than the expected cost of recording anything.
+
+**Both reports asserted the overlap was zero and both were wrong** — P-16b's went further and
+described P-13b's only target as `packs/burkham-wickmont.draft.yaml`, which P-13b never touched.
+Neither had any way to check. **A claim about a sibling's diff is not a claim an agent is in a
+position to make**, and a coordinator taking one on trust is reading a fact out of a report
+rather than out of the two diffs, which is Caveat 13 wearing different clothes. The collision
+was found by listing both PRs' files and intersecting them, which takes one command.
+
 **Every agent gets its own git worktree.** `git checkout -b` in a shared checkout collides
 with whatever another agent has uncommitted. This cost a recovery on the previous run.
 
