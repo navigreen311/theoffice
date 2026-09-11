@@ -4062,6 +4062,81 @@ empty. **Configuring a provider before this is settled would make the sends succ
 attachment silently absent**, which is why the key stays unset deliberately rather than by
 oversight.
 
+### RULED 11 September 2026 — consolidate the customer send path onto `multi-provider.ts`
+
+**Ivan's ruling.** `/api/emails/send` moves onto `multi-provider.ts`. The other three senders
+**stay**, and are named below so a later reader finds out why four of five were not touched
+rather than assuming nobody looked.
+
+**The finding was never "five transports, should be one."** It was that **the approved sends go
+through the only transport that cannot carry what the copy promises.** Alerting, digests and
+report delivery are different jobs. A service-level `reply_to` is right for an alert — one sender
+identity, no personalisation, no enclosure — and pulling those into a transport built for
+marketing merge-fields would be consolidation for its own sake.
+
+### The count moved twice, and that is the finding about the finding
+
+**Reported as three. It is five.** The first count came from following `/api/emails/send`'s import
+and stopping when the contradiction was explained. The third was found by looking for a third
+because one had been asked for; the fourth and fifth were found by **not stopping there** —
+`grep -rln "new Resend"` returns five files, and two of them had never been named.
+
+**This is the same shape as eleven-versus-twenty-seven on B37's `revoked_at` sites**: a count
+taken from the first search that explained the symptom, reported as if it were the population.
+Both times the number was wrong in the direction of *fewer*, because a search that has explained
+the thing in front of you feels finished.
+
+### The five, and which is in scope
+
+| # | file | `replyTo` | attachments | reached from | scope |
+|---|---|---|---|---|---|
+| 1 | `services/email/multi-provider.ts` | **yes**, six providers | **yes** | `test-sender.ts` only | **the destination** |
+| 2 | `email-engine/src/services/email-sender.ts` | no | no | **`/api/emails/send`**, `transactional-emails.ts` | **IN SCOPE** |
+| 3 | `services/notifications/email.ts` | service-level `reply_to` | no | monitoring, messaging | out — alerting |
+| 4 | `jobs/notification-digest.ts` | no | no | a scheduled job | out — digests |
+| 5 | `services/reporting/scheduled-report-executor.ts` | no | **yes**, four refs | scheduled reports | out — report delivery |
+
+`services/email-engine-client.ts` is an HTTP client, not a transport. Ruled out.
+
+**#3, #4 and #5 are out of scope deliberately, not by oversight.** Each does a different job from
+the customer send path, each is reached from somewhere the approved copy never touches, and
+none of them has been complained about. A ruling that moved them would be deciding the fate of
+three working services as a side effect of a marketing template.
+
+### #5 is the sharpest fact in this entry
+
+**FunnelForge sends attachments today.** `scheduled-report-executor.ts` carries them — four
+references, a live Resend client, a scheduled report that *is* an enclosure.
+
+So the true statement is not *"the transport cannot carry an attachment."* It is: **the capability
+exists, and the approved-copy path does not have it.** That is a different problem with a
+different cost, and it is why the earlier framing — *no attachment field in the schema, the types,
+or any provider call* — was wrong in a way that mattered: it made the gap look like absence when
+it was distribution.
+
+### What the package is, and what it starts with
+
+**Move `/api/emails/send` onto `multi-provider.ts` without losing merge-field personalisation.**
+
+**It starts by establishing what `email-engine` does that `multi-provider` does not.** P-08 proved
+a naive repoint breaks merge-field personalisation and recorded that it declined to make it. So
+that difference is **the first task, not an assumption to work around** — the package opens by
+reading both senders and writing down the delta, and anything it then builds is answerable to
+that list.
+
+### This does not unblock D-1 and D-6, and they are not waiting on it
+
+**Their promises were removed from the copy rather than carried** (B43, merged as #110). So this
+ruling does not restore anything. It decides **what the transport is**.
+
+Whether an approved template may promise a reply channel or an enclosure again is a **separate
+question for whoever owns the copy**, to be asked after the transport exists — and asked on its
+own merits, because the reason those promises came out was that keeping them would have chosen
+FunnelForge's transport as a side effect of a line of marketing copy. Choosing the transport
+first is what makes that question answerable rather than load-bearing.
+
+**P-08's escalation (#155) and P-05's Pack patch unblock behind this**, in that order.
+
 ### Gotcha, recorded because it costs an hour
 
 **The FunnelForge test command must run from `apps/api`** — it has its own `vitest.config.ts` and
