@@ -63,7 +63,11 @@ _STEP_END = "Process completed with exit code"
 _TIMESTAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T[\d:.]+Z ")
 _CHROMIUM = re.compile(r"^ {4}(DevTools listening|\[\d+:\d+:|$)")
 _HEX8 = re.compile(r"\b[0-9a-f]{8}\b")
-_TOKEN = re.compile(r"issued [A-Za-z0-9]{8}\.\.\.")
+#: Console tokens are URL-safe base64, so the prefix can carry `_` and `-`. The first
+#: version of this mask was `[A-Za-z0-9]{8}` and matched every capture the baseline was
+#: built from - none of which happened to contain one. #109 did, and the script reported
+#: DIVERGENT on a clean run: a false red, which is the direction that erodes a gate.
+_TOKEN = re.compile(r"issued [A-Za-z0-9_-]{8}\.\.\.")
 
 
 def normalise(raw: str) -> str:
