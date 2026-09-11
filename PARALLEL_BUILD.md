@@ -1372,12 +1372,29 @@ manuals already live here - as does every prior FunnelForge finding.
 
     50f95788f3f35a37256f9fe30383378164a98708c98d2acc475fc94ba0f33f80
 
-Over the documented eight failures and one could-not-run. **Recipe:** extract the
-`console-smoke.sh` step, strip the leading ISO timestamp column, drop Chromium stderr and
-DevTools lines, mask 8-hex ids and the issued-token prefix.
+Over the documented eight failures and one could-not-run.
 
-Every package diffs against this text. **A PR with the same number of red checks and
-different text is rejected.**
+**The recipe is `scripts/smoke_normalise.py`, not this paragraph.**
+
+    gh api repos/navigreen311/theoffice/actions/jobs/<job-id>/logs > smoke.raw
+    python scripts/smoke_normalise.py smoke.raw --check
+
+**Corrected 11 September, and the correction is this run's own defect committed by the
+coordinator.** The baseline was first recorded as the hash above plus a prose recipe. P-06
+followed that prose carefully, got `d3052620…`, and had to fall back on a ten-line diff to reach a
+verdict. Its verdict was right and **the gate was not verifiable** - the number could be reproduced
+only by the shell history that produced it. That is *a finding recorded without the instrument that
+produced it*, which is what PR #140 did with the battery probes, committed here about the artifact
+every package is required to check against. Caveat 19's rule applies to the guard as much as to the
+measurement.
+
+The script is verified in all three directions: **MATCH** on five independent clean captures
+(#98-after, #104, #105, #106, #109), **DIVERGENT** on #98-before - the real run that carried a
+ninth failure it had introduced itself - and **REFUSED**, exit 2, on an empty capture, because an
+empty file hashes to something and that something is not a verdict.
+
+Every package checks against this text. **A PR with the same number of red checks and different
+text is rejected.**
 
 ## What reading the repo changed before dispatch
 
