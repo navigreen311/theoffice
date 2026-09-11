@@ -1045,6 +1045,103 @@ position to make**, and a coordinator taking one on trust is reading a fact out 
 rather than out of the two diffs, which is Caveat 13 wearing different clothes. The collision
 was found by listing both PRs' files and intersecting them, which takes one command.
 
+**Caveat 19 - a guard that records what answered cannot catch a run that asked the wrong
+thing.**
+
+Found by P-01 on 11 September, by refusing to run. It is the third member of Caveat 17's family
+and the three are worth reading together, because each substitutes a different thing and each
+survives the guard built for the one before.
+
+    Caveat 17, first error   substituted the INPUT      empty prompts on all eight probes
+    Caveat 17, second error  substituted the READING    `.text` parsed the response's repr
+    Caveat 19                substitutes the COMPARISON the "second model" IS the first model
+
+**The mechanism, and every step of it is green.** `.env` carries `LLM_PROVIDER=auto`.
+`llm_client.resolve_provider` expands `auto` to *ollama-if-reachable-else-stub* and **never to
+`anthropic`** - that is its documented purpose (ADR-0023), not a defect. Ollama is up on this box
+serving `llama3.1:8b`, **the model under comparison**. `ANTHROPIC_API_KEY` is a 27-character
+placeholder with no `sk-ant-` prefix, and `AnthropicProvider.health_check` is `bool(self.api_key)`,
+so the placeholder **health-checks green**.
+
+So a run intended to measure a second model would not have errored. It would have re-measured the
+first, returned a plausible 3/3 + 0/5, and been filed as the second model's result - supporting
+the *more interesting* of the two available conclusions, that safety training and structured
+output pull against each other in general. That conclusion would have been false.
+
+**And PR #139 would not have caught it.** #139 records the model that answered, read off the live
+provider rather than off settings - built precisely so a certification names what earned it. The
+artifact would have read `ollama/llama3.1:8b`: **correct, and useless.** A truthful label on a run
+whose entire purpose was a different model tells you nothing, because the label describes what
+answered and the defect is in what was asked.
+
+**The rule.** A guard that records provenance answers *what produced this*. It cannot answer
+*was this the right question*. When an experiment's whole content is a comparison, the thing to
+assert before the first call is the comparison itself - that the provider resolves to the one
+under test, by name, not by a setting that happens to resolve there today.
+
+### Every guard in this family points downstream. Every failure has been upstream.
+
+Five instances now, and the shape is identical in all five. Listed so the count is checkable
+rather than asserted:
+
+| # | what was substituted | the guard that existed, or followed |
+|---|---|---|
+| 1 | the **input** - empty prompts on eight probes | *assert every probe is non-empty* |
+| 2 | the **reading** - `.text` parsed the response's repr | *read the field off the dataclass* |
+| 3 | the **comparison** - `auto` resolved to the model under test | #139's recorded provider label |
+| 4 | the **subject** - five invented prohibitions, zero overlap with the live seven | the provenance rule, written 11 September |
+| 5 | the **sink** - a suite mocking `emailSender.send` wholesale (B45, P-08) | 81 green tests |
+
+**Each of those guards checks that the instrument ran correctly on whatever it was given. Not one
+of them asks whether the subject was the right one.** Non-empty probes were non-empty. The
+provider label was accurate. The field was read rather than defaulted. The eighty-one tests passed.
+Every guard did its job, and in four of the five cases the answer was still wrong - in the fifth it
+would have shipped an API that advertised attachment support and silently discarded attachments.
+
+### The check that would have caught all five is one check
+
+**Name the thing you are measuring, from the system, before you measure it.** A `forge_id`. A
+`module_id`. A `content_hash`. The provider, by name, not by a setting that resolves to it today.
+The real sink, not a mock standing in for it.
+
+The provenance rule this run produced - *record which never-do list authored these probes, and
+where it came from* - is that check for probes specifically. **It generalises, and that is the
+point of writing it here rather than only in the calibration doc.**
+
+**The guard belongs at the point where the subject is chosen, not at the point where the reading
+is taken.** Everything downstream of that point can be correct and the result still be about the
+wrong thing - which is exactly what happened five times, and what no amount of care at the reading
+end would have prevented.
+
+
+
+**The guard that was watching did not fail. It was watching the wrong property.**
+
+Caveat 17 produced a rule - *assert every probe is non-empty before measuring* - and the
+10 September script **did assert it, and the probes WERE non-empty.** Non-empty was never the
+property that mattered; it was the property that had failed the time before. A guard written for
+the last substitution checks the last substitution.
+
+P-01, who was blocked twice in one day, put it better than this caveat can: *"both times I was
+blocked, I had aimed my prediction at the model's behaviour while the substitution sat in the
+setup."* Every one of these four errors is upstream of the thing being measured, and every guard
+so far has been pointed downstream of it.
+
+**A fourth substitution, found the same day, one level deeper.** The eight probes of the
+10 September run were authored from five prohibitions **hardcoded in an uncommitted script**.
+The live `capitalforge/portfolio_health` never-do list has seven entries. **The overlap is zero.**
+The invented five are plausible neighbours of the real seven without being near-duplicates of
+them - nearest-neighbour similarity **0.55**, close enough to read as sourced and far enough to be
+a different question. So that run substituted the **SUBJECT**: it measured a model against
+prohibitions the system does not hold. PR #140 recorded the finding without the instrument that
+produced it, which is how it stayed invisible.
+
+**The corroboration that settles it.** Running the invented five back through the real authoring
+path produces **8 probes, 5 `never_do_violation` + 3 `silent_failure`** - the exact shape of the
+recorded table. The live seven produce **12, at 7 + 5**. So the old numbers are not merely
+suspect, they are **not comparable**: the class split changes, and the first model has to be
+re-run against the new set before any second model means anything.
+
 **Every agent gets its own git worktree.** `git checkout -b` in a shared checkout collides
 with whatever another agent has uncommitted. This cost a recovery on the previous run.
 
@@ -1275,12 +1372,29 @@ manuals already live here - as does every prior FunnelForge finding.
 
     50f95788f3f35a37256f9fe30383378164a98708c98d2acc475fc94ba0f33f80
 
-Over the documented eight failures and one could-not-run. **Recipe:** extract the
-`console-smoke.sh` step, strip the leading ISO timestamp column, drop Chromium stderr and
-DevTools lines, mask 8-hex ids and the issued-token prefix.
+Over the documented eight failures and one could-not-run.
 
-Every package diffs against this text. **A PR with the same number of red checks and
-different text is rejected.**
+**The recipe is `scripts/smoke_normalise.py`, not this paragraph.**
+
+    gh api repos/navigreen311/theoffice/actions/jobs/<job-id>/logs > smoke.raw
+    python scripts/smoke_normalise.py smoke.raw --check
+
+**Corrected 11 September, and the correction is this run's own defect committed by the
+coordinator.** The baseline was first recorded as the hash above plus a prose recipe. P-06
+followed that prose carefully, got `d3052620…`, and had to fall back on a ten-line diff to reach a
+verdict. Its verdict was right and **the gate was not verifiable** - the number could be reproduced
+only by the shell history that produced it. That is *a finding recorded without the instrument that
+produced it*, which is what PR #140 did with the battery probes, committed here about the artifact
+every package is required to check against. Caveat 19's rule applies to the guard as much as to the
+measurement.
+
+The script is verified in all three directions: **MATCH** on five independent clean captures
+(#98-after, #104, #105, #106, #109), **DIVERGENT** on #98-before - the real run that carried a
+ninth failure it had introduced itself - and **REFUSED**, exit 2, on an empty capture, because an
+empty file hashes to something and that something is not a verdict.
+
+Every package checks against this text. **A PR with the same number of red checks and different
+text is rejected.**
 
 ## What reading the repo changed before dispatch
 

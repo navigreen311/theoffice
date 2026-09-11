@@ -3899,3 +3899,69 @@ again from scratch.
 `revocation` table, and always has. Gate 7 asks the same source. **No agent can act on a revoked
 grant because of this** — the defect is entirely in what a human is told, which is why it is a
 `console` item and not a `call-path` one.
+
+
+---
+
+## B45 — FunnelForge has three parallel email transports, and the only capable one is reachable from a test-send helper
+
+**`architecture`** · Found 11 September 2026 by P-08, which shipped no code and escalated rather
+than build around it. **Owner: unassigned — this is an architectural ruling and it is Ivan's.**
+
+**What D-1 and D-6 were actually blocked on.** Both findings said three approved templates promise
+a reply channel and four promise an attachment that the send path cannot carry. The remaining-work
+document located the gap in `sendEmailSchema`. The coordinator then "corrected" that to *the
+carrier exists one layer down, this is plumbing through two layers* — **and that was wrong.**
+
+### The three transports
+
+| implementation | carries `replyTo` / `attachments` | reachable from |
+|---|---|---|
+| `apps/api/src/services/email/multi-provider.ts` | **yes** — mapped across **six** providers | `test-sender.ts`, and nothing else |
+| `apps/email-engine/src/services/email-sender.ts` | **no** — zero mentions at four layers | **`/api/emails/send`**, the route The Office's adapter calls |
+| `apps/api/src/modules/email/` (singular) | — | the `services/email` barrel |
+
+`apps/api/src/modules/emails/routes.ts:4` imports `emailSender` from `@funnelforge/email-engine`.
+**The capable transport is never on the path.** Its only consumer in the repository is a test-send
+helper.
+
+### Why P-08 stopped instead of finishing
+
+Completing D-1 and D-6 requires `apps/email-engine/src/types.ts` and `email-sender.ts`, neither on
+its allowed list. It **proved** the requirement rather than asserting it: forwarding the fields
+yields `TS2353: 'replyTo' does not exist in type 'SendEmailOptions'` — baseline 3 errors → 4, probe
+reverted byte-identical.
+
+**And the trap it declined is the part worth keeping.** Casting past that error compiles **and
+keeps all 81 tests green**, because the suite mocks `emailSender.send` wholesale — the mock
+receiving a field proves nothing about the real sink, which destructures four keys and drops the
+rest. **It would have shipped an API advertising attachment support that silently discards
+attachments.** A green suite over a mocked sink is not evidence about the sink.
+
+It also recorded, and refused, the cheaper-looking alternative: repointing `/send` at
+`multiEmailProvider` would silently break merge-field personalisation.
+
+### The ruling, and why it is not an agent's
+
+**Ivan, 11 September:** *"a second transport plus a separate `sendAMPEmail()` branch is choosing
+which transport FunnelForge has, and that shouldn't happen as a side effect of an attachment
+promise."*
+
+So D-1 and D-6 are resolved **by removing the promises from the copy** (B43), not by building the
+carrier. That is not a refusal of the transport work — it is a refusal to make an architectural
+decision as a consequence of a line of marketing copy. **Nobody chose to have three email
+implementations**, and choosing which one FunnelForge keeps is a deliberate decision that needs an
+owner, a reason and a record.
+
+### What this does not affect
+
+All six approved sends 500 today regardless — `RESEND_API_KEY` is empty and the provider list is
+empty. **Configuring a provider before this is settled would make the sends succeed with a promised
+attachment silently absent**, which is why the key stays unset deliberately rather than by
+oversight.
+
+### Gotcha, recorded because it costs an hour
+
+**The FunnelForge test command must run from `apps/api`** — it has its own `vitest.config.ts` and
+`tests/setup.ts`. From the repo root, setup is skipped and you get **59 spurious failures**: a
+phantom red that looks like a broken branch.
