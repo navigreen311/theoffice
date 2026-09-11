@@ -1038,6 +1038,31 @@ guess what a sibling it cannot see will guess.
 number in the dispatch prompt. A conflict in `blocking.md` is then a coordination failure with a
 name, rather than the expected cost of recording anything.
 
+**AMENDED 11 September 2026 — the allocation worked, and produced a second failure mode.**
+
+Run 2 allocated B41 through B49 at dispatch. **Nothing collided.** Four of those entries were
+raised by packages in *other repositories* — B44 and B46 and B47 in funnelforge, B48 in
+capitalforge — and a package outside this repo cannot write this ledger. So each wrote its entry
+as a quoted block in its PR body for the coordinator to carry across.
+
+**Then four correctly-numbered entries sat unapplied in four PR bodies for a day.**
+
+That is the fix for collision producing its own defect: **an entry that exists, is correctly
+numbered, and is nowhere anybody reads.** The blocker was found, described well, and recorded in a
+place whose only reader is whoever opens that pull request afterwards.
+
+**An allocation with no completion check is a promise nobody audits.** The applier refuses a
+number that is already present — the collision case, which was the one being guarded. **Nothing
+notices a number allocated and never applied.** The asymmetry is exact: the guard watches the
+direction that already had a guard.
+
+**Recorded rather than fixed.** A completion check is buildable — compare allocated numbers
+against `## B<n>` headings after a wave — and it is not built here, because the gap is worth
+seeing before it is papered over, and because the next wave may allocate differently. What a
+coordinator should take from this is smaller than a script: **after a wave, read the allocation
+table and confirm every number on it is in the ledger.** Four were not, for a day, and the only
+reason it surfaced is that somebody asked what was still owed.
+
 **Both reports asserted the overlap was zero and both were wrong** — P-16b's went further and
 described P-13b's only target as `packs/burkham-wickmont.draft.yaml`, which P-13b never touched.
 Neither had any way to check. **A claim about a sibling's diff is not a claim an agent is in a
