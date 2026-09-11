@@ -12,6 +12,18 @@
 *.yml text eol=lf
 *.yaml text eol=lf
 
+# A patch is read by `git apply`, which compares context lines byte for byte. A `.patch`
+# stored LF and checked out CRLF therefore mismatches on EVERY line and is refused whole,
+# with `error: patch does not apply` and nothing about carriage returns.
+# `docs/plans/funnelforge-position-DEFERRED.patch` sat in exactly that state: the blob is
+# LF, `* text=auto` below gave it CRLF on a Windows checkout, and the documented command
+# `git apply docs/plans/funnelforge-position-DEFERRED.patch` failed for everyone who ran
+# it there while working on Linux. The test that exists to stop that patch rotting read
+# the module names out of it and never tried to apply it, so it stayed green throughout.
+# See B38.
+*.patch text eol=lf
+*.diff text eol=lf
+
 # Let git decide for everything else, and never touch a binary.
 * text=auto
 *.png binary
