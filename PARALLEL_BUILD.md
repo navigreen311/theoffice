@@ -1142,6 +1142,34 @@ recorded table. The live seven produce **12, at 7 + 5**. So the old numbers are 
 suspect, they are **not comparable**: the class split changes, and the first model has to be
 re-run against the new set before any second model means anything.
 
+**Caveat 20 - `git branch --merged` returns 0 for a squash-merged branch, forever.**
+
+Pruning Run 1's worktrees, eight theoffice branches were checked with
+`git branch --merged origin/main` before removal. **All eight came back 0.** Every one of them
+had shipped - #94, #101, #102 and the rest are in main's history by content and by PR.
+
+`--merged` asks about **ancestry**. A squash merge creates a new commit that contains the
+branch's changes and none of its commits, so the branch is never an ancestor of main and never
+will be. **The answer is not stale; it is permanently wrong**, and it is wrong in the dangerous
+direction - it reports work as unmerged, so a reader either keeps dead branches forever or stops
+trusting the check and deletes something live.
+
+**This is B17 in a different command.** B17 was `revoked_at`: a column that looked like it
+answered *is this agent stopped* and did not, because nothing wrote it. `--merged` looks like it
+answers *did this land* and does not, because nothing in a squash merge writes the ancestry it
+reads. In both cases the receiving side holds the answer - the `revocation` table there, the PR
+state here - and in both cases the plausible-looking local check was consulted instead.
+
+**What caught it was the number being implausible, not anything going red.** Eight of eight
+unmerged, in a repo whose last twenty merges were those branches, is not a believable result. A
+check that had returned 0 for *one* branch would have been believed.
+
+**The rule.** On a squash-merging repo, `--merged` is not evidence about whether work shipped.
+Ask the PR state, or compare trees. And a prune does not need the answer at all: removing a
+worktree leaves its branch and its commits untouched, so the safe order is to prune first and
+decide about branches separately - which is what makes the wrong answer harmless here and worth
+recording before it is load-bearing somewhere it is not.
+
 **Every agent gets its own git worktree.** `git checkout -b` in a shared checkout collides
 with whatever another agent has uncommitted. This cost a recovery on the previous run.
 
