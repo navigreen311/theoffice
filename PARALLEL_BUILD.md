@@ -1237,3 +1237,69 @@ the run could not finish.**
   branch and flags it in the PR. **It does not modify the file.**
 - **A critical-path package failing twice halts the entire run** and escalates to Ivan.
 - Any package requiring more than one revert-and-retry gets a post-mortem entry here.
+
+
+---
+
+# RUN 2 — the remaining work, 11 September 2026
+
+**Thirteen packages, four repositories, peak concurrency nine.** Plan:
+`docs/coordination-plan-remaining.md`. Template:
+`docs/coordination-plan-remaining-template.md`.
+
+## Ledger allocation, made at dispatch
+
+Caveat 18's rule, applied. Two packages both claimed B38 on 10 September because the
+coordinator did not allocate; this is what stops it happening twice.
+
+| Package | Repo | Allocation |
+|---|---|---|
+| P-03 | theoffice | amends **B40** - no new number |
+| P-04 | theoffice | **B41** |
+| P-06 | theoffice | **B42** |
+| P-07 | theoffice | **B43** |
+| P-08 | funnelforge | **B44** |
+| P-09 | funnelforge | **B45** |
+| P-10 | funnelforge | **B46** |
+| P-11 | funnelforge | **B47** (no-op if verification passes) |
+| P-12 | capitalforge | **B48** |
+| P-05 | theoffice | **B49** |
+| P-01 | simforge | **ADR-0053** (reserved) |
+| P-02 | simforge | **ADR-0054** (reserved) |
+
+**GAP-3 ruled: FunnelForge findings are recorded in theoffice's `docs/blocking.md`.**
+FunnelForge has no ledger of its own, and the adapter, the approved copy and the nine
+manuals already live here - as does every prior FunnelForge finding.
+
+## The Smoke baseline, recorded rather than re-derived
+
+    50f95788f3f35a37256f9fe30383378164a98708c98d2acc475fc94ba0f33f80
+
+Over the documented eight failures and one could-not-run. **Recipe:** extract the
+`console-smoke.sh` step, strip the leading ISO timestamp column, drop Chromium stderr and
+DevTools lines, mask 8-hex ids and the issued-token prefix.
+
+Every package diffs against this text. **A PR with the same number of red checks and
+different text is rejected.**
+
+## What reading the repo changed before dispatch
+
+Four findings were filed against FunnelForge and are not in it. `APPROVED_TEMPLATES` lives
+in `adapters/funnelforge/templates.py` **here**, and so do the four `attached` promises and
+the three `reply` mentions; the `sent`/`booked`/`captured` literals are in
+`adapters/funnelforge/modules.py:143,185,215`. A plan dispatched on the document's face
+would have sent four agents into a repo to edit copy that is not there.
+
+**And one correction that changes what a ruling costs.** The finding says there is *"no
+attachment field in the schema, the types, or any provider call."* Not true of the provider
+layer - `multi-provider.ts` carries `replyTo` and `attachments` and maps them for all four
+providers. What is missing is `sendEmailSchema` one layer up. **Carrying an attachment is
+plumbing through two layers, not building support.**
+
+**FunnelForge's trunk is `master`, not `main`.** That alone would have broken five cards.
+
+## The run record
+
+| P | PR | SHA | tests | Smoke | merged |
+|---|---|---|---|---|---|
+| *(appended on each merge)* | | | | | |
