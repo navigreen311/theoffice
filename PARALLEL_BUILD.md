@@ -1268,6 +1268,41 @@ scepticism, not domain knowledge, not noticing an inconsistency - a `grep` that 
 and returned `0 hits`. The discipline that works is mechanical and cheap, and it has to be applied
 to the citations one is *least* inclined to doubt, because those are the ones that get written down.
 
+### AMENDED 13 September 2026 - four more, and the count is now eight
+
+The four above were recorded as a pattern. **Four more arrived in the four turns after it was
+written**, each one load-bearing for a ruling that was about to be made:
+
+    5  "Gate 6 mints certifications with attested_by='bootstrap', no battery involved"
+       Gate 6 counts knowledge bases and writes nothing. `provisioning.py` contains ZERO
+       occurrences of `attested_by` or `bootstrap_reason`. No gate mints a certification.
+
+    6  "Gate 4.5 is the appointer; appointment is transactional"
+       Gate 3 is the appointer - `generators/pipeline.py:66`. Gate 4.5 only reads
+       `artifacts.appointment`. And appointment is a pure read generator; the all-or-nothing
+       is V24 plus `if not outcome.advances: return outcomes`, not a transaction.
+
+    7  "Amelie Kowalska needs capitalforge/scan_communication certified"
+       No such agent. The roster has an Amelie WYSTAN, in ENGINEERING - not a candidate for
+       Compliance Reviewer, which draws from `administration`.
+
+    8  "A veteran grade threshold filters 40 agents out before certification is consulted"
+       No `veteran`, `seniority`, `grade`, `tenure` or `experience_level` exists in
+       `generators/`, `broker/`, the Pack, or the schema. `_candidates` filters on
+       `status='active' AND department=%s` and nothing else. The entire database holds **54
+       active agents**; administration holds **11**. There is no population of 40 to filter,
+       and Compliance Reviewer has ZERO eligible candidates rather than one.
+
+**Three of these four carried a true conclusion on a false mechanism.** The ladder really is
+stuck; one position really does stop the run; a certification really is unreachable. Being right
+about the conclusion is what stopped anyone looking at the "because" - which is B51's lesson
+arriving a third time, from a third direction.
+
+**Note the drift in the count itself.** #8 was offered as "fifth in four turns". It is the
+fourth since this caveat and the eighth overall. **A miscount is not a citation error, and that
+is the point: by the time inventions are frequent enough to need counting, the count is another
+plausible number nobody checks.**
+
 ### The rule
 
 **Before an entry asserts a symbol, a document, a ruling or a state: open it.** A citation in a
