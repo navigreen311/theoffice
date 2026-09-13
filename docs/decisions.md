@@ -2710,3 +2710,83 @@ merge trap a plain value falls into.
 a Forge with no bridge, no operating instructions and — as of today's ruling — no V1 work is
 building against a start nobody has scheduled. **The note is here so that whoever does schedule
 it reads this before `docker compose up`, rather than after.**
+
+---
+
+## 31. The refusal is the design result - a real module, refused because this position does not operate it
+
+**Recorded 2026-09-13 alongside the bootstrap generalisation (PR #118). Not a footnote to that
+change: it is the half that makes it a generalisation rather than an unpinning.**
+
+> **Numbered 31, not 30, and the reason is Caveat 18.** Entry 30 is taken by PR #117, which is
+> open and not merged, so `origin/main` does not yet contain it. Branching from main and taking
+> the next free number would have produced two entry 30s the moment both landed - the collision
+> that caveat exists to describe, caused here by the allocation being read off a trunk that is
+> behind two open branches rather than off the branches themselves.
+
+`--forge` and `--module` remove the constants. **The constants were the only thing that scoped
+the tool**, so what replaces them is the whole question, and the answer has to be visible in what
+the tool refuses rather than in what it accepts.
+
+Two refusals, both against **real, registered, perfectly valid CapitalForge modules**:
+
+    $ bootstrap-phase0 --module client_read_credit --department administration
+    burkham-wickmont's live Pack has no position operating 'client_read_credit'.
+
+    $ bootstrap-phase0 --module statement_pull --department administration
+    no position operating 'statement_pull' draws from 'administration'.
+    The Pack draws it from banking.
+
+**Neither is a bad module and neither is a typo.** `client_read_credit` is in
+`forge_module_registry` under capitalforge. `statement_pull` is in Burkham's own live Pack - it is
+what Diagnostic Analyst operates. They are refused because **this venture, or this position, does
+not ask for them**, and that is the distinction the constants used to enforce by accident.
+
+**A warning would have been the wrong answer and not a milder one.** A certification for a pair no
+position operates is a row Gate 4.5 will never read: the write would succeed, the operator would
+believe a gate had moved, and nothing would have changed. The refusal is not protecting the
+database from a bad row. It is refusing to produce a true-looking record of work that has no
+consumer - which is the `fabricated` shape `docs/module-exclusions.md` was written about, arriving
+from the certification side.
+
+**The Pack is the authority and needed no new one.** `positions_required` already declares what
+each position operates, and Gate 4.5 appoints against exactly that list. So the check and the gate
+read the same source, and a pair the bootstrap refuses is one the gate could never have used.
+
+### Two corrections from Ivan, recorded because both were load-bearing
+
+**1. Unit B is per Forge per department, not per invocation.** `ux_cert_unit_b` is
+`(department, forge_id) WHERE unit = 'B'` and `record_result` upserts on it, so the bootstrap's
+unit-B write is idempotent after the first per department. **Burkham needs 3 unit-B rows, not one
+per run.**
+
+> The accompanying figure does not check out and is recorded as stated rather than adopted.
+> "Five invocations not ten" matches no count in the Pack: **Compliance Reviewer needs 3** (one
+> per module at headcount 1), and **full appointment needs 15 unit-A rows** - 2x3 + 2x1 + 2x1 +
+> 1x3 + 1x2 - plus the 3 unit-B. The correction about unit B is right; the arithmetic attached to
+> it is a third number, and this ledger has now been wrong twice about counts that nobody checked.
+
+**2. `--department` is not optional - it is the parameter that makes this reach Burkham at all.**
+This was called unnecessary when the work was scoped, and it is the opposite: the hardcoded
+`department = 'engineering'` default is what wrote **all seven prior certification rows**. Every
+one of them is held by an engineering agent, and **neither venture has an engineering position** -
+Greenstone draws `property_lookup` from `research`. So the seven proved the call path, which was
+their job, and **not one of them could ever have filled a position.** Without `--department` the
+generalised tool would have gone on producing rows in the one department that no Pack asks for.
+
+### A structural finding the same work exposed
+
+**`agent_forge_grant` has no foreign key to `certification`.** Its FKs are to
+`forge_module_registry` and `office_agent_identity` only, and `is_assignable` is generated as
+`operation_cert_ref IS NOT NULL AND dept_context_cert_ref IS NOT NULL AND activated_at IS NOT
+NULL`.
+
+**So the generated column proves the references are present, not that they resolve.** Seven live
+grants in this database currently read `is_assignable = t` while both certifications they name
+have been deleted. That state is reachable by any deletion of a certification row, and nothing in
+the schema notices.
+
+Found because the development database was emptied mid-session - `pytest tests/` with no
+`OFFICE_TEST_ADMIN_DSN` truncates what it owns, and prints a warning first. The wipe was an
+error; **the dangling grants are not a consequence of it but a property it revealed**, and they
+would survive any ordinary revocation-and-cleanup path the same way.
