@@ -1221,6 +1221,101 @@ worktree leaves its branch and its commits untouched, so the safe order is to pr
 decide about branches separately - which is what makes the wrong answer harmless here and worth
 recording before it is load-bearing somewhere it is not.
 
+**Caveat 21 - a wrong claim gets argued with. A plausible one gets recorded.**
+
+Four invented citations in four consecutive turns, all from the same source, all offered as
+established fact, none of them real. Recorded together because the pattern is the finding; any one
+of them alone would read as a slip.
+
+    1  "ADR-0034 names record_submission for exactly this case"
+       theoffice has no ADRs at all. SimForge's ADR-0034 is "Daily cognitive-drift canary +
+       cohort analytics" - zero mentions of record_submission, bootstrap or curriculum.
+
+    2  "record_submission is the documented bootstrap route"
+       decisions.md entry 27 says the opposite, in terms: "It does not license a certification
+       written by hand... The fix is to build the two writers, not to widen the one that exists."
+       The citation did not merely lack support - it inverted an existing ruling.
+
+    3  "SimForgeAdministrator holds a module with no live instruction, so required_module_ids is
+       empty and blocking_reason stays None"
+       `SimForgeAdministrator`, `required_module_ids` and `blocking_reason`: **0 hits each in
+       source**, across both repositories, in every .py, .yaml and .md - the only occurrences
+       either repository now contains are the three in this caveat. The appointment code uses
+       `modules`, `missing`, `shortfalls`, `unfilled`. Burkham declares no such position.
+
+    4  "def65e4f sits at 4.5 with Gate 3 and Gate 4 both awaiting_human - it has been waiting on a
+       signature"
+       Gate 3 `passed`, Gate 4 `passed`. The `awaiting_human` rows on Gate 4 are the two that
+       *preceded* the signature of 8 September 19:51 and are superseded by it. Nothing was waiting.
+
+**Three of the four would have been written into this ledger as fact.** Each was specific enough to
+look checked, coherent enough to survive a read, and consequential enough to act on - #2 would have
+reversed a standing ruling by citing it as support, and #3 would have recorded a mechanism that
+does not exist as the reason a gate was satisfiable.
+
+### Why plausibility is the hazard and wrongness is not
+
+**A wrong claim gets argued with.** "The battery has no caller" invites a check, because it is the
+kind of statement whose truth is the point of the sentence.
+
+**A plausible claim gets recorded.** A named ADR, a symbol in snake_case, a gate state - these
+arrive as *premises*, not as assertions. The reader's attention goes to what is being argued from
+them, and the premise passes underneath. That is what happened three times here, and the fourth was
+caught only because the symbol names were unfamiliar enough to be worth a grep.
+
+**The only thing that caught any of them was reading the source before writing the entry.** Not
+scepticism, not domain knowledge, not noticing an inconsistency - a `grep` that took ten seconds
+and returned `0 hits`. The discipline that works is mechanical and cheap, and it has to be applied
+to the citations one is *least* inclined to doubt, because those are the ones that get written down.
+
+### AMENDED 13 September 2026 - four more, and the count is now eight
+
+The four above were recorded as a pattern. **Four more arrived in the four turns after it was
+written**, each one load-bearing for a ruling that was about to be made:
+
+    5  "Gate 6 mints certifications with attested_by='bootstrap', no battery involved"
+       Gate 6 counts knowledge bases and writes nothing. `provisioning.py` contains ZERO
+       occurrences of `attested_by` or `bootstrap_reason`. No gate mints a certification.
+
+    6  "Gate 4.5 is the appointer; appointment is transactional"
+       Gate 3 is the appointer - `generators/pipeline.py:66`. Gate 4.5 only reads
+       `artifacts.appointment`. And appointment is a pure read generator; the all-or-nothing
+       is V24 plus `if not outcome.advances: return outcomes`, not a transaction.
+
+    7  "Amelie Kowalska needs capitalforge/scan_communication certified"
+       No such agent. The roster has an Amelie WYSTAN, in ENGINEERING - not a candidate for
+       Compliance Reviewer, which draws from `administration`.
+
+    8  "A veteran grade threshold filters 40 agents out before certification is consulted"
+       No `veteran`, `seniority`, `grade`, `tenure` or `experience_level` exists in
+       `generators/`, `broker/`, the Pack, or the schema. `_candidates` filters on
+       `status='active' AND department=%s` and nothing else. The entire database holds **54
+       active agents**; administration holds **11**. There is no population of 40 to filter,
+       and Compliance Reviewer has ZERO eligible candidates rather than one.
+
+**Three of these four carried a true conclusion on a false mechanism.** The ladder really is
+stuck; one position really does stop the run; a certification really is unreachable. Being right
+about the conclusion is what stopped anyone looking at the "because" - which is B51's lesson
+arriving a third time, from a third direction.
+
+**Note the drift in the count itself.** #8 was offered as "fifth in four turns". It is the
+fourth since this caveat and the eighth overall. **A miscount is not a citation error, and that
+is the point: by the time inventions are frequent enough to need counting, the count is another
+plausible number nobody checks.**
+
+### The rule
+
+**Before an entry asserts a symbol, a document, a ruling or a state: open it.** A citation in a
+ledger is a promise that somebody checked, and every later reader spends that promise without
+re-earning it. An entry that records a false premise is worse than no entry, because it converts an
+unverified claim into a verified-looking one and does so permanently.
+
+**This applies hardest to citations that support what one already believes.** Three of the four
+arrived in service of a conclusion that was being argued for, and the fourth arrived in service of
+a conclusion that turned out to be right anyway - the battery caller *is* complete. Being right
+about the conclusion is not evidence about the premise, which is Caveat 19's lesson arriving from
+the documentation side rather than the instrument side.
+
 **Every agent gets its own git worktree.** `git checkout -b` in a shared checkout collides
 with whatever another agent has uncommitted. This cost a recovery on the previous run.
 
