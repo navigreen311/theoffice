@@ -293,6 +293,64 @@ class Position(Strict):
     compliance_flags_in_scope: list[str]
     headcount: int = Field(ge=1)
     trust_tier_ceiling: TrustTier
+
+    #: Per-module overrides of `trust_tier_ceiling`, keyed `forge_id/module_id`.
+    #:
+    #: **Qualified from the first line it was written**, while it costs nothing. A bare module
+    #: name is unambiguous only while one Forge is bound, and `forge_module_registry`'s primary
+    #: key is `(forge_id, module_id)` - the schema has always permitted two Forges exposing one
+    #: name. `client_read` and `client_read_pii` both being CapitalForge is the near-miss that
+    #: makes a bare key look safe.
+    #:
+    #: Absent means today's behaviour exactly: one tier across every module this position
+    #: operates.
+    #:
+    #: **The storage was always per-module; only the declaration was not.**
+    #: `agent_forge_grant` carries one `trust_tier` per (agent, forge, module) row and
+    #: `resolve_grant` gates each call on that row's value - so a position holding
+    #: `client_read` at `auto_execute` and `submit_application` at `propose` has always been a
+    #: representable, enforceable runtime state. What did not exist was a way for a Pack to ask
+    #: for it, so `runtime_config` fanned one ceiling across every module an agent held.
+    #:
+    #: **Why a position and not a workflow step.** The tier is authority granted to an agent for
+    #: a module; a step is work that uses it. The same module reached from two steps is the same
+    #: authority, and declaring it twice invites the two to disagree.
+    #:
+    #: A tier here is still a CEILING. Certification caps it per Part 10.1, and an agent
+    #: certified below its declared tier operates at the certified one.
+    module_trust_tiers: dict[str, TrustTier] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _overrides_are_qualified_and_operated(self) -> Position:
+        """Keys are `forge_id/module_id`, and name a module this position operates.
+
+        Two checks, and they fail differently on purpose. An unqualified key is a form error
+        the author can fix without knowing the venture; an unoperated module is a typo or a
+        stale edit and needs the position's own list to diagnose.
+
+        Refused rather than ignored: a silently-ignored override reads as applied, and the
+        failure mode is a module running at a tier somebody believes they lowered.
+
+        The forge half is checked against `forge_dependencies` at Pack level - a position
+        cannot see the bindings from here.
+        """
+        unqualified = sorted(k for k in self.module_trust_tiers if k.count("/") != 1)
+        if unqualified:
+            raise ValueError(
+                f"{self.position_title}: module_trust_tiers keys must be 'forge_id/module_id'. "
+                f"Unqualified: {', '.join(unqualified)}. A bare module name is unambiguous only "
+                "while one Forge is bound."
+            )
+        operated = set(self.forge_modules_operated)
+        unknown = sorted(
+            k for k in self.module_trust_tiers if k.split("/", 1)[1] not in operated
+        )
+        if unknown:
+            raise ValueError(
+                f"{self.position_title}: module_trust_tiers names {', '.join(unknown)}, which "
+                f"this position does not operate. It operates {', '.join(sorted(operated))}."
+            )
+        return self
     lifecycle_stages_owned: list[str] = Field(default_factory=list)
     """Which lifecycle stages this position acts in. Empty means all of them.
 
@@ -548,6 +606,39 @@ class BusinessPack(Strict):
     kpi_targets: dict[str, list[KpiTarget]] = Field(default_factory=dict)
     scenarios: list[Scenario] = Field(default_factory=list)
     lifecycle: Lifecycle
+
+    @model_validator(mode="after")
+    def _tier_overrides_name_a_bound_forge(self) -> BusinessPack:
+        """The forge half of every `module_trust_tiers` key names a Forge this Pack binds.
+
+        The position validator checks the form and that the module is operated; it cannot see
+        `forge_dependencies` from inside a position. This is the other half, and it is what
+        makes a qualified key MEAN something rather than merely look qualified.
+
+        Checked against the binding's own `modules_expected`, which is where this Pack already
+        carries the (forge, module) pairing - so `capitalforge/place_call` is caught as wrong
+        even though both halves exist somewhere.
+        """
+        bound = {
+            b.forge: set(b.modules_expected) for b in self.forge_dependencies.forge_bindings
+        }
+        wrong: list[str] = []
+        for position in self.positions_required:
+            for key in position.module_trust_tiers:
+                forge, module = key.split("/", 1)
+                if forge not in bound:
+                    wrong.append(
+                        f"{position.position_title}: {key} names Forge {forge!r}, which this "
+                        f"Pack does not bind (bound: {', '.join(sorted(bound))})"
+                    )
+                elif module not in bound[forge]:
+                    wrong.append(
+                        f"{position.position_title}: {key} - {forge!r} is bound but does not "
+                        f"expect {module!r}"
+                    )
+        if wrong:
+            raise ValueError("; ".join(wrong))
+        return self
 
     @property
     def venture_id(self) -> str:

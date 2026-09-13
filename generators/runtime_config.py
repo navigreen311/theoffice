@@ -36,6 +36,16 @@ from generators.artifacts import (
 )
 from generators.pack import BusinessPack
 
+#: The tier ladder, ranked. Duplicated from `broker.certification` deliberately: `generators`
+#: does not import `broker`, and a generator that reached into the runtime for a constant would
+#: make the artifact depend on the thing it is meant to describe.
+_TIER_RANK = {"suggest": 1, "propose": 2, "auto_execute": 3}
+
+
+def _lower(a: str, b: str) -> str:
+    """The weaker of two tiers. Ties return the first, which is the declared one."""
+    return a if _TIER_RANK[a] <= _TIER_RANK[b] else b
+
 
 def generate(
     pack: BusinessPack,
@@ -61,6 +71,7 @@ def generate(
         )
 
     tier_by_title = {p.position_title: p.trust_tier_ceiling for p in roles.positions}
+    overrides_by_title = {p.position_title: p.module_trust_tiers for p in roles.positions}
 
     grants: list[PlannedGrant] = []
     if blocked is None:
@@ -69,6 +80,15 @@ def generate(
             for agent in position.appointed:
                 for module in agent.certified_modules:
                     forge = module_forge.get(module, "UNREGISTERED")
+                    # The declared ceiling FOR THIS MODULE. Absent from the map means the
+                    # position's single ceiling, which is every Pack authored before
+                    # `module_trust_tiers` existed - so this line is a no-op for them.
+                    # Keyed `forge_id/module_id`, and `forge` is resolved immediately
+                    # above - so the two consumers of this map, here and the approval
+                    # projection, qualify it the same way and cannot drift.
+                    declared = overrides_by_title.get(
+                        position.position_title, {}
+                    ).get(f"{forge}/{module}", ceiling)
                     grants.append(
                         PlannedGrant(
                             grant_id=str(
@@ -82,10 +102,19 @@ def generate(
                             office_agent_id=agent.office_agent_id,
                             forge_id=forge,
                             module_id=module,
-                            # Certified tier already capped by the ceiling in 5.2;
-                            # min() again here would be re-deriving a decision that
-                            # has an owner.
-                            trust_tier=agent.certified_tier or ceiling,
+                            # The LOWER of what the Pack declares for this module and what
+                            # the agent is certified to. Both halves are needed now and only
+                            # one was before.
+                            #
+                            # 5.2 caps `certified_tier` against the position's single ceiling,
+                            # so taking it alone used to be correct. With a per-module ceiling
+                            # it is not: a module declared `propose` under a position whose
+                            # ceiling is `auto_execute` would be issued at the agent's
+                            # certified `auto_execute` and the override would do nothing.
+                            #
+                            # `_lower` rather than `min()` because these are ranked names, not
+                            # numbers, and the ranking lives in one place.
+                            trust_tier=_lower(declared, agent.certified_tier or declared),
                         )
                     )
         grants.sort(key=lambda g: (g.office_agent_id, g.forge_id, g.module_id))

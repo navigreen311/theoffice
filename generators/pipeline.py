@@ -70,7 +70,9 @@ async def run_all(pack: BusinessPack, conn: AsyncConnection) -> GeneratedArtifac
 
     # The projection counts human decisions and needs neither the Forge each module
     # sits on nor its retry class - both were per-task facts, and there are no tasks.
-    approval_projection = approvals_gen.generate(pack, roles, workflow, appointment)
+    approval_projection = approvals_gen.generate(
+        pack, roles, workflow, appointment, module_forge=module_forge
+    )
 
     curriculum = await curriculum_gen.generate(pack, roles, workflow, appointment, conn)
     forge_manifest = manifest_gen.generate(pack, workflow)

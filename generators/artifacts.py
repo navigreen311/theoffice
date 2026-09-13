@@ -103,6 +103,14 @@ class DefinedPosition:
     trust_tier_ceiling: str
     lifecycle_stages_owned: list[str]
 
+    #: Per-module overrides of `trust_tier_ceiling`. Empty means one tier across every module,
+    #: which is what every Pack declared before 13 September 2026.
+    #:
+    #: Last, and defaulted, so the field order of this artifact is unchanged for every existing
+    #: construction site - this class is frozen, slotted, and hashed into `artifacts_hash`, so a
+    #: field inserted in the middle would be a signature change dressed as an addition.
+    module_trust_tiers: dict[str, str] = field(default_factory=dict)
+
 
 @dataclass(frozen=True, slots=True)
 class RoleDefinition(Artifact):

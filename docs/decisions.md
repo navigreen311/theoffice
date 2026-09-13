@@ -3707,3 +3707,121 @@ tests; they were the suite reaching for an application database it had not been 
 
 **Both variables, or neither.** `OFFICE_TEST_ADMIN_DSN` alone is worse than nothing, because it
 buys the appearance of isolation and the warning that would have corrected it.
+
+---
+
+## 48. Nineteen qualified refs and twenty-five bare ones, and the line between them is a reason
+
+**Ruled 2026-09-13 by Ivan. Recorded because a reader meeting both forms in one Pack will assume
+the bare ones were missed, and they were not.**
+
+`Position.module_trust_tiers` keys are `forge_id/module_id`. `Position.forge_modules_operated` is
+ruled to follow - **19 refs, 10 in Burkham and 9 in Greenstone.** Three other populations of bare
+module names stay bare, and each stays for its own reason:
+
+    forge_dependencies.forge_bindings[].modules_expected   20   ALREADY forge-keyed
+    forge_operating_instructions[] refs                     5   prose-embedded, unparsed
+    (grant/certification/registry columns)                   -   already (forge_id, module_id)
+
+**`modules_expected` is not ambiguous.** It is nested inside a `ForgeBinding` whose first field is
+`forge`, so every name in that list is already scoped by the object containing it. Qualifying it
+would write the Forge twice per entry and create a second place for the two to disagree - the
+defect, not the fix.
+
+**The instruction refs are prose.** Nothing parses them into a (forge, module) pair; they are read
+by people. Qualifying them is a formatting change to documentation, with no consumer that would
+benefit and no validator that would check it.
+
+**The database columns are already qualified.** `agent_forge_grant`, `certification`,
+`forge_module_registry` and `forge_module_exclusion` all carry `forge_id` and `module_id` as
+separate columns, and `forge_module_registry`'s primary key is the pair. Nothing there is a bare
+name; it only looks like one when a Pack string is joined against it.
+
+### So the wide scope was three changes with two designs
+
+Not one change at a larger radius. `modules_expected` would be de-duplication, the instruction refs
+would be documentation formatting, and the columns need nothing. Only `forge_modules_operated`
+shares the actual defect with `module_trust_tiers`: **a bare name in a standalone list, with no
+surrounding object naming the Forge.**
+
+### Where the wide line would begin
+
+**The day a module name appears under two Forges.** `forge_module_registry` permits it - the
+primary key is `(forge_id, module_id)` - and `module_forge_map` builds a flat `module_id ->
+forge_id` dict whose docstring asserts *"A module belongs to exactly one Forge."* Measured
+2026-09-13: **zero collisions across all four Forges**, capitalforge 11 modules, cre-forge 5,
+simforge 2, voiceforge 2.
+
+On that day `modules_expected` stays fine - it is scoped - and `module_forge_map` silently keeps
+whichever row came last. That lookup is where the wide change starts, and it is a derivation
+replaced by a declaration rather than a spelling change.
+
+---
+
+## 49. A run that did not advance, reported as two gate outcomes and a constraint violation
+
+**Recorded 2026-09-13 at Ivan's instruction. The seventh invention, and the first to describe a
+failure mode in detail - a named constraint, a named tier, a named layer disagreement.**
+
+Reported: Gate 4.5 passed, first venture ever; Gate 5 then blocked on a tier `read_only` violating
+`agent_forge_grant_tier_check`; `runtime_config` computes four tiers while the CHECK knows three.
+
+Measured, all four false:
+
+    run adc5be8b                blocked at gate 4.5, pack 0.7.0, unchanged since the 13th
+    gate 4.5 results, ever      two, both `blocked` - 8 September and 13 September
+    gate 5 results, ever        none, for this venture
+    `read_only`                 zero occurrences outside .venv/ in .py, .yaml and .sql
+    constraint name             agent_forge_grant_TRUST_tier_check, not agent_forge_grant_tier_check
+    tiers runtime_config emits  three. `_lower` returns one of two arguments drawn from
+                                `_TIER_RANK`, which has three keys
+
+### Why this one was harder to doubt than the earlier six
+
+**It described a mechanism, not an outcome.** The earlier inventions asserted that something
+happened; this one asserted *how something failed*, with a layer, a constraint name, and a value -
+and then drew the correct general lesson from it: that a CHECK refusing a value fires at write time
+rather than at migration time, and nothing catches the gap between a Python constant and a database
+constraint.
+
+**That lesson is true.** The gap is real, no test covered it, and closing it was worth doing -
+`tests/contract/test_tier_vocabulary_agrees.py` now reads the allowed array out of `pg_constraint`
+and compares it against `_TIER_RANK` in both directions.
+
+**So a false premise produced a correct and useful conclusion**, which is the third time this week
+(B51, entry 45, this). The danger is not that the conclusion is wrong. It is that a conclusion
+arriving with a worked failure mode attached reads as already-verified, and the verification is the
+part that was never done.
+
+### What caught it
+
+Four greps and one query, none taking longer than a few seconds: `provisioning_gate_result` for the
+gate outcomes, `pg_constraint` for the real name, and `grep -rn read_only` for the tier. **The
+specificity that made it convincing is the same specificity that made it checkable** - a vague
+claim would have been harder to refute.
+
+---
+
+## 50. Going back to six hours is not going back to a good number
+
+**Recorded 2026-09-13 alongside the revert, at Ivan's instruction, because the revert could
+otherwise read as a restoration.**
+
+Coverage went 6 -> 9 to close 616 minutes of demand against 432 available. Per-module trust tiers
+removed that demand at its source - six of Burkham's ten modules are reads, and the Pack had been
+declaring every-action human review on all ten - so the shortfall the nine hours was solving no
+longer exists, and it is back to 6.
+
+**Both numbers have the same provenance: `declared`, `established_by: Ivan Green`, `source: null`.**
+Six was never measured either. What the revert removes is a number declared for a shortfall that
+has gone, not a wrong number replaced by a right one.
+
+**And the figure underneath both is still unmeasured.** `median_review_minutes` - 4 and 3, weighted
+to 3.5 - is the multiplier that turns 80 approvals into 280 minutes, and no review has ever been
+timed in this system. `proposal.queue_to_decision_seconds` is wall-clock including queue rather than
+review effort, and `CapacityProvenance` forecloses it as a source in terms. B21 stays open.
+
+So the current state reads: **280 demanded against 432 available, 152 minutes of headroom** - and
+every one of those figures except the (step, holder, module) pair count rests on a duration nobody
+has measured. Entry 46 records the two constants either side of it; V13 now carries all three in
+`evidence_basis` so the margin cannot be read without meeting what produced it.
