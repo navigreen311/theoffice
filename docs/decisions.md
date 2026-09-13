@@ -3192,3 +3192,64 @@ Wherever this session's notes say the Village was unreachable, not running, or h
 port: **the Village was up, the address was configured, and the process that needed it did not
 read the configuration.** The remaining half of that sentence is the real finding - that
 `python -m broker` reads no `.env` - and it is a property of the CLI, not of the Village.
+
+---
+
+## 39. The adapter's manual versions are a snapshot of the day they were typed
+
+**Found 2026-09-13, once CapitalForge was running and `/api/office/_modules` could be asked.
+Recorded as an opportunity as much as a defect: the comparison it enables does not exist yet, and
+becomes possible the moment `forge_operating_instruction` is populated.**
+
+`office.routes.ts` declares `manual` and `manualVersion` per module. The manuals live in The
+Office, in `docs/instructions/`, and each carries a `**Version:**` line. **Nothing in either
+repository compares the two** - `grep` for `manual_version` finds the adapter's constant, the
+`_modules` payload, and `check_module_manuals.py`, which matches on *filename* and never on
+version.
+
+    module                        adapter   document
+    client_read                   1.4       1.7      STALE
+    client_read_pii               1.4       1.5      STALE
+    client_read_credit            1.4       1.5      STALE
+    record_consent                1.2       1.4      STALE
+    restack_recommend             1.1       1.4      STALE
+    scan_communication            1.0       1.2      STALE
+    statement_pull                1.1       1.2      STALE
+    submit_application            1.0       1.2      STALE
+    regulator_dossier_export      1.1       1.2      STALE
+    compliance_manifest_assemble  1.1       1.2      STALE
+    portfolio_health              1.0       1.0      match
+
+**Ten of eleven are stale, and the one that matches has never been revised.** `client_read` is the
+widest: the adapter says 1.4, the document is at 1.7. `portfolio_health` agrees at 1.0/1.0 because
+nothing has moved it.
+
+**A constant that agrees only where nothing has changed is not a handshake. It is a snapshot of
+the day it was typed**, and it will read as agreement for exactly as long as the document stays
+still.
+
+### What it costs once the handshake is possible
+
+`forge_operating_instruction.instruction_version` is currently unpopulated. When it is filled from
+the documents, a comparison against `/_modules` becomes available for the first time - and **it
+would compare against the constant, not against the document.** Ten of eleven modules would report
+a mismatch that is real and misattributed: the stale side is the adapter, and the check would
+point at the instruction.
+
+**The case it would miss is the one that matters.** Where the adapter and the document agree
+because both are old, the check reports agreement. `portfolio_health` is that case today, and it
+is indistinguishable from a module that is genuinely current.
+
+### Why this is worth having anyway
+
+**Both sides carry a plausible number, and no reader can tell which is current.** A mismatch that
+nothing compares is a mismatch nothing reports, and this one has been sitting across two repos and
+a live HTTP surface for as long as the manuals have been revised. The comparison is cheap - one
+field against one front-matter line - and it is the only mechanism that would surface a manual
+revised after the adapter was built, which is the normal direction of change here.
+
+**The fix is not to sync the constant.** `office.routes.ts` says of the same field: *"The check
+here is self-attestation - this file could name a manual that does not exist. The Office's half is
+the real one, because that is where the manuals live."* The adapter attesting to a version it
+cannot read is the defect; the remedy is for the comparison to treat the document as authoritative
+and the constant as a claim, exactly as it already treats the filename.
