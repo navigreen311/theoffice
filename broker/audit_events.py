@@ -182,6 +182,12 @@ EVENTS: tuple[Event, ...] = (
     Event("office_identity_issued", "Office identity issued",
           "A Village agent was given an identity in The Office. The Office appoints; it "
           "does not create agents.", "broker.roster", SYSTEM),
+    Event("office_identity_reinstated", "Office identity reinstated",
+          "A named human returned a suspended identity to active, with a reason. It is the "
+          "inverse of the suspension half of a departure cascade and NOT of the revocation "
+          "half: no grant is re-issued and no revocation is lifted, so a reinstated agent "
+          "holds exactly the authority it held a moment earlier. Re-granting is a "
+          "provisioning run.", "broker.roster", CONSOLE),
     Event("village_agent_registered", "Village agent registered",
           "An agent from the Village roster became known here.",
           "broker.roster", SYSTEM),

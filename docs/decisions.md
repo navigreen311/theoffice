@@ -3825,3 +3825,261 @@ So the current state reads: **280 demanded against 432 available, 152 minutes of
 every one of those figures except the (step, holder, module) pair count rests on a duration nobody
 has measured. Entry 46 records the two constants either side of it; V13 now carries all three in
 `evidence_basis` so the margin cannot be read without meeting what produced it.
+
+---
+
+## 51. A departure cascade where every half is reversible except one
+
+**Found 2026-09-13, ruled and built the same day. Recorded as a design gap rather than a missing
+script, because the thing that was absent had a counterpart everywhere else it mattered.**
+
+`sync_roster` implements departure as a cascade. An agent the Village no longer reports loses two
+things:
+
+    office_agent_identity.status  -> 'suspended'     sync_roster.py:265
+    the grants that agent held    -> revoked         via revocation.revoke
+
+**One of those has an inverse and the other did not.** `revocation.reinstate` exists, takes a named
+human and a documented reason, enforces the same authority as revoking at that scope, and demands a
+second human at the wide scopes. Grants have a way back and the way back is a ritual.
+
+`office_agent_identity.status` had **exactly one writer in the entire codebase**, and it only ever
+wrote `'suspended'`. `grep -rn "office_agent_identity SET status"` returned one line.
+`grep "status = 'active'"` against identity returned nothing. There was no route, no CLI, no
+function - not an unimplemented one, an absent one.
+
+### How it surfaced, which is the part worth keeping
+
+**54 identities were suspended by a control working correctly on false input.** A `sync_roster`
+test ran against the development database with a roster that did not contain these agents
+(entry 47), and the cascade did exactly what it is for: marked 186 Village agents departed,
+suspended every identity, wrote 11 revocations.
+
+Nothing was defective. The control read a roster, found the agents absent, and withdrew their
+recognition - which is the correct response to a departure and the wrong response to a test
+fixture. **A control cannot tell the difference, and it should not have to; what it needs is for
+somebody to be able to say afterwards that the input was wrong.**
+
+That is what was missing. And the absence was invisible until then, because until a suspension
+happened for a reason that was not a departure, nobody needed the door to open the other way.
+
+### What the repair options were, before the fix
+
+Two, and both were bad:
+
+**Delete and re-issue.** `issue_identity` refuses an agent that already holds one, so 54 rows
+would have to be deleted first - and every row mints a fresh `office_agent_id`. 18 certifications
+and 36 grants reference the old ids. The repair would have destroyed the evidence it was repairing
+around.
+
+**A direct UPDATE.** One line, correct in effect, and an unattributed write to a governance table
+whose whole purpose is that authority changes have names attached. The system is built to make that
+impossible without a named act, and doing it by hand would have been the named act being skipped.
+
+### What was built, and the line it must not cross
+
+`roster.reinstate_identity(village_agent_ref, *, human, reason)`. Named human, mandatory reason,
+`venture_operator` authority, audited as `office_identity_reinstated` with the reason in the
+subject.
+
+**Reinstating an identity is not re-granting authority, and the docstring says so at length
+because the two are one keystroke apart.** An identity is recognition; a grant is authority. The
+cascade collapses them in one direction only - somebody who left loses both - and coming back is
+not the mirror of leaving.
+
+So the function touches `status` and nothing else:
+
+    grants            not re-issued, not un-revoked, not read
+    revocations       stay recorded and stay in force
+    certifications    untouched, and still valid, because office_agent_id does not change
+
+`tests/contract/test_departure_revokes.py::test_a_returning_agent_does_not_get_their_grants_back`
+is the rule this respects. A reinstated agent is appointable and holds exactly the authority it
+held a moment earlier - which, after a departure, is none. Re-granting is `runtime_config.apply` at
+the end of a provisioning run, and it has its own gates.
+
+**It also refuses three things**, each for its own reason: no identity (that is `issue_identity`),
+already active (a reinstatement reporting success without changing anything is a record of an act
+that did not happen), and an agent the Village still reports as departed (an identity active in The
+Office and departed in the Village is the disagreement the refusal exists to prevent).
+
+---
+
+## 52. Five layers agreed and the sixth flattened them, and a hash proves it
+
+**Ruled and built 2026-09-13 by Ivan. This is the entry the week's per-module tier work ends at,
+and it is recorded around a piece of evidence rather than an argument.**
+
+`AppointedAgent.certified_tier: str` became `certified_tiers: dict[str, str]`, keyed
+`forge_id/module_id`.
+
+### The trade, stated as a loss first
+
+The field that went away held **the weakest certified tier across every module the position
+operated, capped by the position ceiling**. An agent certified `auto_execute` on four modules and
+`propose` on a fifth operated all five at `propose`.
+
+**That is a real safety default and it is worth naming as one.** It is a position-wide floor: one
+weak certification restrained everything beside it, so a module nobody had thought hard about could
+not run wide open merely because it sat next to four that could. Removing it removes that
+restraint.
+
+**It is given up because it is the exact model per-module tiers exist to replace.** A position is
+not one authority level - a Placement Strategist reading a client record and a Placement Strategist
+submitting a lender application are not the same act, and the Pack has been able to say so since
+entry 44. The floor meant that sentence could be written in a Pack, stored in `agent_forge_grant`,
+enforced by `resolve_grant` and certified by `record_result`, and **still have no effect**, because
+the one artifact sitting between the certifications and V13 could only carry a single number.
+
+**What replaces it is stricter per call, not looser.** The floor was one tier applied to a whole
+position; this is one tier per module, enforced at the grant on every call by `resolve_grant`
+(`broker/grants.py:135`), which reads `certification.state` live and raises `NotCertified` unless
+that module's own certification is current. A module that should be restrained is now restrained by
+its own certification rather than by the weakest of its neighbours - and a module that should not be
+is no longer dragged down by one.
+
+### The decision inside it that would have looked like the safe choice
+
+`_effective_tier` takes a module key. When the agent's map has **no entry for that module**, the
+declaration stands **uncapped**.
+
+The alternative - fall back to the weakest tier in the map - is the one that reads as cautious. It
+is not: **it is the removed floor, reintroduced through the default branch.** Any module missing
+from the map would be governed by the weakest of its neighbours again, which is precisely the
+behaviour this change exists to end, and it would arrive wearing the word "safe".
+
+It is also the wrong reading of the case. A module absent from `certified_tiers` is a module this
+agent **was not appointed for** - not one appointed at an unknown tier. Nothing is permitted by
+returning `declared`, because no grant exists for a module the agent does not hold: the agent cannot
+call it at any tier. `resolve_grant` refuses it at the grant, which is where the refusal belongs.
+Capping a tier that will never be used would not add safety; it would hide the absence, by making a
+missing appointment look like a cautious one.
+
+Recorded here and not only in the docstring, because the next person to read that branch will see an
+uncapped default and be tempted to harden it.
+
+### The evidence: one hash that did not move, and then did
+
+    9 unit-A certifications reissued at auto_execute      artifacts hash  0934c7a7b89f76bb
+    (client_read x2, client_read_pii x2, statement_pull x2,
+     compliance_manifest_assemble, portfolio_health, restack_recommend)
+
+    the same 9, after certified_tiers                     artifacts hash  356807747d57ee10
+
+**Nine of fifteen certifications changed tier and the artifact Gate 10 binds a signature to was
+byte-identical.** Not approximately unchanged - the same hash. Every layer beneath it had been
+corrected: the Pack declared per-module tiers, the schema accepted them, the validator checked them,
+the certifications carried them, and the database would have enforced them. The artifact flattened
+all five back to one number on the way past.
+
+**That is the five-layer finding demonstrated rather than argued.** An unchanged hash across a
+correct change to the layer below it is the signature of a flattening - and it is a cheap check
+anyone can run, because a hash either moves or it does not. The same hash moving to
+`356807747d57ee10` on this change is the proof the appointment can now represent what the five
+layers already agreed on.
+
+Pack `burkham-wickmont@0.9.0`, hash `fe57b006c5bc6a1f`, unchanged across both - **the input did not
+move, so the difference is entirely in what the generator could express.**
+
+### What it touches
+
+    generators/artifacts.py       AppointedAgent, a frozen slotted dataclass that is hashed
+    the Gate 10 signature         bound to artifacts_hash, so every unsigned run must regenerate
+    tests/golden/snapshots/       greenstone_appointment.json, and anything downstream of it
+    Greenstone's Pack             untouched, and its snapshots change anyway
+
+**Greenstone's snapshots changing while its Pack does not is the point, not a side effect.** The
+shape of the artifact changed, so a venture that declared nothing new still records a new document.
+A reviewer seeing only Burkham's diff would conclude the change was venture-local, and it is not -
+it is a platform change, as ruled in entry 43.
+
+`certification.certified_tier` - the database column - **is not renamed and does not change.** One
+certification still certifies one (agent, forge, module) to one tier; the map is the artifact
+collecting them, and the singular column is still correct where it lives.
+
+### Three corrections to the ruling that authorised this
+
+Recorded at Ivan's instruction, all three measured before building:
+
+**`--tier` never existed on `bootstrap-phase0`.** The ruling was "Option A - drop `--tier`, read the
+Pack". There was nothing to drop: the flag was never added, and the script has read the Pack's tier
+since it was written. The work the ruling intended had already been done in `_assert_pair_in_pack`,
+which returns the per-module tier where one is declared.
+
+**All fifteen certifications already matched the Pack.** The reissue was ruled as a correction; the
+measurement above is what the Pack declares, module for module. Nine at `auto_execute`, six at
+`propose`, and no disagreement to fix. The reissue was a no-op against the certifications, and the
+defect was in the artifact all along - which is why the hash not moving was the tell.
+
+**Nothing was half-migrated.** The concern was a system partly on per-module tiers and partly on the
+scalar. It was not: every layer except the artifact was complete, and the artifact was complete in
+the other direction. There was no intermediate state to reconcile - there was one field.
+
+---
+
+## 53. Forty approvals, stated four times, never once checked
+
+**Recorded 2026-09-13 at Ivan's instruction.**
+
+"I want to see 40 approvals rather than 176 before I sign", and 40 was named four times across the
+day as the target the per-module work was aiming at. **The measured figure is 80**, and it was
+measured and reported before the fourth statement.
+
+    176   before per-module tiers; every module of every step, human-reviewed
+     80   after; the six read modules drop out at auto_execute
+     40   never produced by any measurement, at any point
+
+### Why 40 was wrong, and why it was reachable
+
+40 is 80 halved, and the halving is a headcount that is not there. Three of the five positions carry
+**headcount 2** - Diagnostic Analyst, Intake Concierge, Placement Strategist - and the projection
+counts per **(step, holder, module)**. Two holders of a position each review their own work; they do
+not share one queue. Cutting all three to headcount 1 is the change that produces something near 40,
+and it was costed on 12 September: 420 minutes against 432, **margin 12**, which the Pack's own
+comment already describes as a pass with no room in it.
+
+So 40 was not arbitrary. It was the number a different and rejected Pack would produce, carried
+forward as if the rejection had not happened.
+
+### The part worth keeping
+
+**A target repeated is not a target checked.** The measurement disagreeing with it was on the screen
+before the last two restatements, and the restatements did not engage with it - they restated. Where
+a number is going to be signed against, the moment to reconcile it with the measurement is the first
+time the two differ, not the fourth.
+
+This is the eighth recorded invention of the week and the first that is **arithmetically almost
+right** - it names a real quantity produced by a real configuration, just not this one. That makes
+it harder to catch than the ones that named nonexistent objects, because there is nothing to grep
+for. The only check available was the subtraction.
+
+---
+
+## 54. A dry run that prints one name and acts on another
+
+**Recorded 2026-09-13 at Ivan's instruction, as legibility rather than correctness. The code is
+right; the output cannot be used.**
+
+`sync_roster`'s dry run reports departures by **`agent_name`**. The cascade it is previewing acts on
+**`village_agent_ref`**. Both are correct in isolation - a human wants a name, and the write needs a
+key - but the operator reading the preview is holding the half that will not find the row.
+
+    dry run prints    agent_name          "Sable Quint"
+    cascade acts on   village_agent_ref   the key every table joins on
+    the operator      has a display name and no way to look it up
+
+`office_agent_identity`, `agent_forge_grant`, `certification` and the audit log are all keyed on the
+ref or on `office_agent_id`. A name is not a key in any of them, and nothing in the output bridges
+the two.
+
+**It cost four queries** to confirm what one line of a 54-row dry run was previewing - which is the
+whole argument. A preview exists so somebody can decide whether to run the thing for real, and a
+preview naming rows in a vocabulary the database does not index has to be re-derived before it can
+be acted on. At that point the preview is doing less work than the operator.
+
+The fix is one line: print both. `"Sable Quint (village_agent_ref=...)"`.
+
+**Recorded rather than fixed on the spot**, because this sits beside entry 51 - the dry run whose
+output nobody could act on is the same control whose cascade nobody could reverse, and the two
+belong together. A control that writes 54 rows should be as readable before it runs as it is
+auditable afterwards.
