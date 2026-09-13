@@ -153,7 +153,10 @@ async def _bootstrap_human(name: str, email: str, role: str) -> int:
     return 0
 
 
-async def _bootstrap_phase0(venture_id: str, ref: str | None, confirm: bool) -> int:
+async def _bootstrap_phase0(
+    venture_id: str, ref: str | None, confirm: bool,
+    forge_id: str, module_id: str, department: str,
+) -> int:
     """Put one agent on the path so the first real call can be made.
 
     Reports what it would do unless `--confirm` is given. The thing being issued is
@@ -176,7 +179,10 @@ async def _bootstrap_phase0(venture_id: str, ref: str | None, confirm: bool) -> 
             return 1
 
         try:
-            detail = await bootstrap_phase0.plan(conn, ref=ref)
+            detail = await bootstrap_phase0.plan(
+                conn, ref=ref, forge_id=forge_id, module_id=module_id,
+                department=department, venture_id=venture_id,
+            )
         except bootstrap_phase0.BootstrapError as exc:
             print(f"bootstrap-phase0: {exc}")
             return 1
@@ -203,7 +209,8 @@ async def _bootstrap_phase0(venture_id: str, ref: str | None, confirm: bool) -> 
 
         try:
             result = await bootstrap_phase0.apply(
-                conn, human=human, venture_id=venture_id, ref=ref, confirmed=True
+                conn, human=human, venture_id=venture_id, ref=ref, forge_id=forge_id,
+                module_id=module_id, department=department, confirmed=True,
             )
         except bootstrap_phase0.BootstrapError as exc:
             print(f"bootstrap-phase0: {exc}")
@@ -336,6 +343,10 @@ def main() -> int:
         help="Apply the diff. Without this the command only reports what would change.",
     )
 
+    # Imported here rather than at module scope, matching `_bootstrap_phase0` below: the
+    # defaults are read from the module so the CLI help and the function cannot drift apart.
+    from broker import bootstrap_phase0
+
     bp = sub.add_parser(
         "bootstrap-phase0",
         help="Issue one identity, certification pair, grant and shift for the first call",
@@ -345,7 +356,19 @@ def main() -> int:
     )
     bp.add_argument(
         "--agent", default=None,
-        help="Village agent ref. Defaults to the lowest-ranked active engineer.",
+        help="Village agent ref. Defaults to the lowest-ranked active IC in --department.",
+    )
+    bp.add_argument(
+        "--forge", default=bootstrap_phase0.DEFAULT_FORGE_ID,
+        help="Forge the certification pair is for. Must match the module's registry row.",
+    )
+    bp.add_argument(
+        "--module", default=bootstrap_phase0.DEFAULT_MODULE_ID,
+        help="Module to certify. Must be operated by a position in the venture's live Pack.",
+    )
+    bp.add_argument(
+        "--department", default="engineering",
+        help="Department to draw the agent from, and the department Unit B is certified for.",
     )
     bp.add_argument(
         "--confirm", action="store_true",
@@ -363,7 +386,10 @@ def main() -> int:
         return asyncio.run(_sync_roster(args.confirm))
     if args.command == "bootstrap-phase0":
         return asyncio.run(
-            _bootstrap_phase0(args.venture, args.agent, args.confirm)
+            _bootstrap_phase0(
+                args.venture, args.agent, args.confirm,
+                args.forge, args.module, args.department,
+            )
         )
     if args.command == "human":
         return asyncio.run(_bootstrap_human(args.name, args.email, args.role))

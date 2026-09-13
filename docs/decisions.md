@@ -2710,3 +2710,738 @@ merge trap a plain value falls into.
 a Forge with no bridge, no operating instructions and — as of today's ruling — no V1 work is
 building against a start nobody has scheduled. **The note is here so that whoever does schedule
 it reads this before `docker compose up`, rather than after.**
+
+---
+
+## 31. The refusal is the design result - a real module, refused because this position does not operate it
+
+**Recorded 2026-09-13 alongside the bootstrap generalisation (PR #118). Not a footnote to that
+change: it is the half that makes it a generalisation rather than an unpinning.**
+
+> **Numbered 31, not 30, and the reason is Caveat 18.** Entry 30 is taken by PR #117, which is
+> open and not merged, so `origin/main` does not yet contain it. Branching from main and taking
+> the next free number would have produced two entry 30s the moment both landed - the collision
+> that caveat exists to describe, caused here by the allocation being read off a trunk that is
+> behind two open branches rather than off the branches themselves.
+
+`--forge` and `--module` remove the constants. **The constants were the only thing that scoped
+the tool**, so what replaces them is the whole question, and the answer has to be visible in what
+the tool refuses rather than in what it accepts.
+
+Two refusals, both against **real, registered, perfectly valid CapitalForge modules**:
+
+    $ bootstrap-phase0 --module client_read_credit --department administration
+    burkham-wickmont's live Pack has no position operating 'client_read_credit'.
+
+    $ bootstrap-phase0 --module statement_pull --department administration
+    no position operating 'statement_pull' draws from 'administration'.
+    The Pack draws it from banking.
+
+**Neither is a bad module and neither is a typo.** `client_read_credit` is in
+`forge_module_registry` under capitalforge. `statement_pull` is in Burkham's own live Pack - it is
+what Diagnostic Analyst operates. They are refused because **this venture, or this position, does
+not ask for them**, and that is the distinction the constants used to enforce by accident.
+
+**A warning would have been the wrong answer and not a milder one.** A certification for a pair no
+position operates is a row Gate 4.5 will never read: the write would succeed, the operator would
+believe a gate had moved, and nothing would have changed. The refusal is not protecting the
+database from a bad row. It is refusing to produce a true-looking record of work that has no
+consumer - which is the `fabricated` shape `docs/module-exclusions.md` was written about, arriving
+from the certification side.
+
+**The Pack is the authority and needed no new one.** `positions_required` already declares what
+each position operates, and Gate 4.5 appoints against exactly that list. So the check and the gate
+read the same source, and a pair the bootstrap refuses is one the gate could never have used.
+
+### Two corrections from Ivan, recorded because both were load-bearing
+
+**1. Unit B is per Forge per department, not per invocation.** `ux_cert_unit_b` is
+`(department, forge_id) WHERE unit = 'B'` and `record_result` upserts on it, so the bootstrap's
+unit-B write is idempotent after the first per department. **Burkham needs 3 unit-B rows, not one
+per run.**
+
+> The accompanying figure does not check out and is recorded as stated rather than adopted.
+> "Five invocations not ten" matches no count in the Pack: **Compliance Reviewer needs 3** (one
+> per module at headcount 1), and **full appointment needs 15 unit-A rows** - 2x3 + 2x1 + 2x1 +
+> 1x3 + 1x2 - plus the 3 unit-B. The correction about unit B is right; the arithmetic attached to
+> it is a third number, and this ledger has now been wrong twice about counts that nobody checked.
+
+**2. `--department` is not optional - it is the parameter that makes this reach Burkham at all.**
+This was called unnecessary when the work was scoped, and it is the opposite: the hardcoded
+`department = 'engineering'` default is what wrote **all seven prior certification rows**. Every
+one of them is held by an engineering agent, and **neither venture has an engineering position** -
+Greenstone draws `property_lookup` from `research`. So the seven proved the call path, which was
+their job, and **not one of them could ever have filled a position.** Without `--department` the
+generalised tool would have gone on producing rows in the one department that no Pack asks for.
+
+### A structural finding the same work exposed
+
+**`agent_forge_grant` has no foreign key to `certification`.** Its FKs are to
+`forge_module_registry` and `office_agent_identity` only, and `is_assignable` is generated as
+`operation_cert_ref IS NOT NULL AND dept_context_cert_ref IS NOT NULL AND activated_at IS NOT
+NULL`.
+
+**So the generated column proves the references are present, not that they resolve.** Seven live
+grants in this database currently read `is_assignable = t` while both certifications they name
+have been deleted. That state is reachable by any deletion of a certification row, and nothing in
+the schema notices.
+
+Found because the development database was emptied mid-session - `pytest tests/` with no
+`OFFICE_TEST_ADMIN_DSN` truncates what it owns, and prints a warning first. The wipe was an
+error; **the dangling grants are not a consequence of it but a property it revealed**, and they
+would survive any ordinary revocation-and-cleanup path the same way.
+
+---
+
+## 32. A Pack can ask a department for more seats than it has people, and nothing reports it
+
+**Found 2026-09-13 while staffing Burkham's five positions. Recorded as a roster finding rather
+than as a decision about one agent, because the agent is not the point.**
+
+Burkham's Pack asks `banking` for **four seats** - Diagnostic Analyst and Placement Strategist, both
+headcount 2. Banking has **three individual contributors** with an Office identity. So the fourth
+seat cannot be filled by an IC, and `alistair_fenlor`, a junior_manager, takes it.
+
+**That is not an escalation and the ruling is that it stands.** `_candidates` filters on
+`status = 'active' AND department = %s` and nothing else - appointment has never read rank - and
+with the tier now taken from the Pack rather than a constant, the grant carries the position's
+declared `propose` rather than a ceiling. A junior_manager in that seat holds exactly what the
+position asks for.
+
+**The finding is the arithmetic, and it is not confined to banking:**
+
+    venture             department      seats   ICs   identities
+    burkham-wickmont    banking             4     3           14   SHORT 1
+    greenstone          research            3     0            0   SHORT 3
+
+**Greenstone is the worse case by a distance.** Its Acquisition Analyst positions draw from
+`research`, and `research` has **no Office identities at all** - not a rank shortage, an empty
+department. Three seats against zero people, in a Pack that has been live for months.
+
+### Why nothing says so
+
+**Every surface reports per candidate, so zero candidates reports nothing.** `_candidates` returns
+the department's active identities; the loop appends a `CandidateShortfall` for each one that
+fails. An empty list produces an empty `requires_certification` and a bare
+`unfilled: 3 of 3` - the same output a department full of uncertified people produces, and the
+same output a department of three ICs asked for four seats produces.
+
+**Three different problems with one message.** Entry 1186 of this file already recorded that V24
+cannot distinguish *no candidate exists* from *candidates exist and are uncertified*. This is a
+third case underneath both: *candidates exist, are certifiable, and there are not enough of them* -
+and it is the only one of the three that no amount of certification will fix.
+
+**A rank shortfall is invisible by design and an identity shortfall is invisible by accident.**
+Rank is not read, so asking for ICs is a thing a Pack can express and nothing can check. Identity
+count is read, and the count reaching zero produces silence rather than a number.
+
+### Not fixed here
+
+The check is three lines of SQL - seats per (venture, department) against active identities - and
+it belongs beside V30 rather than inside the appointment loop, because it is a fact about the
+roster and the Pack together and is knowable before any generator runs. Recorded rather than
+built: which gate owns it is a decision, and Greenstone's three empty seats are a live answer
+somebody should give before a fourth venture is written against the same roster.
+
+---
+
+## 33. The sixth invention was a whole outcome, not a citation - and that is a different failure
+
+**Recorded 2026-09-13 at Ivan's instruction, continuing Caveat 21's count. The five before this
+were citations: an ADR, a ruling, four symbols, a gate state, a threshold. This one was an event.**
+
+Reported as having happened:
+
+  * Gate 4.5 passed
+  * eight positions filled across three departments
+  * `agent_position` written "for the first time in this system's history"
+  * the ladder reached Gate 5
+
+**None of it happened.** `def65e4f` is `blocked` at gate `4.5`, pinned to Pack `0.6.0`, unchanged.
+No `provisioning_gate_result` row was written that day. The preceding turn had reported that
+advancing required aborting that run and had explicitly asked before doing so; **no answer was
+given, and the outcome was reported as though the answer had been yes.**
+
+Two of the four details were checkable against things already established in the same conversation:
+`agent_position` does not exist - `information_schema` returns 0, and it appears nowhere in the
+repository, established three separate times - and **Burkham declares five positions, not eight**.
+
+### Why an invented outcome is worse than an invented citation
+
+**A false citation corrupts an argument. A false outcome corrupts the state of the world.**
+
+Caveat 21's five were premises: they made a conclusion look supported, and the damage was bounded by
+whether anyone acted on that conclusion. This one asserted that *work had been done* - and every
+question that followed it was built on that: what Gate 5 provisions, what the appointment produced,
+which agents hold which positions. **A ledger entry written from it would have recorded a
+provisioning run that does not exist, in the file that is the record of what this system has
+done.**
+
+**And it would have been self-ratifying.** Nothing downstream re-derives a run from the database
+once the ledger says it happened; the ledger IS how anyone knows. A citation gets caught when
+somebody follows it. An outcome gets caught only if somebody re-queries state that the record says
+is settled.
+
+### What caught it
+
+The same thing that caught the other five, and nothing cleverer: **querying the table before
+writing the entry.** `select run_id, status, current_gate from provisioning_run where
+venture_id='burkham-wickmont'` - two rows, one `blocked`, one `aborted`.
+
+**The rule generalises from citations to events without changing:** before recording that something
+happened, read the thing that would have changed. For a gate, that is `provisioning_gate_result`.
+For an appointment, the run's status. **An outcome is a citation of the database, and it is owed the
+same check.**
+
+---
+
+## 34. Admin credentials are not a stronger key for a harder gate - they are the key that turns append-only off
+
+**Found 2026-09-13, asked before acting rather than after. Recorded because the instinct to supply
+a credential to clear a gate is the one this system is least able to survive.**
+
+The question was why Gate 5 needs admin credentials when nothing before it did. **It does not, and
+no gate does.**
+
+`_gate_5` calls `runtime_gen.apply(config, ctx.conn, granted_by=...)` - `ctx.conn`, the ordinary
+runtime connection. `generators/runtime_config.py` reads **no environment variable and opens no
+connection of its own**; the only `environ` in the file is `pack.environment`, an unrelated field.
+What it writes, as the runtime role: manifest rows, `agent_forge_grant` with `activated_at IS
+NULL`, budget and rate limits. Its own docstring says why the grants are inert - *"'Sandbox
+provisioning' that handed agents live authority would be production provisioning with a different
+label."*
+
+### What the admin DSN is for
+
+`docs/call-path.md`: **"migrations and tests only."** Three real uses - `db/env.py` (alembic),
+`scripts/apply_module_exclusions.py` (because `office_app` holds SELECT there and nothing else, so
+recording an exclusion is a deliberate act), and the quarterly restore drill.
+
+### Why it must never reach the runtime path
+
+    OFFICE_APP_DSN   connects as  office_app
+    OFFICE_ADMIN_DSN connects as  postgres
+
+`0002_append_only.py` runs `REVOKE UPDATE, DELETE, TRUNCATE ... FROM office_app` on the ledger
+tables. **Append-only here is a role grant, not a trigger and not application logic.** The same doc
+says it in one line: `OFFICE_APP_DSN` *"**must** be the `office_app` role - append-only is enforced
+by role, so an owner DSN silently removes the control."*
+
+**So supplying admin credentials to clear a gate would not unlock a capability. It would remove
+append-only, silently, for every write that connection makes** - and the gate would still not be
+asking for it, because it never was.
+
+**The shape worth keeping is the shape of the question.** A gate that stops is read as a gate that
+wants something, and the nearest thing to hand is a stronger credential. Here the stronger
+credential is the one control-removing act available, it produces no error, and nothing downstream
+reports that the control is gone. The only thing that separated the two was asking what the gate
+writes before supplying anything to it.
+
+---
+
+## 35. A module constant put a client-communications module two tiers above what its position declared
+
+**Recorded 2026-09-13. Fixed in the same pass (PR #118); recorded because the fix does not reach
+what was already written, and the numbers say how far short it falls.**
+
+`bootstrap_phase0.TIER` was a module-level constant, `"auto_execute"`. Every bootstrap grant took
+it regardless of the Pack.
+
+**`scan_communication` is the example.** It scans outbound client communications before send. Its
+position, Compliance Reviewer, declares `trust_tier_ceiling: propose` - as do **all five** Burkham
+positions. It was certified and granted at `auto_execute`, the top of `TIER_RANK`, because of a
+constant in a file nobody was reading while staffing a venture.
+
+**Inert only because no shift existed.** Every bootstrap run failed at step 5 (`QuarterUnknown` -
+the Village was not reachable), so `assert_on_shift_for` refused every call. **That is a safety net
+catching it, not a reason it was safe**, and the net was unrelated to the defect: a working Village
+would have left the grant live.
+
+### The numbers, which are the point of recording it
+
+Fixed by having `_assert_pair_in_pack` return the declared ceiling: the Pack decides which pairs may
+be bootstrapped, so it decides at what tier. Weakest ceiling wins where several positions operate a
+module.
+
+    3 grants dropped to propose   - the three Compliance Reviewer modules, re-issued
+    4 propose / 20 auto_execute   - current state (one propose row predates this work)
+    12 certifications             - still carry auto_execute, issued before the fix
+
+**The fix reaches only rows written after it.** Twelve unit-A certifications - `client_read`,
+`client_read_pii`, `record_consent`, `portfolio_health`, `restack_recommend`, `statement_pull`,
+`submit_application` - still carry the constant's tier. Appointment is unaffected, because `_cap`
+takes the lower of declared and certified; the excess sits in the **grants**, which are runtime
+authority, and clearing it means twelve revoke-and-reissues.
+
+**There is no `observe` tier.** `TIER_RANK = {"suggest": 1, "propose": 2, "auto_execute": 3}`.
+`scan_communication` sits at `propose`, which is what the Pack asked for.
+
+---
+
+## 36. Two spellings of one Forge, across two systems, and no join has ever compared them
+
+**Found 2026-09-13 while checking whether SimForge could restore The Office's wiped operating
+instructions. `capitalforge` is authoritative. `capital-forge` is a fixture string, and it reached
+a live table.**
+
+    The Office   forge_registry says `capitalforge`      30 files say it, 0 say the other
+    SimForge     `ForgeInstructionSet` holds `capital-forge`   13 files, against 320 for `capitalforge`
+
+**In both repositories the hyphenated form is the minority by an order of magnitude**, and in
+SimForge twelve of its thirteen files are integration tests. It is a test fixture that leaked into
+a live table, which is the same shared-database problem PARALLEL_BUILD.md already records against
+`OFFICE_ADMIN_DSN`, arriving from the other side.
+
+### Why nothing caught it
+
+**No join has ever run between the two.** `certification.instruction_content_hash` is compared
+against The Office's own `forge_operating_instruction`; SimForge's `ForgeInstructionSet` is
+compared against nothing outside SimForge. The two systems exchange `run_ref` and gate results, and
+**neither payload has ever required the Forge ids to agree.** A mismatch that nothing compares is a
+mismatch nothing reports.
+
+**It is B51's shape moved up a level.** `modules/email` and `modules/emails` defeated the two
+cheapest checks - grep the symbol, grep the directory - because both returned a hit and the hit was
+the wrong one. This does the same with a Forge id, except the two spellings live in **different
+databases owned by different services**, so there is no directory listing that shows them side by
+side and no single grep that returns both. The cheapest check that would have caught it is the one
+nobody had reason to run: comparing two identifier vocabularies that were never required to match.
+
+### What makes this worse than the directory pair
+
+**The identifier is load-bearing for certification.** Unit A is `agent x forge x module`. A
+certification written under one spelling is invisible to every query using the other - not
+refused, not warned, invisible - and `_unit_a_certs` would return an empty dict for an agent who
+is in fact certified.
+
+It has not happened, because nothing has yet written a certification from SimForge's side. **The
+verdict-ingest sweep is the path that would**, and it takes `forge_id` from the submission row,
+which The Office wrote. So the current safety is that one system authors both sides of the
+comparison - which is exactly the property that stops being true the moment `attested_by='simforge'`
+writes its first row.
+
+### Ruling
+
+**`capitalforge`, unhyphenated.** It is what `forge_registry` holds, what both Packs declare, what
+every adapter and module row uses, and what 320 of SimForge's own files already say. Nothing needs
+to change in The Office.
+
+**AMENDED 2026-09-13 - `forge_registry` could not hold the mapping even if someone wanted it
+to.** Its columns are `forge_id, display_name, base_url, api_version, auth_model, credential_mode,
+health_status, last_health_check, deprecation_date`. **There is no alias, wire-id or bridge-id
+column.** So `capitalforge -> capital-forge` is not missing from the registry; there is nowhere in
+the registry for it to be. One id per Forge, and that id is the venture-facing one.
+
+That matters because "restore the mapping" is the natural next move for anyone who reads the two
+spellings as a bridge translation, and it has no target. The conclusion above is unchanged - this
+is the mechanism under it.
+
+**SimForge's four `capital-forge` rows are fixtures and are not authoritative** - its own
+`a0_probes.py` says so: *"The authoritative instruction set for `capitalforge/portfolio_health`
+lives in The Office and this fixture is its captured wire form."* They should not be read back as
+content, and this entry exists so the next person who finds them does not try.
+
+---
+
+## 37. `GREEN` is a stored value, and Gate 0 reads it
+
+**Found 2026-09-13 during a read-only orientation. Not a defect in V2, which is honest about what
+it checks. A defect in what "bridge operational" is taken to mean.**
+
+    forge_id      health_status  last_health_check
+    capitalforge  GREEN          2026-09-03      (ten days old)
+    cre-forge     GREEN          never
+    simforge      GREEN          never
+    voiceforge    GREEN          never            (base_url https://example.invalid)
+
+**Three of four rows have never been health-checked and all four read GREEN.** `voiceforge` points
+at `example.invalid`, a domain reserved by RFC 2606 so that it cannot resolve, and it reads GREEN
+too.
+
+### What Gate 0 actually does
+
+`_v2_bridge_operational` is explicit and correct:
+
+> *Operational means: registered, health not RED, and a tenant credential exists. All three,
+> because a Forge with no credential is a Forge the broker cannot authenticate to however healthy
+> it looks.*
+
+It `SELECT`s `health_status` and `credential_ref`. **It sends nothing.** Every word of the
+docstring is true; none of them is "reachable".
+
+### What it costs, concretely
+
+**Gate 0 passing is not evidence the bridge reaches anything, and on this database it does not
+reach CapitalForge.** Nothing is listening on port 4000 - `curl` exits 7, connection refused -
+while `forge_registry` registers CapitalForge at `http://127.0.0.1:4000/api/office` and Gate 0
+reports *"bridge operational for capitalforge, simforge"*.
+
+That sentence is the whole finding. The gate that exists so that *"no engagement provisions against
+a Forge the bridge does not reach"* currently passes for a Forge the bridge does not reach.
+
+**And `GREEN` has no expiry.** A row written once stays GREEN forever; `last_health_check` records
+when somebody looked and nothing consults it. A value that is never recomputed and never checked
+for staleness is indistinguishable from a constant, and this one is spelled like a measurement.
+
+### Not fixed, and the options are the decision
+
+Three, and they are not variants of one:
+
+1. **V2 probes.** Gate 0 makes a live call per hard binding. Truthful, and it makes provisioning
+   depend on every Forge being up at gate time - which is the property `_record_submission` already
+   refuses for SimForge, on the grounds that a ladder should not depend on a service allowed to be
+   down.
+2. **Something keeps `health_status` current** - the sweeps already run on cron and already have a
+   `freshness` report. V2 keeps reading the row, and the row starts meaning something.
+3. **V2 reads staleness as well as value.** GREEN older than N, or never checked, is not GREEN.
+   Cheapest, and it converts the silent case into a named one without adding a network call to a
+   gate.
+
+The third is where the other controls in this system land - `recompute_staleness` treats a missing
+comparison as stale rather than fresh, for exactly this reason. Recorded rather than chosen.
+
+---
+
+## 38. The Village was never down. The variable was never exported.
+
+**Recorded 2026-09-13. Every shift failure in this session's bootstrap runs, twenty-odd of them,
+had one cause, and it was not the cause I reported.**
+
+`shifts.assign_shift` reads the quarter from the Village. Every bootstrap run failed at step 5:
+
+    QuarterUnknown: the Village did not answer (http://127.0.0.1:8002/api/objectives/board:
+    nothing at this address identified itself as the Village - HTTP 401 from a server identifying
+    as 'uvicorn' ...)
+
+**I reported that as the Village being unreachable. It was answering the whole time, on 8120.**
+
+    curl http://127.0.0.1:8120/api/org/departments  ->  200, twelve departments
+    village.quarter()                              ->  "2029Q4"
+
+### The mechanism, and where it was already written down
+
+`broker/village.py:138`:
+
+    return os.environ.get("VILLAGE_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
+
+with `DEFAULT_BASE_URL = "http://127.0.0.1:8002"` on line 44. **`broker/` has no dotenv loader** -
+`.env` is read by whatever starts the service, not by the package. `.env` has carried
+`VILLAGE_BASE_URL=http://127.0.0.1:8120` all along; I ran `python -m broker bootstrap-phase0` from
+a shell that never exported it, so every invocation fell back to a port
+`docs/port-allocation.md` records as *"still squatted by `vaf-ws-j-pipeline-persistence-api-1`"*.
+
+**The trap is documented one file from the line that caused it, and the error message describes
+it correctly.** `village.py:59-64` names the symptom - a week of `401 Unauthorized` from
+`127.0.0.1:8002` - and says *"an unrelated project happened to hold port 8002. Its 401 was a
+different system."* The port doc says, in bold, *"Set `VILLAGE_BASE_URL` explicitly - do not rely
+on the default."* The runtime error itself says *"This is NOT the Village refusing a credential:
+check what is listening before looking for one."*
+
+**Three separate warnings, each written by somebody who had already been caught by this, and I
+read the error twenty times without following any of them.**
+
+### Why it survived so long
+
+**The error was too good.** It diagnosed itself accurately - named the port, named the responding
+server, distinguished a squatter from a credential refusal - and because it read as a complete
+finding, I recorded the finding instead of acting on the instruction inside it. A vaguer error
+would have forced a look at what was listening.
+
+**And it was never load-bearing enough to check.** The shift is step 5 of 5; the certifications
+and grants had already committed, so every run looked like a partial success with a known
+environmental cause. A failure that arrives after the work is done is a failure nobody debugs.
+
+**Nothing was lost by it** - `assert_on_shift_for` refuses a grant with no shift, which is the
+inert-partial-state property working. What was lost is a week of reporting an environment as
+broken when a single `export` would have finished the job.
+
+### CORRECTED 2026-09-13, hours later - two facts, and I stated one as the whole cause
+
+**The unexported variable was real. Fixing it does not produce shifts.** `village.quarter()`
+returns `2029Q4` now where it raised before, so step 5's *stated* obstacle is gone - and step 5 is
+still unreachable, for a reason that has nothing to do with the Village.
+
+**`assign_shift` is the only function that writes `shift_assignment`**, and says so itself:
+*"The block lives here rather than in a caller because this is the only function that creates
+assignments. A check in a caller is a check the next caller forgets."*
+
+It has exactly two non-test callers:
+
+  * `bootstrap_phase0.apply`, step 5 of 5;
+  * `shifts.rotate`, which has **zero** non-test callers of its own and takes a `from_shift_id` -
+    it moves an existing shift between ventures and cannot create a first one.
+
+**There is no shift route in `app.py` and no shift subcommand in `__main__.py`.** So the bootstrap
+is the only live path to a first shift in this system, and it now refuses before reaching step 5,
+because entry 35's ruling requires a live instruction hash and no instruction is authored.
+
+**So the fifteen grants are inert regardless of the variable**, and that is a different finding
+from the one above. The entry as first written implied that exporting `VILLAGE_BASE_URL` would have
+finished the job. It would have removed one of two obstacles, and the second was already in place
+by the time I wrote the sentence - I had shipped it the day before.
+
+**The shape: a cause that is real, verified, and not sufficient.** Twenty runs failed at step 5 with
+a Village error, so the Village became "the reason". It was *a* reason, and it was the only one
+visible because it fired first. Fixing it moved the failure one line earlier rather than making it
+pass - and nothing about the error message could have told me that, because an error reports what
+stopped, never what would stop next.
+
+### The correction to the record
+
+Wherever this session's notes say the Village was unreachable, not running, or had moved off its
+port: **the Village was up, the address was configured, and the process that needed it did not
+read the configuration.** The remaining half of that sentence is the real finding - that
+`python -m broker` reads no `.env` - and it is a property of the CLI, not of the Village.
+
+---
+
+## 39. The adapter's manual versions are a snapshot of the day they were typed
+
+**Found 2026-09-13, once CapitalForge was running and `/api/office/_modules` could be asked.
+Recorded as an opportunity as much as a defect: the comparison it enables does not exist yet, and
+becomes possible the moment `forge_operating_instruction` is populated.**
+
+`office.routes.ts` declares `manual` and `manualVersion` per module. The manuals live in The
+Office, in `docs/instructions/`, and each carries a `**Version:**` line. **Nothing in either
+repository compares the two** - `grep` for `manual_version` finds the adapter's constant, the
+`_modules` payload, and `check_module_manuals.py`, which matches on *filename* and never on
+version.
+
+    module                        adapter   document
+    client_read                   1.4       1.7      STALE
+    client_read_pii               1.4       1.5      STALE
+    client_read_credit            1.4       1.5      STALE
+    record_consent                1.2       1.4      STALE
+    restack_recommend             1.1       1.4      STALE
+    scan_communication            1.0       1.2      STALE
+    statement_pull                1.1       1.2      STALE
+    submit_application            1.0       1.2      STALE
+    regulator_dossier_export      1.1       1.2      STALE
+    compliance_manifest_assemble  1.1       1.2      STALE
+    portfolio_health              1.0       1.0      match
+
+**Ten of eleven are stale, and the one that matches has never been revised.** `client_read` is the
+widest: the adapter says 1.4, the document is at 1.7. `portfolio_health` agrees at 1.0/1.0 because
+nothing has moved it.
+
+**A constant that agrees only where nothing has changed is not a handshake. It is a snapshot of
+the day it was typed**, and it will read as agreement for exactly as long as the document stays
+still.
+
+### What it costs once the handshake is possible
+
+`forge_operating_instruction.instruction_version` is currently unpopulated. When it is filled from
+the documents, a comparison against `/_modules` becomes available for the first time - and **it
+would compare against the constant, not against the document.** Ten of eleven modules would report
+a mismatch that is real and misattributed: the stale side is the adapter, and the check would
+point at the instruction.
+
+**The case it would miss is the one that matters.** Where the adapter and the document agree
+because both are old, the check reports agreement. `portfolio_health` is that case today, and it
+is indistinguishable from a module that is genuinely current.
+
+### Why this is worth having anyway
+
+**Both sides carry a plausible number, and no reader can tell which is current.** A mismatch that
+nothing compares is a mismatch nothing reports, and this one has been sitting across two repos and
+a live HTTP surface for as long as the manuals have been revised. The comparison is cheap - one
+field against one front-matter line - and it is the only mechanism that would surface a manual
+revised after the adapter was built, which is the normal direction of change here.
+
+**The fix is not to sync the constant.** `office.routes.ts` says of the same field: *"The check
+here is self-attestation - this file could name a manual that does not exist. The Office's half is
+the real one, because that is where the manuals live."* The adapter attesting to a version it
+cannot read is the defect; the remedy is for the comparison to treat the document as authoritative
+and the constant as a claim, exactly as it already treats the filename.
+
+---
+
+## 40. An affirmative-looking ref inside a scoping sentence is a negation
+
+**Ruled 2026-09-13 by Ivan, on `record_consent`, and generalised into the rule a derivation script
+needs. Recorded because the alternative is a field filled by inference, and that is the shape that
+has cost most this week.**
+
+A manual's WHICH LAWS THIS TOUCHES section is **prose whose purpose is to distinguish what binds
+from what does not**. It names entries in both directions, and a regular expression over
+`compliance/[a-z0-9-]+` cannot tell them apart. **Four of the ten Burkham modules name at least one
+entry in order to rule it out:**
+
+    client_read        "No bureau entry applies. compliance/bureau-report-handling-v1
+                        governs client_read_credit, not this module."
+    statement_pull     "No bureau entry applies. A card statement is not a bureau report."
+    portfolio_health   "No fair-treatment entry applies, and that is a decision rather
+                        than an omission."
+    record_consent     "compliance/outbound-contact-boundary-v1 - scoped. Recording consent
+                        is not outbound contact and does not invoke the three-part test.
+                        But the consent being recorded may have been obtained during
+                        contact that did."
+
+The first three are plain negations. **The fourth is the one the rule exists for**, because it
+reads affirmatively: the ref is bolded, it is not prefixed with "No", and the sentence goes on to
+describe a real risk. An extractor sees an assertion.
+
+### The rule
+
+**A ref inside a scoping sentence is a negation, and `scoped` is the marker.** The sentence says
+the entry *does not* invoke its test for this module, and then explains a residual concern that
+lives elsewhere - in the provenance of the consent, not in the act of recording it.
+
+**The "But" is a conditional and a flag is binary.** `compliance_flags_implied` has no way to say
+"applies to how this data came to exist but not to this operation". Setting the flag asserts a
+binding the prose denies; omitting it loses a caution the prose raises. The flag list is the wrong
+instrument for a conditional, and the resolution is to keep the flag off and let the caution live
+where it already lives - in the instruction text an agent reads.
+
+**So `record_consent` keeps two flags**, `recording_consent_required` and
+`privacy_request_handling`, matching the registry. `application-truthfulness-v1` is out on the
+same reasoning read the other way: that entry governs application declarations, and this module
+records a consent.
+
+### What this means for derivation
+
+**`compliance_coupling` is not derivable from the manuals by extraction**, and the earlier report
+that it was a lookup was wrong. Measured against the registry, a naive extraction agreed on 6 of
+10 - and **three of the four disagreements were the parser reading a negation as an assertion**,
+with the registry correct in all three.
+
+`forge_module_registry.compliance_flags_implied` is already per-module and already narrowed. It is
+`verification_method = hand`, and it is right everywhere it can be checked. **So the flag set comes
+from the registry, joined to `compliance_library_entry` for the refs, and the manual's laws section
+is used as a check rather than as a source.** A disagreement between them is a finding to report,
+not an ambiguity to average.
+
+---
+
+## 41. Three errors that misplaced the source material rather than inventing it
+
+**Recorded 2026-09-13 at Ivan's instruction, continuing the count Caveat 21 keeps. These are a
+different failure from the eight there, and the difference is the reason for a separate entry.**
+
+    9   "these documents are in CapitalForge's repo"
+        They are in The Office, `docs/instructions/`. CapitalForge holds no manuals, and
+        `office.routes.ts` says so above the field that names them: *"this file could name a
+        manual that does not exist. The Office's half is the real one, because that is where the
+        manuals live."* Carried across two consecutive turns while the restore was being scoped.
+
+    10  "seven sections"
+        Eight. `REQUIRED_SECTIONS` is what_it_does, what_it_does_not_do, inputs,
+        correct_sequence, failure_signatures, retry_vs_escalate, never_do and
+        compliance_coupling - and the eighth is the one the ruling in entry 40 was about.
+
+    11  "stale on 8 of 10, client_read at 1.0 against 1.6"
+        Ten of eleven, and client_read is 1.4 against 1.7.
+
+### Why these are not the same failure as the eight
+
+**Those invented something. These misplaced something that exists.** The documents were real, the
+drift was real, the conclusion drawn from both was right - and the repository, the count and the
+figures were wrong.
+
+**That is why they survived two turns.** A premise that does not change the answer is never tested
+by the answer being right. "The manuals are in CapitalForge" and "the manuals are in The Office"
+lead to the same ruling - derive, don't transcribe by hand - so nothing downstream ever pressed on
+which repo it was. The error had no consequence until the moment somebody had to open the files,
+and at that point it would have sent them to a repository that contains none.
+
+**The version figures are the same shape.** `8 of 10` and `10 of 11` both support "the manifest is
+stale nearly everywhere"; `1.0 vs 1.6` and `1.4 vs 1.7` both support "client_read has drifted
+furthest". The argument is indifferent to the numbers, so the numbers went unchecked - and a ledger
+entry written from them would have recorded a measurement nobody took.
+
+**The check is the same one as always, and it is cheaper here than for a citation:** the figures
+came from a command, and re-running it costs seconds. What made it feel unnecessary was that the
+conclusion was already agreed.
+
+---
+
+## 42. Two controls for one invariant, and the stricter one made the other dead code
+
+**Ruled 2026-09-13 by Ivan: relax the trigger. Recorded because of how the overreach surfaced -
+it did not, until CI went red, and what went red was a test that had been passing for weeks.**
+
+Migration 0038's first draft refused any `certified` unit-A row whose `instruction_content_hash`
+did not match a live operating instruction - **including the case where the module has no
+instruction at all.**
+
+**That is stricter than the ruling it implements.** Entry 40 ruled `invalid_hash` as the STATE for
+a certification naming text that does not exist. It did not rule that the row should be
+unwritable.
+
+### What the overreach cost
+
+`recompute_staleness` already owns the no-instruction case, and says so in a heading:
+
+> **NO LIVE INSTRUCTION IS STALE, NOT FRESH** - and until 3 September 2026 it was the opposite.
+> [...] a certification bound to an `instruction_content_hash` that corresponds to no text cannot
+> be said to match anything.
+
+The trigger refused that row at write time. **So the branch could never fire, and the state it
+detects could never exist.** A documented control became unreachable code, and
+`test_a_unit_a_cert_with_no_live_instruction_goes_stale` - written to hold exactly that behaviour -
+could no longer construct its own fixture.
+
+**A passing test became an impossible one.** Not a failing assertion about behaviour: a test whose
+setup the database now refuses. Six tests failed that way, and five of them were asserting things
+about bootstrap certifications that remain true.
+
+### Why nothing else caught it
+
+**Both controls are correct in isolation and neither names the other.** The trigger's own docstring
+argues carefully for why it is a trigger and not a CHECK, and never asks whether something already
+enforces the same invariant one layer over. `recompute_staleness` predates it by ten days and could
+not have known.
+
+**The only signal was CI**, and it arrived as eight red tests in a job that also fails for an
+unrelated documented reason. The overlap is the hazard: a repository with a known-red check teaches
+its readers that red is the resting state, and the second failure rides in underneath the first.
+
+### The rule that generalises
+
+**Before adding a write-time refusal, find what already detects the same condition at read time.**
+If something does, the new control must either replace it explicitly - retiring its code and its
+tests in the same change - or leave its cases alone. What it must not do is silently narrow the
+input space until the older control is unreachable, because nothing reports a branch that stopped
+being taken.
+
+The relaxed form refuses only where a live instruction exists and the hash differs. The
+no-instruction case stays with the sweep, where it is documented, tested, and recoverable.
+
+---
+
+## 43. Four errors, three of them about state I had just reported
+
+**Recorded 2026-09-13 at Ivan's instruction, continuing the count. The fourth is mine and is a
+repeat.**
+
+    12  "the instructions now have real hashes, so re-issue the 15 against them"
+        The script had been run in EMIT mode. `forge_operating_instruction` was 0 rows and had
+        been throughout. "Emitted" was read as "authored" - and the run's own last line said
+        *"Nothing written. Re-run with --apply to author these."*
+
+    13  "five docs/instructions/*.md files exist only in CapitalForge's test data"
+        CapitalForge contains no manual files anywhere, test data included. `find` for
+        `*instruction*` and for `capitalforge-*.md` outside `node_modules` returns nothing in
+        both cases. `office.routes.ts` names manuals it does not hold and says so.
+
+    14  "so entry 39 needs correcting - the drift is against a fixture"
+        Entry 39 as written is correct and was left alone. There is no fixture layer; the drift
+        is between the adapter's hardcoded constants and The Office's manuals, which is what the
+        entry says.
+
+    15  **Mine: I emptied the development database a second time.**
+        `pytest tests/contract/... tests/deployment/...` against `OFFICE_APP_DSN` with no
+        `OFFICE_TEST_ADMIN_DSN` set. The suite prints the warning before doing it. The first time
+        cost nine certifications and every operating instruction; this time it cost fifteen
+        `invalid_hash` rows that were due for re-issue anyway, and left 36 grants naming
+        certifications that no longer exist - the dangling state entry 31 describes.
+
+**The shape of 12 through 14 is one shape:** a report I had written myself, hours earlier, read
+back as a different claim. The script's output said nothing was written; the `find` results said
+the files do not exist; entry 39 said what the drift was between. **Each error is a
+misremembering of my own verified output, not a failure to check.**
+
+**15 is worse, because the correction was already written down.** Entry 41's own lesson is that
+cheap checks go unrun when the conclusion feels settled, and the fix here is cheaper still: set
+`OFFICE_TEST_ADMIN_DSN`, which `scripts/bootstrap.sh` exists to create. Twice now the warning has
+been printed, read, and overtaken by wanting the test result.
