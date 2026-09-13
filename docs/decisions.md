@@ -3582,3 +3582,128 @@ were unusable. Neither caused the other, and both had already been established s
 noun resolves, every fact checks out, and the error is in the word "because". A citation check
 confirms all of it. The only thing that separates it is asking what the consuming code actually
 reads - which is one grep, and not the one the claim invites.
+
+---
+
+## 46. Three unattributed constants, inside a rule that forecloses the cheap fix while resting on them
+
+**Ruled 2026-09-13 by Ivan. V13 blocks a venture on a comparison whose every multiplier is a
+number nobody established. Recorded together because they are one class, and two of them are
+deliberately still there.**
+
+    generators/validator.py:48             UTILISATION_FACTOR = 0.6               DENOMINATOR
+    generators/approval_projection.py      DEFAULT_DAILY_VOLUME_PER_HEADCOUNT = 8 NUMERATOR
+    generators/pack.py                     median_review_minutes: float = 5.0     REMOVED 13 Sep
+
+### What each does to the verdict
+
+**`0.6` multiplies the whole supply side.** `coverage_hours x 60 x 0.6`: twelve declared hours
+become 432 minutes, where at 1.0 they would be 720 and V13 would pass with room. Its entire
+attribution is the comment above it - *"Part 14: a human reviewing for 100% of their coverage hours
+does nothing else, and a trust tier backed by a saturated reviewer is a rubber stamp waiting to
+happen."* Nothing in `docs/` derives it.
+
+**`8` multiplies the whole demand side.** The projection counts 22 (workflow step, holder) pairs -
+**that count is real**, derived from positions, headcount, workflow and tier - then multiplies each
+by 8 decisions a day. **22 is structure; 176 is 22 x a guess.** No Pack field feeds it;
+`capacity_demand.agent_days_per_week` exists and is not what this reads.
+
+**`5.0` was a silent default on the one field with a provenance block to describe it.** Omitting
+`median_review_minutes` did not withhold a number - it asserted five minutes, with no way to say
+where five came from. The field immediately below already said why that is wrong: *"Required. No
+default, **because a default is how the four numbers this field exists for became unattributed in
+the first place.**"* That comment was about `median_review_minutes`, and `median_review_minutes`
+was the field that still had one.
+
+### The shape
+
+**A rule that forecloses the cheap fix while resting on it.** V13's failure ends *"Fix by raising a
+trust-tier ceiling, adding reviewer coverage, or cutting scope - **not by lowering the utilisation
+factor**"*, and blocking.md already names that factor as the canonical wrong fix: *"the easiest
+change that makes the symptom go away."* Both are right. Neither observes that the number being
+protected from adjustment was never established - **an unmeasured constant defended as though it
+were a measurement.**
+
+**The asymmetry is what hides it.** The numerator's derivation is visible and checkable, so
+attention goes there and the multiplier rides behind it. One layer down, the same: coverage hours
+are declared with provenance, and the `0.6` scaling them is a bare constant in another file.
+
+### What was built
+
+`5.0` is removed and `median_review_minutes` is required. **`0.6` and `8` are recorded and left
+alone** - changing either would move a gate verdict, and a constant should not move because a rule
+blocked, which is V13's own argument about the one it names.
+
+And the verdict now carries its basis. `RuleResult.evidence_basis` is a per-input map that Gate 4.5
+writes into its evidence under `V13_basis`, naming each human's declared review time with who
+declared it, and each constant with its value, its file and the fact that nothing derives it.
+
+**Attached whether it passes or fails**, which is the case that mattered: this Pack carried a
+twelve-minute margin for five days and it read as capacity. A PASS computed from an unmeasured
+duration is the same claim as a FAIL computed from one.
+
+**Why the evidence and not the message.** A message is read by somebody deciding what to do; a
+basis is read by somebody deciding whether the verdict means what it says. Folding the second into
+the first makes the message longer every time somebody remembers another caveat, and makes none of
+it queryable - which is how *43% over* came to be actionable without anyone meeting the number it
+was computed from.
+
+### What removing the default caught
+
+**The Pack template omitted the field.** `broker/pack_templates.py` filled `human_name`,
+`coverage_hours`, `timezone` and a provenance block correctly stating the numbers were unfilled -
+and left `median_review_minutes` out, so **every Pack created from the template began life
+asserting five minutes a review** while its own provenance said the values were placeholders. The
+template now carries an explicit `0`, which fails V13 loudly on first validation, as a placeholder
+should.
+
+Nobody would have found that by reading. It surfaced because the default stopped existing.
+
+---
+
+## 47. Test isolation was half-set, and the half that was missing is the half that writes
+
+**Recorded 2026-09-13 after the third development-database casualty in two days. The first two were
+wipes; this one suspended every agent identity in the venture being provisioned.**
+
+`tests/conftest.py` reads **two** variables:
+
+    TEST_ADMIN_DSN = os.environ.get("OFFICE_TEST_ADMIN_DSN")   # schema, migrations, teardown
+    TEST_APP_DSN   = os.environ.get("OFFICE_TEST_APP_DSN")     # everything the code under test does
+
+and at line 170 it overrides `OFFICE_APP_DSN` **only when `TEST_APP_DSN` is set**. Otherwise the
+application DSN falls through to `.env` - the development database.
+
+**I set only the first, twice, and reported the isolation as complete.** So the schema work went to
+`theoffice_test` and every write the code under test performed went to `theoffice`. A `sync_roster`
+test ran against a roster that did not contain Burkham's agents, and
+`sync_roster.py:265` did what it is for:
+
+    UPDATE office_agent_identity SET status = 'suspended' WHERE village_agent_ref = ANY(...)
+
+**186 Village agents marked departed, all 54 identities suspended, 11 revocations written.** The
+certifications, instructions, grants and Packs were untouched - what was destroyed was the roster's
+state, and `_candidates` filters on `status = 'active'`, so V24 went from five positions filled to
+five unfilled without a single certification changing.
+
+### The part worth keeping
+
+**A partial guard reads exactly like a complete one.** With only the admin DSN set, the suite
+prints no warning - the "running against the development database" banner is gated on
+`OFFICE_TEST_ADMIN_DSN` being absent, and it was present. **Setting half the isolation silenced the
+warning that would have reported the other half missing.**
+
+**And the evidence I used to rule out my own change was contaminated by the thing I was ruling
+out.** Sixteen tests failed; I compared against a stash of clean main, got sixteen again, and
+concluded "pre-existing". They were failing because they were colliding with development data that
+the first run had already corrupted. The comparison was sound and the baseline was not.
+
+### What correct isolation is worth
+
+With **both** variables set, the same suite reports **1512 passed, zero failed, zero errors.**
+Against the same commit with only the admin DSN set it reported *1 failed, 1281 passed, 448
+errors*, and 58 tests that had been silently skipping now run. The 448 were never a defect in the
+tests; they were the suite reaching for an application database it had not been given.
+
+**Both variables, or neither.** `OFFICE_TEST_ADMIN_DSN` alone is worse than nothing, because it
+buys the appearance of isolation and the warning that would have corrected it.

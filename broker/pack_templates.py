@@ -181,6 +181,12 @@ def skeleton(
                 "coverage_hours": 0,
                 "timezone": PLACEHOLDER,
                 "advisory_daily_approval_ceiling": 0,
+                # Zero, and present. The field lost its `5.0` default on 13 September 2026, and
+                # this template was one of the things relying on it: omitting the key here meant
+                # every Pack started life asserting five minutes a review, unattributed, while the
+                # provenance block below correctly said the numbers were unfilled. A zero fails
+                # V13 loudly on the first validation, which is what a placeholder should do.
+                "median_review_minutes": 0,
                 "auth_method": "sso_mfa",
                 # A template's numbers are placeholders, and the provenance says so
                 # rather than leaving the next author to inherit silence. This is the
