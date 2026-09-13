@@ -3155,6 +3155,37 @@ environmental cause. A failure that arrives after the work is done is a failure 
 inert-partial-state property working. What was lost is a week of reporting an environment as
 broken when a single `export` would have finished the job.
 
+### CORRECTED 2026-09-13, hours later - two facts, and I stated one as the whole cause
+
+**The unexported variable was real. Fixing it does not produce shifts.** `village.quarter()`
+returns `2029Q4` now where it raised before, so step 5's *stated* obstacle is gone - and step 5 is
+still unreachable, for a reason that has nothing to do with the Village.
+
+**`assign_shift` is the only function that writes `shift_assignment`**, and says so itself:
+*"The block lives here rather than in a caller because this is the only function that creates
+assignments. A check in a caller is a check the next caller forgets."*
+
+It has exactly two non-test callers:
+
+  * `bootstrap_phase0.apply`, step 5 of 5;
+  * `shifts.rotate`, which has **zero** non-test callers of its own and takes a `from_shift_id` -
+    it moves an existing shift between ventures and cannot create a first one.
+
+**There is no shift route in `app.py` and no shift subcommand in `__main__.py`.** So the bootstrap
+is the only live path to a first shift in this system, and it now refuses before reaching step 5,
+because entry 35's ruling requires a live instruction hash and no instruction is authored.
+
+**So the fifteen grants are inert regardless of the variable**, and that is a different finding
+from the one above. The entry as first written implied that exporting `VILLAGE_BASE_URL` would have
+finished the job. It would have removed one of two obstacles, and the second was already in place
+by the time I wrote the sentence - I had shipped it the day before.
+
+**The shape: a cause that is real, verified, and not sufficient.** Twenty runs failed at step 5 with
+a Village error, so the Village became "the reason". It was *a* reason, and it was the only one
+visible because it fired first. Fixing it moved the failure one line earlier rather than making it
+pass - and nothing about the error message could have told me that, because an error reports what
+stopped, never what would stop next.
+
 ### The correction to the record
 
 Wherever this session's notes say the Village was unreachable, not running, or had moved off its
