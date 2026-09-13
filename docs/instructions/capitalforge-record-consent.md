@@ -1,7 +1,8 @@
 # FORGE OPERATING INSTRUCTION
 
 **Forge:** CapitalForge  **Module:** `record_consent`  **Endpoint:** `POST /api/businesses/:id/consent`
-**Version:** 1.4 — corrected 3 September 2026, against CapitalForge `1d6c7c8`
+**Version:** 1.5 — corrected 13 September 2026
+**Corrected at 1.5:** §11 asserted `compliance/application-truthfulness-v1` as a binding coupling. It governs application declarations and this module records a consent, which makes no declaration. Restated as a scoped-out reference rather than deleted, matching how `outbound-contact-boundary-v1` is already handled in the same section. The registry has always implied two flags for this module; the manual now agrees with it.
 **Corrected at 1.4:** §2 named six submission gates and four SMS gates. Five are enforced and five run. See Appendix D.
 **Corrected at 1.3:** the read-back prohibition moved from §5 to §7, where a prohibition belongs — see Appendix C.
 **Renamed at 1.2:** the module id was `consent_grant` in 1.1. `record_consent` is what the Burkham Pack declares and what the adapter now dispatches. See Appendix B.
@@ -148,7 +149,9 @@ The failure mode here is not malice — it is helpfulness. Every one of these is
 
 **`compliance/consumer-privacy-rights-v1`** — a consent record is personal data about a person, subject to access and deletion requests.
 
-**`compliance/application-truthfulness-v1`** — that entry says no agent submits: an agent prepares and a human presses the button. Maker-checker is the mechanism, and until 1 September the submit route did not run it. It does now, and the route requires an `approvedByUserId` naming a real second user who is not the maker.
+**`compliance/application-truthfulness-v1`** — scoped. That entry governs the truthfulness of application *declarations*: what an application asserts about a business, and who stands behind the assertion. This module records a consent. It makes no declaration, so the entry does not bind here and the flag is not set.
+
+> Named rather than omitted, because it was considered and the reasoning is worth more than the absence. The entry's own subject — no agent submits; an agent prepares and a human presses the button — reads as though it ought to apply to any agent write, and it does not. Maker-checker is the mechanism it names, and maker-checker guards `submit_application`, which is where the flag belongs. A reader who finds this section silent on truthfulness would have to re-derive that; a reader who finds this paragraph learns it once.
 
 **OPEN — deletion versus evidence.** A consent record is personal data subject to deletion, and the evidence a TCPA defence would need. Those pull opposite ways. An agent has no authority to delete one; deletion of compliance evidence is a human decision with legal input. Named here rather than answered.
 

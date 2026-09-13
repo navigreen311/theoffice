@@ -155,7 +155,7 @@ async def _bootstrap_human(name: str, email: str, role: str) -> int:
 
 async def _bootstrap_phase0(
     venture_id: str, ref: str | None, confirm: bool,
-    forge_id: str, module_id: str, department: str,
+    forge_id: str, module_id: str, department: str, certify_only: bool,
 ) -> int:
     """Put one agent on the path so the first real call can be made.
 
@@ -210,7 +210,8 @@ async def _bootstrap_phase0(
         try:
             result = await bootstrap_phase0.apply(
                 conn, human=human, venture_id=venture_id, ref=ref, forge_id=forge_id,
-                module_id=module_id, department=department, confirmed=True,
+                module_id=module_id, department=department,
+                certify_only=certify_only, confirmed=True,
             )
         except bootstrap_phase0.BootstrapError as exc:
             print(f"bootstrap-phase0: {exc}")
@@ -371,6 +372,11 @@ def main() -> int:
         help="Department to draw the agent from, and the department Unit B is certified for.",
     )
     bp.add_argument(
+        "--certify-only", action="store_true",
+        help="Write the two certifications and nothing else. For an agent that already holds a "
+             "correct grant whose certification needs replacing: no grant, no manifest, no shift.",
+    )
+    bp.add_argument(
         "--confirm", action="store_true",
         help="Actually issue. Without this the command only reports what it would do.",
     )
@@ -388,7 +394,7 @@ def main() -> int:
         return asyncio.run(
             _bootstrap_phase0(
                 args.venture, args.agent, args.confirm,
-                args.forge, args.module, args.department,
+                args.forge, args.module, args.department, args.certify_only,
             )
         )
     if args.command == "human":

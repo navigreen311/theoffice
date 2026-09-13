@@ -332,6 +332,7 @@ async def apply(
     forge_id: str = DEFAULT_FORGE_ID,
     module_id: str = DEFAULT_MODULE_ID,
     department: str = "engineering",
+    certify_only: bool = False,
     confirmed: bool = False,
 ) -> dict[str, Any]:
     """Issue the identity, certifications, grant and shift. Refuses without confirmation."""
@@ -392,13 +393,17 @@ async def apply(
     existing = await _already_granted(
         conn, office_agent_id, forge_id=forge_id, module_id=module_id, venture_id=venture_id
     )
-    if existing is not None:
+    if existing is not None and not certify_only:
         raise BootstrapError(
             f"{agent['agent_name']} already holds a live grant for "
             f"{forge_id}/{module_id} ({existing}). Nothing was written. Revoke it first "
             "if you mean to re-issue: a command that silently re-issues authority is a "
-            "command somebody runs twice."
+            "command somebody runs twice. If the grant is correct and it is the CERTIFICATION "
+            "that needs replacing, use --certify-only: that writes the two certifications and "
+            "touches no authority."
         )
+    if existing is not None:
+        print(f"  grant {existing} already held and left alone (--certify-only)")
 
     # The hash a certification is earned against. **The live instruction's, and only that.**
     #
@@ -477,6 +482,34 @@ async def apply(
             f"for {forge_id}/{module_id} when this was written. {basis}"
         ),
     )
+
+    if certify_only:
+        # Stops before the grant, deliberately, and this is the whole of the mode.
+        #
+        # **Re-issuing a certification is not re-issuing authority.** The grant already exists,
+        # `resolve_grant` reads `certification.state` live on every call - it raises `NotCertified`
+        # unless both units read `certified` - and a certification naming a real content hash is
+        # strictly better than one naming nothing. The alternative was revoking correct grants to
+        # replace the certifications underneath them, which is authority churn to fix a field that
+        # is not authority.
+        #
+        # No grant, no manifest row, no shift. So a certify-only run cannot make an agent able to
+        # call anything it could not call before: it can only change whether the call is refused
+        # for `NotCertified`.
+        return {
+            "office_agent_id": str(office_agent_id),
+            "agent_name": agent["agent_name"],
+            "village_agent_ref": agent["village_agent_ref"],
+            "department": department,
+            "unit_a_cert": str(unit_a.cert_id),
+            "unit_b_cert": str(unit_b.cert_id),
+            "grant_id": str(existing) if existing else None,
+            "venture_id": venture_id,
+            "forge_id": forge_id,
+            "module_id": module_id,
+            "trust_tier": tier,
+            "certify_only": True,
+        }
 
     # 4. The grant, activated, carrying both certification ids. `is_assignable` is a
     # generated column over exactly these fields, so a grant missing one of them is
