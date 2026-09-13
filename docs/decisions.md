@@ -2710,3 +2710,75 @@ merge trap a plain value falls into.
 a Forge with no bridge, no operating instructions and — as of today's ruling — no V1 work is
 building against a start nobody has scheduled. **The note is here so that whoever does schedule
 it reads this before `docker compose up`, rather than after.**
+
+---
+
+## 30. No gate produces a certification - Gate 4.5 requires one and blocks in front of the only path toward it
+
+**Found 2026-09-13, read-only, after four turns of looking for the block one layer too high.
+Not a ruling: a structural fact, recorded because every attempt to name the blocker so far has
+named a gate, and the answer is that it is not between two gates at all.**
+
+### What requires a certification
+
+V24 runs at Gate 4.5 and FAILs on any unfilled position. `unfilled` is appointment output, and
+appointment appoints nobody without **unit A `certified` for every module the position operates
+and unit B `certified` for every Forge it touches**. The tier is computed after eligibility and
+cannot affect it. `appointment.py:14` states the rule directly: *"An uncertified candidate
+appears as `requires_certification`, **never as filled**."*
+
+**Gate 4.5 is not the appointer.** `generators/pipeline.py:66` generates the appointment during
+Gate 3; `_gate_4_5` only reads `artifacts.appointment`. There is no appointment table for
+anything to fail to write - `agent_position` returns 0 rows from `information_schema.tables` and
+appears nowhere in the repository.
+
+### What produces one, and it is not a gate
+
+`certification` rows are written by exactly one function, `certification.record_result`, and it
+has exactly **two non-test callers**:
+
+  * `broker/bootstrap_phase0.py` - twice, both `attested_by='bootstrap'`;
+  * `broker/sweeps.py` - the verdict-ingest sweep, `attested_by` defaulting to `'simforge'`.
+
+**`broker/provisioning.py` contains zero occurrences of `attested_by` or `bootstrap_reason` and
+never writes a certification.** No migration seeds one. No HTTP route writes one.
+
+**So no gate produces a certification.** Gate 8 does not either: it submits a curriculum and
+stores a `simforge_run_ref`, and the row is written afterwards by `sweep_verdict_ingest`, which
+runs from `run_all` under `python -m broker sweep` - **on cron, outside the ladder.**
+
+### The shape, stated plainly
+
+`GATE_SEQUENCE` puts 4.5 before 8, and `if not outcome.advances: return outcomes` halts the run
+at the first gate that does not advance. So:
+
+> **Gate 4.5 is the first and only gate that requires a certification, and there is no gate
+> anywhere in the ladder that produces one.** The only in-ladder path toward a certification
+> runs 4.5 -> 5 -> 6 -> 7 -> 8 -> sweep, and 4.5 blocks in front of it.
+
+**This is why four turns of gate numbers could not find it.** The dependency is not between two
+gates; it is between the ladder and a sweep that is not part of the ladder. Every framing that
+asked *which gate* was asking a question with no answer.
+
+### The sole escape, and why it does not reach Burkham
+
+`python -m broker bootstrap-phase0 --venture <v> [--agent <ref>] --confirm`. A CLI on the host,
+deliberately not a route - the same argument `_bootstrap_human` makes: *"an unauthenticated route
+that works 'only when the table is empty' is a permanent backdoor wearing a bootstrap label."*
+
+It is pinned by **module-level constants**:
+
+    FORGE_ID  = "cre-forge"
+    MODULE_ID = "property_lookup"
+    TIER      = "auto_execute"
+
+and its default agent selection is `department='engineering' AND role_key='individual_contributor'`
+- *"the first agent across a new bridge should be the one whose authority is smallest."*
+
+**That default is the whole explanation of the certification table.** All seven rows - four unit
+A, three unit B - belong to engineering agents, and every one has `simforge_verdict IS NULL`.
+Not one certification in this database was earned.
+
+Burkham's five positions draw from `operations`, `banking` and `administration`, and operate ten
+modules, **every one of them on capitalforge**. The bootstrap cannot produce a single one of them
+without editing constants - which is a code change, not a configuration.
