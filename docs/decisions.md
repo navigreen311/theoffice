@@ -2710,3 +2710,323 @@ merge trap a plain value falls into.
 a Forge with no bridge, no operating instructions and — as of today's ruling — no V1 work is
 building against a start nobody has scheduled. **The note is here so that whoever does schedule
 it reads this before `docker compose up`, rather than after.**
+
+---
+
+## 31. The refusal is the design result - a real module, refused because this position does not operate it
+
+**Recorded 2026-09-13 alongside the bootstrap generalisation (PR #118). Not a footnote to that
+change: it is the half that makes it a generalisation rather than an unpinning.**
+
+> **Numbered 31, not 30, and the reason is Caveat 18.** Entry 30 is taken by PR #117, which is
+> open and not merged, so `origin/main` does not yet contain it. Branching from main and taking
+> the next free number would have produced two entry 30s the moment both landed - the collision
+> that caveat exists to describe, caused here by the allocation being read off a trunk that is
+> behind two open branches rather than off the branches themselves.
+
+`--forge` and `--module` remove the constants. **The constants were the only thing that scoped
+the tool**, so what replaces them is the whole question, and the answer has to be visible in what
+the tool refuses rather than in what it accepts.
+
+Two refusals, both against **real, registered, perfectly valid CapitalForge modules**:
+
+    $ bootstrap-phase0 --module client_read_credit --department administration
+    burkham-wickmont's live Pack has no position operating 'client_read_credit'.
+
+    $ bootstrap-phase0 --module statement_pull --department administration
+    no position operating 'statement_pull' draws from 'administration'.
+    The Pack draws it from banking.
+
+**Neither is a bad module and neither is a typo.** `client_read_credit` is in
+`forge_module_registry` under capitalforge. `statement_pull` is in Burkham's own live Pack - it is
+what Diagnostic Analyst operates. They are refused because **this venture, or this position, does
+not ask for them**, and that is the distinction the constants used to enforce by accident.
+
+**A warning would have been the wrong answer and not a milder one.** A certification for a pair no
+position operates is a row Gate 4.5 will never read: the write would succeed, the operator would
+believe a gate had moved, and nothing would have changed. The refusal is not protecting the
+database from a bad row. It is refusing to produce a true-looking record of work that has no
+consumer - which is the `fabricated` shape `docs/module-exclusions.md` was written about, arriving
+from the certification side.
+
+**The Pack is the authority and needed no new one.** `positions_required` already declares what
+each position operates, and Gate 4.5 appoints against exactly that list. So the check and the gate
+read the same source, and a pair the bootstrap refuses is one the gate could never have used.
+
+### Two corrections from Ivan, recorded because both were load-bearing
+
+**1. Unit B is per Forge per department, not per invocation.** `ux_cert_unit_b` is
+`(department, forge_id) WHERE unit = 'B'` and `record_result` upserts on it, so the bootstrap's
+unit-B write is idempotent after the first per department. **Burkham needs 3 unit-B rows, not one
+per run.**
+
+> The accompanying figure does not check out and is recorded as stated rather than adopted.
+> "Five invocations not ten" matches no count in the Pack: **Compliance Reviewer needs 3** (one
+> per module at headcount 1), and **full appointment needs 15 unit-A rows** - 2x3 + 2x1 + 2x1 +
+> 1x3 + 1x2 - plus the 3 unit-B. The correction about unit B is right; the arithmetic attached to
+> it is a third number, and this ledger has now been wrong twice about counts that nobody checked.
+
+**2. `--department` is not optional - it is the parameter that makes this reach Burkham at all.**
+This was called unnecessary when the work was scoped, and it is the opposite: the hardcoded
+`department = 'engineering'` default is what wrote **all seven prior certification rows**. Every
+one of them is held by an engineering agent, and **neither venture has an engineering position** -
+Greenstone draws `property_lookup` from `research`. So the seven proved the call path, which was
+their job, and **not one of them could ever have filled a position.** Without `--department` the
+generalised tool would have gone on producing rows in the one department that no Pack asks for.
+
+### A structural finding the same work exposed
+
+**`agent_forge_grant` has no foreign key to `certification`.** Its FKs are to
+`forge_module_registry` and `office_agent_identity` only, and `is_assignable` is generated as
+`operation_cert_ref IS NOT NULL AND dept_context_cert_ref IS NOT NULL AND activated_at IS NOT
+NULL`.
+
+**So the generated column proves the references are present, not that they resolve.** Seven live
+grants in this database currently read `is_assignable = t` while both certifications they name
+have been deleted. That state is reachable by any deletion of a certification row, and nothing in
+the schema notices.
+
+Found because the development database was emptied mid-session - `pytest tests/` with no
+`OFFICE_TEST_ADMIN_DSN` truncates what it owns, and prints a warning first. The wipe was an
+error; **the dangling grants are not a consequence of it but a property it revealed**, and they
+would survive any ordinary revocation-and-cleanup path the same way.
+
+---
+
+## 32. A Pack can ask a department for more seats than it has people, and nothing reports it
+
+**Found 2026-09-13 while staffing Burkham's five positions. Recorded as a roster finding rather
+than as a decision about one agent, because the agent is not the point.**
+
+Burkham's Pack asks `banking` for **four seats** - Diagnostic Analyst and Placement Strategist, both
+headcount 2. Banking has **three individual contributors** with an Office identity. So the fourth
+seat cannot be filled by an IC, and `alistair_fenlor`, a junior_manager, takes it.
+
+**That is not an escalation and the ruling is that it stands.** `_candidates` filters on
+`status = 'active' AND department = %s` and nothing else - appointment has never read rank - and
+with the tier now taken from the Pack rather than a constant, the grant carries the position's
+declared `propose` rather than a ceiling. A junior_manager in that seat holds exactly what the
+position asks for.
+
+**The finding is the arithmetic, and it is not confined to banking:**
+
+    venture             department      seats   ICs   identities
+    burkham-wickmont    banking             4     3           14   SHORT 1
+    greenstone          research            3     0            0   SHORT 3
+
+**Greenstone is the worse case by a distance.** Its Acquisition Analyst positions draw from
+`research`, and `research` has **no Office identities at all** - not a rank shortage, an empty
+department. Three seats against zero people, in a Pack that has been live for months.
+
+### Why nothing says so
+
+**Every surface reports per candidate, so zero candidates reports nothing.** `_candidates` returns
+the department's active identities; the loop appends a `CandidateShortfall` for each one that
+fails. An empty list produces an empty `requires_certification` and a bare
+`unfilled: 3 of 3` - the same output a department full of uncertified people produces, and the
+same output a department of three ICs asked for four seats produces.
+
+**Three different problems with one message.** Entry 1186 of this file already recorded that V24
+cannot distinguish *no candidate exists* from *candidates exist and are uncertified*. This is a
+third case underneath both: *candidates exist, are certifiable, and there are not enough of them* -
+and it is the only one of the three that no amount of certification will fix.
+
+**A rank shortfall is invisible by design and an identity shortfall is invisible by accident.**
+Rank is not read, so asking for ICs is a thing a Pack can express and nothing can check. Identity
+count is read, and the count reaching zero produces silence rather than a number.
+
+### Not fixed here
+
+The check is three lines of SQL - seats per (venture, department) against active identities - and
+it belongs beside V30 rather than inside the appointment loop, because it is a fact about the
+roster and the Pack together and is knowable before any generator runs. Recorded rather than
+built: which gate owns it is a decision, and Greenstone's three empty seats are a live answer
+somebody should give before a fourth venture is written against the same roster.
+
+---
+
+## 33. The sixth invention was a whole outcome, not a citation - and that is a different failure
+
+**Recorded 2026-09-13 at Ivan's instruction, continuing Caveat 21's count. The five before this
+were citations: an ADR, a ruling, four symbols, a gate state, a threshold. This one was an event.**
+
+Reported as having happened:
+
+  * Gate 4.5 passed
+  * eight positions filled across three departments
+  * `agent_position` written "for the first time in this system's history"
+  * the ladder reached Gate 5
+
+**None of it happened.** `def65e4f` is `blocked` at gate `4.5`, pinned to Pack `0.6.0`, unchanged.
+No `provisioning_gate_result` row was written that day. The preceding turn had reported that
+advancing required aborting that run and had explicitly asked before doing so; **no answer was
+given, and the outcome was reported as though the answer had been yes.**
+
+Two of the four details were checkable against things already established in the same conversation:
+`agent_position` does not exist - `information_schema` returns 0, and it appears nowhere in the
+repository, established three separate times - and **Burkham declares five positions, not eight**.
+
+### Why an invented outcome is worse than an invented citation
+
+**A false citation corrupts an argument. A false outcome corrupts the state of the world.**
+
+Caveat 21's five were premises: they made a conclusion look supported, and the damage was bounded by
+whether anyone acted on that conclusion. This one asserted that *work had been done* - and every
+question that followed it was built on that: what Gate 5 provisions, what the appointment produced,
+which agents hold which positions. **A ledger entry written from it would have recorded a
+provisioning run that does not exist, in the file that is the record of what this system has
+done.**
+
+**And it would have been self-ratifying.** Nothing downstream re-derives a run from the database
+once the ledger says it happened; the ledger IS how anyone knows. A citation gets caught when
+somebody follows it. An outcome gets caught only if somebody re-queries state that the record says
+is settled.
+
+### What caught it
+
+The same thing that caught the other five, and nothing cleverer: **querying the table before
+writing the entry.** `select run_id, status, current_gate from provisioning_run where
+venture_id='burkham-wickmont'` - two rows, one `blocked`, one `aborted`.
+
+**The rule generalises from citations to events without changing:** before recording that something
+happened, read the thing that would have changed. For a gate, that is `provisioning_gate_result`.
+For an appointment, the run's status. **An outcome is a citation of the database, and it is owed the
+same check.**
+
+---
+
+## 34. Admin credentials are not a stronger key for a harder gate - they are the key that turns append-only off
+
+**Found 2026-09-13, asked before acting rather than after. Recorded because the instinct to supply
+a credential to clear a gate is the one this system is least able to survive.**
+
+The question was why Gate 5 needs admin credentials when nothing before it did. **It does not, and
+no gate does.**
+
+`_gate_5` calls `runtime_gen.apply(config, ctx.conn, granted_by=...)` - `ctx.conn`, the ordinary
+runtime connection. `generators/runtime_config.py` reads **no environment variable and opens no
+connection of its own**; the only `environ` in the file is `pack.environment`, an unrelated field.
+What it writes, as the runtime role: manifest rows, `agent_forge_grant` with `activated_at IS
+NULL`, budget and rate limits. Its own docstring says why the grants are inert - *"'Sandbox
+provisioning' that handed agents live authority would be production provisioning with a different
+label."*
+
+### What the admin DSN is for
+
+`docs/call-path.md`: **"migrations and tests only."** Three real uses - `db/env.py` (alembic),
+`scripts/apply_module_exclusions.py` (because `office_app` holds SELECT there and nothing else, so
+recording an exclusion is a deliberate act), and the quarterly restore drill.
+
+### Why it must never reach the runtime path
+
+    OFFICE_APP_DSN   connects as  office_app
+    OFFICE_ADMIN_DSN connects as  postgres
+
+`0002_append_only.py` runs `REVOKE UPDATE, DELETE, TRUNCATE ... FROM office_app` on the ledger
+tables. **Append-only here is a role grant, not a trigger and not application logic.** The same doc
+says it in one line: `OFFICE_APP_DSN` *"**must** be the `office_app` role - append-only is enforced
+by role, so an owner DSN silently removes the control."*
+
+**So supplying admin credentials to clear a gate would not unlock a capability. It would remove
+append-only, silently, for every write that connection makes** - and the gate would still not be
+asking for it, because it never was.
+
+**The shape worth keeping is the shape of the question.** A gate that stops is read as a gate that
+wants something, and the nearest thing to hand is a stronger credential. Here the stronger
+credential is the one control-removing act available, it produces no error, and nothing downstream
+reports that the control is gone. The only thing that separated the two was asking what the gate
+writes before supplying anything to it.
+
+---
+
+## 35. A module constant put a client-communications module two tiers above what its position declared
+
+**Recorded 2026-09-13. Fixed in the same pass (PR #118); recorded because the fix does not reach
+what was already written, and the numbers say how far short it falls.**
+
+`bootstrap_phase0.TIER` was a module-level constant, `"auto_execute"`. Every bootstrap grant took
+it regardless of the Pack.
+
+**`scan_communication` is the example.** It scans outbound client communications before send. Its
+position, Compliance Reviewer, declares `trust_tier_ceiling: propose` - as do **all five** Burkham
+positions. It was certified and granted at `auto_execute`, the top of `TIER_RANK`, because of a
+constant in a file nobody was reading while staffing a venture.
+
+**Inert only because no shift existed.** Every bootstrap run failed at step 5 (`QuarterUnknown` -
+the Village was not reachable), so `assert_on_shift_for` refused every call. **That is a safety net
+catching it, not a reason it was safe**, and the net was unrelated to the defect: a working Village
+would have left the grant live.
+
+### The numbers, which are the point of recording it
+
+Fixed by having `_assert_pair_in_pack` return the declared ceiling: the Pack decides which pairs may
+be bootstrapped, so it decides at what tier. Weakest ceiling wins where several positions operate a
+module.
+
+    3 grants dropped to propose   - the three Compliance Reviewer modules, re-issued
+    4 propose / 20 auto_execute   - current state (one propose row predates this work)
+    12 certifications             - still carry auto_execute, issued before the fix
+
+**The fix reaches only rows written after it.** Twelve unit-A certifications - `client_read`,
+`client_read_pii`, `record_consent`, `portfolio_health`, `restack_recommend`, `statement_pull`,
+`submit_application` - still carry the constant's tier. Appointment is unaffected, because `_cap`
+takes the lower of declared and certified; the excess sits in the **grants**, which are runtime
+authority, and clearing it means twelve revoke-and-reissues.
+
+**There is no `observe` tier.** `TIER_RANK = {"suggest": 1, "propose": 2, "auto_execute": 3}`.
+`scan_communication` sits at `propose`, which is what the Pack asked for.
+
+---
+
+## 36. Two spellings of one Forge, across two systems, and no join has ever compared them
+
+**Found 2026-09-13 while checking whether SimForge could restore The Office's wiped operating
+instructions. `capitalforge` is authoritative. `capital-forge` is a fixture string, and it reached
+a live table.**
+
+    The Office   forge_registry says `capitalforge`      30 files say it, 0 say the other
+    SimForge     `ForgeInstructionSet` holds `capital-forge`   13 files, against 320 for `capitalforge`
+
+**In both repositories the hyphenated form is the minority by an order of magnitude**, and in
+SimForge twelve of its thirteen files are integration tests. It is a test fixture that leaked into
+a live table, which is the same shared-database problem PARALLEL_BUILD.md already records against
+`OFFICE_ADMIN_DSN`, arriving from the other side.
+
+### Why nothing caught it
+
+**No join has ever run between the two.** `certification.instruction_content_hash` is compared
+against The Office's own `forge_operating_instruction`; SimForge's `ForgeInstructionSet` is
+compared against nothing outside SimForge. The two systems exchange `run_ref` and gate results, and
+**neither payload has ever required the Forge ids to agree.** A mismatch that nothing compares is a
+mismatch nothing reports.
+
+**It is B51's shape moved up a level.** `modules/email` and `modules/emails` defeated the two
+cheapest checks - grep the symbol, grep the directory - because both returned a hit and the hit was
+the wrong one. This does the same with a Forge id, except the two spellings live in **different
+databases owned by different services**, so there is no directory listing that shows them side by
+side and no single grep that returns both. The cheapest check that would have caught it is the one
+nobody had reason to run: comparing two identifier vocabularies that were never required to match.
+
+### What makes this worse than the directory pair
+
+**The identifier is load-bearing for certification.** Unit A is `agent x forge x module`. A
+certification written under one spelling is invisible to every query using the other - not
+refused, not warned, invisible - and `_unit_a_certs` would return an empty dict for an agent who
+is in fact certified.
+
+It has not happened, because nothing has yet written a certification from SimForge's side. **The
+verdict-ingest sweep is the path that would**, and it takes `forge_id` from the submission row,
+which The Office wrote. So the current safety is that one system authors both sides of the
+comparison - which is exactly the property that stops being true the moment `attested_by='simforge'`
+writes its first row.
+
+### Ruling
+
+**`capitalforge`, unhyphenated.** It is what `forge_registry` holds, what both Packs declare, what
+every adapter and module row uses, and what 320 of SimForge's own files already say. Nothing needs
+to change in The Office.
+
+**SimForge's four `capital-forge` rows are fixtures and are not authoritative** - its own
+`a0_probes.py` says so: *"The authoritative instruction set for `capitalforge/portfolio_health`
+lives in The Office and this fixture is its captured wire form."* They should not be read back as
+content, and this entry exists so the next person who finds them does not try.
