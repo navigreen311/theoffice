@@ -69,8 +69,20 @@ from broker import audit, certification, humans, roster, shifts
 #: Phase 0.8 names CRE Forge specifically. Not a parameter: this command exists to make
 #: one documented call happen, and a general-purpose grant issuer is exactly the thing
 #: the provisioning ladder is for.
-FORGE_ID = "cre-forge"
-MODULE_ID = "property_lookup"
+#: The pair this command was written for, now a DEFAULT rather than a constant.
+#:
+#: They were never a rule. Phase 0.8 had one venture, one bridged Forge and one registered
+#: module, so an author's convenience and a scope constraint looked identical - and stayed
+#: identical for as long as there was only one venture to tell them apart.
+#:
+#: **Removing them removes the only thing that scoped this tool**, which is why
+#: `_assert_pair_in_pack` exists. `record_result` has always been generic; `attested_by='bootstrap'`
+#: has always demanded a reason and written `simforge_verdict = NULL`. What was missing was never
+#: a guard on the writer - it was a way for a documented mechanism to name a venture it was not
+#: parameterised for. The Pack is what says which pairs a venture may bootstrap, and it says so
+#: already, in `positions_required`.
+DEFAULT_FORGE_ID = "cre-forge"
+DEFAULT_MODULE_ID = "property_lookup"
 
 #: `auto_execute`, because nothing below it reaches a Forge at all.
 #:
@@ -93,12 +105,19 @@ class BootstrapError(Exception):
     """The bootstrap could not run, and nothing was written."""
 
 
-async def _one_agent(conn: AsyncConnection, ref: str | None) -> dict[str, Any]:
+async def _one_agent(
+    conn: AsyncConnection, ref: str | None, department: str = "engineering"
+) -> dict[str, Any]:
     """The agent to put on the path.
 
     Named explicitly when `ref` is given. Otherwise the lowest-ranked active agent in
-    engineering, because the first agent across a new bridge should be the one whose
+    `department`, because the first agent across a new bridge should be the one whose
     authority is smallest.
+
+    **The department moved; the rank filter did not.** `role_key = 'individual_contributor'`
+    is the safety property in this selection and it holds for every department - a bootstrap
+    that reached for a department head when asked for a new department would be answering a
+    question about scope with a change of authority.
     """
     async with conn.cursor(row_factory=dict_row) as cur:
         if ref:
@@ -111,48 +130,121 @@ async def _one_agent(conn: AsyncConnection, ref: str | None) -> dict[str, Any]:
             await cur.execute(
                 "SELECT village_agent_ref, agent_name, department, role_key "
                 "FROM village_agent "
-                "WHERE status = 'active' AND department = 'engineering' "
+                "WHERE status = 'active' AND department = %s "
                 "  AND role_key = 'individual_contributor' "
-                "ORDER BY village_agent_ref LIMIT 1"
+                "ORDER BY village_agent_ref LIMIT 1",
+                (department,),
             )
         row = await cur.fetchone()
 
     if row is None:
         raise BootstrapError(
-            f"no active Village agent {'matching ' + ref if ref else 'in engineering'}. "
+            f"no active Village agent {'matching ' + ref if ref else 'in ' + department}. "
             "Run `python -m broker sync-roster --confirm` first: The Office cannot "
             "appoint an agent the Village has never reported."
         )
     return dict(row)
 
 
+async def _assert_pair_in_pack(
+    conn: AsyncConnection, *, venture_id: str, forge_id: str, module_id: str,
+    department: str | None,
+) -> None:
+    """Refuse a pair the venture's live Pack does not ask for. Loudly, and never a warning.
+
+    **This is what the constants used to do.** While `cre-forge/property_lookup` was hardcoded
+    the tool could only ever certify the one pair its author had checked by hand. Taking
+    `--forge` and `--module` removes that, and removing it without putting something in its
+    place would turn a bootstrap into a way to certify anything for anyone - which is the
+    difference between generalising a mechanism and loosening it.
+
+    The Pack is the right authority and needs no new one: `positions_required` already declares
+    every module each position operates, and Gate 4.5 appoints against exactly that list. So a
+    pair this refuses is a pair that could never have filled a position anyway, and a warning
+    would mean writing an unearned certification that no gate will ever read.
+
+    Three separate refusals, because they are three different mistakes and collapsing them
+    would tell the operator to fix the wrong one.
+    """
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT p->>'position_title' AS title, p->>'source_department' AS department "
+            "FROM business_pack b, jsonb_array_elements(b.parsed->'positions_required') p "
+            "WHERE b.venture_id = %s AND b.status = 'live' "
+            "  AND p->'forge_modules_operated' ? %s",
+            (venture_id, module_id),
+        )
+        positions = [dict(r) for r in await cur.fetchall()]
+        await cur.execute(
+            "SELECT forge_id FROM forge_module_registry WHERE module_id = %s", (module_id,)
+        )
+        registered = await cur.fetchone()
+
+    if not positions:
+        raise BootstrapError(
+            f"{venture_id}'s live Pack has no position operating {module_id!r}. Nothing was "
+            "written. A certification for a module no position operates is a row Gate 4.5 "
+            "will never read - the Pack decides what this venture may bootstrap, and it does "
+            "not ask for this."
+        )
+    if registered is None:
+        raise BootstrapError(f"{module_id!r} is not in forge_module_registry.")
+    if registered["forge_id"] != forge_id:
+        raise BootstrapError(
+            f"{module_id!r} belongs to {registered['forge_id']!r}, not {forge_id!r}. Unit A is "
+            "agent x forge x module, so a certification under the wrong Forge certifies "
+            "nothing and matches no position."
+        )
+    if department is not None and department not in {p["department"] for p in positions}:
+        asked = sorted({p["department"] for p in positions})
+        raise BootstrapError(
+            f"no position operating {module_id!r} draws from {department!r}. The Pack draws it "
+            f"from {', '.join(asked)}. Unit B is certified per (department, Forge), so a "
+            "certification in the wrong department is invisible to every position that needs it."
+        )
+
+
 async def _already_granted(
-    conn: AsyncConnection, office_agent_id: uuid.UUID
+    conn: AsyncConnection, office_agent_id: uuid.UUID, *, forge_id: str, module_id: str
 ) -> uuid.UUID | None:
     async with conn.cursor() as cur:
         await cur.execute(
             "SELECT grant_id FROM agent_forge_grant "
             "WHERE office_agent_id = %s AND forge_id = %s AND module_id = %s",
-            (office_agent_id, FORGE_ID, MODULE_ID),
+            (office_agent_id, forge_id, module_id),
         )
         row = await cur.fetchone()
     return row[0] if row else None
 
 
-async def plan(conn: AsyncConnection, *, ref: str | None = None) -> dict[str, Any]:
-    """What the bootstrap would do. Writes nothing."""
-    agent = await _one_agent(conn, ref)
+async def plan(
+    conn: AsyncConnection, *, ref: str | None = None,
+    forge_id: str = DEFAULT_FORGE_ID, module_id: str = DEFAULT_MODULE_ID,
+    department: str = "engineering", venture_id: str | None = None,
+) -> dict[str, Any]:
+    """What the bootstrap would do. Writes nothing.
+
+    The Pack check runs HERE, not only in `apply`, so that the dry run refuses a pair the
+    venture cannot bootstrap. A plan that reports a write `--confirm` would then reject is a
+    plan that taught the operator the wrong thing.
+    """
+    if venture_id is not None:
+        await _assert_pair_in_pack(
+            conn, venture_id=venture_id, forge_id=forge_id, module_id=module_id,
+            department=None if ref else department,
+        )
+    agent = await _one_agent(conn, ref, department)
 
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
             "SELECT api_version, base_url, health_status FROM forge_registry "
             "WHERE forge_id = %s",
-            (FORGE_ID,),
+            (forge_id,),
         )
         forge = await cur.fetchone()
         await cur.execute(
             "SELECT credential_ref FROM forge_tenant_credential WHERE forge_id = %s",
-            (FORGE_ID,),
+            (forge_id,),
         )
         credential = await cur.fetchone()
         await cur.execute(
@@ -163,10 +255,10 @@ async def plan(conn: AsyncConnection, *, ref: str | None = None) -> dict[str, An
         identity = await cur.fetchone()
 
     if forge is None:
-        raise BootstrapError(f"{FORGE_ID} is not in forge_registry")
+        raise BootstrapError(f"{forge_id} is not in forge_registry")
     if credential is None:
         raise BootstrapError(
-            f"{FORGE_ID} has no row in forge_tenant_credential, so the broker has no "
+            f"{forge_id} has no row in forge_tenant_credential, so the broker has no "
             "credential to inject. The call would be unauthenticated."
         )
 
@@ -175,8 +267,8 @@ async def plan(conn: AsyncConnection, *, ref: str | None = None) -> dict[str, An
         "forge": dict(forge),
         "credential_ref": credential["credential_ref"],
         "identity_exists": identity is not None,
-        "forge_id": FORGE_ID,
-        "module_id": MODULE_ID,
+        "forge_id": forge_id,
+        "module_id": module_id,
         "tier": TIER,
     }
 
@@ -187,6 +279,9 @@ async def apply(
     human: humans.Human,
     venture_id: str,
     ref: str | None = None,
+    forge_id: str = DEFAULT_FORGE_ID,
+    module_id: str = DEFAULT_MODULE_ID,
+    department: str = "engineering",
     confirmed: bool = False,
 ) -> dict[str, Any]:
     """Issue the identity, certifications, grant and shift. Refuses without confirmation."""
@@ -196,10 +291,20 @@ async def apply(
             "--confirm. Run it without the flag first to see what it would do."
         )
 
-    detail = await plan(conn, ref=ref)
+    detail = await plan(
+        conn, ref=ref, forge_id=forge_id, module_id=module_id, department=department,
+        venture_id=venture_id,
+    )
     agent = detail["agent"]
     forge = detail["forge"]
     department = agent["department"]
+    # Re-checked against the agent's OWN department. `plan` could only test the requested one,
+    # and `--agent` bypasses the request entirely: naming an engineer for an administration
+    # module would otherwise write a unit-B row for `engineering` that no position can use.
+    await _assert_pair_in_pack(
+        conn, venture_id=venture_id, forge_id=forge_id, module_id=module_id,
+        department=department,
+    )
 
     # 1. Identity. The real function, which refuses an agent the Village never reported.
     #
@@ -231,11 +336,13 @@ async def apply(
             conn, agent["village_agent_ref"], human=human
         )
 
-    existing = await _already_granted(conn, office_agent_id)
+    existing = await _already_granted(
+        conn, office_agent_id, forge_id=forge_id, module_id=module_id
+    )
     if existing is not None:
         raise BootstrapError(
             f"{agent['agent_name']} already holds a live grant for "
-            f"{FORGE_ID}/{MODULE_ID} ({existing}). Nothing was written. Revoke it first "
+            f"{forge_id}/{module_id} ({existing}). Nothing was written. Revoke it first "
             "if you mean to re-issue: a command that silently re-issues authority is a "
             "command somebody runs twice."
         )
@@ -244,12 +351,12 @@ async def apply(
     # this names the bootstrap so staleness has something concrete to compare and the
     # certification cannot be permanent by accident.
     instruction_hash = hashlib.sha256(
-        f"{BOOTSTRAP}:{FORGE_ID}:{MODULE_ID}:{forge['api_version']}".encode()
+        f"{BOOTSTRAP}:{forge_id}:{module_id}:{forge['api_version']}".encode()
     ).hexdigest()
 
     # 2. Unit B - the department is certified for this Forge.
     unit_b = await certification.record_result(
-        conn, unit="B", forge_id=FORGE_ID, department=department,
+        conn, unit="B", forge_id=forge_id, department=department,
         verdict="PASS", rubric_version=BOOTSTRAP, certified_tier=TIER,
         instruction_content_hash=instruction_hash,
         forge_api_version=forge["api_version"],
@@ -259,15 +366,17 @@ async def apply(
         # to record whether SimForge ran.
         attested_by="bootstrap",
         bootstrap_reason=(
-            "Phase 0.8. Issued outside the provisioning ladder so the first real "
-            "brokered call could be made. No SimForge scenario pack existed for "
-            "cre-forge when this was written."
+            f"Phase 0.8. Issued outside the provisioning ladder because Gate 4.5 requires a "
+            f"certification and no gate produces one. No SimForge scenario pack had been run "
+            f"for {department} on {forge_id} when this was written. Unit B is certified per "
+            f"(department, Forge), so this row covers every {forge_id} module that department "
+            f"operates - it is not per-module and must not be read as one."
         ),
     )
 
     # 3. Unit A - this agent is certified for this module.
     unit_a = await certification.record_result(
-        conn, unit="A", forge_id=FORGE_ID, module_id=MODULE_ID,
+        conn, unit="A", forge_id=forge_id, module_id=module_id,
         office_agent_id=office_agent_id,
         verdict="PASS", rubric_version=BOOTSTRAP, certified_tier=TIER,
         instruction_content_hash=instruction_hash,
@@ -278,9 +387,9 @@ async def apply(
         # to record whether SimForge ran.
         attested_by="bootstrap",
         bootstrap_reason=(
-            "Phase 0.8. Issued outside the provisioning ladder so the first real "
-            "brokered call could be made. No SimForge scenario pack existed for "
-            "cre-forge when this was written."
+            f"Phase 0.8. Issued outside the provisioning ladder because Gate 4.5 requires a "
+            f"certification and no gate produces one. No SimForge scenario pack had been run "
+            f"for {forge_id}/{module_id} when this was written."
         ),
     )
 
@@ -297,7 +406,7 @@ async def apply(
                activated_at, activated_by)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, now(), %s)
             """,
-            (grant_id, office_agent_id, FORGE_ID, MODULE_ID, venture_id, TIER,
+            (grant_id, office_agent_id, forge_id, module_id, venture_id, TIER,
              str(unit_a.cert_id), str(unit_b.cert_id), human.human_id, human.human_id),
         )
         # The venture has to declare the module it uses. Step 4 of the call path raises
@@ -312,7 +421,7 @@ async def apply(
             ON CONFLICT (venture_id, forge_id, module_id) DO UPDATE
             SET is_required = EXCLUDED.is_required
             """,
-            (venture_id, FORGE_ID, MODULE_ID),
+            (venture_id, forge_id, module_id),
         )
     await conn.commit()
 
@@ -327,8 +436,8 @@ async def apply(
             "grant_id": str(grant_id),
             "office_agent_id": str(office_agent_id),
             "agent_name": agent["agent_name"],
-            "forge_id": FORGE_ID,
-            "module_id": MODULE_ID,
+            "forge_id": forge_id,
+            "module_id": module_id,
             "trust_tier": TIER,
             "operation_cert_ref": str(unit_a.cert_id),
             "dept_context_cert_ref": str(unit_b.cert_id),
@@ -370,7 +479,7 @@ async def apply(
         "unit_b_cert": str(unit_b.cert_id),
         "shift_id": str(shift_id),
         "venture_id": venture_id,
-        "forge_id": FORGE_ID,
-        "module_id": MODULE_ID,
+        "forge_id": forge_id,
+        "module_id": module_id,
         "trust_tier": TIER,
     }
