@@ -64,7 +64,7 @@ from typing import Any
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 
-from broker import audit, certification, humans, roster, shifts
+from broker import audit, certification, errors, humans, revocation, roster, shifts
 
 #: Phase 0.8 names CRE Forge specifically. Not a parameter: this command exists to make
 #: one documented call happen, and a general-purpose grant issuer is exactly the thing
@@ -95,7 +95,15 @@ DEFAULT_MODULE_ID = "property_lookup"
 #: `property_lookup` is a search over CRE Forge's property table. It is registered
 #: `is_mutating` in forge_module_registry, which is worth questioning separately, but
 #: the operation itself reads.
-TIER = "auto_execute"
+#: Fallback only, for the no-venture path. **The tier comes from the Pack.**
+#:
+#: It was a constant, and that made every bootstrap grant `auto_execute` regardless of what the
+#: position declared - 20 of 21 grants in this database, against five positions that every one of
+#: them declares `propose`. Inert only because no shift existed: `assert_on_shift_for` refuses the
+#: call, so nothing had used the extra tier. That is a safety net catching it, not a reason it was
+#: safe. A bootstrap certifies an agent for work a position defines; issuing it above the ceiling
+#: that position declared is authority the Pack did not ask for.
+DEFAULT_TIER = "auto_execute"
 
 #: A marker on every row and audit entry this command writes.
 BOOTSTRAP = "phase0.8"
@@ -149,7 +157,7 @@ async def _one_agent(
 async def _assert_pair_in_pack(
     conn: AsyncConnection, *, venture_id: str, forge_id: str, module_id: str,
     department: str | None,
-) -> None:
+) -> str | None:
     """Refuse a pair the venture's live Pack does not ask for. Loudly, and never a warning.
 
     **This is what the constants used to do.** While `cre-forge/property_lookup` was hardcoded
@@ -165,10 +173,17 @@ async def _assert_pair_in_pack(
 
     Three separate refusals, because they are three different mistakes and collapsing them
     would tell the operator to fix the wrong one.
+
+    **Returns the trust tier the Pack declares for this pair**, which is the other half of the
+    same idea: if the Pack is the authority on WHICH pairs may be bootstrapped, it is the
+    authority on AT WHAT TIER. The weakest ceiling wins where more than one position operates
+    the module, because a certification is per (agent, forge, module) and cannot distinguish
+    which position an agent will be appointed to.
     """
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
-            "SELECT p->>'position_title' AS title, p->>'source_department' AS department "
+            "SELECT p->>'position_title' AS title, p->>'source_department' AS department, "
+            "       p->>'trust_tier_ceiling' AS ceiling "
             "FROM business_pack b, jsonb_array_elements(b.parsed->'positions_required') p "
             "WHERE b.venture_id = %s AND b.status = 'live' "
             "  AND p->'forge_modules_operated' ? %s",
@@ -203,10 +218,31 @@ async def _assert_pair_in_pack(
             "certification in the wrong department is invisible to every position that needs it."
         )
 
+    relevant = [p for p in positions if department is None or p["department"] == department]
+    ceilings = [p["ceiling"] for p in relevant if p["ceiling"]]
+    if not ceilings:
+        raise BootstrapError(
+            f"no position operating {module_id!r} declares a trust_tier_ceiling. The tier is the "
+            "Pack's to state and this command will not choose one for it."
+        )
+    return str(min(ceilings, key=lambda t: certification.TIER_RANK[t]))
+
 
 async def _already_granted(
-    conn: AsyncConnection, office_agent_id: uuid.UUID, *, forge_id: str, module_id: str
+    conn: AsyncConnection, office_agent_id: uuid.UUID, *, forge_id: str, module_id: str,
+    venture_id: str,
 ) -> uuid.UUID | None:
+    """A LIVE grant for this pair, or None.
+
+    **A revoked grant is not a live one, and this used to say it was.** The guard asked whether
+    a row existed; `agent_forge_grant` has no `revoked_at` (B37 dropped it, deliberately - there
+    is one place revocation is recorded and it is the `revocation` table), so a revoked grant
+    went on blocking re-issue forever with no way to clear it short of deleting the row. That
+    turns "revoke it first if you mean to re-issue" into advice that cannot be taken.
+
+    `check_revocations` is the same authority the call path uses per call, so the guard and the
+    runtime now agree on what "granted" means rather than each keeping its own answer.
+    """
     async with conn.cursor() as cur:
         await cur.execute(
             "SELECT grant_id FROM agent_forge_grant "
@@ -214,7 +250,21 @@ async def _already_granted(
             (office_agent_id, forge_id, module_id),
         )
         row = await cur.fetchone()
-    return row[0] if row else None
+    if row is None:
+        return None
+
+    try:
+        await revocation.check_revocations(
+            conn, office_agent_id=office_agent_id, forge_id=forge_id,
+            module_id=module_id, venture_id=venture_id,
+        )
+    except errors.Revoked as exc:
+        # Loud rather than silent. Re-issuing over a revocation is legitimate - it is what a
+        # revoke-then-reissue repair IS - but it is somebody undoing a deliberate act, and the
+        # operator should see that they are doing it.
+        print(f"  re-issuing over a revoked grant ({row[0]}): {exc}")
+        return None
+    return uuid.UUID(str(row[0]))
 
 
 async def plan(
@@ -228,11 +278,12 @@ async def plan(
     venture cannot bootstrap. A plan that reports a write `--confirm` would then reject is a
     plan that taught the operator the wrong thing.
     """
+    tier = DEFAULT_TIER
     if venture_id is not None:
-        await _assert_pair_in_pack(
+        tier = await _assert_pair_in_pack(
             conn, venture_id=venture_id, forge_id=forge_id, module_id=module_id,
             department=None if ref else department,
-        )
+        ) or DEFAULT_TIER
     agent = await _one_agent(conn, ref, department)
 
     async with conn.cursor(row_factory=dict_row) as cur:
@@ -269,7 +320,7 @@ async def plan(
         "identity_exists": identity is not None,
         "forge_id": forge_id,
         "module_id": module_id,
-        "tier": TIER,
+        "tier": tier,
     }
 
 
@@ -301,10 +352,13 @@ async def apply(
     # Re-checked against the agent's OWN department. `plan` could only test the requested one,
     # and `--agent` bypasses the request entirely: naming an engineer for an administration
     # module would otherwise write a unit-B row for `engineering` that no position can use.
-    await _assert_pair_in_pack(
+    # This re-check, not `plan`'s, is what sets the tier: `--agent` can name someone from a
+    # different department than the one requested, and the tier follows the position that will
+    # actually appoint them.
+    tier = await _assert_pair_in_pack(
         conn, venture_id=venture_id, forge_id=forge_id, module_id=module_id,
         department=department,
-    )
+    ) or DEFAULT_TIER
 
     # 1. Identity. The real function, which refuses an agent the Village never reported.
     #
@@ -337,7 +391,7 @@ async def apply(
         )
 
     existing = await _already_granted(
-        conn, office_agent_id, forge_id=forge_id, module_id=module_id
+        conn, office_agent_id, forge_id=forge_id, module_id=module_id, venture_id=venture_id
     )
     if existing is not None:
         raise BootstrapError(
@@ -357,7 +411,7 @@ async def apply(
     # 2. Unit B - the department is certified for this Forge.
     unit_b = await certification.record_result(
         conn, unit="B", forge_id=forge_id, department=department,
-        verdict="PASS", rubric_version=BOOTSTRAP, certified_tier=TIER,
+        verdict="PASS", rubric_version=BOOTSTRAP, certified_tier=tier,
         instruction_content_hash=instruction_hash,
         forge_api_version=forge["api_version"],
         # Not a SimForge verdict, and it no longer says it is. These two rows
@@ -378,7 +432,7 @@ async def apply(
     unit_a = await certification.record_result(
         conn, unit="A", forge_id=forge_id, module_id=module_id,
         office_agent_id=office_agent_id,
-        verdict="PASS", rubric_version=BOOTSTRAP, certified_tier=TIER,
+        verdict="PASS", rubric_version=BOOTSTRAP, certified_tier=tier,
         instruction_content_hash=instruction_hash,
         forge_api_version=forge["api_version"],
         # Not a SimForge verdict, and it no longer says it is. These two rows
@@ -406,7 +460,7 @@ async def apply(
                activated_at, activated_by)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, now(), %s)
             """,
-            (grant_id, office_agent_id, forge_id, module_id, venture_id, TIER,
+            (grant_id, office_agent_id, forge_id, module_id, venture_id, tier,
              str(unit_a.cert_id), str(unit_b.cert_id), human.human_id, human.human_id),
         )
         # The venture has to declare the module it uses. Step 4 of the call path raises
@@ -438,7 +492,7 @@ async def apply(
             "agent_name": agent["agent_name"],
             "forge_id": forge_id,
             "module_id": module_id,
-            "trust_tier": TIER,
+            "trust_tier": tier,
             "operation_cert_ref": str(unit_a.cert_id),
             "dept_context_cert_ref": str(unit_b.cert_id),
             "why": (
@@ -481,5 +535,5 @@ async def apply(
         "venture_id": venture_id,
         "forge_id": forge_id,
         "module_id": module_id,
-        "trust_tier": TIER,
+        "trust_tier": tier,
     }
