@@ -3253,3 +3253,102 @@ here is self-attestation - this file could name a manual that does not exist. Th
 the real one, because that is where the manuals live."* The adapter attesting to a version it
 cannot read is the defect; the remedy is for the comparison to treat the document as authoritative
 and the constant as a claim, exactly as it already treats the filename.
+
+---
+
+## 40. An affirmative-looking ref inside a scoping sentence is a negation
+
+**Ruled 2026-09-13 by Ivan, on `record_consent`, and generalised into the rule a derivation script
+needs. Recorded because the alternative is a field filled by inference, and that is the shape that
+has cost most this week.**
+
+A manual's WHICH LAWS THIS TOUCHES section is **prose whose purpose is to distinguish what binds
+from what does not**. It names entries in both directions, and a regular expression over
+`compliance/[a-z0-9-]+` cannot tell them apart. **Four of the ten Burkham modules name at least one
+entry in order to rule it out:**
+
+    client_read        "No bureau entry applies. compliance/bureau-report-handling-v1
+                        governs client_read_credit, not this module."
+    statement_pull     "No bureau entry applies. A card statement is not a bureau report."
+    portfolio_health   "No fair-treatment entry applies, and that is a decision rather
+                        than an omission."
+    record_consent     "compliance/outbound-contact-boundary-v1 - scoped. Recording consent
+                        is not outbound contact and does not invoke the three-part test.
+                        But the consent being recorded may have been obtained during
+                        contact that did."
+
+The first three are plain negations. **The fourth is the one the rule exists for**, because it
+reads affirmatively: the ref is bolded, it is not prefixed with "No", and the sentence goes on to
+describe a real risk. An extractor sees an assertion.
+
+### The rule
+
+**A ref inside a scoping sentence is a negation, and `scoped` is the marker.** The sentence says
+the entry *does not* invoke its test for this module, and then explains a residual concern that
+lives elsewhere - in the provenance of the consent, not in the act of recording it.
+
+**The "But" is a conditional and a flag is binary.** `compliance_flags_implied` has no way to say
+"applies to how this data came to exist but not to this operation". Setting the flag asserts a
+binding the prose denies; omitting it loses a caution the prose raises. The flag list is the wrong
+instrument for a conditional, and the resolution is to keep the flag off and let the caution live
+where it already lives - in the instruction text an agent reads.
+
+**So `record_consent` keeps two flags**, `recording_consent_required` and
+`privacy_request_handling`, matching the registry. `application-truthfulness-v1` is out on the
+same reasoning read the other way: that entry governs application declarations, and this module
+records a consent.
+
+### What this means for derivation
+
+**`compliance_coupling` is not derivable from the manuals by extraction**, and the earlier report
+that it was a lookup was wrong. Measured against the registry, a naive extraction agreed on 6 of
+10 - and **three of the four disagreements were the parser reading a negation as an assertion**,
+with the registry correct in all three.
+
+`forge_module_registry.compliance_flags_implied` is already per-module and already narrowed. It is
+`verification_method = hand`, and it is right everywhere it can be checked. **So the flag set comes
+from the registry, joined to `compliance_library_entry` for the refs, and the manual's laws section
+is used as a check rather than as a source.** A disagreement between them is a finding to report,
+not an ambiguity to average.
+
+---
+
+## 41. Three errors that misplaced the source material rather than inventing it
+
+**Recorded 2026-09-13 at Ivan's instruction, continuing the count Caveat 21 keeps. These are a
+different failure from the eight there, and the difference is the reason for a separate entry.**
+
+    9   "these documents are in CapitalForge's repo"
+        They are in The Office, `docs/instructions/`. CapitalForge holds no manuals, and
+        `office.routes.ts` says so above the field that names them: *"this file could name a
+        manual that does not exist. The Office's half is the real one, because that is where the
+        manuals live."* Carried across two consecutive turns while the restore was being scoped.
+
+    10  "seven sections"
+        Eight. `REQUIRED_SECTIONS` is what_it_does, what_it_does_not_do, inputs,
+        correct_sequence, failure_signatures, retry_vs_escalate, never_do and
+        compliance_coupling - and the eighth is the one the ruling in entry 40 was about.
+
+    11  "stale on 8 of 10, client_read at 1.0 against 1.6"
+        Ten of eleven, and client_read is 1.4 against 1.7.
+
+### Why these are not the same failure as the eight
+
+**Those invented something. These misplaced something that exists.** The documents were real, the
+drift was real, the conclusion drawn from both was right - and the repository, the count and the
+figures were wrong.
+
+**That is why they survived two turns.** A premise that does not change the answer is never tested
+by the answer being right. "The manuals are in CapitalForge" and "the manuals are in The Office"
+lead to the same ruling - derive, don't transcribe by hand - so nothing downstream ever pressed on
+which repo it was. The error had no consequence until the moment somebody had to open the files,
+and at that point it would have sent them to a repository that contains none.
+
+**The version figures are the same shape.** `8 of 10` and `10 of 11` both support "the manifest is
+stale nearly everywhere"; `1.0 vs 1.6` and `1.4 vs 1.7` both support "client_read has drifted
+furthest". The argument is indifferent to the numbers, so the numbers went unchecked - and a ledger
+entry written from them would have recorded a measurement nobody took.
+
+**The check is the same one as always, and it is cheaper here than for a citation:** the figures
+came from a command, and re-running it costs seconds. What made it feel unnecessary was that the
+conclusion was already agreed.
