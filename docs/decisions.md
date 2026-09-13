@@ -2975,3 +2975,58 @@ authority, and clearing it means twelve revoke-and-reissues.
 
 **There is no `observe` tier.** `TIER_RANK = {"suggest": 1, "propose": 2, "auto_execute": 3}`.
 `scan_communication` sits at `propose`, which is what the Pack asked for.
+
+---
+
+## 36. Two spellings of one Forge, across two systems, and no join has ever compared them
+
+**Found 2026-09-13 while checking whether SimForge could restore The Office's wiped operating
+instructions. `capitalforge` is authoritative. `capital-forge` is a fixture string, and it reached
+a live table.**
+
+    The Office   forge_registry says `capitalforge`      30 files say it, 0 say the other
+    SimForge     `ForgeInstructionSet` holds `capital-forge`   13 files, against 320 for `capitalforge`
+
+**In both repositories the hyphenated form is the minority by an order of magnitude**, and in
+SimForge twelve of its thirteen files are integration tests. It is a test fixture that leaked into
+a live table, which is the same shared-database problem PARALLEL_BUILD.md already records against
+`OFFICE_ADMIN_DSN`, arriving from the other side.
+
+### Why nothing caught it
+
+**No join has ever run between the two.** `certification.instruction_content_hash` is compared
+against The Office's own `forge_operating_instruction`; SimForge's `ForgeInstructionSet` is
+compared against nothing outside SimForge. The two systems exchange `run_ref` and gate results, and
+**neither payload has ever required the Forge ids to agree.** A mismatch that nothing compares is a
+mismatch nothing reports.
+
+**It is B51's shape moved up a level.** `modules/email` and `modules/emails` defeated the two
+cheapest checks - grep the symbol, grep the directory - because both returned a hit and the hit was
+the wrong one. This does the same with a Forge id, except the two spellings live in **different
+databases owned by different services**, so there is no directory listing that shows them side by
+side and no single grep that returns both. The cheapest check that would have caught it is the one
+nobody had reason to run: comparing two identifier vocabularies that were never required to match.
+
+### What makes this worse than the directory pair
+
+**The identifier is load-bearing for certification.** Unit A is `agent x forge x module`. A
+certification written under one spelling is invisible to every query using the other - not
+refused, not warned, invisible - and `_unit_a_certs` would return an empty dict for an agent who
+is in fact certified.
+
+It has not happened, because nothing has yet written a certification from SimForge's side. **The
+verdict-ingest sweep is the path that would**, and it takes `forge_id` from the submission row,
+which The Office wrote. So the current safety is that one system authors both sides of the
+comparison - which is exactly the property that stops being true the moment `attested_by='simforge'`
+writes its first row.
+
+### Ruling
+
+**`capitalforge`, unhyphenated.** It is what `forge_registry` holds, what both Packs declare, what
+every adapter and module row uses, and what 320 of SimForge's own files already say. Nothing needs
+to change in The Office.
+
+**SimForge's four `capital-forge` rows are fixtures and are not authoritative** - its own
+`a0_probes.py` says so: *"The authoritative instruction set for `capitalforge/portfolio_health`
+lives in The Office and this fixture is its captured wire form."* They should not be read back as
+content, and this entry exists so the next person who finds them does not try.
