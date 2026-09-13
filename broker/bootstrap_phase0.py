@@ -56,7 +56,6 @@ EVERY ROW SAYS IT WAS BOOTSTRAPPED
 
 from __future__ import annotations
 
-import hashlib
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -401,24 +400,21 @@ async def apply(
             "command somebody runs twice."
         )
 
-    # The hash a certification is earned against. **The live instruction's, when there is
-    # one** - anything else is a certification bound to text that does not exist.
+    # The hash a certification is earned against. **The live instruction's, and only that.**
     #
-    # This used to be unconditional:
+    # One mode, no flag, no fallback. It used to be unconditional:
     #
     #     sha256(f"{BOOTSTRAP}:{forge_id}:{module_id}:{api_version}")
     #
-    # a hash of a LABEL, not of any instruction. It was written when CapitalForge had no
-    # authored instructions at all, and it was defensible then and only then. The moment one
-    # exists, `recompute_staleness` compares the cert's hash against the live `content_hash`,
-    # they cannot match, and **every certification this command wrote goes
-    # `stale_instructions` on the next sweep.** Not a risk - arithmetic.
+    # a hash of a LABEL, not of any instruction, and that is what produced fifteen
+    # certifications bound to text that does not exist. A flag offering both is how the wrong
+    # one gets chosen later by someone who needs the command to succeed today.
     #
-    # Its own docstring says why the no-instruction case must not be quietly treated as fresh:
-    # *"NO LIVE INSTRUCTION IS STALE, NOT FRESH"* - a cert bound to a hash corresponding to no
-    # text cannot be said to match anything, and `resolve_grant` dispatches on `state =
-    # 'certified'`. So the fallback stays, it stays honest about being a fallback, and the
-    # reason on the row says which of the two happened.
+    # So a module with no authored instruction cannot be bootstrapped, and that refusal is the
+    # feature. `recompute_staleness` already says why: *"NO LIVE INSTRUCTION IS STALE, NOT
+    # FRESH"* - a certification bound to a hash corresponding to no text cannot be said to match
+    # anything, and `resolve_grant` dispatches on `state = 'certified'`. Writing the row and
+    # letting a sweep condemn it later is strictly worse than not writing it.
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
             "SELECT content_hash FROM forge_operating_instruction "
@@ -427,23 +423,21 @@ async def apply(
         )
         live_instruction = await cur.fetchone()
 
-    if live_instruction is not None:
-        instruction_hash = live_instruction["content_hash"]
-        basis = (
-            f"Bound to the live operating instruction for {forge_id}/{module_id} "
-            f"(content_hash {instruction_hash[:12]}), so staleness is computable against the "
-            "text this agent was certified on."
+    if live_instruction is None:
+        raise BootstrapError(
+            f"no operating instruction is authored for {forge_id}/{module_id}, so there is no "
+            "content hash to certify against. Nothing was written. A certification names the "
+            "text an agent was certified on; without one this command would be asserting that "
+            "an agent was examined on a document nobody has written. Author the instruction "
+            "first - `POST /api/instructions`, or the console's authoring screen."
         )
-    else:
-        instruction_hash = hashlib.sha256(
-            f"{BOOTSTRAP}:{forge_id}:{module_id}:{forge['api_version']}".encode()
-        ).hexdigest()
-        basis = (
-            f"NO operating instruction is authored for {forge_id}/{module_id}, so this is "
-            "bound to a synthetic hash naming the bootstrap. It matches no text and will be "
-            "marked stale by the first staleness sweep after one is authored - which is the "
-            "correct outcome, not a defect to work around."
-        )
+
+    instruction_hash = live_instruction["content_hash"]
+    basis = (
+        f"Bound to the live operating instruction for {forge_id}/{module_id} "
+        f"(content_hash {instruction_hash[:12]}), so staleness is computable against the text "
+        "this agent was certified on."
+    )
 
     # 2. Unit B - the department is certified for this Forge.
     unit_b = await certification.record_result(
