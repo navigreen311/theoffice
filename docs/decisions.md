@@ -3026,7 +3026,76 @@ writes its first row.
 every adapter and module row uses, and what 320 of SimForge's own files already say. Nothing needs
 to change in The Office.
 
+**AMENDED 2026-09-13 - `forge_registry` could not hold the mapping even if someone wanted it
+to.** Its columns are `forge_id, display_name, base_url, api_version, auth_model, credential_mode,
+health_status, last_health_check, deprecation_date`. **There is no alias, wire-id or bridge-id
+column.** So `capitalforge -> capital-forge` is not missing from the registry; there is nowhere in
+the registry for it to be. One id per Forge, and that id is the venture-facing one.
+
+That matters because "restore the mapping" is the natural next move for anyone who reads the two
+spellings as a bridge translation, and it has no target. The conclusion above is unchanged - this
+is the mechanism under it.
+
 **SimForge's four `capital-forge` rows are fixtures and are not authoritative** - its own
 `a0_probes.py` says so: *"The authoritative instruction set for `capitalforge/portfolio_health`
 lives in The Office and this fixture is its captured wire form."* They should not be read back as
 content, and this entry exists so the next person who finds them does not try.
+
+---
+
+## 37. `GREEN` is a stored value, and Gate 0 reads it
+
+**Found 2026-09-13 during a read-only orientation. Not a defect in V2, which is honest about what
+it checks. A defect in what "bridge operational" is taken to mean.**
+
+    forge_id      health_status  last_health_check
+    capitalforge  GREEN          2026-09-03      (ten days old)
+    cre-forge     GREEN          never
+    simforge      GREEN          never
+    voiceforge    GREEN          never            (base_url https://example.invalid)
+
+**Three of four rows have never been health-checked and all four read GREEN.** `voiceforge` points
+at `example.invalid`, a domain reserved by RFC 2606 so that it cannot resolve, and it reads GREEN
+too.
+
+### What Gate 0 actually does
+
+`_v2_bridge_operational` is explicit and correct:
+
+> *Operational means: registered, health not RED, and a tenant credential exists. All three,
+> because a Forge with no credential is a Forge the broker cannot authenticate to however healthy
+> it looks.*
+
+It `SELECT`s `health_status` and `credential_ref`. **It sends nothing.** Every word of the
+docstring is true; none of them is "reachable".
+
+### What it costs, concretely
+
+**Gate 0 passing is not evidence the bridge reaches anything, and on this database it does not
+reach CapitalForge.** Nothing is listening on port 4000 - `curl` exits 7, connection refused -
+while `forge_registry` registers CapitalForge at `http://127.0.0.1:4000/api/office` and Gate 0
+reports *"bridge operational for capitalforge, simforge"*.
+
+That sentence is the whole finding. The gate that exists so that *"no engagement provisions against
+a Forge the bridge does not reach"* currently passes for a Forge the bridge does not reach.
+
+**And `GREEN` has no expiry.** A row written once stays GREEN forever; `last_health_check` records
+when somebody looked and nothing consults it. A value that is never recomputed and never checked
+for staleness is indistinguishable from a constant, and this one is spelled like a measurement.
+
+### Not fixed, and the options are the decision
+
+Three, and they are not variants of one:
+
+1. **V2 probes.** Gate 0 makes a live call per hard binding. Truthful, and it makes provisioning
+   depend on every Forge being up at gate time - which is the property `_record_submission` already
+   refuses for SimForge, on the grounds that a ladder should not depend on a service allowed to be
+   down.
+2. **Something keeps `health_status` current** - the sweeps already run on cron and already have a
+   `freshness` report. V2 keeps reading the row, and the row starts meaning something.
+3. **V2 reads staleness as well as value.** GREEN older than N, or never checked, is not GREEN.
+   Cheapest, and it converts the silent case into a named one without adding a network call to a
+   gate.
+
+The third is where the other controls in this system land - `recompute_staleness` treats a missing
+comparison as stale rather than fresh, for exactly this reason. Recorded rather than chosen.
