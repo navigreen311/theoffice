@@ -3352,3 +3352,96 @@ entry written from them would have recorded a measurement nobody took.
 **The check is the same one as always, and it is cheaper here than for a citation:** the figures
 came from a command, and re-running it costs seconds. What made it feel unnecessary was that the
 conclusion was already agreed.
+
+---
+
+## 42. Two controls for one invariant, and the stricter one made the other dead code
+
+**Ruled 2026-09-13 by Ivan: relax the trigger. Recorded because of how the overreach surfaced -
+it did not, until CI went red, and what went red was a test that had been passing for weeks.**
+
+Migration 0038's first draft refused any `certified` unit-A row whose `instruction_content_hash`
+did not match a live operating instruction - **including the case where the module has no
+instruction at all.**
+
+**That is stricter than the ruling it implements.** Entry 40 ruled `invalid_hash` as the STATE for
+a certification naming text that does not exist. It did not rule that the row should be
+unwritable.
+
+### What the overreach cost
+
+`recompute_staleness` already owns the no-instruction case, and says so in a heading:
+
+> **NO LIVE INSTRUCTION IS STALE, NOT FRESH** - and until 3 September 2026 it was the opposite.
+> [...] a certification bound to an `instruction_content_hash` that corresponds to no text cannot
+> be said to match anything.
+
+The trigger refused that row at write time. **So the branch could never fire, and the state it
+detects could never exist.** A documented control became unreachable code, and
+`test_a_unit_a_cert_with_no_live_instruction_goes_stale` - written to hold exactly that behaviour -
+could no longer construct its own fixture.
+
+**A passing test became an impossible one.** Not a failing assertion about behaviour: a test whose
+setup the database now refuses. Six tests failed that way, and five of them were asserting things
+about bootstrap certifications that remain true.
+
+### Why nothing else caught it
+
+**Both controls are correct in isolation and neither names the other.** The trigger's own docstring
+argues carefully for why it is a trigger and not a CHECK, and never asks whether something already
+enforces the same invariant one layer over. `recompute_staleness` predates it by ten days and could
+not have known.
+
+**The only signal was CI**, and it arrived as eight red tests in a job that also fails for an
+unrelated documented reason. The overlap is the hazard: a repository with a known-red check teaches
+its readers that red is the resting state, and the second failure rides in underneath the first.
+
+### The rule that generalises
+
+**Before adding a write-time refusal, find what already detects the same condition at read time.**
+If something does, the new control must either replace it explicitly - retiring its code and its
+tests in the same change - or leave its cases alone. What it must not do is silently narrow the
+input space until the older control is unreachable, because nothing reports a branch that stopped
+being taken.
+
+The relaxed form refuses only where a live instruction exists and the hash differs. The
+no-instruction case stays with the sweep, where it is documented, tested, and recoverable.
+
+---
+
+## 43. Four errors, three of them about state I had just reported
+
+**Recorded 2026-09-13 at Ivan's instruction, continuing the count. The fourth is mine and is a
+repeat.**
+
+    12  "the instructions now have real hashes, so re-issue the 15 against them"
+        The script had been run in EMIT mode. `forge_operating_instruction` was 0 rows and had
+        been throughout. "Emitted" was read as "authored" - and the run's own last line said
+        *"Nothing written. Re-run with --apply to author these."*
+
+    13  "five docs/instructions/*.md files exist only in CapitalForge's test data"
+        CapitalForge contains no manual files anywhere, test data included. `find` for
+        `*instruction*` and for `capitalforge-*.md` outside `node_modules` returns nothing in
+        both cases. `office.routes.ts` names manuals it does not hold and says so.
+
+    14  "so entry 39 needs correcting - the drift is against a fixture"
+        Entry 39 as written is correct and was left alone. There is no fixture layer; the drift
+        is between the adapter's hardcoded constants and The Office's manuals, which is what the
+        entry says.
+
+    15  **Mine: I emptied the development database a second time.**
+        `pytest tests/contract/... tests/deployment/...` against `OFFICE_APP_DSN` with no
+        `OFFICE_TEST_ADMIN_DSN` set. The suite prints the warning before doing it. The first time
+        cost nine certifications and every operating instruction; this time it cost fifteen
+        `invalid_hash` rows that were due for re-issue anyway, and left 36 grants naming
+        certifications that no longer exist - the dangling state entry 31 describes.
+
+**The shape of 12 through 14 is one shape:** a report I had written myself, hours earlier, read
+back as a different claim. The script's output said nothing was written; the `find` results said
+the files do not exist; entry 39 said what the drift was between. **Each error is a
+misremembering of my own verified output, not a failure to check.**
+
+**15 is worse, because the correction was already written down.** Entry 41's own lesson is that
+cheap checks go unrun when the conclusion feels settled, and the fix here is cheaper still: set
+`OFFICE_TEST_ADMIN_DSN`, which `scripts/bootstrap.sh` exists to create. Twice now the warning has
+been printed, read, and overtaken by wanting the test result.

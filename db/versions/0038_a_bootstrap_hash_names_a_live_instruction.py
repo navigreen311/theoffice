@@ -20,6 +20,19 @@ WHY `invalid_hash` AND NOT `stale_instructions`
     document that has since been revised, and invites the same remedy - which would
     re-certify against whatever is live now and quietly ratify the original claim.
 
+WHAT THIS REFUSES, AND WHAT IT DELIBERATELY DOES NOT
+====================================================
+
+    It refuses a `certified` unit-A row whose hash differs from the LIVE instruction for its
+    module. **It does not refuse a module that has no instruction at all.**
+
+    The distinction is the correction to this migration's first draft, which refused both. That
+    was stricter than the ruling it implements - entry 40 ruled `invalid_hash` as the STATE, not
+    that the row should be unwritable - and it made `recompute_staleness`'s documented
+    no-instruction branch unreachable, because the row it exists to mark could no longer be
+    created. Two controls for one invariant, with the stricter one turning the other into dead
+    code. See decisions.md entry 42.
+
 WHY A TRIGGER AND NOT A CHECK
 =============================
 
@@ -95,7 +108,19 @@ def upgrade() -> None:
             IF NEW.unit <> 'A' OR NEW.state <> 'certified' THEN
                 RETURN NEW;
             END IF;
-            IF NOT EXISTS (
+            -- Only where a live instruction EXISTS and the hash differs.
+            --
+            -- The first version of this trigger refused any certified unit-A row whose hash did
+            -- not match a live instruction, including the case where the module has no
+            -- instruction at all. That is stricter than the ruling it implements, and it made a
+            -- documented behaviour unreachable: `recompute_staleness` exists to mark exactly
+            -- that row, its heading says so - "NO LIVE INSTRUCTION IS STALE, NOT FRESH" - and
+            -- the test written to hold it could no longer construct its own fixture.
+            IF EXISTS (
+                SELECT 1 FROM forge_operating_instruction i
+                WHERE i.forge_id = NEW.forge_id AND i.module_id = NEW.module_id
+                  AND i.superseded_at IS NULL
+            ) AND NOT EXISTS (
                 SELECT 1 FROM forge_operating_instruction i
                 WHERE i.forge_id = NEW.forge_id AND i.module_id = NEW.module_id
                   AND i.superseded_at IS NULL
@@ -103,9 +128,11 @@ def upgrade() -> None:
             ) THEN
                 RAISE EXCEPTION
                     'bootstrap_hash_is_live: certification for %/% names instruction_content_hash '
-                    '%, which is not the content_hash of any live operating instruction. A '
-                    'certification records the text an agent was examined on; this one names no '
-                    'text.', NEW.forge_id, NEW.module_id, NEW.instruction_content_hash;
+                    '%, which is not the content_hash of the LIVE operating instruction for that '
+                    'module. A certification records the text an agent was examined on; this one '
+                    'names different text. (A module with NO live instruction is not refused here '
+                    '- that is recompute_staleness''s case.)',
+                    NEW.forge_id, NEW.module_id, NEW.instruction_content_hash;
             END IF;
             RETURN NEW;
         END;
