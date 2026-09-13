@@ -2790,3 +2790,55 @@ Found because the development database was emptied mid-session - `pytest tests/`
 `OFFICE_TEST_ADMIN_DSN` truncates what it owns, and prints a warning first. The wipe was an
 error; **the dangling grants are not a consequence of it but a property it revealed**, and they
 would survive any ordinary revocation-and-cleanup path the same way.
+
+---
+
+## 32. A Pack can ask a department for more seats than it has people, and nothing reports it
+
+**Found 2026-09-13 while staffing Burkham's five positions. Recorded as a roster finding rather
+than as a decision about one agent, because the agent is not the point.**
+
+Burkham's Pack asks `banking` for **four seats** - Diagnostic Analyst and Placement Strategist, both
+headcount 2. Banking has **three individual contributors** with an Office identity. So the fourth
+seat cannot be filled by an IC, and `alistair_fenlor`, a junior_manager, takes it.
+
+**That is not an escalation and the ruling is that it stands.** `_candidates` filters on
+`status = 'active' AND department = %s` and nothing else - appointment has never read rank - and
+with the tier now taken from the Pack rather than a constant, the grant carries the position's
+declared `propose` rather than a ceiling. A junior_manager in that seat holds exactly what the
+position asks for.
+
+**The finding is the arithmetic, and it is not confined to banking:**
+
+    venture             department      seats   ICs   identities
+    burkham-wickmont    banking             4     3           14   SHORT 1
+    greenstone          research            3     0            0   SHORT 3
+
+**Greenstone is the worse case by a distance.** Its Acquisition Analyst positions draw from
+`research`, and `research` has **no Office identities at all** - not a rank shortage, an empty
+department. Three seats against zero people, in a Pack that has been live for months.
+
+### Why nothing says so
+
+**Every surface reports per candidate, so zero candidates reports nothing.** `_candidates` returns
+the department's active identities; the loop appends a `CandidateShortfall` for each one that
+fails. An empty list produces an empty `requires_certification` and a bare
+`unfilled: 3 of 3` - the same output a department full of uncertified people produces, and the
+same output a department of three ICs asked for four seats produces.
+
+**Three different problems with one message.** Entry 1186 of this file already recorded that V24
+cannot distinguish *no candidate exists* from *candidates exist and are uncertified*. This is a
+third case underneath both: *candidates exist, are certifiable, and there are not enough of them* -
+and it is the only one of the three that no amount of certification will fix.
+
+**A rank shortfall is invisible by design and an identity shortfall is invisible by accident.**
+Rank is not read, so asking for ICs is a thing a Pack can express and nothing can check. Identity
+count is read, and the count reaching zero produces silence rather than a number.
+
+### Not fixed here
+
+The check is three lines of SQL - seats per (venture, department) against active identities - and
+it belongs beside V30 rather than inside the appointment loop, because it is a fact about the
+roster and the Pack together and is knowable before any generator runs. Recorded rather than
+built: which gate owns it is a decision, and Greenstone's three empty seats are a live answer
+somebody should give before a fourth venture is written against the same roster.
