@@ -1,11 +1,9 @@
-diff --git a/packs/burkham-wickmont.draft.yaml b/packs/burkham-wickmont.draft.yaml
-index 3bf712f..957c9dd 100644
 --- a/packs/burkham-wickmont.draft.yaml
 +++ b/packs/burkham-wickmont.draft.yaml
-@@ -398,6 +398,42 @@ positions_required:
-     trust_tier_ceiling: propose
+@@ -462,6 +462,42 @@
+       # read; a recommendation, and its manual forbids it reading as an instruction
+       capitalforge/restack_recommend: auto_execute
      lifecycle_stages_owned: [Stack management]
- 
 +  # ADDED 2026-09-09 by P-13, the FunnelForge binding.
 +  #
 +  # `trust_tier_ceiling: auto_execute` is the honest declaration and it is expected to
@@ -42,13 +40,13 @@ index 3bf712f..957c9dd 100644
 +    lifecycle_stages_owned: [Intake, Diagnostic, Placement]
 +
 +
+ 
  capacity_demand:
    agent_days_per_week: 40
-   peak_concurrent_positions: 8
-@@ -475,6 +511,44 @@ forge_dependencies:
+@@ -539,6 +575,44 @@
+       rate_limit_policy: {max_rps: 1, burst: 3, backoff: linear, on_429: queue}
        credential_mode: brokered
        cost_center: burkham-training
- 
 +    # ADDED 2026-09-09 by P-13. Nine modules, one per approved autonomous template plus
 +    # scheduling, contact capture and analytics.
 +    #
@@ -87,6 +85,6 @@ index 3bf712f..957c9dd 100644
 +      credential_mode: brokered
 +      cost_center: burkham-marketing
 +
+ 
    external_software:
      - name: Plaid
-       purpose: Bank statement and account data (Decision A)

@@ -63,6 +63,7 @@ async def generate(pack: BusinessPack, conn: AsyncConnection | None = None) -> R
                 effective_compliance_flags=sorted(set(declared) | set(implied)),
                 headcount=p.headcount,
                 trust_tier_ceiling=p.trust_tier_ceiling,
+                module_trust_tiers=dict(p.module_trust_tiers),
                 # Default to every stage rather than none: a position that owns no
                 # stage appears in no workflow step, and would vanish from the venture
                 # without anybody being told.

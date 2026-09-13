@@ -27,6 +27,7 @@
         "Source",
         "Qualify"
       ],
+      "module_trust_tiers": {},
       "position_title": "Acquisition Analyst",
       "reports_to": "venture_operator",
       "source_department": "research",
@@ -60,6 +61,7 @@
         "Assign",
         "Close"
       ],
+      "module_trust_tiers": {},
       "position_title": "Buyer Network Manager",
       "reports_to": "venture_operator",
       "source_department": "operations",
@@ -87,6 +89,7 @@
         "Underwrite",
         "Contract"
       ],
+      "module_trust_tiers": {},
       "position_title": "Deal Underwriter",
       "reports_to": "venture_operator",
       "source_department": "banking",

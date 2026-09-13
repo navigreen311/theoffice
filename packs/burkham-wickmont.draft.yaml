@@ -309,6 +309,21 @@ positions_required:
     headcount: 2
     # Level 2 "Communicate with approval" is the Console's nearest equivalent.
     trust_tier_ceiling: propose
+    # PER-MODULE TIERS, 13 September 2026. The ceiling above is the default; these
+    # override it per module. Storage was always per-module - agent_forge_grant
+    # carries one trust_tier per (agent, forge, module) and resolve_grant gates on
+    # it. Only the declaration was missing.
+    #
+    # Keys are forge_id/module_id. Qualified from the first line rather than when a
+    # second Forge binds: the registry's key has always been (forge_id, module_id),
+    # and a bare name is unambiguous only while one Forge is bound.
+    module_trust_tiers:
+      # read; no write, natural idempotency
+      capitalforge/client_read: auto_execute
+      # read; the PII boundary is in never_do, not the tier
+      capitalforge/client_read_pii: auto_execute
+      # MUTATING - records a consent a person gave
+      capitalforge/record_consent: propose
     lifecycle_stages_owned: [Intake]
 
   - position_title: Diagnostic Analyst
@@ -330,6 +345,17 @@ positions_required:
        per_connection_authorization_required, sb_lending_data_collection]
     headcount: 2
     trust_tier_ceiling: propose
+    # PER-MODULE TIERS, 13 September 2026. The ceiling above is the default; these
+    # override it per module. Storage was always per-module - agent_forge_grant
+    # carries one trust_tier per (agent, forge, module) and resolve_grant gates on
+    # it. Only the declaration was missing.
+    #
+    # Keys are forge_id/module_id. Qualified from the first line rather than when a
+    # second Forge binds: the registry's key has always been (forge_id, module_id),
+    # and a bare name is unambiguous only while one Forge is bound.
+    module_trust_tiers:
+      # read of statements already on file
+      capitalforge/statement_pull: auto_execute
     lifecycle_stages_owned: [Diagnostic, Readiness]
 
   - position_title: Placement Strategist
@@ -365,6 +391,17 @@ positions_required:
        advance_placement_prohibited]
     headcount: 2
     trust_tier_ceiling: propose
+    # PER-MODULE TIERS, 13 September 2026. The ceiling above is the default; these
+    # override it per module. Storage was always per-module - agent_forge_grant
+    # carries one trust_tier per (agent, forge, module) and resolve_grant gates on
+    # it. Only the declaration was missing.
+    #
+    # Keys are forge_id/module_id. Qualified from the first line rather than when a
+    # second Forge binds: the registry's key has always been (forge_id, module_id),
+    # and a bare name is unambiguous only while one Forge is bound.
+    module_trust_tiers:
+      # MUTATING, at_most_once. Its manual's first never: 'Never submit. An agent prepares and stages; a human presses the button.'
+      capitalforge/submit_application: propose
     lifecycle_stages_owned: [Placement, Funded]
 
   - position_title: Compliance Reviewer
@@ -383,6 +420,21 @@ positions_required:
        card_product_discipline_required]
     headcount: 1
     trust_tier_ceiling: propose
+    # PER-MODULE TIERS, 13 September 2026. The ceiling above is the default; these
+    # override it per module. Storage was always per-module - agent_forge_grant
+    # carries one trust_tier per (agent, forge, module) and resolve_grant gates on
+    # it. Only the declaration was missing.
+    #
+    # Keys are forge_id/module_id. Qualified from the first line rather than when a
+    # second Forge binds: the registry's key has always been (forge_id, module_id),
+    # and a bare name is unambiguous only while one Forge is bound.
+    module_trust_tiers:
+      # MUTATING, at_most_once; inserts disclosures into outbound client text
+      capitalforge/scan_communication: propose
+      # read; assembles from records already held
+      capitalforge/compliance_manifest_assemble: auto_execute
+      # MUTATING, at_most_once; mints an exportId and emits an event
+      capitalforge/regulator_dossier_export: propose
     lifecycle_stages_owned: [Readiness, Placement]
 
   - position_title: Stack Manager
@@ -396,6 +448,19 @@ positions_required:
     compliance_flags_in_scope: [trigger_term_disclosure_required]
     headcount: 1
     trust_tier_ceiling: propose
+    # PER-MODULE TIERS, 13 September 2026. The ceiling above is the default; these
+    # override it per module. Storage was always per-module - agent_forge_grant
+    # carries one trust_tier per (agent, forge, module) and resolve_grant gates on
+    # it. Only the declaration was missing.
+    #
+    # Keys are forge_id/module_id. Qualified from the first line rather than when a
+    # second Forge binds: the registry's key has always been (forge_id, module_id),
+    # and a bare name is unambiguous only while one Forge is bound.
+    module_trust_tiers:
+      # read; scores a portfolio, changes nothing
+      capitalforge/portfolio_health: auto_execute
+      # read; a recommendation, and its manual forbids it reading as an instruction
+      capitalforge/restack_recommend: auto_execute
     lifecycle_stages_owned: [Stack management]
 
 capacity_demand:
@@ -516,6 +581,33 @@ human_capacity:
   # DECLARED 2026-09-08 by Ivan Green. This block was previously Greenstone's, copied
   # wholesale (B20, B21). It is now Burkham's own, and both entries are real people.
   #
+  # COVERAGE REVERTED 9 -> 6 HOURS EACH, 13 September 2026, the same day it was raised.
+  #
+  # Nine hours was declared to close 616 minutes of demand against 432 available. Per-module
+  # trust tiers removed that shortfall at its source: six of these ten modules are reads, and
+  # the Pack had been asking for every-action human review on all ten. Demand is 280 minutes,
+  # and the gap nine hours was solving does not exist.
+  #
+  # **An unmeasured number declared for a shortfall that no longer exists is the defect this
+  # Pack spent a day removing.** Nine was never better evidenced than six - it was a larger
+  # commitment from the same two people, defensible only while it was needed.
+  #
+  # ------------------------------------------------------------------------------------------
+  # THE MARGIN IS 152 MINUTES, AND ONE (STEP, HOLDER, MODULE) PAIR COSTS 28.
+  #
+  #   12 coverage-hours x 60 x 0.6 = 432 available.
+  #   10 pairs below auto_execute x 8 approvals x 3.5 weighted minutes = 280 demanded.
+  #   432 - 280 = 152, which is five more propose-tier pairs before this fails.
+  #
+  #   The count is per (step, holder, MODULE) now, not per (step, holder). Adding a module to a
+  #   position costs nothing if it is declared auto_execute and 28 minutes per holder if it is
+  #   not - so the tier chosen for a new module matters more than the position's headcount.
+  #
+  #   Written here rather than in a ledger entry because the person who adds the module is
+  #   editing this file, and a margin that has to be looked up is a margin that will not be.
+  # ------------------------------------------------------------------------------------------
+  #
+  # SUPERSEDED 13 September 2026, kept because its prediction came true exactly as written:
   # READ THIS BEFORE YOU READ THE V13 PASS: the margin is twelve minutes.
   # 120 projected daily approvals x 3.5 weighted minutes = 420 review-minutes demanded,
   # against 432 available (12 coverage-hours x 60 x the 0.6 utilisation factor). One more
@@ -540,7 +632,10 @@ human_capacity:
         $50K to the founders. The reviewer role was already his; what was missing was the
         Pack saying so. Coverage hours and review minutes are asserted from how the work
         is actually done, not measured - no review-duration telemetry exists yet, and
-        B21 stays open until it does.
+        B21 stays open until it does. Coverage raised 6 -> 9 on 13 September 2026: the
+        same person stating a larger commitment, on the same basis as the six. Nine is
+        not better evidenced than six was; it is a bigger number from the same source,
+        and the declaration is the commitment rather than the measurement.
       source: null
   - human_name: Ira Green
     role: compliance_officer
@@ -557,7 +652,9 @@ human_capacity:
         Co-founder and co-managing partner of Green Companies LLC, named by the same
         governance that names Ivan: section 2.3 puts BOTH founders on marketing claim
         approvals, and Gardner routes $50K transfers to the founders jointly. Declared,
-        not measured, for the same reason as the entry above.
+        not measured, for the same reason as the entry above. Coverage raised 6 -> 9 on
+        13 September 2026 alongside Ivan's, and the same caveat applies to both: a larger
+        commitment from the same two people, not a number anybody measured.
 
         The two entries name each other as backup_human, and that satisfies V14 while
         making both critical-role backups the same two people. V14 checks only that the
