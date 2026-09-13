@@ -47,6 +47,44 @@ from generators.pack import BusinessPack
 # trust tier backed by a saturated reviewer is a rubber stamp waiting to happen.
 UTILISATION_FACTOR = 0.6
 
+
+def _v13_evidence_basis(pack: BusinessPack) -> dict[str, str]:
+    """Where each of V13's three inputs came from.
+
+    **The demand side is derived and the multipliers are not, and a reader cannot see that from
+    the verdict.** 22 (workflow step, holder) pairs is real - positions, headcount, workflow and
+    tier, all from the Pack. It is then multiplied by 8, and compared against coverage multiplied
+    by 0.6, and neither multiplier is derived from anything.
+
+    Reported rather than fixed. Changing either would move a gate verdict, and a constant should
+    not move because a rule blocked - which is the argument V13's own message already makes about
+    the one it names. See decisions.md entry 46.
+    """
+    from generators.approval_projection import DEFAULT_DAILY_VOLUME_PER_HEADCOUNT
+
+    basis: dict[str, str] = {}
+    for human in pack.human_capacity:
+        p = human.provenance
+        basis[f"median_review_minutes[{human.human_name}]"] = (
+            f"{human.median_review_minutes:g} min - {p.basis}"
+            + (f" by {p.established_by}" if p.basis == "declared" else "")
+            + (f", source: {p.source}" if p.source else "")
+            + ". No review has been timed in this system and "
+            "`proposal.queue_to_decision_seconds` is wall-clock including queue rather than review "
+            "effort, so it cannot be derived (B21)."
+        )
+    basis["UTILISATION_FACTOR"] = (
+        f"{UTILISATION_FACTOR} - unattributed constant at generators/validator.py:48. Scales the "
+        "whole supply side. Its only justification is the comment above it; nothing in docs/ "
+        "derives it."
+    )
+    basis["DEFAULT_DAILY_VOLUME_PER_HEADCOUNT"] = (
+        f"{DEFAULT_DAILY_VOLUME_PER_HEADCOUNT} - unattributed constant at "
+        "generators/approval_projection.py. Scales the whole demand side. The (step, holder) pair "
+        "count it multiplies IS derived from the Pack; this multiplier is not."
+    )
+    return basis
+
 # Roles whose failure has no second chance, so they cannot have a single point of
 # human failure either.
 CRITICAL_HUMAN_ROLES = ("compliance_officer", "trust_safety_escalation")
@@ -72,6 +110,20 @@ class RuleResult:
     severity: Severity
     verdict: Verdict
     message: str
+
+    #: What this rule's figures rest on, per input. Optional, and today only V13 fills it.
+    #:
+    #: **A verdict and its basis are different facts and the message is the wrong place for the
+    #: second one.** A message is read by a human deciding what to do; a basis is read by a human
+    #: deciding whether the verdict means what it says. Folding one into the other makes the
+    #: message longer every time somebody remembers another caveat, and makes none of it
+    #: queryable - which is how "43% over" came to be actionable without anybody meeting the
+    #: number it was computed from.
+    #:
+    #: Keyed by input name. Each value names where that input came from, in the same vocabulary
+    #: `CapacityProvenance` uses, so a declared value and an unattributed constant are
+    #: distinguishable at a glance rather than by reading prose.
+    evidence_basis: dict[str, str] | None = None
 
     @property
     def blocks(self) -> bool:
@@ -1510,7 +1562,10 @@ async def validate(
         verdict = Verdict.PASS if ok else (
             Verdict.FAIL if severity is Severity.FAIL else Verdict.WARN
         )
-        report.results.append(RuleResult(rule_id, severity, verdict, message))
+        # Asked for by rule id rather than returned by the rule, so that no existing rule's
+        # `(bool, str)` signature changes. A second rule wanting a basis adds a line here.
+        basis = _v13_evidence_basis(pack) if rule_id == "V13" else None
+        report.results.append(RuleResult(rule_id, severity, verdict, message, basis))
 
     return report
 
@@ -1703,6 +1758,10 @@ async def validate_gate_4_5(
             )
             if overloaded
             else "projected approvals fit within reviewer capacity",
+            # Attached whether it passed or failed. A PASS computed from an unmeasured duration
+            # is the same claim as a FAIL computed from one, and the twelve-minute margin this
+            # Pack carried for five days was the case that mattered: it read as capacity.
+            _v13_evidence_basis(pack),
         )
     )
 

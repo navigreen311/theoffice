@@ -456,7 +456,19 @@ class HumanCapacity(Strict):
     #: looked enforced and was not. See `blocking.md` B23.
     advisory_daily_approval_ceiling: int
 
-    median_review_minutes: float = 5.0
+    #: **Required. No default, as of 13 September 2026.**
+    #:
+    #: It carried `5.0`, which meant omitting it did not withhold a number - it asserted five
+    #: minutes, unattributed, with no provenance able to describe where five came from. The field
+    #: immediately below already said why that is wrong: *"no default, because a default is how the
+    #: four numbers this field exists for became unattributed in the first place."* That comment
+    #: was about this field, and this field was the one that still had one.
+    #:
+    #: The number remains unmeasured for every venture in this repository - no review has ever been
+    #: timed, and `proposal.queue_to_decision_seconds` is wall-clock including queue rather than
+    #: review effort (B21). `provenance` is where that is said; V13 carries it into its evidence
+    #: so a reader cannot act on a shortfall without meeting what the shortfall was computed from.
+    median_review_minutes: float
     auth_method: Literal["sso_mfa", "mfa_only"]
     #: Required. See `CapacityProvenance` - no default, because a default is how the
     #: four numbers this field exists for became unattributed in the first place.

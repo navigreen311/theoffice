@@ -304,7 +304,15 @@ async def _gate_4_5(ctx: _Context) -> GateOutcome:
         ctx.pack.pack, artifacts.approval_projection, artifacts.appointment
     )
     failures = report.failures
-    evidence = {r.rule_id: r.message for r in report.results}
+    evidence: dict[str, Any] = {r.rule_id: r.message for r in report.results}
+
+    # A rule's basis, where it supplies one, under its own key rather than inside the message.
+    # `evidence` is what the Provisioning Console renders and what a Gate 4 reviewer reads, and
+    # the point of the separate key is that a shortfall and what it was computed from arrive as
+    # two facts. See decisions.md entry 46 and `RuleResult.evidence_basis`.
+    for result in report.results:
+        if result.evidence_basis:
+            evidence[f"{result.rule_id}_basis"] = result.evidence_basis
     if failures:
         return GateOutcome(
             "4.5", BLOCKED,
