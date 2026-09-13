@@ -3099,3 +3099,65 @@ Three, and they are not variants of one:
 
 The third is where the other controls in this system land - `recompute_staleness` treats a missing
 comparison as stale rather than fresh, for exactly this reason. Recorded rather than chosen.
+
+---
+
+## 38. The Village was never down. The variable was never exported.
+
+**Recorded 2026-09-13. Every shift failure in this session's bootstrap runs, twenty-odd of them,
+had one cause, and it was not the cause I reported.**
+
+`shifts.assign_shift` reads the quarter from the Village. Every bootstrap run failed at step 5:
+
+    QuarterUnknown: the Village did not answer (http://127.0.0.1:8002/api/objectives/board:
+    nothing at this address identified itself as the Village - HTTP 401 from a server identifying
+    as 'uvicorn' ...)
+
+**I reported that as the Village being unreachable. It was answering the whole time, on 8120.**
+
+    curl http://127.0.0.1:8120/api/org/departments  ->  200, twelve departments
+    village.quarter()                              ->  "2029Q4"
+
+### The mechanism, and where it was already written down
+
+`broker/village.py:138`:
+
+    return os.environ.get("VILLAGE_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
+
+with `DEFAULT_BASE_URL = "http://127.0.0.1:8002"` on line 44. **`broker/` has no dotenv loader** -
+`.env` is read by whatever starts the service, not by the package. `.env` has carried
+`VILLAGE_BASE_URL=http://127.0.0.1:8120` all along; I ran `python -m broker bootstrap-phase0` from
+a shell that never exported it, so every invocation fell back to a port
+`docs/port-allocation.md` records as *"still squatted by `vaf-ws-j-pipeline-persistence-api-1`"*.
+
+**The trap is documented one file from the line that caused it, and the error message describes
+it correctly.** `village.py:59-64` names the symptom - a week of `401 Unauthorized` from
+`127.0.0.1:8002` - and says *"an unrelated project happened to hold port 8002. Its 401 was a
+different system."* The port doc says, in bold, *"Set `VILLAGE_BASE_URL` explicitly - do not rely
+on the default."* The runtime error itself says *"This is NOT the Village refusing a credential:
+check what is listening before looking for one."*
+
+**Three separate warnings, each written by somebody who had already been caught by this, and I
+read the error twenty times without following any of them.**
+
+### Why it survived so long
+
+**The error was too good.** It diagnosed itself accurately - named the port, named the responding
+server, distinguished a squatter from a credential refusal - and because it read as a complete
+finding, I recorded the finding instead of acting on the instruction inside it. A vaguer error
+would have forced a look at what was listening.
+
+**And it was never load-bearing enough to check.** The shift is step 5 of 5; the certifications
+and grants had already committed, so every run looked like a partial success with a known
+environmental cause. A failure that arrives after the work is done is a failure nobody debugs.
+
+**Nothing was lost by it** - `assert_on_shift_for` refuses a grant with no shift, which is the
+inert-partial-state property working. What was lost is a week of reporting an environment as
+broken when a single `export` would have finished the job.
+
+### The correction to the record
+
+Wherever this session's notes say the Village was unreachable, not running, or had moved off its
+port: **the Village was up, the address was configured, and the process that needed it did not
+read the configuration.** The remaining half of that sentence is the real finding - that
+`python -m broker` reads no `.env` - and it is a property of the CLI, not of the Village.
