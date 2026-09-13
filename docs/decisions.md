@@ -3445,3 +3445,70 @@ misremembering of my own verified output, not a failure to check.**
 cheap checks go unrun when the conclusion feels settled, and the fix here is cheaper still: set
 `OFFICE_TEST_ADMIN_DSN`, which `scripts/bootstrap.sh` exists to create. Twice now the warning has
 been printed, read, and overtaken by wanting the test result.
+
+---
+
+## 44. `office_agent_identity.role_key` has no writer, and the populated one is a table away
+
+**Numbered 44 rather than 46: the highest entry on `main` is 43, and 30 sits on PR #117, still
+open. Recorded 2026-09-13 as dormant - it has never had a consequence, and that is most of why it
+is worth recording.**
+
+    office_agent_identity.role_key   NULL, all 54 rows
+    village_agent.role_key           individual_contributor 120, senior_manager 23,
+                                     junior_manager 16, deputy_head 13,
+                                     department_head 12, team_lead 2
+
+`roster.issue_identity` inserts `(office_agent_id, village_agent_ref, agent_name, department,
+status)`. **`role_key` is not in the column list**, and nothing else writes it. The column has been
+NULL since the table was created.
+
+### Why it has never mattered
+
+**Nothing reads it.** `generators/appointment.py` contains zero references to `role_key` -
+`_candidates` is `status = 'active' AND department = %s` and nothing else. No gate consults it, no
+validator rule names it, and `resolve_grant` does not select it.
+
+The only reader of *any* `role_key` is `bootstrap_phase0._one_agent`, and it reads
+**`village_agent.role_key`** - the populated one - to pick the lowest-ranked agent in a department:
+*"the first agent across a new bridge should be the one whose authority is smallest."*
+
+### Why record a dormant column at all
+
+**Because the next person to reach for it will find NULL and not know the real value is one table
+away.** `village_agent.role_key` is maintained: `sync_roster` writes it, and diffs it on re-sync,
+reporting `old -> new` when the Village moves somebody. The identity table's copy looks like the
+same fact gone missing rather than a fact that was never copied.
+
+That is the failure mode this entry exists to prevent. A NULL column on the table you are already
+querying reads as *this system does not track rank* - and the correct conclusion is *this system
+tracks rank on `village_agent`, and the identity row never carried it across.* The first reading
+leads to building something; the second leads to a join.
+
+**It is also the shape that matters if rank ever becomes load-bearing.** Appointment ignores rank
+today, which is why a junior_manager holds an IC seat in Burkham's banking department (entry 32).
+If a rule is ever written that cares, the column nearest to hand is the empty one.
+
+---
+
+## 45. The 15 were unusable because of `invalid_hash`, not `role_key`
+
+**Recorded 2026-09-13 at Ivan's instruction. Sixteenth in the running count, and the first that
+attributed a real problem to the wrong cause rather than inventing one.**
+
+The claim was that the fifteen certifications *"were never usable for appointment"* because the
+bootstrap issued them against a `role_key` that has always been NULL - a defect predating any wipe.
+
+**Appointment never reads `role_key`.** Zero references in `generators/appointment.py`. The
+certifications were unusable because their `instruction_content_hash` named text that did not
+exist, which is entry 40's finding and migration 0038's `invalid_hash` state. The bootstrap does
+read a `role_key` - `village_agent`'s, which is populated - and only to choose a default agent.
+
+**Two true facts joined by a causal claim that is not.** The column is empty; the certifications
+were unusable. Neither caused the other, and both had already been established separately - the
+`role_key` NULL in a column listing, the `invalid_hash` state in the migration that created it.
+
+**What makes this shape harder to catch than an invention:** there is nothing to fail a grep. Every
+noun resolves, every fact checks out, and the error is in the word "because". A citation check
+confirms all of it. The only thing that separates it is asking what the consuming code actually
+reads - which is one grep, and not the one the claim invites.
