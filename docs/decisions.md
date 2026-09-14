@@ -4364,3 +4364,97 @@ It does not rename `ivan`, and it makes the rename no easier or harder. Entry 60
 cost and Ivan has reserved the decision. What this test changes is that the five copies can no
 longer disagree *silently* - which is a precondition for a rename rather than a substitute for
 one, because a rename is exactly the operation that would leave copies disagreeing.
+
+---
+
+## 62. B22 is not a mismatched string. There is no join, in either direction
+
+**Corrected 2026-09-13 by measurement, before renaming anything. The correction is larger than
+the thing it corrects, which is why it gets an entry rather than an amendment.**
+
+### What B22 was thought to be
+
+B22 reads *"a venture can clear every gate to 10 with a reviewer who has no account."* Entry 59
+found the shape live: `Ivan` on the account row, `Ivan Green` in Burkham's Pack. The obvious
+reading is that a Pack-to-account lookup matches on display name and these two spellings miss
+each other - a mismatched string, fixed by an UPDATE.
+
+**Measured, that lookup does not exist.**
+
+    anything joining human_capacity.human_name -> office_human.display_name   NONE
+    display_name used as a lookup key (WHERE display_name = %s)               NONE
+
+Every one of the eight `display_name` references in `broker/` is a SELECT **projecting** it for
+display, reached through `human_id` - `revoked_by_name`, `started_by_name`, `reported_by_name`,
+`written_by_name`. Not one query finds a person by name.
+
+### The actual shape
+
+**Two halves that have never been required to meet.**
+
+    V13 / the Pack side        reads pack.human_capacity[].human_name, role, coverage_hours
+                               and median_review_minutes. Never touches office_human. Has no
+                               way to ask whether the person exists, and does not ask.
+
+    authentication / the       resolves a bearer token to a human_id, reads roles live from
+    account side               office_human_role. Never reads a Pack. Has no way to ask what
+                               the Pack expects of this person, and does not ask.
+
+There is no column, no query and no rule connecting them. **A Pack's reviewer capacity is an
+assertion the Pack makes about the world, and nothing in this system is responsible for checking
+it.** That is why Burkham's V13 PASS - 280 minutes against 432, reviewed and attested at Gate 4 -
+rests on twelve coverage-hours declared by two entries that correspond to no account holding the
+role they name, and why it would read exactly the same if both names were invented.
+
+**That is a bigger finding than a spelling.** A mismatched string is a bug with a fix. Two
+subsystems that have never been required to agree is a missing requirement, and no amount of
+renaming produces one.
+
+### So what do the display names actually buy? Legibility, not function
+
+**Recorded because the next person to notice the mismatch will rename a row expecting it to
+connect something.** It will not. Nothing reads the result.
+
+Ivan's row was left as `Ivan` deliberately, on his ruling: **making two unconnected strings look
+alike reads as a link that is not there**, which is worse than leaving them visibly different.
+Ira Green's account was created matching the Pack because there was no history to contradict, not
+because matching does any work.
+
+The cost of renaming Ivan's row was measured first, and it is an UPDATE rather than a migration -
+which is the answer that would have made it tempting:
+
+    office_human.display_name            1 row     the only updatable occurrence
+    business_pack.parsed / yaml_source   18 rows   immutable - a published version is frozen
+    audit_log.subject                     3 rows   append-only by design
+    provisioning_gate_result.evidence    11 rows   append-only
+    provisioning_gate_result.reason       3 rows   append-only, "reviewed by Ivan: ..."
+    docs/decisions.md                    15 refs   prose
+
+**The three gate results are the Gate 4 reviews at Pack 0.6.0, 0.7.0 and 0.9.0**, frozen as
+*"reviewed by Ivan:"* because `record_human_review` interpolates the display name into the reason
+at write time. That is correct: the record says what was true when the act happened, and
+rewriting it would falsify an attestation. So one row is updatable and everything else is history
+that should not move - meaning a rename makes an account disagree with its own audit trail, in
+exchange for nothing.
+
+### The second administrator exists
+
+    human_id      fdae58a6-d786-4da7-be8d-1c7269839898
+    display_name  Ira Green
+    email         green_ira@yahoo.com
+    origin        human           (classified, not asserted: the name is not prefix-hex
+                                   and the address does not end .invalid)
+    role          ivan, venture_id NULL - every venture
+    granted_by    78869b20-e83a-4fbc-90bc-d58560f79bfb   (Ivan)
+
+`assert_may_grant` permitted it under the top-role carve-out - equal-rank granting, allowed only
+where nothing outranks, which entry 59 records as the case that exception exists for - and the
+self-grant bar was clear because the target is somebody else. **Every role anyone holds was
+granted by somebody else, and the audit log says who.**
+
+The token was printed once and written nowhere; only its hash is stored.
+
+**This does not close B22.** Ira holds `ivan`, not `compliance_officer`, and V13 matches the
+Pack's role string rather than a rank - so a second real administrator changes nothing about a
+denominator the Pack supplies by asserting it. **What changed is that the system now has two
+people who can act in it, and 124 test fixtures still hold the same top role.**
