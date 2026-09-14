@@ -4919,3 +4919,84 @@ halves: refs converge, `granted_by` and `granted_at` unchanged. **Verified by br
 reverting the upsert alone makes it fail with *"still carries the dangling unit-A ref after a
 second apply"*; restoring it passes. The test could not have existed before, because until a
 `cert_id` could change there was no reachable way to make a ref stale (entry 68).
+
+---
+
+## 72. Four grants nobody can certify, and a stop rather than a deferral
+
+**Ruled 2026-09-14 by Ivan. Gate 9 blocks on eight units and stays blocked, deliberately.**
+
+### What they are
+
+    Amelie Wystan   engineering  active   capitalforge/client_read         auto_execute  3 Sep 14:19
+    Brina Arvane    engineering  active   capitalforge/client_read         auto_execute  3 Sep 14:20
+    Brina Arvane    engineering  active   capitalforge/scan_communication  propose       3 Sep 15:52
+    Cedric Noren    engineering  active   capitalforge/client_read         auto_execute  3 Sep 14:45
+
+**Not superseded, not orphaned, not simply uncertified.** Three agents from a department outside
+the Pack, holding live activated grants for modules inside it.
+
+    the modules ARE operated      client_read -> Intake Concierge
+                                  scan_communication -> Compliance Reviewer
+    the department is NOT drawn   Burkham's positions draw from administration, banking
+      from by any position        and operations. `engineering` appears in no position
+    so no unit B is reachable     unit B is per (department, forge_id). Gate 8 opens a
+                                  department unit only for departments a position names
+    and these are the ONLY        nothing supersedes them, nothing waits behind them, and
+      grants on their triples     `resolve_grant` selects them because there is nothing newer
+
+**That last line is what separates them from the thirty duplicates of entry 67.** The duplicates
+are unreachable and harmless; these are reachable and refused.
+
+### Why both remedies were refused
+
+**Certifying `engineering/capitalforge`** mints a unit B for a department no Burkham position
+draws from. It would clear Gate 9 by certifying something the Pack never asked for - *certifying
+to clear a line*, which is the shape `scripts/check_module_manuals.py` is documented as warning
+against: *"registering a name to clear that line is how `lender_match` happens."*
+
+**Deleting them** removes authority rather than a shadow. Entry 67's thirty could be argued away
+because a newer grant answers for their triple; these have no replacement, so deleting is not
+tidying a superseded row - it is withdrawing a grant, silently, through the one mechanism that
+leaves no record.
+
+**So the answer is neither, and it is a stop rather than a deferral.** Gate 9 blocks on eight
+units that represent a real gap, the run does not advance, and the reason is on the record.
+
+### The question that has to be answered first - and it now has evidence
+
+The question was: **why does Phase 0 issue grants to a department the Pack does not name?** If
+`engineering` is deliberately a bootstrap or operator department, the Pack should say so and the
+unit B is legitimate. If it is an artefact of `bootstrap-phase0`'s behaviour before `--department`
+existed, they are residue and deleting them is right.
+
+**Measured while recording this, and it points one way.** The version of
+`broker/bootstrap_phase0.py` immediately before PR #118 selected its candidate agents with a
+hardcoded literal:
+
+    SELECT village_agent_ref, agent_name, department, role_key
+      FROM ...
+     WHERE status = 'active' AND department = 'engineering'
+
+    #118 - bootstrap-phase0 takes --forge, --module and --department   13 Sep 2026 10:46
+    the four grants                                                     3 Sep 2026 14:19-15:52
+
+**The grants predate `--department` by ten days, and the code that wrote them could not have
+chosen any other department.** `engineering` was not a policy about operator departments; it was
+a literal in a candidate query, and the Pack was never consulted.
+
+**That answers the question and does not settle the disposition.** It makes "residue" the likely
+reading, and residue still holds live activated authority over two modules a live Pack operates,
+by an agent nobody appointed. Deleting on the strength of a strong inference is the same act
+entry 69 declined - reaching for the mechanism that leaves no record because the honest one does
+not exist. The supersession vocabulary is still missing, and these four still have nothing to be
+superseded by.
+
+### One detail that complicates any resolution
+
+**Amelie Wystan holds two grants in `greenstone` as well**, so she is not purely a Burkham
+artefact. Brina Arvane and Cedric Noren hold grants only here.
+
+Whatever resolves this has to account for her twice: a decision that `engineering` is residue in
+Burkham says nothing about what her Greenstone grants are, and a deletion scoped to one venture
+would leave the same agent in two states for the same reason.
