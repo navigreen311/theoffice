@@ -138,17 +138,29 @@ async def test_golden_snapshot(artifacts, name):
 async def test_role_definition_derives_implied_compliance_flags(artifacts):
     """G3 — 5.1 does real work.
 
-    The Pack author gave the Acquisition Analyst `tsr_disclosure_required`. It also
-    operates `place_call`, whose module registration implies
-    `recording_consent_required`. An author who omits a flag has not escaped it.
+    The Pack author gave the Buyer Network Manager `recording_consent_required`. It also
+    operates `buyer_match` and `assign_contract`, whose Forge registration implies
+    `tsr_disclosure_required`. An author who omits a flag has not escaped it.
+
+    RE-ANCHORED 13 September 2026, from the Acquisition Analyst. That position carried
+    the same property the other way round - it declared `tsr_disclosure_required` and
+    picked up `recording_consent_required` from `place_call`. `place_call` is forbidden
+    in `forge_module_exclusion` and is being removed from the Pack, so the position stops
+    operating a voiceforge module and there is nothing left for it to imply.
+
+    **The property under test did not change and the anchor did.** Buyer Network Manager
+    exercises it in the same shape - one declared flag, one implied by a Forge the author
+    did not think about - and it does so both before and after the Pack edit, which is
+    why this lands first.
     """
-    analyst = next(
-        p for p in artifacts.roles.positions if p.position_title == "Acquisition Analyst"
+    manager = next(
+        p for p in artifacts.roles.positions
+        if p.position_title == "Buyer Network Manager"
     )
-    assert "tsr_disclosure_required" in analyst.declared_compliance_flags
-    assert "recording_consent_required" in analyst.implied_compliance_flags
-    assert "recording_consent_required" not in analyst.declared_compliance_flags
-    assert set(analyst.effective_compliance_flags) == {
+    assert "recording_consent_required" in manager.declared_compliance_flags
+    assert "tsr_disclosure_required" in manager.implied_compliance_flags
+    assert "tsr_disclosure_required" not in manager.declared_compliance_flags
+    assert set(manager.effective_compliance_flags) == {
         "tsr_disclosure_required", "recording_consent_required"
     }
 
@@ -575,11 +587,83 @@ async def test_runtime_config_apply_is_idempotent(artifacts):
     assert len(after_first["grants"]) == (
         len(artifacts.runtime_config.grants) - len(first["grants_excluded"])
     )
-    assert first["grants_excluded"], (
-        "greenstone plans a grant over an excluded module; if this is empty the "
-        "exclusion stopped being applied and nothing else here would notice"
-    )
     assert len(after_first["budget"]) == 1, "budget must not duplicate"
+
+
+async def test_apply_skips_an_excluded_module_and_names_it(greenstone_world, admin):
+    """An excluded module is skipped and reported, and the rest of the config applies.
+
+    SPLIT OUT 13 September 2026 from `test_apply_wires_...idempotent`, which asserted
+    this by borrowing a production Pack: Greenstone declared `voiceforge/place_call`,
+    which `forge_module_exclusion` forbids, so a planned-but-never-written grant fell out
+    of the fixture for free. Its own comment said the quiet part - *"if this is empty the
+    exclusion stopped being applied and nothing else here would notice."*
+
+    **That made one venture's Pack the only coverage of a safety control, and the control
+    was tested by accident.** Removing the forbidden module from that Pack - which is
+    correct, and is happening - would have taken the only test of `apply`'s exclusion
+    path with it, silently, which is the shape entry 58 rules against.
+
+    So the grant is constructed here instead. The test now says what it depends on, holds
+    whatever any Pack declares, and covers the branch on purpose.
+    """
+    from generators import runtime_config as runtime_gen
+    from generators.artifacts import PlannedGrant, RuntimeConfig
+
+    async with connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            "SELECT forge_id, module_id FROM forge_module_exclusion "
+            " WHERE forge_id = 'voiceforge' AND module_id = 'place_call'"
+        )
+        row = await cur.fetchone()
+
+    assert row is not None, (
+        "voiceforge/place_call is not in forge_module_exclusion. It is forbidden by a "
+        "founder decision binding every venture; if the row is gone, that is the finding "
+        "and not a reason to change this test."
+    )
+    forge_id, module_id = row
+
+    config = RuntimeConfig(
+        venture_id="greenstone",
+        environment="sandbox",
+        grants=[
+            PlannedGrant(
+                grant_id="00000000-0000-5000-8000-0000000e0001",
+                office_agent_id="11111111-1111-5111-8111-111111111111",
+                forge_id=forge_id,
+                module_id=module_id,
+                trust_tier="suggest",
+            )
+        ],
+        manifest_rows=[],
+        rate_limits={},
+        budget={
+            "monthly_usd_cap": 1000.0,
+            "soft_cap_pct": 80,
+            "per_agent_usd_daily_cap": 10.0,
+            "per_task_usd_ceiling": 1.0,
+        },
+        compliance_flags=[],
+        blocked_reason=None,
+    )
+
+    async with connection() as conn:
+        written = await runtime_gen.apply(
+            config, conn, granted_by="00000000-0000-5000-8000-00000000bbbb"
+        )
+
+    assert written["grants"] == 0, (
+        "a grant over an excluded module was written. The exclusion means no agent may "
+        "hold this at any tier, and apply is the layer that is supposed to know."
+    )
+    assert len(written["grants_excluded"]) == 1, (
+        "the excluded grant was skipped without being named. Skipping silently is how a "
+        "Pack keeps declaring a module nobody can ever hold: nothing in the run says so."
+    )
+    skipped = written["grants_excluded"][0]
+    assert skipped["module_id"] == module_id
+    assert skipped["reason"], "an exclusion is reported with its reason or not at all"
 
 
 async def test_apply_wires_both_certification_refs_onto_each_grant(artifacts):
