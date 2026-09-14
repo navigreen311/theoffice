@@ -2892,7 +2892,7 @@ brings every other assertion in that file to bear on it. A partial delivery that
 when it is completed is one nobody can lose track of.
 
 **What this does not close.** V11 and V23 stay FAIL for the Marketing Operations Coordinator
-until all nine exist. **P-16 did not apply `docs/plans/funnelforge-position-DEFERRED.patch`,
+until all nine exist. **P-16 did not apply `docs/plans/funnelforge-position-PLAN.md`,
 did not edit any Pack, and did not run `scripts/register_funnelforge_modules.py`.** Burkham's
 Gate 2 is unchanged at 0 FAIL. The ordering P-13 measured still stands: the registry rows land
 before or with the patch, never after, or V31 goes mute.
@@ -3537,7 +3537,7 @@ content does not depend on the number.
 **Nothing here is fixed, and nothing here is P-16b's to fix.** All four items are the copy
 meeting the transport, and the copy sits behind the §4.5 two-founder review gate, which this
 package does not sit on. **P-16b did not apply
-`docs/plans/funnelforge-position-DEFERRED.patch`, did not edit any Pack, and did not run
+`docs/plans/funnelforge-position-PLAN.md`, did not edit any Pack, and did not run
 `scripts/register_funnelforge_modules.py`.** Burkham's Gate 2 is unchanged at 0 FAIL.
 
 ### Finding 1 — three approved templates tell the recipient to reply, and a reply reaches FunnelForge
@@ -3664,7 +3664,7 @@ boundary the quarterly Brief cover cannot see.
 
 **Corrected in place.** Rule 10's closing paragraph is amended on this branch to point at the
 committed library, with the Pack comment named as the source of the error. The Pack comment
-itself is **not** touched: `packs/` is not P-16b's, `docs/plans/funnelforge-position-DEFERRED.patch`
+itself is **not** touched: `packs/` is not P-16b's, `docs/plans/funnelforge-position-PLAN.md`
 is P-13b's, and correcting a comment is not worth a Pack edit from a package that has been told
 not to make one. **It is recorded here so the next person to read that comment reads this
 first.**
@@ -3694,7 +3694,7 @@ system, and it was bound to a transactional send route that has five fields.
 **Scope:** venture-scoped: burkham-wickmont
 
 **Written by P-13b, 10 September 2026.** P-13 built the FunnelForge binding and deliberately
-did not apply `docs/plans/funnelforge-position-DEFERRED.patch`, edit any Pack, or run
+did not apply `docs/plans/funnelforge-position-PLAN.md`, edit any Pack, or run
 `scripts/register_funnelforge_modules.py`. This package owns that deferred patch and the rule
 attached to it:
 
@@ -3798,7 +3798,7 @@ a bigger change to how Packs are edited than this package should make on its own
 
 ### Finding 1 — the deferred patch had stopped applying, and the test that guards it could not see
 
-`git apply docs/plans/funnelforge-position-DEFERRED.patch` — the command the record gives, whose
+the two blocks in `docs/plans/funnelforge-position-PLAN.md` (retired the patch, 14 Sep 2026) — the command the record gives, whose
 promise is that the position returns *"exactly as authored, comment and all"* — **failed on
 every Windows checkout.** `error: patch does not apply`, nothing about the reason.
 

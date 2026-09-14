@@ -89,21 +89,78 @@ async def test_every_declared_idempotency_value_is_one_the_registry_accepts():
         assert binding.idempotency_support in forge_modules.IDEMPOTENCY_SUPPORT, module_id
 
 
-async def test_seven_modules_are_the_shape_v31_refuses_and_that_is_recorded():
-    """A prediction written down rather than discovered by whoever runs the ladder.
+async def test_the_seven_sends_are_key_and_nothing_is_at_most_once():
+    """The shape V31 reads, pinned - now from the other side.
 
-    V31 refuses `auto_execute` over a module that is mutating and `at_most_once`, and
-    `auto_execute` is the only tier that reaches a Forge. This test does not assert that
-    V31 is wrong or that the declarations should change - it pins the count so that a
-    later change to a declaration is a deliberate act with a failing test attached.
+    **INVERTED 14 September 2026, and the inversion is what this test is for.** It was
+    `test_seven_modules_are_the_shape_v31_refuses_and_that_is_recorded`, and it said of
+    itself: *"it pins the count so that a later change to a declaration is a deliberate
+    act with a failing test attached."*
+
+    **It fired, and the deliberate act was made.** This docstring is the attachment.
+
+    WHY THE DECLARATIONS CHANGED
+    ============================
+
+        FunnelForge PR #160 merged 2026-09-12 04:55 UTC and gave the send path an
+        idempotency store: an atomic Redis claim (`SET ... PX NX`, so it holds across
+        replicas), a repeat answered from the record instead of sent, failing closed with
+        a 503 when Redis is unreachable, and a 24-hour window matched to Resend's so a key
+        cannot expire on one side while live on the other.
+
+        `at_most_once` was true when it was written and stopped being true two days before
+        anybody in this repository read it. Nothing crossed back: the declaration here is
+        a hand-written string about another repository's code, and sixteen of the twenty
+        registered modules carry `verification_method = 'hand'` with nothing comparing
+        them to anything.
+
+    WHY `key` AND NOT `natural`
+    ===========================
+
+        The header is optional on FunnelForge's side - an unkeyed repeat still sends a
+        second email, and the store's own docstring says a caller without a key "never
+        reaches this file". So repetition is not inherently safe. What is true is that a
+        repeat becomes recognisable *when the caller supplies a key*.
+
+        That makes `key` a claim about the CALL PATH rather than about the Forge alone,
+        which is why `adapters/funnelforge/app.py` forwards `Idempotency-Key` and
+        `tests/adapters/test_funnelforge_idempotency_hop.py` asserts it survives the hop.
+        The declaration and the forwarding are one fact and changed in one commit.
+
+    WHAT IS STILL PINNED
+    ====================
+
+        The pin moves rather than disappearing. This now fails if any declaration drifts
+        back to `at_most_once` - which would mean either FunnelForge lost its store, or
+        somebody softened a declaration to make a Pack pass. Both deserve the same
+        failing test attached.
     """
     unsafe = sorted(
         m for m, b in MODULES.items()
         if b.is_mutating and b.idempotency_support == "at_most_once"
     )
-    assert len(unsafe) == 7, unsafe
-    grantable = sorted(set(MODULES) - set(unsafe))
-    assert grantable == ["capture_contact", "read_funnel_analytics"]
+    assert unsafe == [], (
+        f"{unsafe} declare `at_most_once`, which V31 refuses under `auto_execute` - and "
+        "`auto_execute` is the only tier that reaches a Forge at all. If FunnelForge "
+        "genuinely lost its idempotency store this is correct and the Pack's ceiling is "
+        "now wrong; fix the Pack, not this assertion."
+    )
+
+    sends = sorted(m for m, b in MODULES.items() if (b.is_mutating and m.startswith(
+        ("send_", "distribute_"))) or m == "schedule_blueprint_call")
+    assert len(sends) == 7, sends
+    assert all(MODULES[m].idempotency_support == "key" for m in sends), {
+        m: MODULES[m].idempotency_support for m in sends
+    }
+
+    naturally_safe = sorted(
+        m for m, b in MODULES.items() if b.idempotency_support == "natural"
+    )
+    assert naturally_safe == ["capture_contact", "read_funnel_analytics"], (
+        "the two modules V31 permitted before #160 should still be the two that need no "
+        "key: capture_contact updates the same lead, read_funnel_analytics mutates "
+        "nothing."
+    )
 
 
 # --------------------------------------------------------------- trap #9: unconfigured

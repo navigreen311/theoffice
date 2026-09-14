@@ -4092,7 +4092,7 @@ auditable afterwards.
 anybody writing down what it is waiting for. Measured before writing, and one premise of the
 instruction is corrected below.**
 
-`docs/plans/funnelforge-position-DEFERRED.patch` adds two hunks to Burkham's Pack: a
+`docs/plans/funnelforge-position-PLAN.md` adds two hunks to Burkham's Pack: a
 `funnelforge` binding under `forge_dependencies`, and a `Marketing Operations Coordinator`
 position operating nine modules at `trust_tier_ceiling: auto_execute`.
 

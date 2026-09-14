@@ -85,19 +85,55 @@ def upstream_base() -> str:
 
 
 class HttpUpstream:
-    """Performs an `UpstreamCall` against FunnelForge's API with the brokered token."""
+    """Performs an `UpstreamCall` against FunnelForge's API with the brokered token.
 
-    def __init__(self, client: httpx.AsyncClient, token: str) -> None:
+    THE IDEMPOTENCY KEY IS FORWARDED, AND THAT IS WHAT MAKES `key` TRUE
+    ==================================================================
+
+        FunnelForge's send path recognises a repeat when the caller supplies an
+        `Idempotency-Key` header: `idempotency-store.ts` takes an atomic Redis claim
+        (`SET ... PX NX`, so it holds across replicas), answers a later request under
+        the same key from its record, and FAILS CLOSED with a 503 when Redis is
+        unreachable rather than sending anyway. The window is 24 hours, matched to
+        Resend's so a key cannot expire on one side while live on the other.
+
+        **The header is optional there, and that is the whole reason this forwarding
+        matters.** An unkeyed repeat still sends a second email - the store's own
+        docstring says a caller without a key "never reaches this file". So the
+        capability is real and unreached unless somebody passes the key along.
+
+        The Office derives one per (task_id, module_id, payload) and sets it on the
+        call to this adapter (`client/office_client.py`, `broker/executor.py:57`).
+        Until now this adapter logged it and dropped it: the upstream request carried
+        `Authorization` and nothing else, so every send reached FunnelForge unkeyed
+        and `forge_module_registry.idempotency_support` was correctly `at_most_once`.
+
+        **The declaration and the forwarding are one fact.** `at_most_once`
+        misdescribes FunnelForge, which has had the key since 12 September;
+        `key` misdescribes this call path without the line below. Either alone is
+        wrong in one direction, so they change together.
+    """
+
+    def __init__(
+        self, client: httpx.AsyncClient, token: str, idempotency_key: str | None = None
+    ) -> None:
         self._client = client
         self._token = token
+        self._idempotency_key = idempotency_key
 
     async def __call__(self, call: UpstreamCall) -> dict[str, Any]:
+        headers = {"Authorization": f"Bearer {self._token}"}
+        # Absent rather than empty when The Office did not derive one: FunnelForge
+        # branches on the header's presence, and `Idempotency-Key: ""` is present.
+        if self._idempotency_key:
+            headers[HEADER_IDEMPOTENCY] = self._idempotency_key
+
         res = await self._client.request(
             call.method,
             f"{upstream_base()}{call.path}",
             json=call.body,
             params=call.query,
-            headers={"Authorization": f"Bearer {self._token}"},
+            headers=headers,
             timeout=30.0,
         )
         try:
@@ -205,7 +241,9 @@ def build_app() -> FastAPI:
         )
 
         async with httpx.AsyncClient() as client:
-            upstream = HttpUpstream(client, configured)
+            upstream = HttpUpstream(
+                client, configured, request.headers.get(HEADER_IDEMPOTENCY)
+            )
             try:
                 result = await binding.handler(payload, upstream)
             except Refused as refused:

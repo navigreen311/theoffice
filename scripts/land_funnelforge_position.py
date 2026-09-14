@@ -6,11 +6,18 @@
 THE RULE THIS SCRIPT IS, RATHER THAN DESCRIBES
 ==============================================
 
-B33 states it and P-13 measured it: *the registry rows land before or with the patch,
+B33 states it and P-13 measured it: *the registry rows land before or with the position,
 never after, or V31 goes mute.* That sentence has been true and unenforced since
-2026-09-09. `docs/plans/funnelforge-position-DEFERRED.patch` is a file anyone can
-`git apply`, and doing so is the obvious thing to do; nothing between the patch and the
-Pack knows about the rule.
+2026-09-09.
+
+**READS A PLAN DOCUMENT, NOT A PATCH, SINCE 14 SEPTEMBER 2026.**
+`docs/plans/funnelforge-position-DEFERRED.patch` held the same two edits as a unified
+diff and was retired: a diff matches three lines of context and goes stale silently
+whenever the Pack shifts near them, which is the expiry problem the deferral itself
+demonstrated. `docs/plans/funnelforge-position-PLAN.md` carries the two edits as YAML
+blocks, each naming the single Pack line it is inserted above. An anchor that has moved
+or duplicated stops this script with a message; three lines of context that have moved
+produce a subtly misplaced edit or an unexplained refusal.
 
 **"Before" is not actually available, and that is why the rule kept being restated
 instead of enforced.** `scripts/register_funnelforge_modules.py` reads the Pack's
@@ -19,10 +26,10 @@ declares no `funnelforge` binding at all - so the script prints *"declares no fu
 binding. Nothing to register"* and exits 1. The rows cannot precede the patch. Only
 "with" is reachable, and "with" is not something a person can do with two commands.
 
-So this script does it as one, by splitting the held patch into the two hunks it has
+So this script does it as one, by splitting the plan into the two blocks it has
 always contained and putting the registration between them:
 
-    1. the `forge_dependencies` hunk    the binding. Nine `modules_expected`, which is
+    1. the `forge_dependencies` block   the binding. Nine `modules_expected`, which is
                                         the half `register_funnelforge_modules.py` needs
                                         in order to write anything. **V31 does not read
                                         this block** - it iterates positions - so the
@@ -32,14 +39,14 @@ always contained and putting the registration between them:
                                         derived from the adapter's dispatch map
                                         intersected with the binding just landed.
 
-    3. the `positions_required` hunk     the Marketing Operations Coordinator at
+    3. the `positions_required` block    the Marketing Operations Coordinator at
                                         `auto_execute`. This is the block V31 reads, and
                                         it lands only once step 2 has put something in
                                         `forge_module_registry` for it to be read
                                         against.
 
     4. the read-back                     V31 is re-run. **If it comes back NOT_RUN, both
-                                        hunks are reverted and this exits non-zero**,
+                                        blocks are reverted and this exits non-zero**,
                                         because NOT_RUN after step 3 means the ordering
                                         failed in some way this script did not predict,
                                         and the state it would leave behind is the exact
@@ -57,7 +64,7 @@ With the binding landed and no rows yet, V6 FAILs: nine modules are declared and
 step 2 closes it seconds later. The alternative window - position first - produces V31
 NOT_RUN, which names a *missing measurement* where the truth is a *refused declaration*.
 Both windows show "Gate 2 blocked"; only one of them tells you which kind of problem you
-have. On any failure every hunk applied is reverted, so the window does not outlive the
+have. On any failure every block applied is reverted, so the window does not outlive the
 command.
 
 WHAT IT WRITES, AND WHY THAT FILE EXISTS
@@ -68,7 +75,7 @@ the position landed, with their `verification_method`, plus V31's verdict at tha
 
 It is not a log. `tests/validator/test_funnelforge_landing_order.py` fails if the Pack
 carries the position and this receipt does not account for every module the position
-operates - so a person who bypasses this script, `git apply`s the patch by hand and
+operates - so a person who bypasses this script, applies the plan by hand and
 commits it, gets a red build naming the rule. **That is the half of the enforcement git
 can see.** The database half is steps 1-4 above; the repository half is the receipt.
 
@@ -76,7 +83,7 @@ WHAT IT WILL NOT DO
 ===================
 
 It will not land the position while V31 would refuse it *for a reason of substance*, and
-it does not try to. A V31 FAIL after step 3 is reported and the hunks are KEPT: a refusal
+it does not try to. A V31 FAIL after step 3 is reported and the blocks are KEPT: a refusal
 naming seven `at_most_once` sends under an unattended tier is the finding P-13 built this
 binding to produce, and reverting it would be hiding the answer. Whether that Pack state
 is one anybody should commit is a decision for a human, and this script says so rather
@@ -88,6 +95,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import re
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -103,76 +111,98 @@ from generators.validator import validate  # noqa: E402
 
 FORGE_ID = "funnelforge"
 PACK_PATH = ROOT / "packs" / "burkham-wickmont.draft.yaml"
-PATCH_PATH = ROOT / "docs" / "plans" / "funnelforge-position-DEFERRED.patch"
+PLAN_PATH = ROOT / "docs" / "plans" / "funnelforge-position-PLAN.md"
 RECEIPT_PATH = ROOT / "docs" / "plans" / "funnelforge-landing-receipt.json"
 REGISTER = ROOT / "scripts" / "register_funnelforge_modules.py"
 
-#: The two hunks, told apart by content rather than by position in the file. A hunk
-#: header's line numbers move whenever the Pack above them changes; the text a hunk adds
-#: does not, and picking hunks by `@@` offsets would be a splitter that silently swapped
-#: the two the first time somebody inserted a position earlier in the Pack.
+#: The two blocks, told apart by content rather than by order in the document. Picking
+#: them by position would swap them the first time somebody reorders the plan.
 BINDING_MARKER = f"- forge: {FORGE_ID}"
 POSITION_MARKER = "position_title: Marketing Operations Coordinator"
+
+#: Each block names the Pack line it is inserted ABOVE. An anchor is one whole line, and
+#: the script refuses unless it appears exactly once - which is a stronger guarantee than
+#: a diff's three lines of context, and the reason this replaced a `.patch`. Context goes
+#: stale silently whenever the Pack changes nearby; a missing or duplicated anchor stops.
+ANCHORS = {
+    BINDING_MARKER: "  external_software:",
+    POSITION_MARKER: "capacity_demand:",
+}
+
+#: ```yaml fences in the plan, in document order.
+_BLOCK = re.compile(r"^```yaml$(.*?)^```", re.M | re.S)
 
 
 class LandingError(RuntimeError):
     """Something is not true that has to be true. The message is for a person."""
 
 
-# ------------------------------------------------------------------ patch splitting
+# ------------------------------------------------------------------ plan reading
 
 
-def split_hunks(patch_text: str) -> tuple[str, str]:
-    """(binding-only patch, position-only patch), each a complete applicable patch.
+def split_hunks(plan_text: str) -> tuple[str, str]:
+    """(binding block, position block), each a chunk of Pack YAML ready to insert.
 
-    Pure, so `tests/validator/test_funnelforge_landing_order.py` can assert the split
-    is faithful - every added line of the original appears in exactly one half - without
-    a repository or a database.
+    Named `split_hunks` still because it answers the same question the patch splitter
+    did - which of the two edits is which - and `tests/validator/
+    test_funnelforge_landing_order.py` asserts the split is faithful without needing a
+    repository or a database. Pure, for the same reason.
     """
-    lines = patch_text.splitlines()
-    header: list[str] = []
-    hunks: list[list[str]] = []
-    for line in lines:
-        if line.startswith("@@"):
-            hunks.append([line])
-        elif hunks:
-            hunks[-1].append(line)
-        else:
-            header.append(line)
+    blocks = [m.group(1) for m in _BLOCK.finditer(plan_text)]
 
     def select(marker: str) -> str:
-        chosen = [h for h in hunks if any(marker in ln for ln in h if ln.startswith("+"))]
+        chosen = [b for b in blocks if marker in b]
         if len(chosen) != 1:
             raise LandingError(
-                f"expected exactly one hunk adding {marker!r} in {PATCH_PATH.name}, "
-                f"found {len(chosen)}. The patch has been edited into a shape this "
-                "splitter cannot read; land it by hand in the order B39 states, or fix "
-                "the splitter - do not apply the whole patch to get past this."
+                f"expected exactly one ```yaml block containing {marker!r} in "
+                f"{PLAN_PATH.name}, found {len(chosen)}. The plan has been edited into a "
+                "shape this reader cannot parse; land the two edits by hand in the order "
+                "B39 states, or fix the reader - do not apply both at once to get past "
+                "this."
             )
-        return "\n".join(header + chosen[0]) + "\n"
+        return chosen[0]
 
     return select(BINDING_MARKER), select(POSITION_MARKER)
 
 
-def _apply(patch_text: str, *, reverse: bool = False) -> None:
-    args = ["apply", "--verbose"] + (["-R"] if reverse else [])
-    # Bytes, with text mode off. Python's text mode rewrites every line ending to CRLF
-    # when writing to a pipe on Windows, and `git apply` compares context lines byte for
-    # byte - so a text write would hand it a CRLF patch and it would refuse the whole
-    # thing with "patch does not apply". That is the same failure `.gitattributes` now
-    # pins `*.patch text eol=lf` to prevent on checkout; this is the other end of it.
-    proc = subprocess.run(
-        ["git", *args, "-"],
-        cwd=ROOT,
-        input=patch_text.encode("utf-8"),
-        capture_output=True,
-        check=False,
-    )
-    if proc.returncode != 0:
+def _apply(block: str, *, reverse: bool = False) -> None:
+    """Insert `block` above its anchor in the Pack, or remove it again.
+
+    Text insertion at a named anchor rather than `git apply`, and that is the whole
+    change: a diff matches three lines of context and fails - or worse, applies at the
+    wrong offset - whenever the Pack shifts near them. An anchor is one line, required to
+    appear exactly once, and a Pack that no longer contains it stops the script with a
+    message rather than producing a subtly wrong Pack.
+    """
+    marker = BINDING_MARKER if BINDING_MARKER in block else POSITION_MARKER
+    anchor = ANCHORS[marker]
+    text = PACK_PATH.read_text(encoding="utf-8")
+
+    if reverse:
+        if block not in text:
+            raise LandingError(
+                f"cannot revert the {marker!r} block: it is not in the Pack as written. "
+                "Something edited it between applying and reverting, so removing it "
+                "automatically would guess at what to take out. Revert the Pack by hand."
+            )
+        PACK_PATH.write_text(text.replace(block, "", 1), encoding="utf-8")
+        return
+
+    if block in text:
         raise LandingError(
-            f"git apply{' -R' if reverse else ''} failed ({proc.returncode}): "
-            f"{proc.stderr.decode('utf-8', 'replace').strip()}"
+            f"the {marker!r} block is already in the Pack. Landing it twice would "
+            "declare it twice; if a previous run half-completed, revert it by hand "
+            "first so the state this script starts from is the one it reports."
         )
+    hits = [ln for ln in text.splitlines() if ln == anchor]
+    if len(hits) != 1:
+        raise LandingError(
+            f"anchor {anchor!r} appears {len(hits)} times in {PACK_PATH.name}; it must "
+            "appear exactly once. The Pack's shape moved - update the anchor in "
+            f"{PLAN_PATH.name} deliberately rather than making this script guess."
+        )
+    spaced = block.rstrip() + "\n\n" + anchor
+    PACK_PATH.write_text(text.replace(anchor, spaced, 1), encoding="utf-8")
 
 
 # ---------------------------------------------------------------------- the checks
@@ -214,8 +244,8 @@ async def _v31(conn):
 
 
 async def run(confirm: bool) -> int:
-    if not PATCH_PATH.exists():
-        print(f"{PATCH_PATH.name} is gone. Nothing to land.")
+    if not PLAN_PATH.exists():
+        print(f"{PLAN_PATH.name} is gone. Nothing to land.")
         return 1
 
     if _pack_carries_position():
@@ -228,7 +258,7 @@ async def run(confirm: bool) -> int:
         return 1
 
     binding_patch, position_patch = split_hunks(
-        PATCH_PATH.read_text(encoding="utf-8")
+        PLAN_PATH.read_text(encoding="utf-8")
     )
 
     async with connection() as conn:
