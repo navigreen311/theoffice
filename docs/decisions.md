@@ -4083,3 +4083,119 @@ The fix is one line: print both. `"Sable Quint (village_agent_ref=...)"`.
 output nobody could act on is the same control whose cascade nobody could reverse, and the two
 belong together. A control that writes 54 rows should be as readable before it runs as it is
 auditable afterwards.
+
+---
+
+## 59. Two real people, and a reviewer capacity computed from four
+
+**Declared 2026-09-13 by Ivan as a standing fact, then audited against every Pack. Recorded as a
+class rather than as a finding about one name, because naming Dana would suggest the other three
+were checked.**
+
+### The standing fact
+
+**Ivan Green and Ira Green are the only real people.** Every other name appearing as a reviewer in
+any Business Pack is invented. This is a fact about the world, not a defect report, and it is
+recorded here so that every number derived from a `human_capacity` block can be read against it.
+
+### Every name in every human_capacity block, both ventures
+
+    GREENSTONE
+      Ivan    venture_operator     6h   median 4    backup_human: Dana
+      Dana    compliance_officer   4h   median 6    backup_human: Ivan     INVENTED
+
+    BURKHAM WICKMONT
+      Ivan Green   compliance_officer   6h   median 4   backup_human: Ira Green
+      Ira Green    compliance_officer   6h   median 3   backup_human: Ivan Green
+
+**Four entries, two people.** Greenstone's "Ivan" and Burkham's "Ivan Green" are the same person
+under two spellings, and neither Pack's entry is joined to an account by anything.
+
+### Everything else in a Pack that names a human
+
+    backup_human          4 occurrences. Dana(1), Ivan(1), Ira Green(1), Ivan Green(1).
+                          One of the four names an invented person, and V14 does not care -
+                          it checks the field is non-empty and nothing else. Burkham's own
+                          Pack says so in its provenance: V14 "passes here on exactly the
+                          arrangement it looks like it exists to catch" (B24).
+    provenance.           4 occurrences, all "Ivan"/"Ivan Green". Real.
+      established_by
+    authored_by           a uuid on Pack versions, resolved against office_human. Real.
+    workflow blocks       no human is named. Steps carry a position title and a role
+                          string; no step names a person.
+    signoff / reviewer    no Pack field names a signer. Gate 10 resolves a signer from
+      refs                the authenticated account, not from the Pack.
+
+So the Pack's entire human surface is `human_capacity[].human_name`, its `backup_human`, and
+`provenance.established_by`. **Three of those ten values name somebody who does not exist**, and
+all three are Dana.
+
+### The accounts that actually exist
+
+    office_human rows        232
+      origin = 'test_fixture'  231
+      origin = 'human'           1   Ivan <ivannextlevel@yahoo.com>, role `ivan`
+
+    holders of `compliance_officer`   ZERO. No account in this system holds it.
+    holders of `venture_operator`     107, every one a test fixture
+    holders of `ivan`                 125 - one real, 124 fixtures
+
+**There is one real account in The Office, and the role both Packs route every approval to has no
+holder at all.**
+
+### So what is Greenstone's V13?
+
+Neither a fail against a fiction nor something that cannot be computed. **It computes cleanly, and
+its supply side refers to nobody.**
+
+    projected approvals     160 to compliance_officer  (192 before place_call was removed)
+    Dana's coverage         4h x 60 x 0.6 = 144 minutes
+    demand                  160 x 6 = 960 minutes
+    verdict                 FAIL, "7 times over"
+
+Every one of those numbers is arithmetic on a Pack field. **V13 reads `pack.human_capacity` and
+never joins `office_human`** - it has no way to ask whether Dana exists, and it does not ask. The
+FAIL is real in the sense that the arithmetic is right, and meaningless in the sense that removing
+Dana entirely would change the verdict from FAIL to a different FAIL, never to a truth.
+
+**The same is true of Burkham's PASS, and that is the sharper half.** 280 minutes demanded against
+432 available - and the 432 is 12 coverage-hours declared by two `human_capacity` entries, neither
+of which is joined to an account. Ivan's real account holds `ivan`, not `compliance_officer`; Ira
+has no account at all. **The V13 PASS reviewed at Gate 4 rests on a denominator supplied entirely
+by the Pack asserting it.**
+
+This is B22, which has been open since before this week and reads: *"a venture can clear every
+gate to 10 with a reviewer who has no account."* It is no longer hypothetical - a venture has now
+cleared Gate 4.5 on exactly that arrangement.
+
+### Is a second top-level holder expressible? Yes, and the design says so out loud
+
+**`ivan` is a role key, not an account id.** The constraint is explicit:
+
+    office_human_role_role_check
+      CHECK (role = ANY (ARRAY['venture_operator', 'compliance_officer', 'ivan']))
+    ROLE_RANK = {"venture_operator": 1, "compliance_officer": 2, "ivan": 3}
+
+**It is not singular by construction**, and three separate pieces of evidence say so:
+
+**The unique index is on the wrong axis to make it singular.**
+`ux_human_role_live (human_id, role, COALESCE(venture_id,'*')) WHERE revoked_at IS NULL` prevents
+*one person holding one role twice*, not *two people holding one role*. 125 rows hold `ivan` right
+now.
+
+**`assert_may_grant` carves out the top role deliberately.** Its rule is *strictly stronger,
+except at the top* - and the docstring explains that applying it literally would make `ivan`
+"ungrantable and unremovable by anybody", which it calls "not a restriction, it is a single point
+of failure with no recovery." **The second holder is the case the exception exists for.**
+
+**The one bar that does apply is that nobody grants themselves**, including `ivan`. Ivan granting
+Ira is somebody else granting somebody else, which is exactly the shape the rule wants.
+
+So a second co-equal administrator is expressible, anticipated, and two function calls:
+`create_human` (which returns a plaintext token once and never stores it, and stamps
+`origin='human'` from the name and address) then `grant_role(role='ivan', venture_id=None)`.
+
+**The finding is not that the system assumes one top-level human.** It is the opposite: the system
+was built for two and has been running on one, while 124 test fixtures hold the same top role and
+`compliance_officer` - the role that actually does the reviewing in both Packs - has never been
+held by anybody.
