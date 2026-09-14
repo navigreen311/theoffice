@@ -4705,3 +4705,92 @@ supports.
 and why the FK that would have refused the truncation is still the first fix. Recorded separately
 from Gate 9's ruling because it is true regardless of what is decided there: **anybody reaching
 for "just re-provision" should know it changes one column.**
+
+---
+
+## 69. Revocation has no grant-level granularity, so retiring a superseded grant always stops its replacement
+
+**The structural fact underneath two separate mistakes, recorded 2026-09-14 after the second one
+was found and lifted.**
+
+### The fact
+
+`revocation` has these columns and not one more that matters here:
+
+    revocation_id, scope, office_agent_id, forge_id, module_id, venture_id,
+    reason, revoked_by, revoked_by_role, revoked_at, reinstated_at,
+    reinstated_by, reinstatement_reason, blast_radius, reinstatement_second_human
+
+**There is no `grant_id`.** A revocation names a *triple* - `(agent, forge, module)` - at its
+narrowest scope, and `agent_forge_grant` has no uniqueness constraint on that triple. So the
+narrowest stop the system can express is still wider than the object somebody usually has in
+mind.
+
+**Where 49 grants occupy 19 triples, a revocation aimed at one row lands on three.**
+
+### Both mistakes are the same mistake
+
+    11 Sept 13, 12:02   sync_roster, agent scope, 11 revocations
+                        intended: stop agents who departed
+                        actually: stopped agents who had not departed, because the
+                        roster it read was a test fixture (entry 47)
+
+     9 Sept 13, 15:44   Ivan, agent_module scope, 9 revocations
+                        intended: stop superseded bootstrap grants
+                        actually: stopped every grant on those triples, including
+                        NINE Gate 5 grants for modules the Pack operates -
+                        client_read, client_read_pii, statement_pull,
+                        portfolio_health, restack_recommend,
+                        compliance_manifest_assemble
+
+**Both are a revocation doing more than its author meant because it names a broader object than
+the one in mind.** In the first the breadth was the agent; in the second it was the triple. In
+neither case did the system object, because in both cases the revocation did exactly what a
+revocation at that scope does.
+
+**The author of the second was Ivan, and the read caught it rather than the system.** That is
+worth stating plainly: the nine sat live for a day, covering 27 grants, and nothing anywhere
+reported that nine of them were live Gate 5 grants the Pack depends on. It surfaced only because
+a read was run before a third revocation was issued on top of them.
+
+### Why the obvious next act was impossible
+
+The act under consideration was retiring the 30 superseded duplicates by revoking them. **It
+cannot be done.** Every one of the 30 shares a triple with a Gate 5 grant, and a revocation
+addressing that triple stops both. Retiring the old row *is* stopping the new one - not as a side
+effect, but as the same operation, because the vocabulary has no way to distinguish them.
+
+Measured before ruling: of the 15 duplicated triples, **nine were already covered** by the
+September 13 revocations, and on all nine every row read `covered=True`, the inactive Gate 5
+grant included. A second revocation would have been a duplicate row over an identical grant set -
+`covered_grants` is existence-based, so it would have changed nothing and added noise to an audit
+trail that had already misled once.
+
+### What the schema is missing, stated as a question rather than a design
+
+A grant can be **created**, **activated** and **revoked**. It cannot be **superseded** - and
+superseding is exactly what `runtime_config.apply` does to a bootstrap grant every time it writes
+a second row for the same triple, under a different `grant_id`, from a different writer. The
+schema invites the state and has no word for resolving it.
+
+`agent_forge_grant` carries `granted_at`, `activated_at` and a generated `is_assignable`, and no
+lifecycle column at all. `revoked_at` existed and was dropped by migration 0036 (B37). So the two
+mechanisms available are a revocation, which says *authority withdrawn* about rows holding none
+that can be exercised, and a `DELETE`, which says nothing at all and leaves no record.
+
+**Neither is honest**, and choosing between them is the open question. Recorded here rather than
+answered.
+
+### State after both lifts
+
+    revocations        agent 0 live / 11 lifted; agent_module 0 live / 9 lifted
+    grants covered     0 of 49
+    resolve_grant      15 triples -> GrantNotActivated   (Gate 11 has not run)
+                        4 triples -> NotCertified        (engineering, no certification)
+    callable now       ZERO
+    Gate 9             68 never_certified, 30 certified - UNCHANGED by any of this
+
+**Every revocation in this venture is now lifted and nothing is callable**, which is the correct
+state: the fifteen await Gate 11, the four await a certification, and Gate 9 still blocks on
+references to certifications that were deleted. Clearing the revocation layer changed what is
+*visible*, not what is *permitted*, and that was the point of clearing it.
