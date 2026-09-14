@@ -143,9 +143,17 @@ Insert into `positions_required`, immediately before the line `capacity_demand:`
     # dropped: a booking a human confirms is the act the position is for, and `propose`
     # is what a proposal-then-confirm looks like.
     #
-    # The ceiling above stays `auto_execute` and these override it per module, which is
-    # the same shape Burkham's five positions use. One ceiling over modules of two kinds
-    # is the thing per-module tiers exist to express.
+    # The ceiling above stays `auto_execute` and these override it per module. One
+    # ceiling over modules of two kinds is the thing per-module tiers exist to express.
+    #
+    # NINE ENTRIES RATHER THAN ONE, and the redundancy is the point. Only
+    # `schedule_blueprint_call` differs from the ceiling, so an override-only list would
+    # be one line and could not drift from it. What it could not do is tell a reader
+    # whether a module absent from the list is NOT OVERRIDDEN or NOT OPERATED - and those
+    # are different facts with the same appearance. Listing every operated module makes
+    # each tier readable at its own line, which is what Burkham's five positions do:
+    # every one lists every module it operates, including where the tier equals the
+    # ceiling (`capitalforge/record_consent: propose` under a `propose` ceiling).
     module_trust_tiers:
       funnelforge/send_intake_acknowledgment: auto_execute
       funnelforge/send_scheduling_confirmation: auto_execute
