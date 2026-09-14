@@ -4458,3 +4458,185 @@ The token was printed once and written nowhere; only its hash is stored.
 Pack's role string rather than a rank - so a second real administrator changes nothing about a
 denominator the Pack supplies by asserting it. **What changed is that the system now has two
 people who can act in it, and 124 test fixtures still hold the same top role.**
+
+---
+
+## 64. "All 34" was a count of grants, and lifting all of them would have undone yesterday's work
+
+**Recorded 2026-09-14 at Ivan's instruction, as a correction to his own ruling, caught in the
+gap between the ruling and the act.**
+
+The instruction was *"reinstate all 34 revocations."* There are **eleven**.
+
+    34   grants DISCOUNTED by revocations - the number Gate 7 reports
+    20   live revocations: 11 `agent` + 9 `agent_module`
+    11   the departure cascade, the set actually ruled on
+
+**34 is a grant count wearing a revocation's name**, and it had already been measured three
+times before the ruling used it - each time as the number of grants Gate 7 sets aside, never as
+a number of revocation rows.
+
+### Why "all" was the dangerous half, not "34"
+
+A miscount that reinstates too few is a short day's work. **This one would have reinstated too
+many.** The other nine live revocations are `agent_module`, issued by Ivan himself at 15:44 the
+previous day with `module_id` and `forge_id` populated - the deliberate stops on modules that no
+longer resolve.
+
+**The discriminator in the ruling excludes them by its own logic.** Ivan's stated reason for
+lifting was that *a revocation asserting a fact about the world that did not occur is the thing
+being corrected* - the eleven each claim the agent "is no longer in the Village roster", and that
+was false when written. **The nine make no claim about the world at all.** They name a module and
+stop it. There is nothing in them to be false.
+
+So "all" would have lifted, in the same transaction and under the same reason text, nine
+revocations whose reason text does not match that reason. **They were left standing**, and this
+entry exists so that the gap between what was said and what was done is on the record rather than
+inferred from a count.
+
+---
+
+## 65. Recognition had a way back that had been used. Authority had one that had never run
+
+**The finding the reinstatement exposed, recorded 2026-09-14.**
+
+    office_identity_reinstated       54 events, all at 15:37 on 13 September 2026
+    identity status now              54 active, 0 suspended
+    revocations reinstated           0 of 20 - `revocation.reinstate` had NEVER been called
+    the eleven revoked agents         all 11 held an ACTIVE identity throughout
+
+**Eleven agents held an active identity and a live revocation at the same time, for three days.**
+The Office recognised them and refused them. Entry 51 built `roster.reinstate_identity` because
+the suspension half of the departure cascade had no inverse; what it did not say is that the
+other half had an inverse nobody had ever exercised.
+
+**Two doors, both built, one worn and one unopened.** `revocation.reinstate` has existed since
+before this week: named human, documented reason, same authority as revoking at that scope, a
+second human at the wide scopes, all NOT NULL-checked by the schema so that *"a reinstatement
+cannot be an anonymous UPDATE."* Complete, tested, and never used on a real row until today.
+
+**A path that has never run is a path nobody has checked.** It worked - eleven rows, first
+attempt - but that was not knowable in advance, and it is the shape entry 51 recorded from the
+other side: an absence that stays invisible until the day somebody needs the door.
+
+The asymmetry is not that one half lacked a mechanism. **It is that one half was reversed and the
+other was not**, for three days, while both mechanisms existed and only one had ever been
+touched.
+
+---
+
+## 66. What the reinstatement is, and what it is not
+
+**Ruled 2026-09-14 by Ivan. Recorded because the act it most resembles is one the system is built
+to refuse.**
+
+### What it is not
+
+`tests/contract/test_departure_revokes.py::test_a_returning_agent_does_not_get_their_grants_back`
+is **correct and this is not its case.** That test protects a real departure followed by a real
+return: somebody left, lost their authority, came back, and must not find their grants waiting.
+Entry 51's docstring says the same thing at length - *reinstating an identity is not re-granting
+authority*, because the two are one keystroke apart.
+
+**Nobody departed here.** The eleven revocations were written by `sync_roster` against a roster
+the Village had never supplied, in the run recorded as entry 47. The control read its input
+correctly and its input was false.
+
+### What it is
+
+**A correction to an assertion about the world, not to the authority that acted on it.** Each of
+the eleven rows says the agent *"is no longer in the Village roster."* That sentence was untrue
+when it was written. Agent scope was the right scope, `sync_roster` was the right caller, the
+cascade is the right behaviour - and the fact it rested on did not happen.
+
+**And the system cannot tell the difference.** Measured before ruling:
+
+    the reason text          identical across all 11 but for the name. Records the
+                             mechanism faithfully and the provenance not at all
+    blast_radius             10 keys, every one about EFFECT - agents, grants, ventures,
+                             in_flight_calls, shifts_today. Nothing about which roster,
+                             which sync run, or that 186 agents departed at once
+    the audit trail          `village_roster_imported` fired twice that day; the row
+                             records that an import happened, not what it contained
+    the reinstatement        `reinstate_identity` audits the act and the reason, and
+      record                 carries no marker distinguishing a correction from a return
+
+**Nothing in the revocation rows, the audit trail or the reinstatement records says which kind of
+cascade this was.** The only evidence that these were erroneous lives outside the database.
+
+**So this is a judgment with a name attached, and it is recorded as one.** The reason written onto
+all eleven rows says so in terms: the cascade's origin, that no agent departed, that the 54
+identities were reinstated on 13 September and these are the other half of the same correction,
+and that nothing in the system distinguishes the two cases. A reader finding these rows in a year
+gets the reasoning, not just the outcome - which is the most the system can offer, because the
+check it would need does not exist.
+
+---
+
+## 67. Nineteen triples, forty-nine grants, and thirty that can never be selected
+
+**The larger finding, and it only surfaced once the revocation layer was cleared out of the
+way.**
+
+    grants for burkham-wickmont              49
+    DISTINCT (agent, forge, module) triples  19
+
+`resolve_grant` selects one row per triple:
+
+    WHERE g.office_agent_id = %s AND g.forge_id = %s
+      AND g.module_id = %s AND g.venture_id = %s
+    ORDER BY g.granted_at DESC
+    LIMIT 1
+
+**The newest row wins, and the newest rows are the fifteen Gate 5 issued at 17:18 - all
+inactive.** Every older grant sharing a triple with one of them is unreachable: it cannot be
+selected at any tier, by any caller, ever, while the newer row exists. Measured after the
+revocations were lifted:
+
+    15 inactive   -> GrantNotActivated     correct; Gate 11 has not run
+    30 activated  -> GrantNotActivated     the NEWER row answered, not these
+     4 activated  -> NotCertified          the only triples with no newer duplicate
+
+**Thirty activated grants are permanently unreachable and nothing anywhere says so.** They are
+not revoked - the revocation table is now clear of them. They are not expired; there is no such
+state. They are not marked superseded; there is no such column. `agent_forge_grant` has no
+uniqueness constraint on the triple, so two live rows for one triple is a legal state the schema
+invites.
+
+**A grant that can never be selected looks identical to one that is simply not chosen yet.** Both
+are rows with `activated_at` set, a valid tier, and resolvable columns. The only difference is
+that a newer sibling exists, and nothing reports siblings.
+
+### What would have caught it: nothing
+
+There is no constraint, no validator rule, no gate and no test that counts grants per triple.
+V31 reads the registry; Gate 7 reads revocations; Gate 9 reads certification refs. **None of them
+asks how many grants exist for one (agent, forge, module).** The duplicate rows pass every check
+because every check is asking a different question.
+
+### Why it surfaced today and not on any previous day
+
+**Because the revocation layer was masking it.** Until this morning all 49 grants were covered by
+a live revocation, so every `resolve_grant` call refused at the revocation check before reaching
+the activation check - and every grant, reachable or not, produced the same refusal. Lifting the
+eleven cascade revocations dropped coverage from 49 to 27 and let the calls run far enough to
+show which row actually answers.
+
+**Clearing one layer is how the layer beneath it becomes legible.** The same shape as entry 52,
+where nine certifications changing tier left the artifact hash unmoved: a defect underneath a
+sufficient blocker is invisible for exactly as long as the blocker holds.
+
+### Where the duplicates come from
+
+Two writers, two id schemes, no reconciliation. `runtime_config.apply` derives a deterministic
+`grant_id` from (venture, agent, forge, module) and upserts on it; `bootstrap_phase0` writes its
+own grant with its own id for the same triple. Neither knows about the other, and the table
+permits both.
+
+**`apply`'s upsert is also narrower than it looks:**
+
+    ON CONFLICT (grant_id) DO UPDATE SET trust_tier = EXCLUDED.trust_tier
+
+Only the tier is refreshed. A re-run updates the tier of a grant it already owns and **does not
+refresh its certification refs** - which is why re-running the pipeline would not repair a single
+one of the 34 dangling refs at Gate 9.
