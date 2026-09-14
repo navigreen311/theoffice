@@ -4283,3 +4283,84 @@ administrator. This entry records the cost so that decision can be made on measu
 
 What is decided is the narrower fact: **`ivan` names a rank, a second holder is legitimate, and
 anybody reading an audit row or an access screen after today should read it that way.**
+## 61. The tier test has a sibling, and the sibling had eight copies to compare rather than two
+
+**Built 2026-09-13 at Ivan's instruction, as the acknowledged sibling of
+`tests/contract/test_tier_vocabulary_agrees.py`. Recorded because the count found while
+building it is larger than the count that motivated it.**
+
+Entry 60 named four copies of the role vocabulary. **Measured while writing the test, it is
+five - and a second vocabulary, the scope-to-authority mapping, is written down three more
+times.**
+
+    THE ROLE VOCABULARY                     5 copies
+      office_human_role_role_check          the database's copy
+      revocation_revoked_by_role_check      the database's SECOND copy, found while writing
+      broker.revocation.ROLE_RANK           the source of the hierarchy
+      console/app/access/forms.tsx  ROLES   hardcoded, renders the grant form's dropdown
+      console/app/access/people.tsx         hardcoded, renders the filter dropdown
+
+    THE SCOPE-TO-AUTHORITY MAPPING          3 copies
+      broker.revocation.SCOPE_MIN_ROLE      the rule that is enforced
+      console/app/revocations/form.tsx      SCOPES[].authority
+      console/app/revocations/page.tsx      SCOPES[].authority
+
+**Nothing compared any of the eight.** `tests/contract/test_role_vocabulary_agrees.py` now
+compares all of them, reading each out of where it lives rather than restating it.
+
+### Three drift costs, and they are not the same cost
+
+**A role in `ROLE_RANK` and absent from the console is ungrantable, silently.** The grant form
+renders `ROLES`; a role missing from that array has no option in the dropdown. The API accepts
+it, the UI never offers it, and the only route to holding it is a direct database write - which
+is precisely what every rule in `assert_may_grant` exists to prevent. This is the case entry 60
+predicted and the reason the test was asked for.
+
+**A role in `ROLE_RANK` and absent from a CHECK fails at write time**, mid-grant, as a raw
+`IntegrityConstraintViolation` out of `grant_role`. Late-reporting, the shape entry 42 and the
+tier test both record - and now doubled, because `revocation_revoked_by_role_check` is a second
+constraint that can drift independently. **A role addable to `office_human_role` and not to
+`revocation` is a role somebody can hold and cannot revoke with.**
+
+**A drifted `authority` in the revocations console does not crash, and is the worst of the
+three.** That page tells an operator which role may revoke at each scope, printed beside the
+button that does it. Drift one way promises an authority the server refuses; the other way
+under-states what a scope requires, and somebody plans around a restriction that is not there.
+**No exception is raised in either direction - a person is simply told something untrue about a
+destructive action.**
+
+### Read, not restated - including the TypeScript
+
+A test that hard-coded the three names would pass while every copy drifted together, which is the
+failure it exists to prevent. So the constraints come out of `pg_constraint`, the constants by
+import, and the console arrays out of the TSX source, parsed.
+
+**Parsing a TypeScript literal from a Python test is crude and it is the crude thing that reads
+the file the browser actually gets.** Each pattern is anchored on something specific to its file -
+`const ROLES = [...]`, `[...].map((role)`, `scope: "x" ... authority: "y"` - rather than on
+"an array", because a loose pattern that matched some other array would compare the wrong thing
+and still pass. Each also asserts its pattern matched at all, so a rewritten console fails the
+test rather than quietly comparing nothing.
+
+### Verified by breaking it
+
+**A test that has never failed proves nothing**, so both directions were checked against
+deliberate drift before the test was committed:
+
+    removed "ivan" from forms.tsx ROLES
+      -> access/forms.tsx does not offer ['ivan']. The role exists and the console cannot
+         grant it, so the only route to holding it is a direct database write.
+
+    changed venture-scope authority to venture_operator in revocations/page.tsx
+      -> revocations/page.tsx tells the operator that 'venture' revocation requires
+         'venture_operator'; the server enforces 'compliance_officer'. This one does not
+         crash - it misinforms somebody standing in front of a destructive action.
+
+Both files restored; the test passes 6 of 6 against the tree as it stands.
+
+### What this does not do
+
+It does not rename `ivan`, and it makes the rename no easier or harder. Entry 60 measures that
+cost and Ivan has reserved the decision. What this test changes is that the five copies can no
+longer disagree *silently* - which is a precondition for a rename rather than a substitute for
+one, because a rename is exactly the operation that would leave copies disagreeing.
