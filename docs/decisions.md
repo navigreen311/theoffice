@@ -4640,3 +4640,68 @@ permits both.
 Only the tier is refreshed. A re-run updates the tier of a grant it already owns and **does not
 refresh its certification refs** - which is why re-running the pipeline would not repair a single
 one of the 34 dangling refs at Gate 9.
+
+---
+
+## 68. Re-provisioning refreshes the tier and leaves the certification refs exactly as they were
+
+**Recorded 2026-09-14. The cheap fix for Gate 9 does not work, and nothing anywhere says so.**
+
+`generators/runtime_config.apply` writes a grant's two certification references as subselects,
+resolved against the certification table **at INSERT time**:
+
+    operation_cert_ref    = (SELECT cert_id FROM certification
+                              WHERE unit='A' AND office_agent_id=… AND forge_id=… AND module_id=…)
+    dept_context_cert_ref = (SELECT cb.cert_id FROM certification cb
+                              JOIN office_agent_identity i ON i.department = cb.department
+                              WHERE cb.unit='B' AND i.office_agent_id=… AND cb.forge_id=…)
+
+And then, one line later:
+
+    ON CONFLICT (grant_id) DO UPDATE SET trust_tier = EXCLUDED.trust_tier
+
+**Only the tier.** A second `apply` against a grant that already exists refreshes its trust tier
+and touches nothing else - not the certification refs, not `granted_by`, not `granted_at`.
+
+### Why this matters right now
+
+Gate 9 blocks `4198c388` on 68 of 98 certification units, every one of them a reference to a
+`cert_id` that no longer exists. **The obvious remedy is to re-run the pipeline** - the refs were
+written by `apply`, `apply` resolves them from live certifications, so running it again should
+pick up the current rows.
+
+**It will not.** Every one of the 34 dangling refs belongs to a grant that already exists, so
+every one takes the `DO UPDATE` branch, and that branch sets `trust_tier` and returns. The run
+would report grants written, the tiers would be correct, and all 68 units would still read
+`never_certified`.
+
+**Measured:** the same subselects `apply` uses resolve today for **45 of the 49** grants - the
+four exceptions being the `engineering` agents with no certification to point at. The data to
+repair the refs is there and in reach of the system's own query. The upsert simply does not ask
+for it.
+
+### The shape
+
+`apply`'s docstring opens *"Write the config. Idempotent: re-running changes nothing and adds
+nothing"*, and it is telling the truth about the property it was written to guarantee - no
+duplicate rows, no duplicate side effects. **Idempotent is not the same as convergent.** Running
+it twice does not produce a second grant; it also does not bring an existing grant into agreement
+with the world it was derived from.
+
+The narrow upsert was almost certainly right when written: refreshing `granted_by` on a re-run
+would rewrite who granted something, and refreshing `granted_at` would erase when. The refs are
+the case that does not fit that reasoning - they are not history, they are pointers, and a
+pointer that is never refreshed is one that can only degrade.
+
+### What would have caught it: nothing
+
+There is no test asserting that a second `apply` reconciles cert refs, because there was no
+reason to write one until a certification's id could change - and until the table was truncated
+(entry 47), it never could. `record_result` upserts on the natural key, so a reissue preserves
+`cert_id`, and refs would have stayed valid forever under every path the system actually
+supports.
+
+**The gap is only reachable through a route nothing sanctions**, which is why it sat unnoticed
+and why the FK that would have refused the truncation is still the first fix. Recorded separately
+from Gate 9's ruling because it is true regardless of what is decided there: **anybody reaching
+for "just re-provision" should know it changes one column.**
