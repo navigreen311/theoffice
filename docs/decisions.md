@@ -5546,3 +5546,81 @@ artefact. Brina Arvane and Cedric Noren hold grants only here.
 Whatever resolves this has to account for her twice: a decision that `engineering` is residue in
 Burkham says nothing about what her Greenstone grants are, and a deletion scoped to one venture
 would leave the same agent in two states for the same reason.
+
+---
+
+## 73. Greenstone's `place_call` removal is held, and the reason is a test that would have no subject
+
+**Ruled 2026-09-14 by Ivan. Recorded as a decision rather than left in a stash, because it
+has been carried across three sessions and a fourth would make it an accident.**
+
+### What is held
+
+A stash on `coord/greenstone-remove-place-call`, nine files:
+
+    packs/greenstone.yaml                     place_call removed at 3 sites
+    7 golden snapshots                        re-recorded
+    tests/golden/test_generators.py           the authored-content end-to-end test,
+                                              re-anchored from place_call to
+                                              transcribe_call
+
+**The edit itself is correct and measured.** `voiceforge/place_call` is FORBIDDEN in
+`forge_module_exclusion` by a founder decision binding every venture - no agent may
+initiate an outbound call as principal - and the exclusion explicitly holds *"whether or
+not the module works."* Declaring it could never produce a usable grant. What it did
+produce was demand: projected approvals fall **192 -> 160** when it goes, which is the 32
+a day V13 was billing for a module no agent may ever call.
+
+`transcribe_call` stays. The same founder decision permits VoiceForge to assist a human on
+a call and forbids only dialling or speaking as one; removing both would over-apply the
+ruling.
+
+### Why it is held
+
+`tests/contract/test_packs_api.py::test_directory_reports_the_failing_rules_message_not_the_rule_name`
+asserts that V11's failure message **names** an excluded module:
+
+    # And the excluded module is NAMED, not silently absent. Silence would make an
+    # exclusion indistinguishable from coverage: a reader seeing every operated module
+    # accounted for cannot tell which were taught and which were refused.
+    assert "place_call" in failure["message"]
+
+**Once `place_call` leaves Greenstone's Pack there is no excluded module for the message
+to name**, so the test asserts a message that cannot exist. It is not a stale expectation
+and it is not collateral: it guards a real property - that an exclusion is visible rather
+than silently absent - and Greenstone's Pack was the only fixture supplying it.
+
+**That is the same shape as the exclusion test split out in #126**, where one venture's
+Pack was the sole coverage of `apply`'s excluded-module skip path and its own comment said
+*"nothing else here would notice."* Two controls, one accidental fixture, found one at a
+time by removing the module both depended on.
+
+### Why holding rather than pushing through
+
+Three routes were available and two are refused:
+
+    delete the assertion        a control quietly ceasing to report - entry 58's ruling
+    weaken it to "or absent"    the same, wearing a conditional
+    give it its own fixture     correct, and a third test-file rewrite
+
+The third is right and was not done at the end of a long session, which is the honest
+reason. **A fixture built deliberately is stronger than the one being removed**: today the
+property is tested only because a production Pack happens to declare a forbidden module,
+which is coverage by accident.
+
+### What holding costs, stated so it is not free
+
+Greenstone's V13 stays **8x over** rather than 7x - 192 approvals x 6 minutes = 1,152
+against Dana's 144. Neither figure passes, so the removal changes the size of a failure
+and not its verdict; that is why holding is affordable and why it is not urgent.
+
+**It does not fix Greenstone's V13 either way.** Dana is the only `compliance_officer` and
+Dana does not exist (entry 59); Ivan's six hours are invisible because V13 matches on the
+Pack's role string and he is `venture_operator`. The 32 approvals are real waste and the
+denominator is a fiction, and removing the waste leaves the fiction.
+
+### The entry numbers this displaces
+
+Two entries were planned as 73 and 74 - the artifact-staleness family, and the corrections
+count - and are now **74 and 75**. Written down rather than left as a reserved gap,
+because a gap in this ledger is the exact hazard one of those entries is about.
