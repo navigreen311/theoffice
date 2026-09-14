@@ -132,7 +132,29 @@ class AppointedAgent:
     agent_name: str
     department: str
     certified_modules: list[str]
-    certified_tier: str
+
+    #: The tier this agent operates each module at, keyed `forge_id/module_id`. The lower of
+    #: what the Pack declares for that module and what the agent is certified to.
+    #:
+    #: **This replaced a single `certified_tier` on 13 September 2026, and the property given up
+    #: is worth naming.** That field was the WEAKEST certified tier across every module the
+    #: position operated, capped by the position ceiling - so an agent certified `auto_execute`
+    #: on four modules and `propose` on a fifth operated all five at `propose`. A position-wide
+    #: floor, and a real safety default: one weak certification restrained everything beside it.
+    #:
+    #: **It is given up because it is the model per-module tiers exist to replace.** A position
+    #: is not one authority level. Keeping the floor meant the concept was declarable in a Pack,
+    #: storable in `agent_forge_grant`, enforceable by `resolve_grant` and certifiable by
+    #: `record_result` - and invisible at the one place V13 reads it, which made every
+    #: per-module declaration inert.
+    #:
+    #: **What replaces it is stricter per call, not looser.** The floor was one number applied
+    #: to a whole position; this is one number per module, enforced at the grant on every call
+    #: by `resolve_grant`, which raises `NotCertified` unless that module's own certification is
+    #: current. A module that should be restrained is restrained by its own tier rather than by
+    #: the weakest of its neighbours - and a module that should not be is no longer dragged down
+    #: by one.
+    certified_tiers: dict[str, str]
 
 
 @dataclass(frozen=True, slots=True)

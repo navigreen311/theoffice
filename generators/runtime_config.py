@@ -114,7 +114,10 @@ def generate(
                             #
                             # `_lower` rather than `min()` because these are ranked names, not
                             # numbers, and the ranking lives in one place.
-                            trust_tier=_lower(declared, agent.certified_tier or declared),
+                            trust_tier=_lower(
+                                declared,
+                                agent.certified_tiers.get(f"{forge}/{module}", declared),
+                            ),
                         )
                     )
         grants.sort(key=lambda g: (g.office_agent_id, g.forge_id, g.module_id))

@@ -88,8 +88,12 @@ def generate(
         for agent_id in holders:
             modules: list[str | None] = list(step.forge_modules) or [None]
             for module in modules:
+                forge = forge_of.get(module) if module else None
                 tier = _effective_tier(
-                    _declared_tier(position, module, forge_of), appointed, agent_id
+                    _declared_tier(position, module, forge_of),
+                    appointed,
+                    agent_id,
+                    f"{forge}/{module}" if forge and module else None,
                 )
                 if tier == "auto_execute":
                     continue  # acts on its own; asks nobody
@@ -134,7 +138,7 @@ _TIER_RANK = {"suggest": 1, "propose": 2, "auto_execute": 3}
 
 
 def _effective_tier(
-    declared: str, appointed: list[AppointedAgent], agent_id: str | None
+    declared: str, appointed: list[AppointedAgent], agent_id: str | None, key: str | None = None
 ) -> str:
     """The tier this work actually runs at: the LOWER of declared and certified.
 
@@ -154,10 +158,18 @@ def _effective_tier(
     """
     for a in appointed:
         if a.office_agent_id == agent_id:
+            # This module's own certified tier. `certified_tiers` replaced a position-wide
+            # scalar on 13 September 2026 - reading that scalar here is what made every
+            # per-module declaration inert, because one `propose` module set the floor for
+            # every `auto_execute` one beside it.
+            certified = a.certified_tiers.get(key or "") if key else None
+            if certified is None:
+                # No entry for this module: it is not one this agent was appointed for, so
+                # the declaration stands uncapped. Falling back to the weakest of the map
+                # would reintroduce the floor this change removed.
+                return declared
             return (
-                declared
-                if _TIER_RANK[declared] <= _TIER_RANK[a.certified_tier]
-                else a.certified_tier
+                declared if _TIER_RANK[declared] <= _TIER_RANK[certified] else certified
             )
     return declared
 

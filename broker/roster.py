@@ -329,6 +329,107 @@ async def issue_identity(
     return office_agent_id
 
 
+async def reinstate_identity(
+    conn: AsyncConnection,
+    village_agent_ref: str,
+    *,
+    human: humans.Human,
+    reason: str,
+) -> uuid.UUID:
+    """Return a suspended Office identity to active. A named human, with a reason.
+
+    **REINSTATING AN IDENTITY IS NOT RE-GRANTING AUTHORITY, and the two are separate on
+    purpose.** An identity is recognition - The Office knows who this agent is and may appoint
+    them. A grant is authority - this agent may call this module on this Forge. They were
+    always different facts in different tables, and a departure cascade collapses them only in
+    one direction: `sync_roster` suspends the identity AND revokes the grants, because somebody
+    who has left should lose both.
+
+    Coming back is not the mirror of leaving. `test_a_returning_agent_does_not_get_their_grants_
+    back` holds the rule, and this function respects it by touching nothing but `status`:
+
+      * grants are not re-issued, un-revoked, or looked at;
+      * revocations recorded by the departure stay recorded and stay in force;
+      * certifications, which reference `office_agent_id`, are untouched and stay valid,
+        because the id does not change.
+
+    So a reinstated agent is appointable and holds exactly the authority it held a moment ago,
+    which after a departure is none. Re-granting is `runtime_config.apply` at the end of a
+    provisioning run, or `bootstrap_phase0`, and both are deliberate acts with their own gates.
+
+    WHY THIS EXISTS AT ALL
+    ======================
+
+        `office_agent_identity.status` had exactly one writer - `sync_roster`, writing
+        `'suspended'` - and no path back. `revocation` has `reinstate`; grants have a
+        documented way back through it; identities had a one-way door.
+
+        That is a design gap rather than a missing script: a departure cascade whose every
+        other half is reversible, with one half that is not. It surfaced when 54 identities
+        were suspended by a control working correctly on false input, and at that point the
+        only repairs available were deleting rows that certifications reference, or an
+        unattributed UPDATE on a governance table.
+
+        See decisions.md entry 51.
+    """
+    if not reason.strip():
+        raise RosterError(
+            "reinstating an identity requires a reason. A suspension is a recorded act and "
+            "undoing one without saying why leaves the record describing a state that no "
+            "longer holds, with nothing explaining the difference."
+        )
+    humans.authorize(human, required_role="venture_operator")
+
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT i.office_agent_id, i.status, i.department, v.status AS village_status "
+            "FROM office_agent_identity i "
+            "LEFT JOIN village_agent v ON v.village_agent_ref = i.village_agent_ref "
+            "WHERE i.village_agent_ref = %s",
+            (village_agent_ref,),
+        )
+        row = await cur.fetchone()
+        if row is None:
+            raise RosterError(
+                f"{village_agent_ref} holds no Office identity. Reinstatement returns an "
+                "existing identity to active; issuing a new one is `issue_identity`."
+            )
+        if row["status"] == "active":
+            raise RosterError(
+                f"{village_agent_ref} is already active. Refused rather than treated as a "
+                "no-op: a reinstatement that reports success without changing anything is a "
+                "record of an act that did not happen."
+            )
+        # The Village is the authority on who exists. Reinstating an agent it still reports as
+        # departed would re-make the appointable colleague `issue_identity` refuses to invent.
+        if row["village_status"] != "active":
+            raise RosterError(
+                f"{village_agent_ref} is {row['village_status'] or 'absent'} in the Village "
+                "roster. Sync the roster first: an identity active in The Office and departed "
+                "in the Village is the disagreement this refusal exists to prevent."
+            )
+
+        await cur.execute(
+            "UPDATE office_agent_identity SET status = 'active' "
+            "WHERE village_agent_ref = %s AND status <> 'active'",
+            (village_agent_ref,),
+        )
+    await conn.commit()
+
+    await audit.write_event(
+        event_type="office_identity_reinstated",
+        actor_type="human", actor_id=human.human_id, venture_id=None,
+        subject={
+            "office_agent_id": str(row["office_agent_id"]),
+            "village_agent_ref": village_agent_ref,
+            "department": row["department"],
+            "reason": reason,
+            "grants_reissued": False,
+        },
+    )
+    return uuid.UUID(str(row["office_agent_id"]))
+
+
 async def register_village_agent(
     conn: AsyncConnection,
     *,
@@ -633,4 +734,5 @@ __all__ = [
     "issue_identity",
     "parse_roster",
     "register_village_agent",
+    "reinstate_identity",
 ]

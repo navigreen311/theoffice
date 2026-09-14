@@ -9,7 +9,11 @@
             "place_call",
             "property_lookup"
           ],
-          "certified_tier": "auto_execute",
+          "certified_tiers": {
+            "cre-forge/comp_analysis": "auto_execute",
+            "cre-forge/property_lookup": "auto_execute",
+            "voiceforge/place_call": "auto_execute"
+          },
           "department": "research",
           "office_agent_id": "11111111-1111-5111-8111-111111111111"
         },
@@ -20,7 +24,11 @@
             "place_call",
             "property_lookup"
           ],
-          "certified_tier": "auto_execute",
+          "certified_tiers": {
+            "cre-forge/comp_analysis": "auto_execute",
+            "cre-forge/property_lookup": "auto_execute",
+            "voiceforge/place_call": "auto_execute"
+          },
           "department": "research",
           "office_agent_id": "22222222-2222-5222-8222-222222222222"
         },
@@ -31,7 +39,11 @@
             "place_call",
             "property_lookup"
           ],
-          "certified_tier": "auto_execute",
+          "certified_tiers": {
+            "cre-forge/comp_analysis": "auto_execute",
+            "cre-forge/property_lookup": "auto_execute",
+            "voiceforge/place_call": "auto_execute"
+          },
           "department": "research",
           "office_agent_id": "33333333-3333-5333-8333-333333333333"
         }
@@ -51,7 +63,12 @@
             "place_call",
             "transcribe_call"
           ],
-          "certified_tier": "propose",
+          "certified_tiers": {
+            "cre-forge/assign_contract": "propose",
+            "cre-forge/buyer_match": "propose",
+            "voiceforge/place_call": "propose",
+            "voiceforge/transcribe_call": "propose"
+          },
           "department": "operations",
           "office_agent_id": "66666666-6666-5666-8666-666666666666"
         },
@@ -63,7 +80,12 @@
             "place_call",
             "transcribe_call"
           ],
-          "certified_tier": "propose",
+          "certified_tiers": {
+            "cre-forge/assign_contract": "propose",
+            "cre-forge/buyer_match": "propose",
+            "voiceforge/place_call": "propose",
+            "voiceforge/transcribe_call": "propose"
+          },
           "department": "operations",
           "office_agent_id": "77777777-7777-5777-8777-777777777777"
         }
@@ -81,7 +103,10 @@
             "comp_analysis",
             "underwrite_deal"
           ],
-          "certified_tier": "propose",
+          "certified_tiers": {
+            "cre-forge/comp_analysis": "propose",
+            "cre-forge/underwrite_deal": "propose"
+          },
           "department": "banking",
           "office_agent_id": "44444444-4444-5444-8444-444444444444"
         },
@@ -91,7 +116,10 @@
             "comp_analysis",
             "underwrite_deal"
           ],
-          "certified_tier": "propose",
+          "certified_tiers": {
+            "cre-forge/comp_analysis": "propose",
+            "cre-forge/underwrite_deal": "propose"
+          },
           "department": "banking",
           "office_agent_id": "55555555-5555-5555-8555-555555555555"
         }

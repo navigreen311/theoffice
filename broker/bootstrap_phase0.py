@@ -182,7 +182,8 @@ async def _assert_pair_in_pack(
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
             "SELECT p->>'position_title' AS title, p->>'source_department' AS department, "
-            "       p->>'trust_tier_ceiling' AS ceiling "
+            "       p->>'trust_tier_ceiling' AS ceiling, "
+            "       p->'module_trust_tiers' AS module_tiers "
             "FROM business_pack b, jsonb_array_elements(b.parsed->'positions_required') p "
             "WHERE b.venture_id = %s AND b.status = 'live' "
             "  AND p->'forge_modules_operated' ? %s",
@@ -218,13 +219,29 @@ async def _assert_pair_in_pack(
         )
 
     relevant = [p for p in positions if department is None or p["department"] == department]
-    ceilings = [p["ceiling"] for p in relevant if p["ceiling"]]
-    if not ceilings:
+
+    # The PER-MODULE tier where the Pack declares one, and the position ceiling otherwise.
+    #
+    # **A declared per-module tier is inert until a certification exists at it.** The Pack can
+    # say `capitalforge/client_read: auto_execute`, `agent_forge_grant` can store it and
+    # `resolve_grant` can enforce it - and `_effective_tier` still caps the declaration against
+    # `AppointedAgent.certified_tier`, so a module certified at the position ceiling runs at the
+    # ceiling however it is declared. Three layers supporting per-module tiers and this one
+    # silently overriding them. See decisions.md entry 52.
+    #
+    # Keys are `forge_id/module_id`, matching the Pack. Read per position rather than pooled,
+    # so a module declared differently by two positions still takes the weakest - the same rule
+    # as before, applied to a more specific number.
+    key = f"{forge_id}/{module_id}"
+    tiers = [
+        (p["module_tiers"] or {}).get(key) or p["ceiling"] for p in relevant if p["ceiling"]
+    ]
+    if not tiers:
         raise BootstrapError(
             f"no position operating {module_id!r} declares a trust_tier_ceiling. The tier is the "
             "Pack's to state and this command will not choose one for it."
         )
-    return str(min(ceilings, key=lambda t: certification.TIER_RANK[t]))
+    return str(min(tiers, key=lambda t: certification.TIER_RANK[t]))
 
 
 async def _already_granted(

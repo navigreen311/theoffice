@@ -127,21 +127,29 @@ async def generate(
                 produced_uncertified += 1
                 continue
 
-            # Weakest certified tier across every module operated, then capped by the
-            # position ceiling. An agent certified auto_execute on four modules and
-            # propose on the fifth operates the position at propose.
-            weakest = min(
-                (certs[(forge_of[m], m)][1] or "suggest" for m in modules),
-                key=lambda t: TIER_RANK[t],
-                default="suggest",
-            )
+            # One tier per module: the lower of what the Pack declares for THAT module and
+            # what this agent is certified to for it.
+            #
+            # This replaced a position-wide floor - the weakest certified tier across every
+            # module, capped by the ceiling - on 13 September 2026. See
+            # `AppointedAgent.certified_tiers` for the property that was given up and why.
+            #
+            # Keyed `forge_id/module_id`, matching the Pack's `module_trust_tiers`, so the two
+            # are looked up the same way and cannot drift in spelling.
+            tiers = {}
+            for m in modules:
+                key = f"{forge_of[m]}/{m}"
+                declared = position.module_trust_tiers.get(key, position.trust_tier_ceiling)
+                certified = certs[(forge_of[m], m)][1] or "suggest"
+                tiers[key] = _cap(declared, certified)
+
             eligible.append(
                 AppointedAgent(
                     office_agent_id=agent_id,
                     agent_name=row["agent_name"],
                     department=row["department"],
                     certified_modules=sorted(modules),
-                    certified_tier=_cap(position.trust_tier_ceiling, weakest),
+                    certified_tiers=tiers,
                 )
             )
 
