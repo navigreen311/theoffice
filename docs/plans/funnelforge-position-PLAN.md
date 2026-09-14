@@ -40,8 +40,11 @@ sends twice. `adapters/funnelforge/app.py` now forwards `Idempotency-Key` from T
 to FunnelForge, and `tests/adapters/test_funnelforge_idempotency_hop.py` asserts it
 survives the hop. The declaration and the forwarding are one fact.
 
-**With the seven at `key`, V31 refuses nothing.** The position-wide ceiling is correct as
-written, and no per-module split is needed.
+**Six of the seven sends are `key`. The seventh is not, and that is the whole of the
+remaining refusal.** `schedule_blueprint_call` posts to `SCHEDULING_BOOK`, which never reads
+the header - so it stays `at_most_once` and V31 refuses `auto_execute` over it. Every other
+module is permitted, which is why this position needs `module_trust_tiers` rather than a
+single ceiling.
 
 ---
 
@@ -126,12 +129,43 @@ Insert into `positions_required`, immediately before the line `capacity_demand:`
     compliance_flags_in_scope: []
     headcount: 1
     trust_tier_ceiling: auto_execute
+    # PER-MODULE TIERS, because this position operates modules of two kinds.
+    #
+    # Eight reach FunnelForge under a guarantee that recognises a repeat: the six sends
+    # and the briefing distribution all post to `/api/emails/send`, which PR #160 gave an
+    # idempotency store; `capture_contact` finds on `(email, businessId)` before it
+    # writes; `read_funnel_analytics` mutates nothing. V31 permits `auto_execute` over
+    # every one of them.
+    #
+    # `schedule_blueprint_call` does not. It posts to `SCHEDULING_BOOK`, a route that
+    # never reads the header, so a repeat books a second appointment - `at_most_once`,
+    # which V31 refuses under `auto_execute`. It is declared `propose` here rather than
+    # dropped: a booking a human confirms is the act the position is for, and `propose`
+    # is what a proposal-then-confirm looks like.
+    #
+    # The ceiling above stays `auto_execute` and these override it per module, which is
+    # the same shape Burkham's five positions use. One ceiling over modules of two kinds
+    # is the thing per-module tiers exist to express.
+    module_trust_tiers:
+      funnelforge/send_intake_acknowledgment: auto_execute
+      funnelforge/send_scheduling_confirmation: auto_execute
+      funnelforge/send_deliverable_cover: auto_execute
+      funnelforge/send_followup_no_engagement: auto_execute
+      funnelforge/send_brief_cover: auto_execute
+      funnelforge/distribute_referrer_briefing: auto_execute
+      # MUTATING, at_most_once - the one V31 refuses unattended
+      funnelforge/schedule_blueprint_call: propose
+      funnelforge/capture_contact: auto_execute
+      funnelforge/read_funnel_analytics: auto_execute
     lifecycle_stages_owned: [Intake, Diagnostic, Placement]
 ```
 
-**No `module_trust_tiers`, deliberately.** With all nine permitted by V31, one ceiling says
-the same thing as nine identical per-module entries and says it once. Add them if a module
-ever needs to differ — which is what the field is for, and is not the case today.
+**`module_trust_tiers` was absent until 14 September 2026 and its absence was the original
+deferral reason, at the wrong count.** The patch declared one ceiling over nine modules and
+was held because V31 refused seven of them. #160 reduced that to **one** — not zero, which
+is what a replace-all briefly made it look like. One module of nine needing a different
+tier is exactly the case per-module tiers were built for, and it is why this position can
+now land at all.
 
 **`forge_modules_operated` is bare**, matching all 19 refs in both live Packs. Entry 48
 ruled it should be qualified `forge_id/module_id` and that ruling is unexecuted; whoever

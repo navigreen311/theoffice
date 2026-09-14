@@ -376,7 +376,26 @@ MODULES: dict[str, Binding] = {
     "schedule_blueprint_call": Binding(
         handler=_schedule_blueprint_call,
         is_mutating=True,
-        idempotency_support="key",
+        # `at_most_once`, NOT `key`, and it is the only send-shaped module here that is.
+        #
+        # **CORRECTED 14 September 2026, having been wrong for one commit.** The seven
+        # `at_most_once` declarations were changed to `key` in a single replace-all on the
+        # evidence of FunnelForge PR #160. That PR changed `/api/emails/send` and nothing
+        # else: `apps/api/src/modules/scheduling/` contains no reference to an idempotency
+        # key, and the store is reached only from `emails/routes.ts`, `multi-provider.ts`,
+        # `transactional-sender.ts`, `webhook-delivery.ts` and `refund-automation.ts`.
+        #
+        # This module posts to `SCHEDULING_BOOK`, not `EMAILS_SEND`. The adapter forwards
+        # `Idempotency-Key` on every upstream call, so the header ARRIVES here and is
+        # ignored - which is the worst of both readings: a caller could believe the guard
+        # applies because the header was sent.
+        #
+        # A repeat books a second appointment. `funnelforge-schedule-blueprint-call.md` §6
+        # has said so all along - *"a duplicate appointment is two rows in a calendar for
+        # one conversation, and nothing in this module can cancel either one"* - and that
+        # manual is what caught this, by reasoning from its own route instead of
+        # inheriting shared rule 9 like the five send manuals did.
+        idempotency_support="at_most_once",
         summary="Book a Blueprint call against a public appointment type.",
         upstream_route=f"POST {upstream.SCHEDULING_BOOK}",
     ),

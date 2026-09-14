@@ -15,6 +15,7 @@ import pytest
 
 from adapters.funnelforge import app as adapter_app
 from adapters.funnelforge import modules as modules_mod
+from adapters.funnelforge import upstream
 from adapters.funnelforge.modules import MODULES, manifest
 from broker import executor, forge_modules
 
@@ -89,7 +90,7 @@ async def test_every_declared_idempotency_value_is_one_the_registry_accepts():
         assert binding.idempotency_support in forge_modules.IDEMPOTENCY_SUPPORT, module_id
 
 
-async def test_the_seven_sends_are_key_and_nothing_is_at_most_once():
+async def test_the_six_email_sends_are_key_and_the_booking_is_not():
     """The shape V31 reads, pinned - now from the other side.
 
     **INVERTED 14 September 2026, and the inversion is what this test is for.** It was
@@ -135,32 +136,42 @@ async def test_the_seven_sends_are_key_and_nothing_is_at_most_once():
         somebody softened a declaration to make a Pack pass. Both deserve the same
         failing test attached.
     """
+    # The route decides, not the module's name. Six sends and the briefing distribution
+    # post to EMAILS_SEND, which PR #160 gave a store.
+    emailing = sorted(
+        m for m, b in MODULES.items() if b.upstream_route.endswith(upstream.EMAILS_SEND)
+    )
+    assert len(emailing) == 6, emailing
+    assert all(MODULES[m].idempotency_support == "key" for m in emailing), {
+        m: MODULES[m].idempotency_support for m in emailing
+    }
+
+    # SCHEDULING_BOOK never reads the header. The adapter forwards it on every call, so
+    # it ARRIVES and is ignored - which is why this is asserted rather than assumed.
+    booking = MODULES["schedule_blueprint_call"]
+    assert booking.is_mutating is True
+    assert booking.idempotency_support == "at_most_once", (
+        f"schedule_blueprint_call declares {booking.idempotency_support!r}. It posts to "
+        "SCHEDULING_BOOK, and `apps/api/src/modules/scheduling/` contains no reference "
+        "to an idempotency key - a repeat books a second appointment. This was `key` for "
+        "one commit because seven declarations were changed in a single replace-all on "
+        "the evidence of a PR that only touched the email path."
+    )
+
     unsafe = sorted(
         m for m, b in MODULES.items()
         if b.is_mutating and b.idempotency_support == "at_most_once"
     )
-    assert unsafe == [], (
-        f"{unsafe} declare `at_most_once`, which V31 refuses under `auto_execute` - and "
-        "`auto_execute` is the only tier that reaches a Forge at all. If FunnelForge "
-        "genuinely lost its idempotency store this is correct and the Pack's ceiling is "
-        "now wrong; fix the Pack, not this assertion."
+    assert unsafe == ["schedule_blueprint_call"], (
+        f"{unsafe} declare `at_most_once`. Exactly one module should: the booking. Any "
+        "other means an email-path declaration drifted back, and V31 would refuse "
+        "`auto_execute` over it - the only tier that reaches a Forge at all."
     )
-
-    sends = sorted(m for m, b in MODULES.items() if (b.is_mutating and m.startswith(
-        ("send_", "distribute_"))) or m == "schedule_blueprint_call")
-    assert len(sends) == 7, sends
-    assert all(MODULES[m].idempotency_support == "key" for m in sends), {
-        m: MODULES[m].idempotency_support for m in sends
-    }
 
     naturally_safe = sorted(
         m for m, b in MODULES.items() if b.idempotency_support == "natural"
     )
-    assert naturally_safe == ["capture_contact", "read_funnel_analytics"], (
-        "the two modules V31 permitted before #160 should still be the two that need no "
-        "key: capture_contact updates the same lead, read_funnel_analytics mutates "
-        "nothing."
-    )
+    assert naturally_safe == ["capture_contact", "read_funnel_analytics"]
 
 
 # --------------------------------------------------------------- trap #9: unconfigured

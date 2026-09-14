@@ -243,6 +243,15 @@ code and no row anywhere, and the first anyone learns of it is a missed call.
 
 ## 6. RETRY VS ESCALATE
 
+
+**CORRECTED 14 September 2026.** This section previously said *"do not retry"*, inheriting
+shared rule 9's premise that nothing on the send path could recognise a repeat. FunnelForge
+PR #160 gave `/api/emails/send` an idempotency store on 12 September and this module posts to
+that route, so **a timeout is retried ONCE with the same key, then escalated** - shared rule 9
+as corrected. The Office derives the key from `(task_id, module_id, payload)`, so a retry of
+the same send carries the same key by construction; a retry with any field changed is a
+different key and therefore a second email.
+
 **On a timeout: stop and escalate. Do not retry. Do not check first.** Shared rule 9, and the
 canonical manual's reasoning holds unchanged — there is nothing to check, because nothing is
 written.

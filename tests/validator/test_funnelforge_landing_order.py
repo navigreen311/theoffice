@@ -277,7 +277,7 @@ def test_the_patch_without_the_rows_makes_v31_mute(tmp_path: Path) -> None:
 
 
 @needs_git
-def test_the_plan_with_the_rows_makes_v31_refuse_nothing(tmp_path: Path) -> None:
+def test_the_plan_with_the_rows_makes_v31_refuse_only_the_booking(tmp_path: Path) -> None:
     """*"the registry rows land before or with the position"* - here is what that buys.
 
     **INVERTED 14 September 2026, and the inversion is the point of the test.** It was
@@ -309,18 +309,36 @@ def test_the_plan_with_the_rows_makes_v31_refuse_nothing(tmp_path: Path) -> None
         "a module the position operates has no registry row, so V31 cannot speak about "
         "it. That is the silence the landing order exists to prevent."
     )
-    assert refusals == [], (
-        f"V31 refuses {refusals}. Every FunnelForge module should now be `key` or "
-        "`natural`: the send path took an idempotency key in PR #160. A refusal here "
-        "means a declaration drifted back to `at_most_once`, or a new module arrived "
-        "without one - and `auto_execute` is the only tier that reaches a Forge at all."
+    # CORRECTED 14 September 2026, from `..._refuse_nothing`. The first inversion said
+    # V31 refuses nothing, on the strength of seven declarations changed in one
+    # replace-all. Six of those seven were right: they post to EMAILS_SEND, which PR #160
+    # gave a store. `schedule_blueprint_call` posts to SCHEDULING_BOOK, which never reads
+    # the header, so it is `at_most_once` and V31 refuses `auto_execute` over it.
+    #
+    # The plan declares it `propose` in `module_trust_tiers` for exactly this reason, so
+    # the LANDED Pack is not refused - but `unattended_writes` reads the ceiling, so the
+    # refusal is visible here and that is the point of the assertion.
+    assert [r for r in refusals if "schedule_blueprint_call" in r], (
+        f"V31 refuses {refusals}, and schedule_blueprint_call is not among them. It is "
+        "mutating and `at_most_once` - a repeat books a second appointment - so a rule "
+        "that does not refuse it under an unattended ceiling has stopped reading the "
+        "shape it exists to read."
+    )
+    others = [r for r in refusals if "schedule_blueprint_call" not in r]
+    assert others == [], (
+        f"V31 also refuses {others}. Every other module posts to EMAILS_SEND, "
+        "`capture_contact` has a natural key, `read_funnel_analytics` mutates nothing. A "
+        "refusal here means an email-path declaration drifted back to `at_most_once`."
     )
 
     shapes = _adapter_shapes()
-    assert not [s for s in shapes.values() if s.idempotency_support == "at_most_once"], (
-        "an adapter declaration is back to `at_most_once`. If FunnelForge's send path "
-        "genuinely lost its idempotency store, this test is right and the Pack's "
-        "`auto_execute` ceiling is now wrong - fix the Pack, not this assertion."
+    unsafe = sorted(
+        m for (_f, m), sh in shapes.items() if sh.idempotency_support == "at_most_once"
+    )
+    assert unsafe == ["schedule_blueprint_call"], (
+        f"{unsafe} declare `at_most_once`. Exactly one should. If FunnelForge's email "
+        "path genuinely lost its idempotency store this test is right and the plan's "
+        "`module_trust_tiers` are now wrong - fix the plan, not this assertion."
     )
 
 
