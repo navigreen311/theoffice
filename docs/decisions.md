@@ -4908,6 +4908,105 @@ people who can act in it, and 124 test fixtures still hold the same top role.**
 
 ---
 
+## 63. A gate whose blocking condition is `if active:` passes when there is nothing to check
+
+**Found 2026-09-13 by measurement. The shape Ivan named is exactly right and the mechanism is not
+the one described, so both are here - the finding is sharper than either version.**
+
+### What Gate 7 did
+
+    gate 7   passed   "0 grant(s) registered, none active;
+                       34 activated grant(s) discounted by a live agent revocation"
+
+`_gate_7` exists to assert *grants are issued inactive and activated only against a valid
+sign-off*. Its whole force is one branch:
+
+    if active:
+        return GateOutcome("7", BLOCKED, f"{len(active)} grant(s) are already active
+                           before Gate 11 ...")
+
+`active` is grants that are activated **and not covered by a revocation**. Measured on this
+venture:
+
+    grants total                                          49
+    covered by a live revocation                          49
+    NOT covered - the set Gate 7 actually examines          0
+
+**Every grant this venture holds is under a live agent-scope revocation, so the set Gate 7 asks
+its question of is empty, and an empty set cannot contain an active grant.** The gate passed
+because it had nothing to look at.
+
+**"Zero of zero" and "all correct" are the same verdict here.** A venture with fifty correctly
+inactive grants and a venture with fifty revoked ones both produce PASSED, and the message
+distinguishes them only if somebody reads the clause after the semicolon. The evidence block is
+better than the message - it carries `grants`, `already_active`, `revoked` and
+`active_but_revoked` separately, and its own comment says why: *"'0 active' on a venture holding
+activated grants is a claim that has to say why it is true."* **The numbers are all there. What is
+missing is any rule that reads them.**
+
+### What would have caught it: nothing
+
+The docstring names the test that matters - *"the one asserting a live active grant still BLOCKS:
+without it this is a gate that passes."* That test exists and it is the right test. It proves the
+gate refuses when handed something to refuse.
+
+**Nothing asserts the gate was handed anything.** There is no check anywhere that `len(live) > 0`
+before a PASS is recorded - no assertion that a gate which examines grants examined any. So the
+one state the existing test cannot distinguish is the one this run is in.
+
+**This is the third instance of one shape this week.** Entry 49's lesson was a CHECK that reports
+at write time; B39's was V31 reporting NOT_RUN because no registry row existed to refuse; this is
+a gate reporting PASSED because no unrevoked grant existed to block on. **Green by narrowing,
+green by absence, green by compliance - entry 58 names the first two and this is the second one
+again, in the gate that stands between a grant and production authority.**
+
+### The 34, measured - and not what was described
+
+Recorded because the description and the measurement disagree in every particular, and the
+measurement is the more interesting of the two.
+
+    described                            measured
+    ---------------------------------    ------------------------------------------------
+    bootstrap residue from August        granted 3 - 13 SEPTEMBER 2026. No August rows.
+    eight modules                        TEN distinct modules
+    eleven forge-pairs                   TEN (forge, module) pairs, all capitalforge
+    no live Pack operates them           ALL TEN are operated by a live position in the
+                                         current Pack. Not one is orphaned.
+    not a certification gap              correct - this part holds
+
+**They are not grants for a world that is not declared. They are duplicates of the world that
+is.** Twenty-nine of the 34 hold a live unit-A certification for their exact (agent, forge,
+module) triple; the current run then issued a *second* grant for the same pair, inactive, with
+fresh certification refs. The same agent and module appears twice at two tiers - Alistair Fenlor
+on `submit_application` at both `propose` and `auto_execute`, and so on across all eleven agents.
+
+**The cause is that `bootstrap-phase0` writes grants already activated**
+(`broker/bootstrap_phase0.py:538`, `activated_at` set to `now()` in the INSERT), so every Phase 0
+grant bypasses Gate 11 by construction. `runtime_config.apply` later writes its own grant for the
+same pair under a different `grant_id`, correctly inactive. Two writers, two id schemes, no
+reconciliation.
+
+The five exceptions are real: Amelie Wystan, Brina Arvane (twice) and Cedric Noren, all
+`engineering` - a department holding no unit-B certification and named by no position. **Those
+four rows are the only genuinely orphaned grants in the venture**, and they are the shape the
+description was reaching for.
+
+### Left open for the next session, deliberately unanswered
+
+The question asked was about shifts - that `_gate_7` activates grants for the shifts in the plan
+and the plan carries none. **`_gate_7` does not read shifts, activate anything, or mention a
+plan**; `grep` for shifts in it returns nothing, and Gate 11 is what activates. So that question
+has no subject here.
+
+**The question its shape points at does have one, and it is better:** why is every grant in this
+venture covered by a live agent-scope revocation, and what should a gate mean when its entire
+input set is revoked? Gate 7 currently answers *pass*. Gate 9 answers *block* over the same rows.
+**Two gates, one set of grants, opposite verdicts** - which is the disagreement first noted when
+this run stopped, now with a measured cause rather than a suspected one.
+
+That is upstream of both gates and it is where a third path most likely is. Not answered tonight.
+---
+
 ## 64. "All 34" was a count of grants, and lifting all of them would have undone yesterday's work
 
 **Recorded 2026-09-14 at Ivan's instruction, as a correction to his own ruling, caught in the
