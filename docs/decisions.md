@@ -4086,6 +4086,453 @@ auditable afterwards.
 
 ---
 
+## 55. A patch deferred three times, and it has never once blocked anything
+
+**Recorded 2026-09-13 at Ivan's instruction, after four days of it being deferred without
+anybody writing down what it is waiting for. Measured before writing, and one premise of the
+instruction is corrected below.**
+
+`docs/plans/funnelforge-position-DEFERRED.patch` adds two hunks to Burkham's Pack: a
+`funnelforge` binding under `forge_dependencies`, and a `Marketing Operations Coordinator`
+position operating nine modules at `trust_tier_ceiling: auto_execute`.
+
+### The correction: it has blocked no merge
+
+The instruction describes it as *"the thing blocking a merge queue"* for three turns. **It has
+blocked nothing, and it has never been in a merge queue.** Every package that deferred it
+merged, on time, with the deferral recorded as a deliberate act:
+
+    P-13    2026-09-09   built the binding, the adapter, the generator, the registration
+                         script and every test. Held the Pack edit back at merge and
+                         preserved it verbatim as the .patch file. MERGED.
+    P-16    2026-09-1x   delivered five of nine manuals, named the other four in an
+                         OUTSTANDING tuple. Explicitly did not apply the patch, edit any
+                         Pack, or run the registrar. MERGED.
+    B39     2026-09-10   P-13b took ownership of the patch and the ordering rule attached
+      /P-13b             to it, and built `scripts/land_funnelforge_position.py` to enforce
+                         that order. Did not land it. MERGED.
+
+**It is the thing merges left behind, not the thing in their way.** That distinction is worth
+keeping because the two have opposite remedies: something blocking a queue is unblocked by
+deciding, and something left behind is landed by doing the work it is waiting on. Four days of
+calling it the first has produced no progress on the second.
+
+It also has not appeared in a single one of this session's five merges (#118 through #122),
+none of which touches FunnelForge.
+
+**And it still applies.** `git apply --check` returns 0 on both the committed patch and the
+rebased copy, against a Pack that has since gained `module_trust_tiers` on all five positions
+and been republished twice. B39's title says it *"had already stopped applying"*; that was true
+on 10 September and is not true now - it was rebased on the 13th and the rebase holds.
+
+### What it is actually waiting for, measured today
+
+Two of the four rules it used to fail are closed:
+
+    V11  PASS   nine manuals on disk plus the shared rules file. OUTSTANDING is now ()
+    V23  PASS   scenario sets delivered with them
+    V6   FAIL   and closable today - nine rows, one command, once the binding hunk lands
+    V31  FAIL   and NOT closable here
+
+**V31 is the whole of it.** Seven of the nine modules are mutating and `at_most_once` - six
+approved sends and a booking - and V31 refuses `auto_execute` over exactly that shape. Measured
+state right now: `funnelforge` has **zero rows** in `forge_module_registry` and is **absent from
+`forge_registry`**, so the rule cannot even speak yet.
+
+**The remedy is not in this repository.** It is an idempotency key on FunnelForge's send path -
+`EmailQueue` has none, so nothing can recognise a repeat - or a lower declared tier, which B33
+argues at length would not be a cautious version of autonomous send but a different thing
+wearing its name, since anything below `auto_execute` becomes a proposal and makes no HTTP call
+at all. **That is what "what it actually needs" comes to: one field in another repository's
+send path, and nobody has been assigned it.**
+
+V32 stays NOT_RUN regardless: the adapter is authored and tested here and deployed nowhere,
+there is no `base_url` to write and no tenant credential to hold. NOT_RUN is the correct answer
+there, not a defect.
+
+### The reason it must not land this week, which is new
+
+**Landing it now would reopen the gate Burkham is about to clear.** The position is unfillable -
+no agent holds a `funnelforge` certification, and none can while the modules are unregistered -
+so V24 would go PASS to FAIL on an unfilled position, and Gate 4.5 would report the capacity
+shortfall it reported for four days before today.
+
+**And it would move the artifacts hash.** A new position changes the appointment artifact, which
+changes `artifacts_hash`, which is what a Gate 10 signature binds to. Entry 52 records nine
+certifications moving without shifting that hash; this would shift it, correctly, and void
+whatever had been signed against `356807747d57ee10`.
+
+So the ordering is not a preference: **Burkham certifies against the five positions it can fill,
+and the sixth lands afterwards, into a run of its own.** Landing it first trades a venture that
+passes for a venture that does not, in exchange for a declaration that cannot be exercised
+anyway.
+
+### What exists so that landing it is one command, when the time comes
+
+`scripts/land_funnelforge_position.py`. Binding hunk, registrar, verify nine rows, position
+hunk, then re-read V31 - **and NOT_RUN reverts both hunks and exits non-zero**, because NOT_RUN
+after registration means the ordering broke and the rule went mute. A FAIL is kept, because a
+refusal is an answer and the seven-module refusal is the finding the binding was built to
+produce.
+
+That script is the one piece of this that is genuinely finished. The deferral has never been
+about how to land the patch.
+
+---
+
+## 56. Gate 4.5 passed - and the invention that was recorded four days ago came back attached to it
+
+**2026-09-13. The milestone is real and is recorded first. The claim that arrived with it is
+entry 49's, returning, and that recurrence is the more useful half of this entry.**
+
+### The milestone
+
+`4198c388` cleared **Gate 4.5 at 17:18 on 13 September - the first venture in this system ever
+to pass it.**
+
+    gate 4     passed   reviewed by Ivan, note stored whole
+                        artifacts_hash 356807747d57ee10d1c2ef2f562af4720b022da0cbe...
+    gate 4.5   passed   capacity and budget feasible
+                          V24  every position is filled by a certified agent
+                          V13  projected approvals fit within reviewer capacity
+
+**Both rules green, and V13's `evidence_basis` travelled into the run's stored evidence** - the
+two unattributed constants and both declared review times are in the record beside the verdict,
+so the PASS cannot be read without meeting what produced it. That is what entry 46 was built
+for, and this is the first run to exercise it.
+
+The run did not stop there. **Gates 5, 6, 7 and 8 also passed**, and it halted at **Gate 9**.
+
+### The claim: "then Gate 5 blocked"
+
+Reported: Gate 5 blocked; `runtime_config` passed `capitalforge/client_read` into `trust_tier`;
+the CHECK constraint refused a module id at write time; the consumer was either iterating keys
+where it should read values, or writing the map entry rather than its contents.
+
+**Measured, read-only, before touching anything. All of it false:**
+
+    gate 5 results on this run     ONE, verdict `passed`, 17:18 -
+                                   "15 grant(s) issued INACTIVE, 12 manifest row(s)"
+    trust_tier values in the       `auto_execute` x29, `propose` x22. Nothing else,
+    entire table                   across every venture
+    trust_tier LIKE '%/%'          0 rows
+    the CHECK                      exists, permits exactly three values, and never fired -
+                                   had it fired, the INSERT would have raised and Gate 5
+                                   could not have reported `passed` with 15 grants
+    the 15 grants issued           every tier matches the appointment module for module
+
+**And the consumer was updated, correctly.** `generators/runtime_config.py` reads
+`agent.certified_tiers.get(f"{forge}/{module}", declared)` - `dict.get` returns the **value**,
+and the default is `declared`, which is a tier. There is no branch that puts a key anywhere near
+`trust_tier`. `_lower` then returns one of its two arguments, both drawn from `_TIER_RANK`; had a
+module id ever reached it, it would have raised `KeyError` rather than written the string.
+
+So the answer to the question actually asked - *was the consumer updated wrongly, or not updated
+at all* - is **neither. It was updated, it is right, and there is nothing to fix.**
+
+### Why this one matters more than the six before it
+
+**It is entry 49, four days later, in the same clothes.** Compare:
+
+    entry 49 (9 Sep)   "Gate 4.5 passed, first venture ever. Gate 5 then blocked on a tier
+                        `read_only` violating agent_forge_grant_tier_check."
+    this (13 Sep)      "Gate 4.5 passed, first venture ever. Gate 5 blocked; the CHECK
+                        refused a module id in trust_tier."
+
+Same gate that passed, same gate that blocked, same table, same constraint, a different invented
+value in the same column. Entry 49 was measured, refuted in five queries, and written down.
+**Being recorded did not stop it recurring.**
+
+**And the first half came true in between.** On 9 September "Gate 4.5 passed, first venture ever"
+was false; on 13 September it is fact. The invention's premise caught up with reality, and the
+consequence it had invented came back along with it - which is exactly the condition under which
+a false claim is hardest to doubt, because everything around it now checks out.
+
+### The constraint line, corrected
+
+The instruction asked for the refusal to be recorded as the constraint-agreement test's sibling:
+*one guards the code's constants against the database's, and this is the database refusing
+something the code produced.*
+
+**The first half is real and the second did not happen.**
+`tests/contract/test_tier_vocabulary_agrees.py` exists, reads the allowed array out of
+`pg_constraint`, and compares it against `_TIER_RANK` in both directions - written in response to
+entry 49, whose *lesson* was sound even though its premise was invented. That test is a real
+guard and it passes.
+
+`agent_grant_forge_trust_tier_check` is also real and permits exactly `auto_execute`, `propose`,
+`suggest`. **But a constraint that never fires is not evidence that it works.** Recording this
+refusal as a success story would have put a fabricated catch in the ledger under the heading of a
+control working - the worst possible place for one, because the entry would be cited later as
+proof the defence is live.
+
+**The honest version:** on the first run ever to reach Gate 5, the generator produced 15 grants
+whose tiers were all valid, and the constraint had nothing to refuse. That is a better outcome
+than a catch and a worse story.
+
+### What is actually blocking the run
+
+Gate 9, on dangling references rather than on missing certifications. 49 grants, 98 units, 68
+`never_certified` - and the 68 are the **34 previously-activated grants whose `operation_cert_ref`
+and `dept_context_cert_ref` point at certification rows that no longer exist**, because revoking
+and re-issuing a certification mints a new `cert_id` and `agent_forge_grant` has no foreign key to
+`certification`. The 15 grants this run issued resolve on both units.
+
+**Gate 7 discounts those same 34 as revoked in the same run; Gate 9 counts them.** Two gates, one
+set of grants, opposite treatment. That is the real finding of this advance, and it is a platform
+question rather than a Burkham one.
+
+---
+
+## 57. A rule that reads the world answers a different question each time it is asked
+
+**Recorded 2026-09-13 at Ivan's instruction, from two read-only investigations. The general
+shape is real and worth having written down; the specific instance that prompted it did not
+happen, and that correction is kept here rather than filed separately.**
+
+### The shape, which is the part worth keeping
+
+**Ten of this system's rules take a database connection.** `generators/validator.py:204`:
+
+    NEEDS_WORLD = {"V2", "V6", "V11", "V28", "V29", "V30", "V31", "V32", "V33", "V34"}
+
+The other rules read a Pack and nothing else, so they answer identically whenever they are
+asked. **These ten read the system**, and the system changes between gates - instructions get
+authored, registry rows get written, Forges come up, humans discharge obligations.
+
+**So "passed at Gate 2, failed at Gate 9" is not a contradiction for any of these ten, and
+somebody will eventually read it as one.** It is the same rule asked a bigger question. At Gate 2
+a Pack is a document; by Gate 8 it is a document plus ten authored instructions, a registry, a
+manifest and a set of grants - and a rule that checks the world against the document has more
+world to check.
+
+**The instance already on the record is V31.** B39 measured it going **NOT_RUN to FAIL** on an
+unchanged Pack, purely because `forge_module_registry` rows were written between the two
+evaluations - with no rows, every module is unresolved and the rule has nothing to refuse.
+`scripts/land_funnelforge_position.py` re-reads V31 at step 5 and reverts both hunks on NOT_RUN
+for exactly this reason. **The phenomenon is real, documented, and enforced against in one
+place.** What does not exist is a general statement of it, which is what this entry is.
+
+### The correction: it was not V28, and there is no Gate 5.5
+
+Reported: V28 passes at Gate 2 and fails at Gate 5.5, with ten instructions authored in between,
+and four library refs unresolved.
+
+Measured, read-only:
+
+    GATE_SEQUENCE          "0","1","2","3","3.5","4","4.5","5","6","7","8","9","9.5",
+                           "10","11","12"  -  there is no 5.5, and 5 is followed by 6
+    GATE_55_RULES          no such identifier anywhere in the repository
+    GATE_2_RULES           no such identifier anywhere in the repository
+    V28 right now          PASS  -  "19 of 21 library ref(s) resolve"
+    unresolved refs        ZERO
+
+**And V28 could not be moved by Gate 5's output even in principle.** It reads exactly two things:
+`pack.market.compliance_surface` and `compliance_library_entry`. It never touches
+`venture_forge_manifest`, `agent_forge_grant`, `venture_budget` or `rate_limit_bucket` - every one
+of the things Gate 5 writes. The rule is world-reading, and Gate 5's world is not the world it
+reads.
+
+**The instinct was right and the subject was wrong**, which is worth separating: *is there a rule
+that judges a venture against artifacts created after it last passed?* is a good question with a
+real answer, and the answer is V31 rather than V28.
+
+### The compliance library, audited because the question deserved an answer
+
+    packs/compliance-library/*.yaml       19 entry_refs written
+    compliance_library_entry              21 rows loaded
+    the Pack's citations                  22 surface entries, 21 carrying a ref,
+                                          19 distinct, 1 declaring library_gap
+    unresolved                            0
+
+All three sets of 19 are **identical**. The two extra library rows - `compliance/ftc-tsr-v2` and
+`compliance/nv-two-party-consent-v1` - are Greenstone's and are simply not cited here.
+`REFERRAL_FEE_REGULATION` carries `library_gap: true` with no ref, which is the honest
+declaration V28 is written to accept.
+
+A near-match scan over every citation found five pairs within 0.75 -
+`application-authorization-v1` against `fcra-pull-authorization-v1` at 0.82, and
+`reg-z-advertising-boundary-v1` against `tax-advice-boundary-v1` at 0.77, among others - **and
+every one of those citations resolves exactly.** They are similar names for genuinely different
+obligations, not a rename anybody mis-cited.
+
+**V28 already separates the three cases the question was asking about**, and was built to. On a
+real failure it distinguishes **WRITTEN BUT NOT LOADED** (*"run the loader; do not rewrite
+these"*) from **NOT WRITTEN ANYWHERE** (*"write the entry, or set library_gap"*), reading the
+files rather than the database because *"the database cannot answer that question about itself."*
+Its own comment records why: nineteen fully-written entries once sat behind this rule reading as a
+documentation gap, when nothing had ingested them.
+
+### And the module column, which needs none of this
+
+`agent_forge_grant.module_id` is **bare**, consistently, and the database enforces it
+structurally rather than by convention:
+
+    module_id    text, NOT NULL
+    FOREIGN KEY (forge_id, module_id) REFERENCES forge_module_registry(forge_id, module_id)
+
+`forge_module_registry`'s primary key is the **pair**, held as two columns. A qualified
+`capitalforge/client_read` could never be written - not because a CHECK would refuse the string,
+but because no registry row is named that. Measured across every venture: **51 grants, 12 distinct
+module ids, none containing a slash.**
+
+**The qualified form exists only as a dict key**, in `Position.module_trust_tiers` (YAML) and
+`AppointedAgent.certified_tiers` (Python), and it is unpacked back into two fields at the write:
+`runtime_config.apply` binds `grant.module_id` and `grant.trust_tier` as separate parameters.
+Both halves of the map land in the columns they belong to.
+
+### The asymmetry the two reads together exposed
+
+    (forge_id, module_id)  ->  FK to forge_module_registry     ENFORCED
+    operation_cert_ref     ->  no FK to certification          NOT ENFORCED
+    dept_context_cert_ref  ->  no FK to certification          NOT ENFORCED
+
+**`agent_forge_grant` is structurally guarded on which module a grant names, and unguarded on
+which certification it rests on.** That is precisely why the module ids are provably clean and
+the cert refs are provably dangling: 34 grants pointing at 20 `cert_id`s that no longer exist,
+because reissuing a certification mints a new one. The database would have refused a bad module
+and had no opinion about a vanished certification.
+
+That is the root of the Gate 9 block, stated as a schema fact rather than a generator one, and it
+is the first thing to rule on before this run moves again.
+
+---
+
+## 58. Neither escape is acceptable, and the reason generalises
+
+**Ruled 2026-09-13 by Ivan, on a blocked run. The ruling is recorded as a ruling; the state of
+the run is recorded as measured, and the two differ in one particular, which is noted at the end
+rather than hidden.**
+
+### The ruling
+
+Presented with two ways past a rule that was reporting a gap, Ivan refused both:
+
+> **Weakening the rule** makes a citation checker stop checking. **Removing the citations** strips
+> authority from prohibitions that are correct - the agent still gets taught the rule, with
+> nothing behind it.
+>
+> **Both amount to making the system stop reporting something true, which is the thing every
+> control in it exists to prevent.**
+
+**That sentence is the most portable thing produced this week** and it is recorded here as a
+general rule rather than as a decision about one validator. Every gate in this ladder is a
+control that reports something true and inconvenient. The two shapes above are the only two ways
+a control is ever defeated without anybody deciding to defeat it:
+
+    narrow the rule       it stops asking the question, and reports green because it
+                          no longer looks - entry 42's shape, where a relaxed trigger
+                          made a documented branch unreachable
+    remove the input      the question is still asked and has nothing to answer about,
+                          so it reports green for absence - B39's shape, where V31 went
+                          NOT_RUN because no registry row existed to refuse
+
+**Green by narrowing and green by absence are indistinguishable from green by compliance in any
+count.** That is why B39 built a script whose final step reverts on NOT_RUN rather than accepting
+it, and why `test_tier_vocabulary_agrees` reads the constraint out of `pg_constraint` rather than
+restating the three names: a test that restates what it checks drifts alongside it and keeps
+passing.
+
+**It waits.** That is the ruling, and it is a ruling rather than a stall: the work is identified,
+the owner is named, and the run stays where it is until the owner supplies what only they can.
+A run parked against a named obligation is a different object from a run nobody is progressing,
+and the ledger should be able to tell them apart a month from now.
+
+### Applying it to the live decision, which is where it bites
+
+Run `4198c388` is blocked at **Gate 9**, and two ways past were put forward:
+
+    retire the 34 stale grants                 the grants are dead: already revoked, already
+                                               refused at the call path, already discounted
+                                               by Gate 7 BY NAME in the same run
+    make Gate 9 exclude revoked grants         Gate 7 already excludes them, so this is
+                                               "consistency"
+
+**Under this ruling the second is the escape and must be refused.** Gate 9 counting revoked
+grants is not obviously wrong - it is the Readiness Gate, and "every grant this venture holds
+rests on a current certification" is a defensible thing to assert. Changing it so the count comes
+out right is narrowing a rule to get a verdict, which is the first shape above wearing the word
+*consistency*.
+
+The first option is not an escape, because it changes the world rather than the question: 34
+grants that are genuinely dead stop being held. Gate 9 then asks exactly what it asked before and
+gets a different answer because the answer is different.
+
+**The distinction is the whole ruling in miniature.** Both options make Gate 9 pass. One removes
+grants that should not exist; the other removes the gate's ability to notice them.
+
+### What this run established, which is more than any before it
+
+    gates 0, 1, 2, 3, 3.5   passed 15:37
+    gate 4                  awaiting_human 15:37, then PASSED 17:18 on a recorded review
+    gate 4.5                PASSED - the first venture in this system ever to clear it
+                            V24 and V13 both green; V13's evidence_basis carried into the
+                            run's stored evidence
+    gate 5                  PASSED - 12 manifest rows, 15 grants issued INACTIVE,
+                            1 budget, 2 rate-limit buckets
+    gates 6, 7, 8           passed
+    gate 9                  BLOCKED
+
+**First venture through Gate 4, through 4.5, and through 5.** The artifacts hash held at
+`356807747d57ee10` across every one of them, which is the property a Gate 10 signature depends on
+and the first time it has been observed across a multi-gate advance.
+
+**Nothing is live.** All 49 grants refuse at the call path, by two independent mechanisms -
+15 on `GrantNotActivated`, 34 on `NotCertified` - verified by exercising `resolve_grant` against
+every one rather than by reading the code.
+
+### Two open items, one owner
+
+**The compliance library has no recorded author.** 19 of its 21 entries are authored by
+`smoke-operator-0eda802c@example.invalid`, a smoke fixture; the other 2 name a `human_id` that
+resolves to no `office_human` row. **Zero were authored by a person.**
+
+This is the exact failure `humans.attributable_actor` was written to prevent, in its own words:
+*"An audit entry signed by a fixture is worthless. Non-repudiation is the whole reason this log
+exists."* And the entries are not thin. Each carries 2,000-2,800 characters of interpreted legal
+meaning - California's Invasion of Privacy Act read as requiring affirmative consent rather than
+disclosure-plus-continuation, a deliberate election to run one over-restrictive rule across
+eleven states because *"operational simplicity beats the risk of implementing jurisdiction
+detection wrongly"*, a guarantor treated as a separate authorizing party whose file the client
+cannot reach.
+
+**That is legal judgment, and V28 passes green over all of it.** The rule checks that a ref
+resolves. It has no opinion about who decided what the entry says. This routes to whoever owns
+the compliance library, the same destination as `referral_fee_permitted_in_state`.
+
+**Nevada.** `compliance/nv-two-party-consent-v1` exists and is cited by
+`funnelforge-approved-send-rules.md`. Burkham's Pack does not cite it - and the entry Burkham
+*does* cite for recording, `call-recording-consent-v1`, ends its escalation triggers with:
+*"When a call is to be recorded in NEVADA, until the contradiction in the notes is resolved. Two
+live artifacts in this portfolio disagree about whether NV is a one-party or all-party state, and
+NV is Burkham's first-listed target geography."*
+
+A venture whose first target geography has a live, documented contradiction about its recording
+law, and whose Pack does not reference the entry written for it. Same owner.
+
+### What was NOT recorded here, and why
+
+The ruling was given against a described stop at "Gate 5.5, on four missing compliance library
+entries naming FCRA 604(f), NRS 200.620 and GLBA." **Measured, none of that is the state of this
+system**, and recording it would put in the ledger the one thing entry 56 argues most strongly
+against:
+
+    GATE_SEQUENCE            "5" is followed by "6". There is no 5.5
+    V28 right now            PASS - "19 of 21 library ref(s) resolve"
+    unresolved refs          ZERO, across the Pack's 19 and all 14 distinct refs cited
+                             by the 24 operating instructions
+    plaid-consumer-data-     absent from the entire repository
+    consent-v1
+    FCRA 604(f)              present - fcra-pull-authorization-v1 cites
+                             15 U.S.C. 1681b(a)(2) and (f), which IS FCRA 604(f)
+    GLBA                     present - glba-plaid-connection-v1
+    NRS 200.620              the Nevada entry exists; the gap is a citation, above
+
+**The ruling survives the correction intact**, which is why it is recorded and the premise is
+not. Its subject is not V28. Its subject is the live Gate 9 decision, where one of the two
+options genuinely is the escape it describes - and it would have been taken as the tidy one.
+---
+
 ## 59. Two real people, and a reviewer capacity computed from four
 
 **Declared 2026-09-13 by Ivan as a standing fact, then audited against every Pack. Recorded as a
