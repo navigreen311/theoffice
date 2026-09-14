@@ -4199,3 +4199,87 @@ So a second co-equal administrator is expressible, anticipated, and two function
 was built for two and has been running on one, while 124 test fixtures hold the same top role and
 `compliance_officer` - the role that actually does the reviewing in both Packs - has never been
 held by anybody.
+
+---
+
+## 60. A role named after a person reads as an impersonation the moment a second person holds it
+
+**Recorded 2026-09-13 by Ivan, ahead of granting the top role to a second holder. The rename is
+NOT ruled on here - this entry exists so that it can be ruled on separately, with its cost
+measured rather than estimated.**
+
+### The finding
+
+`ivan` is a **role key**. It is not an account, not a user id, and not a reference to a particular
+person - `ROLE_RANK = {"venture_operator": 1, "compliance_officer": 2, "ivan": 3}`, and the role
+has always permitted multiple holders (entry 59: 125 rows hold it today).
+
+**Correct in the database, wrong on every screen and in every audit row.** A second holder is a
+legitimate co-equal administrator and reads as somebody impersonating the founder. The console
+prints the role string directly - `console/app/access/people.tsx` renders
+`["ivan", "compliance_officer", "venture_operator"]` as the grantable set, and
+`console/app/access/page.tsx` explains a refusal with the sentence *"`ivan` - is not a read for a
+venture operator."* Every one of those becomes ambiguous the day Ira Green holds it.
+
+### What it costs, stated as the specific harm rather than as untidiness
+
+**`ROLE_RANK` is the only place in this system that decides who may grant what.** `authorize`
+compares ranks out of it; `assert_may_grant` compares ranks out of it; `SCOPE_MIN_ROLE` maps
+Forge-scope revocation to `"ivan"` by name. There is no second expression of the hierarchy to
+check a reading against.
+
+**So a reader auditing whether Ira should hold `ivan` has nothing that distinguishes the role from
+the man.** The question "should Ira Green hold ivan" is a question about a rank-3 role, and it
+reads as a question about whether Ira should be Ivan. That is not a cosmetic problem: the audit
+log's purpose is answering *who decided this*, and a role whose name is a person's name makes
+every row about the role look like a row about the person.
+
+### What a rename would touch - measured 2026-09-13, not estimated
+
+    DATABASE
+      office_human_role.role                125 live rows
+      office_human_role_role_check          CHECK naming all three roles
+      revocation_revoked_by_role_check      CHECK naming all three roles
+      db/versions/0006_governance.py        declares the role in a constraint
+      db/versions/0010_humans.py            declares the role in a constraint
+      audit_log.subject                     0 rows carry the string
+      revocation.scope                      0 rows carry it (scope is a different vocabulary)
+
+    PYTHON (broker/)                        13 occurrences across 7 modules
+      broker/revocation.py                  ROLE_RANK and SCOPE_MIN_ROLE - the source of truth
+      broker/humans.py                      authorize, assert_may_grant, the docstrings
+                                            that explain the top-role exception
+      broker/app.py, access_overview.py, sync_roster.py, budget.py
+
+    TESTS                                   ~50 occurrences across 12 files
+      test_access_api.py (18), test_access_overview.py (12), test_revocation_console.py (7)
+
+    CONSOLE (console/app/)                  12 occurrences in 5 files
+      access/forms.tsx                      const ROLES = [...] - a hardcoded second copy
+                                            of the vocabulary, which is its own finding
+      access/people.tsx                     a third hardcoded copy in a render loop
+      access/page.tsx, access/overview.tsx, provisioning/[venture]/page.tsx
+
+**Two things in that list are worth separating from the rename question.**
+
+`console/app/access/forms.tsx` and `people.tsx` each hold their **own hardcoded list of the three
+roles**. That is the same defect `tests/contract/test_tier_vocabulary_agrees.py` was written to
+catch for tiers - a vocabulary restated in a second place, free to drift from the constraint that
+enforces it - and it exists here in *three* places (the CHECK, `ROLE_RANK`, and two TSX arrays)
+with nothing comparing them. **A fourth role added to `ROLE_RANK` today would be ungrantable from
+the console and nothing would say so.** That is a finding on its own and does not depend on the
+rename.
+
+The second is that a rename is a **two-CHECK, 125-row migration on the table that governs
+authority**, and the window between dropping the old constraint and writing the new value is a
+window where the authority vocabulary is in two states. It is not hard; it is the one table where
+"not hard" is not the standard.
+
+### Not ruled on
+
+**Ivan's instruction is explicit: do not rename it.** A change to the one table that governs
+authority gets its own decision, made deliberately, not taken as a side effect of adding a second
+administrator. This entry records the cost so that decision can be made on measurement.
+
+What is decided is the narrower fact: **`ivan` names a rank, a second holder is legitimate, and
+anybody reading an audit row or an access screen after today should read it that way.**
