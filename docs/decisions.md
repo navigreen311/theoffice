@@ -5624,3 +5624,151 @@ denominator is a fiction, and removing the waste leaves the fiction.
 Two entries were planned as 73 and 74 - the artifact-staleness family, and the corrections
 count - and are now **74 and 75**. Written down rather than left as a reserved gap,
 because a gap in this ledger is the exact hazard one of those entries is about.
+
+---
+
+## 74. Two records that read as current because nothing marks a record stale
+
+**Recorded 2026-09-14. A family of two, narrowed from three: the third case turned out to be
+a merge queue rather than decay, and is excluded for that reason.**
+
+### The family
+
+    the deferred Pack patch      an artifact whose describing world moved
+    entry 48's ruling            a decision with no field for whether it happened
+
+Neither was wrong when written. Both read as current for as long as nobody looked, and
+**nothing in the repository distinguishes a live record from an expired one.**
+
+### Case one: the patch
+
+`docs/plans/funnelforge-position-DEFERRED.patch` held two Pack edits as a unified diff. It
+was deferred nine times across five packages - P-13 held it at merge, P-16 declined it, B39
+took ownership and built the lander without running it - and **read for the first time on
+the ninth deferral.**
+
+What the reading found:
+
+    it applied cleanly                   `git apply --check` exit 0, contradicting the
+                                         belief that it kept failing
+    it targeted Burkham's Pack           not a FunnelForge Pack; there is no such thing
+    `forge_modules_operated` bare        matching the live Pack, so no qualification had
+                                         replaced its shape
+    `trust_tier_ceiling` still used      by all five live Burkham positions, superseded
+                                         by nothing
+    the position never landed            both counts zero, so it was an instruction and
+                                         not a record
+
+**And the one thing that had genuinely expired was the reason it was being deferred.** V31
+refused seven of its nine modules because the send path could not recognise a repeat;
+FunnelForge PR #160 fixed that on 12 September, two days before anybody here read the
+artifact citing it. Nothing crossed back.
+
+**A diff is a record with a built-in expiry that gives no signal when it fires.** It matches
+three lines of context: when the file shifts near them it either refuses - loudly, which is
+survivable - or applies at a wrong offset, which is not. That is why it was replaced by
+`docs/plans/funnelforge-position-PLAN.md`, whose blocks name a single anchor line required to
+appear exactly once. An anchor that moved stops with a message naming it.
+
+### Case two: entry 48
+
+Entry 48 ruled, in terms: *"`Position.module_trust_tiers` keys are `forge_id/module_id`.
+`Position.forge_modules_operated` is ruled to follow - 19 refs, 10 in Burkham and 9 in
+Greenstone."*
+
+    measured 2026-09-14    19 names, 10 Burkham and 9 Greenstone, ALL BARE
+    generators/pack.py:291 forge_modules_operated: list[str], unchanged
+    qualified refs          zero in either Pack
+
+**The ruling was made and not executed, and the entry cannot say so.** A decision entry has a
+date, a ruling and its reasoning. It has no field for whether the ruling happened, so a reader
+meeting entry 48 today finds a settled decision and no way to learn that the code never moved.
+
+The entry was twice read *out* of this family during the session on the belief that
+`module_trust_tiers` had been the ruling's subject - which is its premise, not its subject.
+**Both times the entry's own text settled it.** That is the argument for the family: a record
+that has to be re-read to be trusted is one nothing else is checking.
+
+### What would catch either: nothing, in different ways
+
+**For the patch** - nothing applies it, so nothing notices when its world moves. `git apply
+--check` in CI would have caught unappliability and would not have caught a stale premise;
+the premise lived in another repository.
+
+**For entry 48** - nothing reads the ledger. No check asserts that a cited entry number
+exists, that a ruling recorded as made was executed, or that a `.patch` in `docs/plans/`
+still applies. The ledger's contiguous numbering is itself misleading: it read as complete on
+13 September with five entries missing, because the run 59-72 had no visible break.
+
+**The cheapest of the three is real and unbuilt**: a test that every `## N.` cited by number
+in `docs/decisions.md` exists. It would not have caught either case here, and it would have
+caught the gap that hid five entries for a day.
+
+---
+
+## 75. Twenty-one corrections, every one from reading a file
+
+**Recorded 2026-09-14 at Ivan's instruction, who asked that the count go somewhere. Counted
+rather than asserted, because a number stated without counting is the defect this session
+spent itself on.**
+
+Ivan's instructions across this thread contained **twenty-one claims that measurement
+contradicted.** Not disagreements about judgment - claims about what was in the tree, which a
+grep or a query settled:
+
+    THINGS THAT DID NOT EXIST
+      _grants_for                          no matches, whole repo
+      a third certified_tiers consumer     one producer, two consumers, both correct
+      Gate 5.5                             GATE_SEQUENCE runs "5", "6"
+      GATE_55_RULES / GATE_2_RULES         not identifiers in this repository
+      plan.shifts                          no artifact carries shifts
+      plaid-consumer-data-consent-v1       absent from the entire repository
+      four unresolved library refs         zero, across the Pack and all 24 instructions
+      test_v6_blocks_when_module_refs_…    no such test
+      test_burkham_pack_declares_its_…     no such test
+      send_email                           no such module; nine declarations, nine manuals
+      a Q1 about atomic vs two-phase       not asked; the lander was already two-phase
+
+    THINGS THAT WERE THE OPPOSITE
+      Gate 7 awaiting_human                passed, at 17:18, and is not a human gate
+      "all 34 revocations"                 eleven; 34 was a count of grants discounted
+      the patch "keeps failing to apply"   applied cleanly every time it was checked
+      "a Pack four versions dead"          applied to the current Pack
+      "the qualification replaced it"      forge_modules_operated still bare, all 19
+      "trust_tier_ceiling superseded"      used by all five live positions
+      "the position exists"                never landed, both counts zero
+      "written against a FunnelForge Pack" targets Burkham's
+      B53 "sits unassigned"                merged 2026-09-12
+      entry 48's subject                   forge_modules_operated, twice re-read to settle
+      "same shape as Burkham"              Burkham does the opposite, measured across five
+
+**Every single correction came from reading a file or querying the database.** Not one came
+from the ledger, a test, a constraint or a gate. The records were consistent with every one
+of these claims, because a record says what was true when it was written and has no opinion
+about what is true now.
+
+### Why this belongs beside the sixteen hand-declared values
+
+`forge_module_registry.idempotency_support` is a hand-written string in this repository
+describing code in another one. Sixteen of twenty rows carry `verification_method = 'hand'`,
+`ModuleShape.is_evidence` already says *"`hand` is a claim; the other two were obtained from
+the Forge"*, and nothing acts on the distinction. Seven of those sixteen turned out to be
+wrong in both directions within two days.
+
+**It is the same failure pointed in two directions.** A claim restated confidently, with
+nothing checking it, is not made truer by the confidence or by the restatement - whether the
+claim is a declaration about another repository's code or an instruction about this one's.
+
+**And it is why the corrections were cheap.** Each cost a grep and produced a better question
+than the one that prompted it: the `_grants_for` hunt found the flattening entry 52 records;
+the Gate 7 hunt found a gate passing on an empty set; the patch hunt found a blocker that had
+been resolved and never crossed back. **The measurement is not the tax on the instruction. It
+is the part that found the thing.**
+
+### The one that was not caught by a grep
+
+Entry 48 was read out of this family twice, on a premise about its own subject, and settled
+both times by reading the entry verbatim. **A ledger entry is the one artifact here with no
+second source** - there is no query that returns what a decision ruled. That is the whole of
+case two in entry 74, and it is the argument for the check that entry names and nobody has
+built.
