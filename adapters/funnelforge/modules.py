@@ -37,17 +37,47 @@ V31 REFUSES SEVEN OF THESE NINE AT THE ONLY TIER THAT CALLS
 
 Read this before wondering why the binding does not produce calls.
 
-Seven modules below are `is_mutating=True, idempotency_support="at_most_once"`. V31
-(`generators/validator.py`) refuses `auto_execute` over exactly that shape, and
-`auto_execute` is the only tier that reaches a Forge at all - step 7 of the client
-library turns anything below it into a proposal and makes no HTTP call.
+**CORRECTED 14 September 2026. The seven sends were `at_most_once` and are now `key`.**
 
-So: **seven of the nine cannot today be granted at a tier that makes a call.** That is
-not a defect in this binding and it must not be fixed by softening a declaration. An
-email leaves the system and reaches a person; a retry sends a second one, and `EmailQueue`
-has no idempotency key that would recognise a repeat. `at_most_once` is the truth, V31 is
-correct to refuse it, and the finding belongs upstream in FunnelForge - an idempotency
-key on the send path is what would change it. Sized and recorded in the binding record.
+Until 12 September they were correctly `at_most_once`: an email leaves the system and
+reaches a person, a retry sent a second one, and nothing on that path could recognise a
+repeat. V31 (`generators/validator.py`) refuses `auto_execute` over exactly that shape,
+and `auto_execute` is the only tier that reaches a Forge at all - step 7 of the client
+library turns anything below it into a proposal and makes no HTTP call. So seven of nine
+could not be granted at a tier that makes a call, and that was not a defect in this
+binding.
+
+**FunnelForge PR #160 merged 2026-09-12 04:55 UTC and changed the fact.**
+`apps/api/src/services/email/idempotency-store.ts` takes an atomic Redis claim -
+`SET key value PX <ttl> NX`, so exactly one caller wins with no read-modify-write window
+and the claim holds across replicas rather than inside one process. A later request under
+the same key is answered from the record instead of sending. The window is **24 hours**,
+chosen to match Resend's own so a key cannot expire on one side while still live on the
+other. The store **fails closed**: if Redis is unreachable `claim` raises and the route
+answers 503 rather than sending anyway.
+
+**Why `key` and not `natural`.** The header is OPTIONAL. An unkeyed repeat still sends a
+second email - the store's docstring is explicit that a caller without a key "never
+reaches this file". Repetition is not inherently safe, so `natural` would overstate it.
+What is true is that a repeat becomes recognisable *when the caller supplies a key*,
+which is what `key` means.
+
+**Why this could not be declared without the adapter change.** `key` describes a
+capability, and a capability nothing reaches is not a property of the call path. The
+Office derives a key per (task_id, module_id, payload) and sets it on the call to this
+adapter, but `adapters/funnelforge/app.py` logged it and dropped it - the upstream
+request carried `Authorization` and nothing else. The forwarding landed in the same
+commit as this line, and `tests/adapters/test_funnelforge_idempotency_hop.py` asserts the
+header survives the hop. **The declaration and the forwarding are one fact**:
+`at_most_once` misdescribes FunnelForge, `key` misdescribes this call path without the
+forwarding, and either alone is wrong in one direction.
+
+**How this was found, because it is the point.** Nothing here noticed. The remedy landed
+in another repository on the 12th, the declaration in this one never moved, and V31 went
+on refusing seven modules on an expired fact for two days - caught by reading FunnelForge,
+not by anything in The Office. `verification_method` on these rows is `hand`, and
+`ModuleShape.is_evidence` already says a hand declaration is a claim rather than an
+observation. Nothing acts on that distinction.
 
 `capture_contact` (natural) and `read_funnel_analytics` (non-mutating) are the two V31
 permits.
@@ -298,7 +328,7 @@ MODULES: dict[str, Binding] = {
     "send_intake_acknowledgment": Binding(
         handler=_send_approved("intake_acknowledgment"),
         is_mutating=True,
-        idempotency_support="at_most_once",
+        idempotency_support="key",
         summary="Send the Decline-Flow Handoff intake acknowledgment.",
         upstream_route=f"POST {upstream.EMAILS_SEND}",
         template_id="intake_acknowledgment",
@@ -306,7 +336,7 @@ MODULES: dict[str, Binding] = {
     "send_scheduling_confirmation": Binding(
         handler=_send_approved("scheduling_confirmation"),
         is_mutating=True,
-        idempotency_support="at_most_once",
+        idempotency_support="key",
         summary="Send the Blueprint scheduling confirmation.",
         upstream_route=f"POST {upstream.EMAILS_SEND}",
         template_id="scheduling_confirmation",
@@ -314,7 +344,7 @@ MODULES: dict[str, Binding] = {
     "send_deliverable_cover": Binding(
         handler=_send_approved("deliverable_cover"),
         is_mutating=True,
-        idempotency_support="at_most_once",
+        idempotency_support="key",
         summary="Send the Blueprint deliverable cover email.",
         upstream_route=f"POST {upstream.EMAILS_SEND}",
         template_id="deliverable_cover",
@@ -322,7 +352,7 @@ MODULES: dict[str, Binding] = {
     "send_followup_no_engagement": Binding(
         handler=_send_approved("followup_no_engagement"),
         is_mutating=True,
-        idempotency_support="at_most_once",
+        idempotency_support="key",
         summary="Send the post-Blueprint no-engagement follow-up.",
         upstream_route=f"POST {upstream.EMAILS_SEND}",
         template_id="followup_no_engagement",
@@ -330,7 +360,7 @@ MODULES: dict[str, Binding] = {
     "send_brief_cover": Binding(
         handler=_send_approved("brief_cover"),
         is_mutating=True,
-        idempotency_support="at_most_once",
+        idempotency_support="key",
         summary="Send the Capital Command Brief cover email.",
         upstream_route=f"POST {upstream.EMAILS_SEND}",
         template_id="brief_cover",
@@ -338,7 +368,7 @@ MODULES: dict[str, Binding] = {
     "distribute_referrer_briefing": Binding(
         handler=_send_approved("referrer_briefing"),
         is_mutating=True,
-        idempotency_support="at_most_once",
+        idempotency_support="key",
         summary="Distribute the referrer quarterly briefing.",
         upstream_route=f"POST {upstream.EMAILS_SEND}",
         template_id="referrer_briefing",
@@ -346,6 +376,25 @@ MODULES: dict[str, Binding] = {
     "schedule_blueprint_call": Binding(
         handler=_schedule_blueprint_call,
         is_mutating=True,
+        # `at_most_once`, NOT `key`, and it is the only send-shaped module here that is.
+        #
+        # **CORRECTED 14 September 2026, having been wrong for one commit.** The seven
+        # `at_most_once` declarations were changed to `key` in a single replace-all on the
+        # evidence of FunnelForge PR #160. That PR changed `/api/emails/send` and nothing
+        # else: `apps/api/src/modules/scheduling/` contains no reference to an idempotency
+        # key, and the store is reached only from `emails/routes.ts`, `multi-provider.ts`,
+        # `transactional-sender.ts`, `webhook-delivery.ts` and `refund-automation.ts`.
+        #
+        # This module posts to `SCHEDULING_BOOK`, not `EMAILS_SEND`. The adapter forwards
+        # `Idempotency-Key` on every upstream call, so the header ARRIVES here and is
+        # ignored - which is the worst of both readings: a caller could believe the guard
+        # applies because the header was sent.
+        #
+        # A repeat books a second appointment. `funnelforge-schedule-blueprint-call.md` §6
+        # has said so all along - *"a duplicate appointment is two rows in a calendar for
+        # one conversation, and nothing in this module can cancel either one"* - and that
+        # manual is what caught this, by reasoning from its own route instead of
+        # inheriting shared rule 9 like the five send manuals did.
         idempotency_support="at_most_once",
         summary="Book a Blueprint call against a public appointment type.",
         upstream_route=f"POST {upstream.SCHEDULING_BOOK}",

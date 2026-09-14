@@ -255,7 +255,7 @@ capacity shortfall, which is entry 11's behaviour working, not failing.
 
 **The adapter, the generator, the registration script and every test merged. The position
 declaration did not.** It is preserved verbatim as
-`docs/plans/funnelforge-position-DEFERRED.patch` — `git apply` it and the position returns
+`docs/plans/funnelforge-position-PLAN.md` — `git apply` it and the position returns
 exactly as authored, comment and all.
 
 ### Why, measured rather than argued
@@ -328,7 +328,7 @@ risk was the next run, which would not have reached Gate 4 at all.
 
 ### What re-applies it
 
-**The registry rows first** — `scripts/register_funnelforge_modules.py`, which this package ships, closing V6. **Then V11 and V23: operating instructions and scenarios, the two that need an author.** Then certification. The rows must land before or with the patch, never after. Then `git apply docs/plans/funnelforge-position-DEFERRED.patch`, republish,
+**The registry rows first** — `scripts/register_funnelforge_modules.py`, which this package ships, closing V6. **Then V11 and V23: operating instructions and scenarios, the two that need an author.** Then certification. The rows must land before or with the patch, never after. Then the two blocks in `docs/plans/funnelforge-position-PLAN.md` (retired the patch, 14 Sep 2026), republish,
 and Gate 2 should return to 0 FAIL with V31 finally **running** — and, per this package's own
 finding, **failing on seven of the nine**, which is the honest declaration and must not be
 softened at either end.

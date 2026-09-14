@@ -15,6 +15,7 @@ import pytest
 
 from adapters.funnelforge import app as adapter_app
 from adapters.funnelforge import modules as modules_mod
+from adapters.funnelforge import upstream
 from adapters.funnelforge.modules import MODULES, manifest
 from broker import executor, forge_modules
 
@@ -89,21 +90,88 @@ async def test_every_declared_idempotency_value_is_one_the_registry_accepts():
         assert binding.idempotency_support in forge_modules.IDEMPOTENCY_SUPPORT, module_id
 
 
-async def test_seven_modules_are_the_shape_v31_refuses_and_that_is_recorded():
-    """A prediction written down rather than discovered by whoever runs the ladder.
+async def test_the_six_email_sends_are_key_and_the_booking_is_not():
+    """The shape V31 reads, pinned - now from the other side.
 
-    V31 refuses `auto_execute` over a module that is mutating and `at_most_once`, and
-    `auto_execute` is the only tier that reaches a Forge. This test does not assert that
-    V31 is wrong or that the declarations should change - it pins the count so that a
-    later change to a declaration is a deliberate act with a failing test attached.
+    **INVERTED 14 September 2026, and the inversion is what this test is for.** It was
+    `test_seven_modules_are_the_shape_v31_refuses_and_that_is_recorded`, and it said of
+    itself: *"it pins the count so that a later change to a declaration is a deliberate
+    act with a failing test attached."*
+
+    **It fired, and the deliberate act was made.** This docstring is the attachment.
+
+    WHY THE DECLARATIONS CHANGED
+    ============================
+
+        FunnelForge PR #160 merged 2026-09-12 04:55 UTC and gave the send path an
+        idempotency store: an atomic Redis claim (`SET ... PX NX`, so it holds across
+        replicas), a repeat answered from the record instead of sent, failing closed with
+        a 503 when Redis is unreachable, and a 24-hour window matched to Resend's so a key
+        cannot expire on one side while live on the other.
+
+        `at_most_once` was true when it was written and stopped being true two days before
+        anybody in this repository read it. Nothing crossed back: the declaration here is
+        a hand-written string about another repository's code, and sixteen of the twenty
+        registered modules carry `verification_method = 'hand'` with nothing comparing
+        them to anything.
+
+    WHY `key` AND NOT `natural`
+    ===========================
+
+        The header is optional on FunnelForge's side - an unkeyed repeat still sends a
+        second email, and the store's own docstring says a caller without a key "never
+        reaches this file". So repetition is not inherently safe. What is true is that a
+        repeat becomes recognisable *when the caller supplies a key*.
+
+        That makes `key` a claim about the CALL PATH rather than about the Forge alone,
+        which is why `adapters/funnelforge/app.py` forwards `Idempotency-Key` and
+        `tests/adapters/test_funnelforge_idempotency_hop.py` asserts it survives the hop.
+        The declaration and the forwarding are one fact and changed in one commit.
+
+    WHAT IS STILL PINNED
+    ====================
+
+        The pin moves rather than disappearing. This now fails if any declaration drifts
+        back to `at_most_once` - which would mean either FunnelForge lost its store, or
+        somebody softened a declaration to make a Pack pass. Both deserve the same
+        failing test attached.
     """
+    # The route decides, not the module's name. Six sends and the briefing distribution
+    # post to EMAILS_SEND, which PR #160 gave a store.
+    emailing = sorted(
+        m for m, b in MODULES.items() if b.upstream_route.endswith(upstream.EMAILS_SEND)
+    )
+    assert len(emailing) == 6, emailing
+    assert all(MODULES[m].idempotency_support == "key" for m in emailing), {
+        m: MODULES[m].idempotency_support for m in emailing
+    }
+
+    # SCHEDULING_BOOK never reads the header. The adapter forwards it on every call, so
+    # it ARRIVES and is ignored - which is why this is asserted rather than assumed.
+    booking = MODULES["schedule_blueprint_call"]
+    assert booking.is_mutating is True
+    assert booking.idempotency_support == "at_most_once", (
+        f"schedule_blueprint_call declares {booking.idempotency_support!r}. It posts to "
+        "SCHEDULING_BOOK, and `apps/api/src/modules/scheduling/` contains no reference "
+        "to an idempotency key - a repeat books a second appointment. This was `key` for "
+        "one commit because seven declarations were changed in a single replace-all on "
+        "the evidence of a PR that only touched the email path."
+    )
+
     unsafe = sorted(
         m for m, b in MODULES.items()
         if b.is_mutating and b.idempotency_support == "at_most_once"
     )
-    assert len(unsafe) == 7, unsafe
-    grantable = sorted(set(MODULES) - set(unsafe))
-    assert grantable == ["capture_contact", "read_funnel_analytics"]
+    assert unsafe == ["schedule_blueprint_call"], (
+        f"{unsafe} declare `at_most_once`. Exactly one module should: the booking. Any "
+        "other means an email-path declaration drifted back, and V31 would refuse "
+        "`auto_execute` over it - the only tier that reaches a Forge at all."
+    )
+
+    naturally_safe = sorted(
+        m for m, b in MODULES.items() if b.idempotency_support == "natural"
+    )
+    assert naturally_safe == ["capture_contact", "read_funnel_analytics"]
 
 
 # --------------------------------------------------------------- trap #9: unconfigured

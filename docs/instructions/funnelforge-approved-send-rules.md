@@ -301,16 +301,36 @@ For an agent this reduces to one rule: **never retry a send.** Rule 9.
 
 ## 9. RETRY VS ESCALATE, FOR EVERY SEND AND FOR THE BOOKING
 
-**On a timeout: stop and escalate. Do not retry. Do not check first.**
+**CORRECTED 14 September 2026. This rule said "do not retry" and the premise under it
+expired on the 12th.** What follows is the corrected rule; the paragraph it replaces is not
+preserved here, because a superseded instruction left in a manual is a sentence somebody
+quotes.
 
-The asymmetry decides it, and it is the one `capitalforge-record-consent.md` §6 sets out. Two
-identical calls send two emails to the same person; a client receiving the same Blueprint
-cover twice is a visible defect in Burkham's own correspondence, and there is no way to
-withdraw one. A message that did not go out is a gap a human closes in a minute.
+**On a timeout: retry ONCE with the same idempotency key, then escalate.**
 
-**Check-then-retry does not exist here.** There is nothing to check. Nothing is written in
-FunnelForge (7c), so no query can tell an agent whether the first attempt landed. An agent
-proposing to "verify and then resend" is proposing to verify against nothing.
+**Why a retry is now safe, and was not.** FunnelForge PR #160 gave `/api/emails/send` an
+idempotency store: the first request under a key claims it atomically and sends; any later
+request under the same key is answered from the record rather than sent. The Office derives
+the key from `(task_id, module_id, payload)`, so a retry of the same send carries the same
+key by construction - an agent does not choose it and cannot vary it. All six sends and the
+briefing distribution post to that one route.
+
+**The retry must be the same call.** A retry with a changed recipient, subject or template is
+a different payload, therefore a different key, therefore a second email. If anything about
+the send needs to change, it is a new send and a human decides it.
+
+**Check-then-retry still does not exist, and no longer needs to.** Nothing in FunnelForge is
+queryable for whether a send landed (7c), so an agent cannot verify - but it does not have
+to, because the key makes the repeat harmless whether or not the first attempt arrived. An
+agent proposing to "verify and then resend" is still proposing to verify against nothing.
+
+**After the second failure, escalate.** Two failures under the same key mean the store or the
+provider is unavailable, not that the send is ambiguous. A human takes it.
+
+**`schedule_blueprint_call` is NOT covered by this rule.** It posts to `SCHEDULING_BOOK`,
+which never reads the header, so a repeat books a second appointment. Its own manual's §6
+governs it: stop and escalate, do not retry. **That module is why this rule names its route
+rather than saying "every module on this Forge".**
 
 **A 429 is the one exception, and it is a wait rather than a retry.** The call was refused by
 a `preHandler` before the route ran, so nothing was sent and nothing is ambiguous. Honour

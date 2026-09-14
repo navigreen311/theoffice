@@ -500,11 +500,14 @@ def test_the_six_approved_sends_are_the_six_the_manual_set_says_they_are():
     for module_id in sorted(sends):
         binding = MODULES[module_id]
         assert binding.is_mutating is True
-        assert binding.idempotency_support == "at_most_once", (
+        assert binding.idempotency_support == "key", (
             f"{module_id} declares idempotency_support "
-            f"{binding.idempotency_support!r}. Shared rule 8 and every send manual's "
-            "retry rule are written on `at_most_once`, and V31's refusal is over "
-            "exactly that shape - a change here changes what those manuals teach."
+            f"{binding.idempotency_support!r}. All six template-bound sends post to "
+            "EMAILS_SEND, which FunnelForge PR #160 gave an idempotency store on "
+            "12 September 2026 - and shared rule 9 plus all six send manuals were "
+            "corrected on the 14th to retry once with the same key. A change here "
+            "changes what those manuals teach, which is why they were edited in the "
+            "same commit as the declaration."
         )
 
 

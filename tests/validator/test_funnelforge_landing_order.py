@@ -31,19 +31,24 @@ from __future__ import annotations
 
 import json
 import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 from adapters.funnelforge.modules import manifest
 from generators.pack import BusinessPack, load_pack
 from generators.validator import ModuleShape, unattended_writes
-from scripts.land_funnelforge_position import split_hunks
+from scripts.land_funnelforge_position import (
+    ANCHORS,
+    BINDING_MARKER,
+    POSITION_MARKER,
+    split_hunks,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 PACK_PATH = ROOT / "packs" / "burkham-wickmont.draft.yaml"
-PATCH_PATH = ROOT / "docs" / "plans" / "funnelforge-position-DEFERRED.patch"
+PLAN_PATH = ROOT / "docs" / "plans" / "funnelforge-position-PLAN.md"
 RECEIPT_PATH = ROOT / "docs" / "plans" / "funnelforge-landing-receipt.json"
 FORGE = "funnelforge"
 POSITION = "Marketing Operations Coordinator"
@@ -54,45 +59,54 @@ needs_git = pytest.mark.skipif(shutil.which("git") is None, reason="git not on P
 # ------------------------------------------------------------------------- helpers
 
 
-def _apply_in(tmp_path: Path, patch_bytes: bytes) -> Path:
-    """Apply a patch to a throwaway copy of the Pack and return the copy.
+def _apply_in(tmp_path: Path, only: str | None = None) -> Path:
+    """Insert the plan's two blocks into a throwaway copy of the Pack; return the copy.
 
-    Outside a repository on purpose. `git apply` resolves paths against the working
-    directory, so this exercises the patch against the Pack's real current text without
-    ever touching the checkout the test is running from.
+    **Was `git apply` against a held `.patch` until 14 September 2026.** The patch was
+    retired because a diff matches three lines of context and goes stale silently: this
+    helper's own history records the patch having stopped applying while the check meant
+    to notice could not see it. The plan's blocks carry an ANCHOR instead - one whole
+    line, required to appear exactly once - so a Pack whose shape moved stops the
+    insertion with a message rather than landing it in the wrong place.
 
-    **Bytes end to end, and that is the whole point of the helper.** The first version of
-    this took `str`, read the patch with `read_text` and encoded it here - and it passed
-    against a deliberately CRLF-ed patch file, because `read_text` uses universal newlines
-    and had already normalised the defect away before `git apply` could see it. A rot
-    detector that launders its own input is the same mistake one layer up from the one it
-    was written to catch. `text=False` matters for the same reason on the write side:
-    Python's text mode rewrites line endings to CRLF into a pipe on Windows.
+    The insertion is the script's, imported rather than reimplemented. A helper that
+    re-derived it would assert against its own copy of the behaviour, which is trap #4
+    in `docs/forge-adapter.md` one layer up.
     """
     (tmp_path / "packs").mkdir(parents=True, exist_ok=True)
     target = tmp_path / "packs" / PACK_PATH.name
-    target.write_bytes(PACK_PATH.read_bytes())
-    proc = subprocess.run(
-        ["git", "apply", "-"],
-        cwd=tmp_path,
-        input=patch_bytes,
-        capture_output=True,
-        check=False,
-    )
-    assert proc.returncode == 0, proc.stderr.decode("utf-8", "replace")
+    target.write_text(PACK_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+
+    binding, position = split_hunks(PLAN_PATH.read_text(encoding="utf-8"))
+    text = target.read_text(encoding="utf-8")
+    pairs = [(binding, BINDING_MARKER), (position, POSITION_MARKER)]
+    if only is not None:
+        # One block alone, for the ordering tests: landing the binding without the
+        # position is step 1 of the sequence and has to be reachable on its own.
+        pairs = [(b, m) for b, m in pairs if only in b]
+        assert len(pairs) == 1, f"{only!r} selected {len(pairs)} blocks"
+    for block, marker in pairs:
+        anchor = ANCHORS[marker]
+        assert [ln for ln in text.splitlines() if ln == anchor] == [anchor], (
+            f"anchor {anchor!r} is not unique in the Pack, so the plan's {marker!r} "
+            "block cannot be placed deterministically. This is the failure the anchors "
+            "exist to make loud - a diff would have guessed."
+        )
+        text = text.replace(anchor, block.rstrip() + "\n\n" + anchor, 1)
+    target.write_text(text, encoding="utf-8")
     return target
 
 
-def _patch_is_held() -> bool:
-    """True while the Pack edit is still on the shelf rather than in the Pack."""
+def _plan_is_held() -> bool:
+    """True while the plan's edits are still on the shelf rather than in the Pack."""
     return POSITION not in {
         p.position_title for p in load_pack(PACK_PATH).positions_required
     }
 
 
 held_only = pytest.mark.skipif(
-    not _patch_is_held(),
-    reason="the deferred edit has landed; there is no held patch left to re-apply",
+    not _plan_is_held(),
+    reason="the planned edit has landed; there is no held plan left to re-apply",
 )
 
 
@@ -108,7 +122,7 @@ def _pack_with_the_position(tmp_path: Path) -> BusinessPack:
     on_disk = load_pack(PACK_PATH)
     if POSITION in {p.position_title for p in on_disk.positions_required}:
         return on_disk
-    return load_pack(_apply_in(tmp_path, PATCH_PATH.read_bytes()))
+    return load_pack(_apply_in(tmp_path))
 
 
 def _adapter_shapes() -> dict[tuple[str, str], ModuleShape]:
@@ -131,83 +145,87 @@ def _adapter_shapes() -> dict[tuple[str, str], ModuleShape]:
 # ------------------------------------------------------------- the patch still works
 
 
-@needs_git
-@held_only
-def test_the_deferred_patch_still_applies(tmp_path: Path) -> None:
-    """The record promises `git apply` returns the position "exactly as authored".
+def test_every_plan_anchor_is_unique_in_the_pack() -> None:
+    """The plan's two blocks can each be placed in exactly one spot.
 
-    A promise about a command is checked by running the command, on the bytes on disk.
-    This failed for the whole of 2026-09-09 to 2026-09-10 on any Windows checkout and
-    nobody could see it, because the only test that read the patch read it as text.
+    **REPLACES `test_the_deferred_patch_still_applies`, 14 September 2026.** That test
+    guarded the property a `.patch` needs - appliability - by running `git apply --check`.
+    The plan is not a diff and `git apply` cannot read it, but the property it protected
+    still matters and has an exact equivalent: a block is placed above a named anchor
+    line, so the plan is landable precisely while every anchor appears once.
+
+    This is a stronger guarantee than the one it replaces. A diff matches three lines of
+    context and can land at a wrong offset when the Pack shifts near them; an anchor that
+    has moved or duplicated stops the insertion with a message naming it.
     """
-    check = subprocess.run(
-        ["git", "apply", "--check", PATCH_PATH.relative_to(ROOT).as_posix()],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert check.returncode == 0, (
-        "the documented command `git apply "
-        f"{PATCH_PATH.relative_to(ROOT).as_posix()}` does not apply to "
-        f"{PACK_PATH.name} as it stands.\n{check.stderr}"
-    )
+    pack_lines = PACK_PATH.read_text(encoding="utf-8").splitlines()
+    for marker, anchor in ANCHORS.items():
+        hits = [ln for ln in pack_lines if ln == anchor]
+        assert len(hits) == 1, (
+            f"anchor {anchor!r} for the {marker!r} block appears {len(hits)} times in "
+            f"{PACK_PATH.name}; it must appear exactly once. The Pack's shape moved - "
+            "update the anchor in the plan deliberately rather than letting the lander "
+            "guess which occurrence was meant."
+        )
 
-    target = _apply_in(tmp_path, PATCH_PATH.read_bytes())
-    pack = load_pack(target)
-    assert POSITION in {p.position_title for p in pack.positions_required}
-    assert FORGE in {b.forge for b in pack.forge_dependencies.forge_bindings}
+def test_the_plan_blocks_parse_as_yaml() -> None:
+    """Each block is well-formed YAML of the shape its destination expects.
 
+    **REPLACES `test_the_patch_is_stored_with_unix_line_endings`, 14 September 2026.**
+    That test existed because `git apply` compares context byte for byte and a CRLF
+    checkout made it refuse the whole patch - a real failure that cost two days. Nothing
+    in the plan path is byte-compared, so the pin it guarded is no longer load-bearing.
 
-@needs_git
-def test_the_patch_is_stored_with_unix_line_endings() -> None:
-    """`.gitattributes` pins `*.patch text eol=lf`; this is what that pin is for.
-
-    Checked against git's own index rather than the working file, because the working
-    file is allowed to be CRLF on a Windows checkout for every other file type and the
-    thing that must not happen is a CRLF `.patch` reaching `git apply`. With the pin in
-    place the two are the same; without it, only this assertion notices.
+    What replaces it is the check the plan path actually needs: the blocks are spliced
+    into a Pack as text, so a block that is not valid YAML produces a Pack that will not
+    load, and the failure would surface at `load_pack` rather than here.
     """
-    proc = subprocess.run(
-        ["git", "check-attr", "text", "eol", "--", PATCH_PATH.relative_to(ROOT).as_posix()],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert proc.returncode == 0, proc.stderr
-    assert "eol: lf" in proc.stdout, (
-        "docs/plans/*.patch is not pinned to LF. A patch checked out with CRLF is "
-        f"refused whole by git apply.\n{proc.stdout}"
-    )
+    binding, position = split_hunks(PLAN_PATH.read_text(encoding="utf-8"))
 
+    parsed_binding = yaml.safe_load(binding)
+    assert isinstance(parsed_binding, list) and len(parsed_binding) == 1, parsed_binding
+    assert parsed_binding[0]["forge"] == FORGE
+    assert len(parsed_binding[0]["modules_expected"]) == 9
 
-@needs_git
+    parsed_position = yaml.safe_load(position)
+    assert isinstance(parsed_position, list) and len(parsed_position) == 1, parsed_position
+    assert parsed_position[0]["position_title"] == POSITION
+    assert parsed_position[0]["trust_tier_ceiling"] == "auto_execute"
+    assert len(parsed_position[0]["forge_modules_operated"]) == 9
+
 @held_only
 def test_the_split_loses_nothing(tmp_path: Path) -> None:
     """Landing in two halves must land the same Pack as landing in one.
 
-    The script's whole method is that the patch has always been two independent hunks.
-    If the splitter dropped or duplicated a line, the ordering would be enforced over a
+    The script's whole method is that the edit has always been two independent blocks.
+    If the reader dropped or duplicated a line, the ordering would be enforced over a
     Pack nobody authored.
+
+    **No longer runs `git apply`, 14 September 2026.** The halves are inserted by the
+    same anchor-based code the lander uses, which is what makes this an assertion about
+    the landing path rather than about a diff that no longer exists.
     """
-    binding_patch, position_patch = split_hunks(PATCH_PATH.read_text(encoding="utf-8"))
+    binding_block, position_block = split_hunks(PLAN_PATH.read_text(encoding="utf-8"))
+    assert binding_block and position_block
 
     halves = tmp_path / "halves"
-    _apply_in(halves, binding_patch.encode("utf-8"))
-    proc = subprocess.run(
-        ["git", "apply", "-"],
-        cwd=halves,
-        input=position_patch.encode("utf-8"),
-        capture_output=True,
-        check=False,
+    _apply_in(halves, only=BINDING_MARKER)
+    # Step 3 of the sequence, against the Pack step 1 already edited.
+    target = halves / "packs" / PACK_PATH.name
+    text = target.read_text(encoding="utf-8")
+    anchor = ANCHORS[POSITION_MARKER]
+    assert [ln for ln in text.splitlines() if ln == anchor] == [anchor]
+    target.write_text(
+        text.replace(anchor, position_block.rstrip() + "\n\n" + anchor, 1),
+        encoding="utf-8",
     )
-    assert proc.returncode == 0, proc.stderr.decode("utf-8", "replace")
 
-    whole = _apply_in(tmp_path / "whole", PATCH_PATH.read_bytes())
-    assert (halves / "packs" / PACK_PATH.name).read_text(
-        encoding="utf-8"
-    ) == whole.read_text(encoding="utf-8")
+    whole = _apply_in(tmp_path / "whole")
+    assert target.read_text(encoding="utf-8") == whole.read_text(encoding="utf-8"), (
+        "landing the two blocks separately produced a different Pack from landing them "
+        "together. The ordering the lander enforces would then be enforced over a Pack "
+        "nobody authored."
+    )
 
 
 @needs_git
@@ -224,8 +242,7 @@ def test_the_binding_half_alone_leaves_v31_with_nothing_to_read(tmp_path: Path) 
     of why this is step 1: without the binding, step 2's rows are outside the query and V31
     would report NOT_RUN with all nine of them written.
     """
-    binding_patch, _ = split_hunks(PATCH_PATH.read_text(encoding="utf-8"))
-    pack = load_pack(_apply_in(tmp_path, binding_patch.encode("utf-8")))
+    pack = load_pack(_apply_in(tmp_path, only=BINDING_MARKER))
 
     assert POSITION not in {p.position_title for p in pack.positions_required}
     refusals, unresolved = unattended_writes(pack, {})
@@ -259,28 +276,68 @@ def test_the_patch_without_the_rows_makes_v31_mute(tmp_path: Path) -> None:
 
 
 @needs_git
-def test_the_patch_with_the_rows_makes_v31_refuse_seven(tmp_path: Path) -> None:
-    """*"the registry rows land before or with the patch"* - here is what that buys.
+def test_the_plan_with_the_rows_makes_v31_refuse_only_the_booking(tmp_path: Path) -> None:
+    """*"the registry rows land before or with the position"* - here is what that buys.
 
-    Seven of the nine are mutating and `at_most_once`: an email leaves the system and
-    reaches a person, and `EmailQueue` has no idempotency key that would recognise a
-    repeat. V31 refuses `auto_execute` over exactly that shape.
+    **INVERTED 14 September 2026, and the inversion is the point of the test.** It was
+    `..._makes_v31_refuse_seven`, pinning seven refusals so that "a change at either end -
+    the adapter restating a shape, or the Pack quietly dropping the tier - shows up as a
+    diff here with a person having to say why."
 
-    **This test passing is not a defect being fixed. It is the defect becoming
-    speakable.** The count is pinned so that a change at either end - the adapter
-    restating a shape, or the Pack quietly dropping the tier - shows up as a diff here
-    with a person having to say why.
+    **It worked exactly as designed.** Changing the adapter's seven `at_most_once`
+    declarations to `key` turned this red, and this docstring is the person saying why.
+
+    The reason is not in this repository. FunnelForge PR #160 merged 2026-09-12 04:55 UTC
+    and gave the send path an idempotency store: an atomic Redis claim, answered from its
+    record on a repeat, failing closed on a 503 rather than sending. `at_most_once` was
+    true when it was written and stopped being true two days before anybody here read it.
+
+    **`key` and not `natural`, because the header is optional there** - an unkeyed repeat
+    still sends twice. That makes the declaration a claim about the CALL PATH, which is
+    why `adapters/funnelforge/app.py` now forwards `Idempotency-Key` and
+    `tests/adapters/test_funnelforge_idempotency_hop.py` asserts it survives the hop. The
+    declaration and the forwarding are one fact.
+
+    So V31 refuses nothing, and the pin moves rather than disappearing: this now fails if
+    anything drifts back to `at_most_once`, or if a tenth module arrives unexamined.
     """
     pack = _pack_with_the_position(tmp_path)
     refusals, unresolved = unattended_writes(pack, _adapter_shapes())
 
-    assert unresolved == []
-    assert len(refusals) == 7
-    permitted = {"capture_contact", "read_funnel_analytics"}
-    assert not [r for r in refusals if any(name in r for name in permitted)], (
-        "capture_contact is mutating with a natural key and read_funnel_analytics "
-        "mutates nothing; V31 permits both and refusing them would be the rule "
-        "over-reaching, not tightening."
+    assert unresolved == [], (
+        "a module the position operates has no registry row, so V31 cannot speak about "
+        "it. That is the silence the landing order exists to prevent."
+    )
+    # CORRECTED 14 September 2026, from `..._refuse_nothing`. The first inversion said
+    # V31 refuses nothing, on the strength of seven declarations changed in one
+    # replace-all. Six of those seven were right: they post to EMAILS_SEND, which PR #160
+    # gave a store. `schedule_blueprint_call` posts to SCHEDULING_BOOK, which never reads
+    # the header, so it is `at_most_once` and V31 refuses `auto_execute` over it.
+    #
+    # The plan declares it `propose` in `module_trust_tiers` for exactly this reason, so
+    # the LANDED Pack is not refused - but `unattended_writes` reads the ceiling, so the
+    # refusal is visible here and that is the point of the assertion.
+    assert [r for r in refusals if "schedule_blueprint_call" in r], (
+        f"V31 refuses {refusals}, and schedule_blueprint_call is not among them. It is "
+        "mutating and `at_most_once` - a repeat books a second appointment - so a rule "
+        "that does not refuse it under an unattended ceiling has stopped reading the "
+        "shape it exists to read."
+    )
+    others = [r for r in refusals if "schedule_blueprint_call" not in r]
+    assert others == [], (
+        f"V31 also refuses {others}. Every other module posts to EMAILS_SEND, "
+        "`capture_contact` has a natural key, `read_funnel_analytics` mutates nothing. A "
+        "refusal here means an email-path declaration drifted back to `at_most_once`."
+    )
+
+    shapes = _adapter_shapes()
+    unsafe = sorted(
+        m for (_f, m), sh in shapes.items() if sh.idempotency_support == "at_most_once"
+    )
+    assert unsafe == ["schedule_blueprint_call"], (
+        f"{unsafe} declare `at_most_once`. Exactly one should. If FunnelForge's email "
+        "path genuinely lost its idempotency store this test is right and the plan's "
+        "`module_trust_tiers` are now wrong - fix the plan, not this assertion."
     )
 
 
