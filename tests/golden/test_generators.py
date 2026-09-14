@@ -937,3 +937,94 @@ async def test_no_rule_reads_the_advisory_daily_approval_ceiling():
         "3.5 minutes is 420 against 432 available, computed from coverage_hours and "
         "median_review_minutes alone"
     )
+
+
+async def test_a_second_apply_reconciles_certification_refs(greenstone_world, admin):
+    """Re-applying repairs a grant's certification refs; it does not rewrite its history.
+
+    WHY THIS TEST DID NOT EXIST
+    ===========================
+
+        `record_result` upserts on the natural key, so reissuing a certification preserves
+        its `cert_id` and a grant's refs stay valid forever under every sanctioned path.
+        There was no reachable way to make them stale — until `certification` was truncated
+        by an unisolated test run (entry 47), and 34 Burkham grants were left pointing at
+        rows that no longer existed.
+
+        The obvious remedy was to re-run the pipeline, since `apply` resolves the refs from
+        live certifications. **It could not work**: every stale grant already existed, so
+        every one took the `DO UPDATE` branch, which set `trust_tier` and returned
+        (entry 68). This asserts the branch now converges.
+
+    WHAT IS DELIBERATELY NOT ASSERTED
+    =================================
+
+        That `granted_by` and `granted_at` are refreshed. They are history, not pointers,
+        and a re-run that rewrote who granted something or erased when would be a worse
+        defect than the one this fixes. Both are asserted UNCHANGED below, so the fix
+        cannot quietly widen.
+    """
+    from generators import runtime_config as runtime_gen
+
+    certify_for_positions(admin)
+    pack = load_pack(PACK_PATH)
+    async with connection() as conn:
+        artifacts = await pipeline.run_all(pack, conn)
+        await runtime_gen.apply(
+            artifacts.runtime_config, conn,
+            granted_by="00000000-0000-5000-8000-00000000bbbb",
+        )
+
+    # Break one grant's refs the way a truncation does: a well-formed uuid pointing at
+    # nothing. Not NULL — a NULL ref is already reported by resolve_grant, and the
+    # failure this covers is the one that stays silent.
+    dangling = "00000000-0000-4000-8000-0000deadbeef"
+    with admin.cursor() as cur:
+        cur.execute(
+            "UPDATE agent_forge_grant SET operation_cert_ref = %s, "
+            "dept_context_cert_ref = %s WHERE venture_id = %s "
+            "RETURNING grant_id, granted_by, granted_at",
+            (dangling, dangling, pack.venture_id),
+        )
+        before = cur.fetchall()
+    admin.commit()
+    assert before, "no grants to break; the fixture stopped producing them"
+
+    async with connection() as conn:
+        await runtime_gen.apply(
+            artifacts.runtime_config, conn,
+            granted_by="00000000-0000-5000-8000-00000000cccc",
+        )
+
+    with admin.cursor() as cur:
+        cur.execute(
+            "SELECT grant_id, operation_cert_ref, dept_context_cert_ref, "
+            "       granted_by, granted_at "
+            "  FROM agent_forge_grant WHERE venture_id = %s",
+            (pack.venture_id,),
+        )
+        after = {r[0]: r for r in cur.fetchall()}
+
+    history = {r[0]: (r[1], r[2]) for r in before}
+    repaired = 0
+    for grant_id, op_ref, dept_ref, granted_by, granted_at in after.values():
+        assert op_ref != dangling, (
+            f"grant {str(grant_id)[:8]} still carries the dangling unit-A ref after a "
+            "second apply. Re-provisioning cannot repair a stale certification ref, "
+            "which is the whole of entry 68."
+        )
+        assert dept_ref != dangling, (
+            f"grant {str(grant_id)[:8]} still carries the dangling unit-B ref."
+        )
+        if op_ref is not None:
+            repaired += 1
+        # History is untouched. A re-run that rewrote these would be a worse defect.
+        assert (granted_by, granted_at) == history[grant_id], (
+            f"grant {str(grant_id)[:8]} had its history rewritten by a re-apply. "
+            "granted_by and granted_at record who and when; only the pointers converge."
+        )
+
+    assert repaired, (
+        "no grant resolved to a live certification, so this asserted nothing. The "
+        "fixture certifies before applying; if that stopped happening the test is inert."
+    )

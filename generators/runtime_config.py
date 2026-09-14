@@ -246,7 +246,28 @@ async def apply(
                           WHERE cb.unit = 'B' AND i.office_agent_id = %s
                             AND cb.forge_id = %s),
                         %s)
-                ON CONFLICT (grant_id) DO UPDATE SET trust_tier = EXCLUDED.trust_tier
+                -- POINTERS ARE REFRESHED; HISTORY IS NOT.
+                --
+                -- This used to set `trust_tier` alone, and that left a re-run unable to
+                -- repair a grant whose certification refs had gone stale - which is how
+                -- Gate 9 came to block on 68 units pointing at rows that no longer
+                -- existed, with "just re-provision" as the obvious remedy that could
+                -- never work (entry 68).
+                --
+                -- The two refs are POINTERS at a current fact, so they converge: a
+                -- second apply resolves them against the certifications that exist now.
+                -- `granted_by` and `granted_at` are HISTORY and are deliberately absent
+                -- from this list - refreshing them would rewrite who granted something
+                -- and erase when, which is the opposite of what a re-run should do.
+                --
+                -- A ref resolving to NULL overwrites a non-NULL one on purpose. NULL is
+                -- a state `resolve_grant` reports truthfully (`grants.py:225` raises
+                -- NotCertified naming which half is missing); a stale non-NULL ref
+                -- pointing at a deleted row is the silent failure this exists to end.
+                ON CONFLICT (grant_id) DO UPDATE SET
+                  trust_tier            = EXCLUDED.trust_tier,
+                  operation_cert_ref    = EXCLUDED.operation_cert_ref,
+                  dept_context_cert_ref = EXCLUDED.dept_context_cert_ref
                 """,
                 (
                     grant.grant_id, grant.office_agent_id, grant.forge_id,

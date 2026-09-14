@@ -4794,3 +4794,128 @@ answered.
 state: the fifteen await Gate 11, the four await a certification, and Gate 9 still blocks on
 references to certifications that were deleted. Clearing the revocation layer changed what is
 *visible*, not what is *permitted*, and that was the point of clearing it.
+## 70. The lifts bought legibility, not permission
+
+**Recorded 2026-09-14, after twenty revocations were lifted across two rulings and nothing
+became callable.**
+
+    before          49 of 49 grants covered by a live revocation
+    after           0 of 49
+    callable        ZERO, before and after
+
+**Not one agent gained a capability.** Every grant still refuses: fifteen on
+`GrantNotActivated` because Gate 11 has not run, four on `NotCertified` because the
+`engineering` agents hold no certification. The revocations were removed and the answer did not
+change.
+
+**What changed is that one answer became four.**
+
+    before     every call refused at the revocation check, first in the chain.
+               One verdict - "covered by a live revocation" - over four distinct causes:
+               a false departure cascade, a mis-scoped module stop, an ungate-11'd grant,
+               and a missing certification.
+
+    after      each triple reports the reason that actually applies to it.
+
+**A control that refuses early refuses truthfully and uninformatively.** `resolve_grant` checks
+revocation before activation and before certification, which is the right order - a revoked agent
+should not have its certification discussed - and it means a wide revocation masks everything
+beneath it for exactly as long as it stands.
+
+### The nine were invisible inside the eleven
+
+**This is what the entry is for.** The nine `agent_module` revocations of 13 September stopped
+nine live Gate 5 grants, and that was undetectable while the cascade's eleven agent-scope
+revocations covered the same rows. Two revocations covering one grant produce one refusal.
+Lifting the eleven dropped coverage from 49 to 27 and left the nine standing alone, where a
+single read found them in one query.
+
+**Neither ruling could have been made without the one before it.** The order was not planned that
+way - the eleven were lifted because the cascade was false, and the nine surfaced as a
+consequence.
+
+### The general form
+
+**Clearing a sufficient blocker is how the layer beneath it becomes legible**, and it is the
+third time this week:
+
+    entry 52    nine certifications changed tier; the artifact hash did not move.
+                The flattening was invisible while the layer above it collapsed everything
+    entry 67    thirty unreachable grants, invisible while every grant was revoked anyway
+    this        four causes wearing one verdict
+
+**The cost of an early, wide refusal is that it is a correct answer which prevents a better
+one.** Nothing here argues for reordering `resolve_grant` - checking revocation first is right -
+only for knowing that a system in that state is telling you less than it knows.
+
+---
+
+## 71. The refs repaired, and the upsert taught to maintain them
+
+**Ruled and built 2026-09-14. A pointer repaired to a fact that is true today, and the reason it
+will not need repairing again.**
+
+### The repair
+
+Burkham's 49 grants carried certification refs written at INSERT time and never refreshed. After
+`certification` was truncated by an unisolated test run (entry 47) and rebuilt, 34 of them
+pointed at `cert_id`s that no longer existed, and Gate 9 blocked on **68 of 98 units**.
+
+**The repair is not a new mechanism.** It is `apply`'s own subselects - the same SQL that wrote
+the refs originally - run against today's certifications:
+
+    operation_cert_ref    = (SELECT cert_id FROM certification
+                              WHERE unit='A' AND office_agent_id = g.office_agent_id
+                                AND forge_id = g.forge_id AND module_id = g.module_id)
+    dept_context_cert_ref = (SELECT cb.cert_id FROM certification cb
+                              JOIN office_agent_identity i ON i.department = cb.department
+                              WHERE cb.unit='B' AND i.office_agent_id = g.office_agent_id
+                                AND cb.forge_id = g.forge_id)
+
+    before   unit-A resolving 15/49   unit-B 15/49
+    after    unit-A resolving 45/49   unit-B 45/49   NULL 4
+    refs naming a different triple:  0
+
+**The four that resolve to NULL are the `engineering` agents** - Amelie Wystan, Brina Arvane
+twice, Cedric Noren - who hold no certification. NULL is the correct answer for them, and
+`resolve_grant` reports it as `NotCertified` naming which half is missing rather than silently.
+
+**Gate 9: 68 never_certified -> 8.** It still blocks, on those four grants' two units each, and
+that is now a real certification gap rather than a bookkeeping artefact.
+
+### The caveat, stated because it is the whole of what this is not
+
+**This attaches each grant to a certification whose triple matches the grant. It cannot confirm
+the original ref aimed at the same fact, because those rows are gone.** Every certification in
+the database was written at 11:28 on 13 September, in one batch, after every one of the 34 grants
+was created. There is no history to compare against.
+
+So it is a pointer repaired to a fact that is true today: this agent *is* certified for this
+module, now, at this tier. It is not a restoration of what the pointer said before, and nothing
+can be. A reader who needs "what was this grant issued against" will not find it here.
+
+**Verified as far as it can be:** zero refs name a different triple than their grant's own, so
+nothing was attached to the wrong certification. That is the strongest check available and it is
+weaker than provenance.
+
+### The upsert, so this does not recur
+
+    ON CONFLICT (grant_id) DO UPDATE SET trust_tier = EXCLUDED.trust_tier      -- was
+    ON CONFLICT (grant_id) DO UPDATE SET                                        -- now
+      trust_tier            = EXCLUDED.trust_tier,
+      operation_cert_ref    = EXCLUDED.operation_cert_ref,
+      dept_context_cert_ref = EXCLUDED.dept_context_cert_ref
+
+**Pointers are refreshed; history is not.** `granted_by` and `granted_at` are deliberately absent
+- refreshing them would rewrite who granted something and erase when, which is a worse defect
+than the one being fixed. The two refs are pointers at a current fact, so they converge.
+
+**A ref resolving to NULL overwrites a non-NULL one on purpose.** NULL is a state `resolve_grant`
+reports truthfully; a stale non-NULL ref pointing at a deleted row is the silent failure this
+exists to end.
+
+`tests/golden/test_generators.py::test_a_second_apply_reconciles_certification_refs` asserts both
+halves: refs converge, `granted_by` and `granted_at` unchanged. **Verified by breaking it** -
+reverting the upsert alone makes it fail with *"still carries the dangling unit-A ref after a
+second apply"*; restoring it passes. The test could not have existed before, because until a
+`cert_id` could change there was no reachable way to make a ref stale (entry 68).
