@@ -4083,3 +4083,203 @@ The fix is one line: print both. `"Sable Quint (village_agent_ref=...)"`.
 output nobody could act on is the same control whose cascade nobody could reverse, and the two
 belong together. A control that writes 54 rows should be as readable before it runs as it is
 auditable afterwards.
+
+---
+
+## 59. Two real people, and a reviewer capacity computed from four
+
+**Declared 2026-09-13 by Ivan as a standing fact, then audited against every Pack. Recorded as a
+class rather than as a finding about one name, because naming Dana would suggest the other three
+were checked.**
+
+### The standing fact
+
+**Ivan Green and Ira Green are the only real people.** Every other name appearing as a reviewer in
+any Business Pack is invented. This is a fact about the world, not a defect report, and it is
+recorded here so that every number derived from a `human_capacity` block can be read against it.
+
+### Every name in every human_capacity block, both ventures
+
+    GREENSTONE
+      Ivan    venture_operator     6h   median 4    backup_human: Dana
+      Dana    compliance_officer   4h   median 6    backup_human: Ivan     INVENTED
+
+    BURKHAM WICKMONT
+      Ivan Green   compliance_officer   6h   median 4   backup_human: Ira Green
+      Ira Green    compliance_officer   6h   median 3   backup_human: Ivan Green
+
+**Four entries, two people.** Greenstone's "Ivan" and Burkham's "Ivan Green" are the same person
+under two spellings, and neither Pack's entry is joined to an account by anything.
+
+### Everything else in a Pack that names a human
+
+    backup_human          4 occurrences. Dana(1), Ivan(1), Ira Green(1), Ivan Green(1).
+                          One of the four names an invented person, and V14 does not care -
+                          it checks the field is non-empty and nothing else. Burkham's own
+                          Pack says so in its provenance: V14 "passes here on exactly the
+                          arrangement it looks like it exists to catch" (B24).
+    provenance.           4 occurrences, all "Ivan"/"Ivan Green". Real.
+      established_by
+    authored_by           a uuid on Pack versions, resolved against office_human. Real.
+    workflow blocks       no human is named. Steps carry a position title and a role
+                          string; no step names a person.
+    signoff / reviewer    no Pack field names a signer. Gate 10 resolves a signer from
+      refs                the authenticated account, not from the Pack.
+
+So the Pack's entire human surface is `human_capacity[].human_name`, its `backup_human`, and
+`provenance.established_by`. **Three of those ten values name somebody who does not exist**, and
+all three are Dana.
+
+### The accounts that actually exist
+
+    office_human rows        232
+      origin = 'test_fixture'  231
+      origin = 'human'           1   Ivan <ivannextlevel@yahoo.com>, role `ivan`
+
+    holders of `compliance_officer`   ZERO. No account in this system holds it.
+    holders of `venture_operator`     107, every one a test fixture
+    holders of `ivan`                 125 - one real, 124 fixtures
+
+**There is one real account in The Office, and the role both Packs route every approval to has no
+holder at all.**
+
+### So what is Greenstone's V13?
+
+Neither a fail against a fiction nor something that cannot be computed. **It computes cleanly, and
+its supply side refers to nobody.**
+
+    projected approvals     160 to compliance_officer  (192 before place_call was removed)
+    Dana's coverage         4h x 60 x 0.6 = 144 minutes
+    demand                  160 x 6 = 960 minutes
+    verdict                 FAIL, "7 times over"
+
+Every one of those numbers is arithmetic on a Pack field. **V13 reads `pack.human_capacity` and
+never joins `office_human`** - it has no way to ask whether Dana exists, and it does not ask. The
+FAIL is real in the sense that the arithmetic is right, and meaningless in the sense that removing
+Dana entirely would change the verdict from FAIL to a different FAIL, never to a truth.
+
+**The same is true of Burkham's PASS, and that is the sharper half.** 280 minutes demanded against
+432 available - and the 432 is 12 coverage-hours declared by two `human_capacity` entries, neither
+of which is joined to an account. Ivan's real account holds `ivan`, not `compliance_officer`; Ira
+has no account at all. **The V13 PASS reviewed at Gate 4 rests on a denominator supplied entirely
+by the Pack asserting it.**
+
+This is B22, which has been open since before this week and reads: *"a venture can clear every
+gate to 10 with a reviewer who has no account."* It is no longer hypothetical - a venture has now
+cleared Gate 4.5 on exactly that arrangement.
+
+### Is a second top-level holder expressible? Yes, and the design says so out loud
+
+**`ivan` is a role key, not an account id.** The constraint is explicit:
+
+    office_human_role_role_check
+      CHECK (role = ANY (ARRAY['venture_operator', 'compliance_officer', 'ivan']))
+    ROLE_RANK = {"venture_operator": 1, "compliance_officer": 2, "ivan": 3}
+
+**It is not singular by construction**, and three separate pieces of evidence say so:
+
+**The unique index is on the wrong axis to make it singular.**
+`ux_human_role_live (human_id, role, COALESCE(venture_id,'*')) WHERE revoked_at IS NULL` prevents
+*one person holding one role twice*, not *two people holding one role*. 125 rows hold `ivan` right
+now.
+
+**`assert_may_grant` carves out the top role deliberately.** Its rule is *strictly stronger,
+except at the top* - and the docstring explains that applying it literally would make `ivan`
+"ungrantable and unremovable by anybody", which it calls "not a restriction, it is a single point
+of failure with no recovery." **The second holder is the case the exception exists for.**
+
+**The one bar that does apply is that nobody grants themselves**, including `ivan`. Ivan granting
+Ira is somebody else granting somebody else, which is exactly the shape the rule wants.
+
+So a second co-equal administrator is expressible, anticipated, and two function calls:
+`create_human` (which returns a plaintext token once and never stores it, and stamps
+`origin='human'` from the name and address) then `grant_role(role='ivan', venture_id=None)`.
+
+**The finding is not that the system assumes one top-level human.** It is the opposite: the system
+was built for two and has been running on one, while 124 test fixtures hold the same top role and
+`compliance_officer` - the role that actually does the reviewing in both Packs - has never been
+held by anybody.
+
+---
+
+## 60. A role named after a person reads as an impersonation the moment a second person holds it
+
+**Recorded 2026-09-13 by Ivan, ahead of granting the top role to a second holder. The rename is
+NOT ruled on here - this entry exists so that it can be ruled on separately, with its cost
+measured rather than estimated.**
+
+### The finding
+
+`ivan` is a **role key**. It is not an account, not a user id, and not a reference to a particular
+person - `ROLE_RANK = {"venture_operator": 1, "compliance_officer": 2, "ivan": 3}`, and the role
+has always permitted multiple holders (entry 59: 125 rows hold it today).
+
+**Correct in the database, wrong on every screen and in every audit row.** A second holder is a
+legitimate co-equal administrator and reads as somebody impersonating the founder. The console
+prints the role string directly - `console/app/access/people.tsx` renders
+`["ivan", "compliance_officer", "venture_operator"]` as the grantable set, and
+`console/app/access/page.tsx` explains a refusal with the sentence *"`ivan` - is not a read for a
+venture operator."* Every one of those becomes ambiguous the day Ira Green holds it.
+
+### What it costs, stated as the specific harm rather than as untidiness
+
+**`ROLE_RANK` is the only place in this system that decides who may grant what.** `authorize`
+compares ranks out of it; `assert_may_grant` compares ranks out of it; `SCOPE_MIN_ROLE` maps
+Forge-scope revocation to `"ivan"` by name. There is no second expression of the hierarchy to
+check a reading against.
+
+**So a reader auditing whether Ira should hold `ivan` has nothing that distinguishes the role from
+the man.** The question "should Ira Green hold ivan" is a question about a rank-3 role, and it
+reads as a question about whether Ira should be Ivan. That is not a cosmetic problem: the audit
+log's purpose is answering *who decided this*, and a role whose name is a person's name makes
+every row about the role look like a row about the person.
+
+### What a rename would touch - measured 2026-09-13, not estimated
+
+    DATABASE
+      office_human_role.role                125 live rows
+      office_human_role_role_check          CHECK naming all three roles
+      revocation_revoked_by_role_check      CHECK naming all three roles
+      db/versions/0006_governance.py        declares the role in a constraint
+      db/versions/0010_humans.py            declares the role in a constraint
+      audit_log.subject                     0 rows carry the string
+      revocation.scope                      0 rows carry it (scope is a different vocabulary)
+
+    PYTHON (broker/)                        13 occurrences across 7 modules
+      broker/revocation.py                  ROLE_RANK and SCOPE_MIN_ROLE - the source of truth
+      broker/humans.py                      authorize, assert_may_grant, the docstrings
+                                            that explain the top-role exception
+      broker/app.py, access_overview.py, sync_roster.py, budget.py
+
+    TESTS                                   ~50 occurrences across 12 files
+      test_access_api.py (18), test_access_overview.py (12), test_revocation_console.py (7)
+
+    CONSOLE (console/app/)                  12 occurrences in 5 files
+      access/forms.tsx                      const ROLES = [...] - a hardcoded second copy
+                                            of the vocabulary, which is its own finding
+      access/people.tsx                     a third hardcoded copy in a render loop
+      access/page.tsx, access/overview.tsx, provisioning/[venture]/page.tsx
+
+**Two things in that list are worth separating from the rename question.**
+
+`console/app/access/forms.tsx` and `people.tsx` each hold their **own hardcoded list of the three
+roles**. That is the same defect `tests/contract/test_tier_vocabulary_agrees.py` was written to
+catch for tiers - a vocabulary restated in a second place, free to drift from the constraint that
+enforces it - and it exists here in *three* places (the CHECK, `ROLE_RANK`, and two TSX arrays)
+with nothing comparing them. **A fourth role added to `ROLE_RANK` today would be ungrantable from
+the console and nothing would say so.** That is a finding on its own and does not depend on the
+rename.
+
+The second is that a rename is a **two-CHECK, 125-row migration on the table that governs
+authority**, and the window between dropping the old constraint and writing the new value is a
+window where the authority vocabulary is in two states. It is not hard; it is the one table where
+"not hard" is not the standard.
+
+### Not ruled on
+
+**Ivan's instruction is explicit: do not rename it.** A change to the one table that governs
+authority gets its own decision, made deliberately, not taken as a side effect of adding a second
+administrator. This entry records the cost so that decision can be made on measurement.
+
+What is decided is the narrower fact: **`ivan` names a rank, a second holder is legitimate, and
+anybody reading an audit row or an access screen after today should read it that way.**
