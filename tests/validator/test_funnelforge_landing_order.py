@@ -242,7 +242,6 @@ def test_the_binding_half_alone_leaves_v31_with_nothing_to_read(tmp_path: Path) 
     of why this is step 1: without the binding, step 2's rows are outside the query and V31
     would report NOT_RUN with all nine of them written.
     """
-    binding_block, _ = split_hunks(PLAN_PATH.read_text(encoding="utf-8"))
     pack = load_pack(_apply_in(tmp_path, only=BINDING_MARKER))
 
     assert POSITION not in {p.position_title for p in pack.positions_required}
