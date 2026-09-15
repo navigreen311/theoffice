@@ -41,11 +41,13 @@ from dataclasses import dataclass
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 
+from broker import audit, humans
 from broker.certification import cap_tier
 from broker.errors import (
     GrantNotActivated,
     IdentityInactive,
     ModuleExcluded,
+    NotAuthorized,
     NotCertified,
     NotGranted,
     UnknownForge,
@@ -282,3 +284,106 @@ async def resolve_grant(
         is_mutating=row["is_mutating"],
         compliance_flags=tuple(row["compliance_flags_implied"] or ()),
     )
+
+
+async def deactivate(
+    conn: AsyncConnection,
+    *,
+    venture_id: str,
+    human: humans.Human,
+    reason: str,
+) -> int:
+    """Return a venture's active grants to awaiting-activation. NOT a revocation.
+
+    THE LINE THIS MUST NOT CROSS
+    ============================
+
+        **Deactivating a grant is not revoking it, and the two are one keystroke apart.**
+        A revocation says *this authority is withdrawn* and is recorded in its own table,
+        consulted on every call, liftable only by a named human at the same scope.
+        Deactivation says *this grant has not yet passed Gate 11* - the state Gate 5
+        creates and Gate 11 clears.
+
+        So this touches `activated_at` and `activated_by` and NOTHING else. No revocation
+        row is written, no certification ref moves, the grant keeps its `granted_by` and
+        `granted_at`, and `revocation.check_revocations` is not consulted or altered. A
+        caller that wants authority withdrawn wants `revocation.revoke`, which says so.
+
+    WHY IT EXISTS, AND WHY IT DID NOT
+    =================================
+
+        `agent_forge_grant.activated_at` had exactly one writer in the repository -
+        `_gate_11`, which only ever writes `now()`, under `WHERE activated_at IS NULL`.
+        Activation was one-way by intent: a threshold you cross, not a state you toggle.
+
+        **That was right until a grant arrived already across it.** `bootstrap_phase0`
+        issues Phase 0 grants activated at insert, because Phase 0 runs before any
+        provisioning run exists and there is no sign-off to activate against.
+        `docs/blocking.md` recorded the collision before anyone reached it: *"Phase 0
+        activated grants because there was no ladder to activate them; the ladder now
+        refuses to run past grants that are already active. The two are correct and
+        incompatible."*
+
+        **That is a conditional, and the condition expired.** A grant activated for want
+        of a mechanism is provisional by construction, and when the mechanism arrives the
+        grant goes through it. This is the verb for that, and without it the only option
+        was an unattributed `UPDATE` on the column that decides whether an agent can
+        reach a Forge.
+
+    WHAT HAPPENS NEXT, SO NOBODY READS THE RESULT AS MORE THAN IT IS
+    ================================================================
+
+        Gate 11 is venture-scoped - `WHERE venture_id = %s AND activated_at IS NULL` -
+        so every grant deactivated here is in the set it acts on, and comes back against
+        a Gate 10 signature bound to the current artifacts.
+
+        **Coming back active is not the same as becoming reachable.** Where two grants
+        share an (agent, forge, module) triple, `resolve_grant` takes the newest and the
+        older one is unselectable whatever its `activated_at` says. Deactivating and
+        reactivating a superseded grant moves it through the gate and changes nothing
+        about which row answers a call. That duplication is a separate question
+        (decisions.md entry 67) and this function does not touch it.
+    """
+    if not reason.strip():
+        raise NotAuthorized("deactivating grants requires a documented reason")
+    humans.authorize(human, required_role="venture_operator", venture_id=venture_id)
+
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT grant_id::text, forge_id, module_id, office_agent_id::text "
+            "  FROM agent_forge_grant "
+            " WHERE venture_id = %s AND activated_at IS NOT NULL "
+            " ORDER BY forge_id, module_id",
+            (venture_id,),
+        )
+        targets = [dict(r) for r in await cur.fetchall()]
+
+    if not targets:
+        raise NotAuthorized(
+            f"{venture_id} has no active grants. A deactivation reporting success "
+            "without changing anything is a record of an act that did not happen."
+        )
+
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "UPDATE agent_forge_grant SET activated_at = NULL, activated_by = NULL "
+            " WHERE venture_id = %s AND activated_at IS NOT NULL",
+            (venture_id,),
+        )
+        changed = cur.rowcount
+    await conn.commit()
+
+    await audit.write_event(
+        event_type="grant_deactivated",
+        actor_type="human",
+        actor_id=human.human_id,
+        venture_id=venture_id,
+        subject={
+            "grants": changed,
+            "reason": reason,
+            # Named individually, because "34 grants" is not something a reader can
+            # check and a list is. Same argument as the dry-run legibility note.
+            "modules": sorted({f"{t['forge_id']}/{t['module_id']}" for t in targets}),
+        },
+    )
+    return changed
