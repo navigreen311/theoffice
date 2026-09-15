@@ -23,7 +23,15 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
+from pydantic_core import PydanticCustomError
 
 SCHEMA_VERSION = 3
 
@@ -375,6 +383,59 @@ class Position(Strict):
         """
         return [(f, m) for f, m in (x.split("/", 1) for x in self.forge_modules_operated)]
 
+    @field_validator("forge_modules_operated")
+    @classmethod
+    def _modules_are_qualified(cls, value: list[str], info: ValidationInfo) -> list[str]:
+        """Each entry is `forge_id/module_id`, and the two failure kinds are signalled apart.
+
+        A FIELD validator rather than a model one, so the error's location NAMES the
+        field - `positions_required.0.forge_modules_operated`. A model validator reports
+        at the position, which elides to `("positions_required",)` and cannot be told from
+        any other failure on the same object. `broker.packs.V3_QUALIFICATIONS` keys on the
+        field path, so the location is load-bearing rather than cosmetic.
+
+        TWO BRANCHES, TWO ERROR TYPES, AND THE SPLIT IS THE POINT.
+
+        A BARE name is a document written before entry 48 landed on 14 September 2026 -
+        valid under the revision of v3 it was published as, and a row to migrate rather
+        than a document to inspect. It is signalled with a `PydanticCustomError` whose
+        type the Pack store's ledger names, so a stored row reports as OLD not MALFORMED.
+
+        A name with MORE than one separator was never valid under any revision. It stays a
+        plain `ValueError`, which `_predated_tightenings` refuses like every other
+        validator failure - *"a wrong type or a failed validator is a document that
+        disagrees with the schema, not one that is older than it."*
+
+        The distinction is made HERE, once, where the values are in hand. The matcher
+        reads the signal rather than re-deriving it: a second derivation is a second place
+        to disagree.
+        """
+        title = info.data.get("position_title", "position")
+
+        unqualified = sorted(m for m in value if m.count("/") == 0)
+        if unqualified:
+            raise PydanticCustomError(
+                "unqualified_module_ref",
+                "{title}: forge_modules_operated entries must be 'forge_id/module_id'. "
+                "Unqualified: {names}. Nothing around this list names a Forge, so a bare "
+                "module name is unambiguous only while one Forge is bound - and "
+                "`forge_module_registry`'s key has always been the pair. QUALIFY WHERE "
+                "THE FIELD DOES NOT ALREADY CARRY THE FORGE; "
+                "`forge_bindings[].modules_expected` stays bare because its container's "
+                "first field is `forge`.",
+                {"title": title, "names": ", ".join(unqualified)},
+            )
+
+        malformed = sorted(m for m in value if m.count("/") > 1)
+        if malformed:
+            raise ValueError(
+                f"{title}: forge_modules_operated entries are 'forge_id/module_id', "
+                f"exactly one separator. Malformed: {', '.join(malformed)}. This is not a "
+                "Pack that predates the qualification - no revision of v3 ever accepted "
+                "this shape."
+            )
+        return value
+
     @model_validator(mode="after")
     def _overrides_are_qualified_and_operated(self) -> Position:
         """Keys are `forge_id/module_id`, and name a module this position operates.
@@ -389,18 +450,6 @@ class Position(Strict):
         The forge half is checked against `forge_dependencies` at Pack level - a position
         cannot see the bindings from here.
         """
-        bare_modules = sorted(m for m in self.forge_modules_operated if m.count("/") != 1)
-        if bare_modules:
-            raise ValueError(
-                f"{self.position_title}: forge_modules_operated entries must be "
-                f"'forge_id/module_id'. Unqualified: {', '.join(bare_modules)}. Nothing "
-                "around this list names a Forge, so a bare module name is unambiguous "
-                "only while one Forge is bound - and `forge_module_registry`'s key has "
-                "always been the pair. Qualify where the field does not already carry "
-                "the forge; `forge_bindings[].modules_expected` stays bare because its "
-                "container's first field is `forge`."
-            )
-
         unqualified = sorted(k for k in self.module_trust_tiers if k.count("/") != 1)
         if unqualified:
             raise ValueError(
