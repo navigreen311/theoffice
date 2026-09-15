@@ -304,7 +304,7 @@ human_capacity:
     role: venture_operator
     coverage_hours: 6
     timezone: America/Los_Angeles
-    backup_human: Dana
+    backup_human: Ira Green
     advisory_daily_approval_ceiling: 60
     median_review_minutes: 4
     auth_method: sso_mfa
@@ -317,23 +317,35 @@ human_capacity:
         plan records where they came from. Recorded as declared rather than measured
         because that is what they are, and as the ORIGINAL rather than inherited because
         Burkham's identical block was copied from here. See blocking.md B21.
-  - human_name: Dana
+  # Replaced Dana 2026-09-15 (decisions entry 92). Dana was invented (entry 59): no
+  # account, no person, and her 4h / 6 min were never attributed to anything. Ivan Green
+  # and Ira Green are the only real people in Green Companies, and Ira is the only one of
+  # them who can be compliance officer of record here without Ivan signing for himself.
+  # `human_name` is the account's display_name exactly, because that is what the access
+  # overview matches a Pack's people against.
+  - human_name: Ira Green
     role: compliance_officer
-    coverage_hours: 4
+    coverage_hours: 2
     timezone: America/Los_Angeles
     backup_human: Ivan
-    advisory_daily_approval_ceiling: 30
-    median_review_minutes: 6
+    advisory_daily_approval_ceiling: 12
+    median_review_minutes: 10
     auth_method: sso_mfa
     provenance:
       basis: declared
       established_by: Ivan
       detail: >
-        Asserted when this Pack was authored and never attributed until now. Nothing
-        measured these hours or this review time; no decision entry, validator doc or
-        plan records where they came from. Recorded as declared rather than measured
-        because that is what they are, and as the ORIGINAL rather than inherited because
-        Burkham's identical block was copied from here. See blocking.md B21.
+        Declared by Ivan on 2026-09-15 and not measured. Two hours a day because Ira is
+        shared across Greenstone, Burkham, MedLink Pro, Argus and Collingswood, and
+        Greenstone is not first in line for her attention. Ten minutes a review because
+        six only holds for boilerplate wire releases the two-agent rule has pre-checked;
+        LOI and PSA review, a deal-viability move from Green to Watch, and escalated
+        novel outreach copy run ten to fifteen. The advisory ceiling is 120 minutes over
+        10, twelve a day. V13 counts less than that: it applies the 0.6 utilisation
+        factor, so the supply it sets against demand is 72 minutes, about seven reviews.
+        If projected approvals exceed that, the stated remedy is fewer escalations, not
+        more hours. Burkham's Pack separately declares Ira Green at 6 hours as its own
+        compliance officer; the two declarations have not been reconciled (entry 92).
 
 separation_of_duties:
   gate_signoff_policy: distinct_humans

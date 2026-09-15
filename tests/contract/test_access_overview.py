@@ -147,10 +147,11 @@ async def test_the_role_reference_matches_the_authority_matrix(api):
 # ------------------------------------------------------- people the Packs name
 
 async def test_a_person_a_pack_names_with_no_account_is_named(api, admin):
-    """Greenstone's Pack names Dana and Gate 10 needs distinct humans.
+    """Greenstone's Pack names a compliance officer and Gate 10 needs distinct humans.
 
     Nothing said so. A run that cannot be signed looked exactly like a run nobody had got
-    to yet.
+    to yet. The name was Dana, who was invented; since entry 92 it is Ira Green, who is
+    real but has no account in this test database - which is exactly the case to report.
     """
     _id, token = await make("Ivan", "ivan", "ivan@office.example.com")
     async with connection() as conn:
@@ -167,15 +168,21 @@ async def test_a_person_a_pack_names_with_no_account_is_named(api, admin):
 
     overview = (await api.get("/api/access/overview", headers=auth(token))).json()
     names = {person["human_name"] for person in overview["missing_people"]}
-    assert "Dana" in names, "the Pack names Dana and no account exists; nothing said so"
+    assert "Ira Green" in names, "the Pack names Ira Green and no account exists; nothing said so"
 
-    dana = next(p for p in overview["missing_people"] if p["human_name"] == "Dana")
-    # The role she is needed in, not the one she is the understudy for.
-    assert dana["role"] == "compliance_officer"
-    assert "Gate 10" in dana["reason"]
+    ira = next(p for p in overview["missing_people"] if p["human_name"] == "Ira Green")
+    # The role she is needed in, not the one she is the understudy for - she is also
+    # Ivan's backup as venture operator.
+    assert ira["role"] == "compliance_officer"
+    assert "Gate 10" in ira["reason"]
 
     # And somebody who does have an account is not reported missing.
     assert "Ivan" not in names
+
+    # Once the account exists under the name the Pack uses, she stops being reported.
+    await make("Ira Green", "ivan", "ira@office.example.com")
+    overview = (await api.get("/api/access/overview", headers=auth(token))).json()
+    assert "Ira Green" not in {p["human_name"] for p in overview["missing_people"]}
 
 
 # --------------------------------------------------------------- bulk suspend

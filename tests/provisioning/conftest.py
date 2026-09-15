@@ -85,20 +85,25 @@ def pack_yaml() -> str:
 def amend_for_capacity(yaml_source: str) -> str:
     """The Greenstone Pack amended until Gate 4.5 is satisfiable.
 
-    The real Pack **blocks at 4.5**, and correctly: the generated workflow routes 192
-    compliance approvals a day at six minutes each against one officer's four coverage
-    hours. That finding is real, it is asserted in its own test, and the amendment is
-    the venture's to make - the validator names three ways out (raise a trust-tier
-    ceiling, add reviewer coverage, cut scope) and deliberately does not offer a fourth.
+    The real Pack **blocks at 4.5**, and correctly: the generated workflow routes 128
+    compliance approvals a day at ten minutes each against Ira Green's two coverage
+    hours - 1,280 minutes against 72, eighteen times over. That finding is real, it is
+    asserted in its own test, and the amendment is the venture's to make - the validator
+    names three ways out (raise a trust-tier ceiling, add reviewer coverage, cut scope)
+    and deliberately does not offer a fourth. Ivan's stated one is the first: fewer
+    escalations, not more hours (decisions entry 92).
 
     This helper takes the second one so that the gates *after* 4.5 can be exercised at
-    all. It is a test fixture, not a recommendation, and the number it lands on - five
-    compliance officers - is worth reading as the size of the real problem.
+    all. It is a test fixture, not a recommendation, and the number it lands on - six
+    compliance officers, five of them eight-hour reviewers who do not exist - is worth
+    reading as the size of the real problem. It was five while the Pack declared an
+    invented officer at four hours and six minutes; four added reviewers leave the real
+    declaration 5% over.
     """
     doc = yaml.safe_load(yaml_source)
     officers = [h for h in doc["human_capacity"] if h["role"] == "compliance_officer"]
     template = dict(officers[0])
-    for i in range(4):
+    for i in range(5):
         extra = dict(template)
         extra["human_name"] = f"Reviewer {i + 1}"
         extra["backup_human"] = template["human_name"]

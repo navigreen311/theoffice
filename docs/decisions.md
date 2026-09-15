@@ -7254,3 +7254,117 @@ stops only those, and refuses a port held by anything else, naming the holder.**
 held by Docker, it refused - *"held by pid 20436 (com.docker.backend.exe) pid 23232 (wslrelay.exe) -
 which this script did not start, so nothing was stopped"* - and CRE Forge still answered afterwards.
 Not shellchecked locally (no shellcheck here); CI's lint job runs it.
+
+---
+
+## 92. Greenstone's Pack decisions: Ira Green replaces Dana; an empty Deal Underwriter cannot be declared yet; appointment already chooses, by name
+
+**Ruled 2026-09-15 by Ivan. Per entry 91, every premise in the ruling was measured before it was
+built on. Results are inline, and the ones that did not hold are said.**
+
+### 1. Compliance officer of record: Ira Green - BUILT
+
+Ivan's ruling: Dana is invented (entry 59), Ivan Green and Ira Green are the only real people, and
+Ira is the compliance officer because there is no one else. **2 coverage hours a day** (Ira is
+shared across five ventures, and Burkham is first in line because it funds the others) and **10
+minutes a review** (6 holds only for pre-checked boilerplate wire releases; LOI and PSA review,
+Green-to-Watch transitions and escalated outreach copy run 10-15).
+
+    measured                  result
+    Ira's account             EXISTS - display_name "Ira Green", sso_mfa, role `ivan` globally
+    name in the Pack          "Ira Green", exactly the display_name, because the access overview
+                              matches Pack names to accounts on it (access_overview.py:133).
+                              "Ira" would have reported her missing.
+    Ivan's backup_human       Dana -> Ira Green. The Pack now names nobody invented.
+    V14                       PASS - both entries carry a backup
+    V13, Gate 2 (pooled)      PASS - 140 of 288 review-minutes
+    V13, Gate 4.5 (by role)   FAIL - 128 approvals x 10 = 1,280 minutes against 72, 18 times over.
+                              It was 768 against 144 with Dana, 5 times over.
+
+**"About twelve reviews a day" is 120 minutes over 10 and is what `advisory_daily_approval_ceiling`
+now says. V13 does not count that.** It applies the 0.6 utilisation factor
+(`generators/validator.py:48`), so the supply it sets against demand is 72 minutes, about seven
+reviews. **Scope of the 128:** the approval projection the golden snapshot holds for the test
+world. Run 60ff7ef5's projection in the dev database was not re-measured here, and the dev
+database's live Pack is still 1.7.0 - this edit is not published.
+
+Ivan's stated remedy for the shortfall is fewer escalations and more agent autonomy on low-risk
+approvals, not more hours. That is the first of the three ways out V13's message names (raise a
+trust-tier ceiling). Nothing here takes it; the routing change is not yet specified.
+
+**A conflict this does not resolve.** Burkham's live Pack (0.10.0) separately declares **Ira Green
+as compliance_officer at 6 hours and 3 minutes**. Two of the five ventures together now declare 8
+hours a day of her time. Neither Pack reads the other and no rule sums a person across ventures.
+Burkham's block is unchanged and is Ivan's to reconcile.
+
+**Of the five ventures named, four are registered** (`broker/ventures.py`: greenstone,
+burkham-wickmont, medlink-pro, collingswood). **Argus is not.** Its only mention is the Burkham
+marketing intake ("Argus and Collingswood come online per Pack Section 7"). The registry's fifth
+slug is `cyber`, and nothing here says whether that is Argus.
+
+`tests/provisioning/conftest.py::amend_for_capacity` clones the compliance officer to make gates
+past 4.5 reachable. With four clones the real declaration is 5% over, so it now adds five eight-hour
+reviewers. The docstring states that as the size of the problem.
+
+### 2. Deal Underwriter left empty, pending activation - NOT BUILT: the schema cannot say it
+
+    Position.headcount        `Field(ge=1)` (generators/pack.py:331). 0 is refused at load.
+    a pending position        no such field. `pending_activation` exists only on a compliance
+                              obligation's `human_held` (pack.py:218, read by V34).
+    headcount 2, unappointed  V24 FAILs Gate 4.5 on any unfilled position (validator.py:1855).
+                              Greenstone would stop there permanently.
+    its review demand         the approval projection counts an unfilled position at its
+                              ceiling (approval_projection.py:71), so it stays in V13.
+
+**The Burkham precedent is not a position.** The Partner Agreement & Payout Center is Burkham
+Module 8.2, deferred to V1.5, and what Burkham declared `pending_activation` on 8 September is the
+**partner-payout compliance obligation** whose trigger is that module activating
+(`packs/burkham-wickmont.draft.yaml:239`). No position was declared and left pending.
+
+**The Specs precedent exists and is narrower.** Greenstone specifications v1 §7.2: *"Ivan or Ira on
+any seller call above a Yellow viability threshold (Phase 1: ALL seller calls until Village agents
+demonstrate reliable performance across 10 completed deals)"*. It is about seller calls. Extending
+it to underwriting is new in this ruling.
+
+A position-level pending state has to decide, at least:
+- V24, whether pending counts as filled;
+- the approval projection, whether its demand is dropped or moved to the humans doing the work;
+- the workflow generator, which position owns the Underwrite and Contract steps DU owns today;
+- scenarios uw-001 to uw-003 and the `operator_requests_underwrite` trigger;
+- `cre-forge/underwrite_deal`, which no other position operates;
+- `comp_analysis`, which DU shares at `propose` (a bootstrap test pins that weakest ceiling).
+
+**None of that is decided, so nothing was written.**
+
+### 3. Buyer Network Manager: let appointment choose - NO EDIT NEEDED; what it chooses by
+
+`generators/appointment.py`, in full: `status = 'active'`, `department` equal to the position's
+source department, Unit A certified for every module, Unit B for every Forge, then **the first
+`headcount` by `agent_name`**. **No skill fit, no workload balance, no persona or surname rule,
+no filter on `role_key`, and no look at other ventures' grants.** The criteria the ruling presumed
+are not there.
+
+    operations, active: 12, in the order appointment reads them
+      Elara Solen      senior_manager
+      Evander Zephar   individual_contributor   holds Burkham grants
+      Jessa Belvar     department_head
+      Mireya Corven    individual_contributor   holds Burkham grants
+      Noelle Zephar    individual_contributor   holds Burkham grants
+      Ronan Valek      individual_contributor
+      Selene Voren     team_lead
+      Seraphine Valek  individual_contributor
+      Tavian Corven    deputy_head
+      Thalia Cyrath    individual_contributor
+      Theron Everis    senior_manager
+      Ulric Fenlor     individual_contributor
+
+**The four named - Ronan, Seraphine, Thalia, Ulric - are exactly the operations ICs holding no
+Burkham grant.** CRE Forge certifications in the dev database: **0**.
+
+**So "let it run" means the choice is made at certification.** Appointment takes whoever is
+certified, alphabetically:
+- **Certify only those four:** Ronan and Seraphine Valek. They come out together, by alphabet
+  and not by any pairing.
+- **Certify Selene Voren too:** Ronan and Selene. Seraphine is split off.
+- **Certify any manager, or any Burkham IC:** they sort ahead of all four. A Burkham IC appointed
+  here then meets `one_venture_per_agent_quarter` at shift assignment.

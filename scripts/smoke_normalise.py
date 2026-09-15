@@ -135,7 +135,16 @@ import sys
 #:     job 104568439387   branch  d7688d4       run 35024155523 attempt 2
 #:
 #: byte-identical, 432 lines, no grep noise, the same eight FAILs.
-BASELINE = "e302d9d1384341c71b91c156ed6915f41e431bb56b55e8d229e463e2812d7597"
+#:
+#: **Re-recorded 2026-09-15 for PR #144 (decisions entry 92), by the same rule.** The one
+#: intended line: `named explicitly: Ivan, Dana` -> `named explicitly: Ivan, Ira Green`,
+#: from Greenstone's compliance officer changing. Two runs on the same commit:
+#:
+#:     job 104579996735   branch  0a0a41e       run 35028138055 attempt 1
+#:     job 104581275555   branch  0a0a41e       run 35028138055 attempt 2
+#:
+#: byte-identical, 432 lines, the same eight FAILs.
+BASELINE = "614d79e8eaacb830ed36f88e309acb5eeff5a8f1350b2607101bb6e5674a66ed"
 
 _STEP_START = "##[group]Run ./scripts/console-smoke.sh"
 _STEP_END = "Process completed with exit code"

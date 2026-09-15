@@ -127,8 +127,10 @@ async def test_a_run_stops_at_the_first_blocking_gate_and_names_it(
         # 83). `voiceforge/place_call` left the Pack: it is forbidden in
         # forge_module_exclusion, so no agent could ever hold it, and its 32 approvals
         # a day were review demand for work that can never happen. Unlike September 2,
-        # nothing real was removed. The gate still blocks - the reviewer is Dana, who
-        # does not exist (entry 59) - so this is still not an improvement.
+        # nothing real was removed. The gate still blocks - the reviewer was Dana, who
+        # does not exist (entry 59) - so this is still not an improvement. Since entry 92
+        # the reviewer is Ira Green, real, at two hours and ten minutes, and the same 128
+        # approvals are eighteen times what she can review rather than five.
         #
         # 128 later the same day (entry 87): the VoiceForge binding went, and with it
         # `transcribe_call`'s steps. Nothing served that module either, so again no
