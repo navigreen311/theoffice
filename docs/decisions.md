@@ -6378,3 +6378,96 @@ ends in exactly this state. The difference is that a named operator chose that e
 off-shift state that follows was decided by someone. It becomes *nobody's* decision only when
 something is expected to follow and doesn't. That expectation is what a scheduler creates,
 and the reason this entry exists before one does.
+
+---
+
+## 82. The smallest real test ran and stopped at activation. What it proved, and what it did not
+
+**Recorded 2026-09-15.** Development database. Agent Evander Zephar (operations), module
+`capitalforge/client_read`, venture `burkham-wickmont`, operator Ivan. Every figure below
+was read back from the database after the run, not remembered from it.
+
+### What happened
+
+    assign-shift --confirm      exit 1, three refusals, shift_assignment 0 rows before and after
+    OfficeClient.call           GrantNotActivated (403), raised inside resolve_grant
+    audit_log                   one row: 1593 call_refused_grant_not_activated,
+                                trace 4bf1ff11-14b5-4289-9729-1803e573911e
+    agent_call_ledger           no row - written only after dispatch, and nothing dispatched
+    CapitalForge ledger_events  no office.module.called row since the call
+
+Each layer's function was wrapped with a trace that logged entry and exit and changed
+nothing. The trace has exactly one entry: `resolve_grant`, which raised.
+
+### What was proven, observed end to end for the first time
+
+1. **`assign-shift` refuses on real data, not only on fixtures:** a venture with 0 of 49
+   grants active, and an agent none of whose three grants resolves.
+2. **Grant selection took the newest of three rows** for (Evander, capitalforge,
+   client_read, burkham-wickmont). The refusal names `0b9ccb2d`, granted 13 September
+   17:18:52, the newest of the three. Entry 67's rule, observed.
+3. **The live certification check ran and passed.** Unit A (`client_read`) and Unit B
+   (`operations`) are both `certified` at `auto_execute`, with `simforge_verdict`,
+   `agent_model`, `score` and `threshold` all NULL. **It reads `state` and nothing else**
+   (`grants.py:238-246`), so it cannot tell these rows from certifications earned in
+   SimForge.
+4. **The activation check refuses a real grant**, and the refusal is audited with a trace.
+5. **`resolve_grant` runs before the shift assertion.** An agent with no shift was refused
+   for activation and never asked about a shift.
+
+### Six claims directed for this record, and why they are not in it
+
+    directed                                   measured
+    -----------------------------------------  ------------------------------------------------
+    a shift asserted against a live window     No shift was written; assign-shift refused.
+                                               assert_on_shift_for was never entered.
+    a grant resolved to the newest of three    Selected: yes (proven, item 2). Resolved: no,
+                                               refused at activation.
+    a certification checked live and           True (item 3), and it passed.
+    bootstrap-attested
+    a tier compared against the Pack's         Not reached. And not that comparison: the call
+    per-module declaration                     path caps the GRANT's tier by Unit A's
+                                               certified tier (grants.py:266-267) and does not
+                                               read the Pack at call time.
+    a 200 from a real Forge                    Nothing dispatched. CapitalForge was not running,
+                                               and the burkham-wickmont tenant holds 0
+                                               businesses, so client_read has no client to read.
+    a ledger row on each side joining on       0 rows on each side for this call.
+    X-Forge-Request-Id
+
+**The join has never been observed in this database either.** CapitalForge holds 63
+`office.module.called` rows (3 to 8 September). The Office's `agent_call_ledger` holds 0,
+and its `audit_log` begins on 13 September. Both join keys exist in code:
+`X-Forge-Request-Id` is stored as `forge_side_ref` (`broker/executor.py:107`) against
+CapitalForge's `payload.forgeRequestId`, and `trace_id` matches CapitalForge's `aggregateId`.
+**Neither key has ever matched a row.**
+
+**Directed too, and not recorded:** *"Evander is on shift until 18:00 and at 18:01 he is off
+shift by nobody's decision."* Evander has no shift, and `shift_assignment` holds 0 rows.
+**The gap in entry 81 has still not been observed on a real agent.**
+
+### The caveat, with the right item attached
+
+The certifications this call accepted have no scenario run behind them: they rest on a
+person's word. **The path works as far as it went, and what it verified is that word.**
+
+The item is **B3**, not B4. B4 is SimForge's own `simforge/gate_result` certification, and
+what retires it is a scenario run by a second SimForge instance. B3, *"No SimForge verdict
+for any CapitalForge module"*, covers these rows. It blocks a real client and names no
+retirement step. What would retire it is a SimForge verdict on a CapitalForge curriculum,
+and SimForge's entry 12 (`simforge/docs/calibration/first-battery-run-2026-09-10.md`, PR
+#151) says none has ever been submitted.
+
+### Still unobserved end to end
+
+Everything after activation: the shift assertion against a live window, revocation on a
+call, the manifest, the budget, the tier cap and gate, dispatch, a Forge response, a ledger
+row on either side, and the join between them. **Every one has been reasoned about and
+tested against a stub. None has been observed against a real Forge in this database.**
+
+### Why the run went no further
+
+All 49 burkham-wickmont grants are inactive, and activation happens at Gate 11. Run
+8ed2f39a is blocked at gate 9. Going further means completing the ladder or writing
+`activated_at` by hand, and the second is the bypass `grants.deactivate` was written to
+undo. **The refusal is the result.**
