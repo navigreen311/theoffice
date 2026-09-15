@@ -5872,20 +5872,38 @@ that leaves no record.
 engineering grants was issued and retracted on two independent grounds, and the read it prompted
 found a third thing nobody had looked at.**
 
-### The ruling and its two errors
+### The reconsideration
 
 The ruling was: deactivate the four, because `deactivate()` is the third state entry 72 lacked -
 neither withdrawing authority nor certifying to clear a line - and it landed after that entry was
-written. Ivan's own summary of what went wrong: *"I ruled on a mechanism's scope without checking
-it, and on an outcome without checking what the gate counts."*
+written. Entry 72's reasoning rested on there being no third state; a third state had since been
+built; so the entry was superseded by a mechanism rather than by a reconsideration.
 
-**First: the mechanism's scope.** `deactivate()` is venture-scoped -
+**The mechanism is real and it is a third state for the wrong question.** In Ivan's terms:
+
+> `deactivate()` is a real third state for *may this be exercised*. It is not one for *is this
+> certified*, and I ruled as though it were.
+
+Entry 72's two refusals were both about certification. Nothing in the new mechanism touches
+certification, so nothing in entry 72 was answered by it.
+
+### Two errors, recorded separately
+
+They are different failures and **either alone would have been enough to make the ruling wrong.**
+Recorded apart so that fixing one is not mistaken for fixing both.
+
+**First: ruling on a mechanism's scope without checking it.** `deactivate()` is venture-scoped -
 `WHERE venture_id = %s AND activated_at IS NOT NULL`. It had already run on this venture on the
 15th and taken all thirty-four active grants, these four among them. They were **already
-inactive**. A second call refuses, because there is nothing active left to deactivate.
+inactive**, so the ruled act had no target. A second call refuses.
 
-**Second, and the one that matters: the outcome.** Deactivating them could not have cleared Gate 9
-even with a per-grant scope, because Gate 9 does not look at `activated_at` at all.
+**Second: ruling on an outcome without checking what the gate counts.** Deactivating them could
+not have cleared Gate 9 even with a per-grant scope, because Gate 9 does not read `activated_at`
+at all.
+
+**The first error is about a verb. The second is about a gate.** Had the scope been per-grant, the
+second still stands. Had Gate 9 read activation, the first still stands. Neither is a special case
+of the other.
 
 ### What Gate 9 counts
 
@@ -5906,10 +5924,15 @@ whose `state` is `certified`.** `COALESCE(state, 'never_certified')` means a NUL
 pointing at nothing are the same answer. The four engineering grants have both refs NULL; no other
 grant on this venture does.
 
+**What the gate is asking is the reason none of this moved it.** Gate 9 asks *whether agents are
+certified for what they hold*. Deactivation does not touch that - it changes whether a held grant
+may be exercised, and the question survives the answer. Deletion does not answer it either:
+**deletion hides the question rather than answering it.** Removing the row removes the thing that
+was asking, and the gate then passes because nobody is holding anything uncertified, which is not
+the same fact as everybody being certified.
+
 **So the option set is exactly entry 72's two and always was.** Certification, or the grant not
-existing. Deactivation was never a third door into this room - it is a real third state, and it is
-a third state for *activation*, which is a different question from *certification*. The two are
-independent by design, and that independence is what made the ruling wrong.
+existing.
 
 **Entry 72 stands.** Not reaffirmed after reconsideration - never actually challenged. The
 mechanism that appeared to supersede it does not operate on the thing it blocks.
@@ -5950,6 +5973,39 @@ It removes it. The run is not one remedy away from advancing; it is one remedy a
 a refusal that applies to ninety units instead of eight, and that refusal wants something no part
 of this deployment currently produces - a SimForge PASS against a held-out scenario run. Gate 8
 reported `0 of 10 module(s) accepted by SimForge` on this very run.
+
+### What the run is blocked on, precisely
+
+**Four grants, held by entry 72's ruling.** Not by a missing mechanism and not by a state that
+needs changing - both of those were looked for and neither is what is in the way.
+
+    97fcff2f   Cedric Noren     engineering   capitalforge/client_read          auto_execute
+    de5213e5   Brina Arvane     engineering   capitalforge/scan_communication   propose
+    ead35ef7   Amelie Wystan    engineering   capitalforge/client_read          auto_execute
+    f68365c3   Brina Arvane     engineering   capitalforge/client_read          auto_execute
+
+**Their disposition needs a Pack decision about whether `engineering` belongs.** That is a question
+about what the business declares, answerable only by whoever authors the Pack. No verb resolves
+it, no state change resolves it, and building either would be answering a question nobody asked
+with a thing nobody needs.
+
+The two paths remain what entry 72 named, and both are still refused:
+
+**Certify `engineering/capitalforge`** - mint a unit B for a department no Burkham position draws
+from. Unit B is per `(department, forge_id)`, and Gate 8 opens a department unit only for
+departments a position names; it opened none for `engineering` because there was none to open.
+Minting it by hand is *certifying to clear a line*, which `scripts/check_module_manuals.py` is
+documented as warning against: *"registering a name to clear that line is how `lender_match`
+happens."*
+
+**Delete the four** - and these hold real authority on their own triples. Nothing supersedes them,
+nothing waits behind them, and `resolve_grant` selects them because there is nothing newer. That
+they are currently inactive does not soften this: `_gate_11` activates with
+`WHERE venture_id = %s AND activated_at IS NULL` and **no certification check at all**, so their
+inactivity is held in place by Gate 9's block and by nothing else. Deleting them is withdrawing a
+grant through the one mechanism that leaves no record - entry 69's refusal, unchanged.
+
+**Both refused. The refusals still hold. The run stays where it is.**
 
 ### A loose thread, recorded where it was found
 
