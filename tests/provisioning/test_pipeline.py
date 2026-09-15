@@ -818,6 +818,75 @@ async def test_a_revocation_lifted_before_gate_11_does_not_withhold_the_grant(
     assert activated == total and total > 0
 
 
+# ------------------------------------------------------------------ entry 91, Gate 9
+# Gate 9 counted every grant on the venture, revoked ones included, so a grant revoked
+# because it should never have existed still demanded two certifications. B53's shape one
+# gate earlier: burkham-wickmont's four Phase 0 engineering grants held it at Gate 9 after
+# both deactivation and revocation, because the query read neither.
+
+#: A research agent from the test world, and a module no research position operates - so
+#: the world never certifies this pair and the grant below can only ever read never_certified.
+_STRAY_AGENT = "11111111-1111-5111-8111-111111111111"
+_STRAY_MODULE = "underwrite_deal"
+
+
+async def _run_to_gate_9_with_a_stray_grant(conn, operator, admin, *, revoke: bool):
+    run_id = await provisioning.start_run(conn, venture_id=VENTURE, started_by=operator.human_id)
+    await provisioning.advance(conn, run_id=run_id, actor=operator.human_id)
+    await provisioning.record_human_review(
+        conn, run_id=run_id, human=operator, note="reviewed the BOM and the gap report"
+    )
+    with admin.cursor() as cur:
+        cur.execute(
+            "INSERT INTO agent_forge_grant (grant_id, office_agent_id, forge_id, module_id, "
+            "venture_id, trust_tier, granted_by) VALUES (%s, %s, 'cre-forge', %s, %s, "
+            "'propose', %s)",
+            (str(uuid.uuid4()), _STRAY_AGENT, _STRAY_MODULE, VENTURE, str(operator.human_id)),
+        )
+    admin.commit()
+    if revoke:
+        await revocation.revoke(
+            conn, scope="agent_module", reason="should never have been issued",
+            revoked_by=operator.human_id, revoked_by_role="venture_operator",
+            office_agent_id=uuid.UUID(_STRAY_AGENT), forge_id="cre-forge",
+            module_id=_STRAY_MODULE,
+        )
+    outcomes = await provisioning.advance(
+        conn, run_id=run_id, actor=operator.human_id, held_out=HeldOutPasses()
+    )
+    return next(o for o in outcomes if o.gate == "9")
+
+
+async def test_gate_9_does_not_ask_a_revoked_grant_for_a_certification(
+    feasible_pack, operator, admin: psycopg.Connection
+):
+    """The defect: a grant a live revocation covers is not one the Readiness Gate waits on."""
+    async with connection() as conn:
+        gate_9 = await _run_to_gate_9_with_a_stray_grant(conn, operator, admin, revoke=True)
+
+    assert gate_9.verdict == provisioning.PASSED, (
+        f"Gate 9 still counted a revoked grant: {gate_9.reason}"
+    )
+    assert gate_9.evidence["withheld_revoked"] == 1
+    assert gate_9.evidence["revocation_scopes"] == ["agent_module"]
+    assert gate_9.evidence["not_certified_total"] == 0
+    # Named in the reason, as Gate 11's withheld clause is.
+    assert "1 revoked grant(s) not counted" in gate_9.reason
+
+
+async def test_gate_9_still_blocks_on_the_same_grant_when_it_is_not_revoked(
+    feasible_pack, operator, admin: psycopg.Connection
+):
+    """The control. Without it, a Gate 9 that ignored every uncertified grant would pass too."""
+    async with connection() as conn:
+        gate_9 = await _run_to_gate_9_with_a_stray_grant(conn, operator, admin, revoke=False)
+
+    assert gate_9.verdict == provisioning.BLOCKED
+    assert gate_9.evidence["not_certified_total"] == 2, "Unit A and Unit B of the stray grant"
+    assert gate_9.evidence["withheld_revoked"] == 0
+    assert "revoked grant" not in gate_9.reason
+
+
 async def test_the_call_path_accepts_the_grant_once_it_is_activated(
     feasible_pack, operator, signer
 ):

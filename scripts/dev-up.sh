@@ -3,7 +3,7 @@
 #
 #   ./scripts/dev-up.sh                  # seed if needed, start both servers, print a token
 #   ./scripts/dev-up.sh --no-build       # reuse an existing .next
-#   ./scripts/dev-up.sh --stop           # stop what it started
+#   ./scripts/dev-up.sh --stop           # stop only what it started (recorded PIDs)
 #   ./scripts/dev-up.sh --new-token      # reissue the operator token as well
 #
 # This exists because the test suite empties the database. Its fixtures delete
@@ -59,15 +59,55 @@ pids_on_port() {
   fi
 }
 
-kill_port() {
-  local port="$1" pid
+# NOTHING IS KILLED BY PORT - decisions entry 91.
+#
+# This used to `taskkill //F` whatever listened on the API and console ports. On a machine
+# running Docker Desktop, 8080 is forwarded by `com.docker.backend.exe` - the same process
+# that forwards every other container's port, CRE Forge's included - so `dev-up.sh` would
+# have killed Docker's backend and every container with it. That is why nobody used it.
+#
+# Now: each server this script starts has its PID written to $RUN_DIR. Stopping and
+# restarting touch only those. A port held by anything else is reported by name and left
+# alone, and the script refuses rather than guessing.
+RUN_DIR="${TMPDIR:-/tmp}/office-dev"
+mkdir -p "$RUN_DIR"
+
+describe_port_holder() {
+  local port="$1" pid name
   for pid in $(pids_on_port "$port"); do
+    name=""
     if [ "$OS_KIND" = "windows" ]; then
-      taskkill //PID "$pid" //F >/dev/null 2>&1 || true
+      name="$(tasklist //FI "PID eq $pid" //FO CSV //NH 2>/dev/null | head -1 | cut -d, -f1 | tr -d '"')"
     else
-      kill "$pid" 2>/dev/null || true
+      name="$(ps -p "$pid" -o comm= 2>/dev/null || true)"
     fi
+    printf 'pid %s (%s) ' "$pid" "${name:-unknown}"
   done
+}
+
+stop_ours() {
+  local label="$1" pidfile pid winpid
+  pidfile="$RUN_DIR/$label.pid"
+  [ -f "$pidfile" ] || return 1
+  pid="$(cat "$pidfile")"
+  if [ "$OS_KIND" = "windows" ] && [ -r "/proc/$pid/winpid" ]; then
+    winpid="$(cat "/proc/$pid/winpid")"
+    taskkill //PID "$winpid" //T //F >/dev/null 2>&1 || true
+  fi
+  kill "$pid" 2>/dev/null || true
+  rm -f "$pidfile"
+  return 0
+}
+
+# A port this script needs must be free, or held by the server this script started last time.
+claim_port() {
+  local label="$1" port="$2" var="$3"
+  if [ -n "$(pids_on_port "$port")" ]; then
+    stop_ours "$label" && sleep 2
+  fi
+  if [ -n "$(pids_on_port "$port")" ]; then
+    die "port $port is held by $(describe_port_holder "$port")- which this script did not start, so nothing was stopped. Pick another: $var=<port> ./scripts/dev-up.sh"
+  fi
 }
 
 [ -f "$ROOT/.env" ] || die ".env not found. Copy .env.example and fill it in."
@@ -83,9 +123,13 @@ VPY="$ROOT/.venv/Scripts/python.exe"
 
 if [ "$STOP" -eq 1 ]; then
   step "Stopping"
-  kill_port "$API_PORT"
-  kill_port "$CONSOLE_PORT"
-  say "stopped whatever was on $API_PORT and $CONSOLE_PORT"
+  for label in api console; do
+    if stop_ours "$label"; then
+      say "stopped the $label this script started"
+    else
+      say "no $label recorded as started by this script - nothing stopped"
+    fi
+  done
   exit 0
 fi
 
@@ -214,13 +258,14 @@ else
 fi
 
 step "Servers"
-kill_port "$API_PORT"
-kill_port "$CONSOLE_PORT"
+claim_port api "$API_PORT" API_PORT
+claim_port console "$CONSOLE_PORT" CONSOLE_PORT
 
 # `</dev/null` and `disown` matter as much as `nohup`. Without them the servers keep
 # the shell's stdout open, so the terminal that ran this script never gets its prompt
 # back even though both servers are up and the work is finished.
 nohup "$VPY" -m broker serve --port "$API_PORT" </dev/null >/tmp/office-api-dev.log 2>&1 &
+echo "$!" > "$RUN_DIR/api.pid"
 disown $! 2>/dev/null || true
 for _ in $(seq 1 40); do
   curl -fsS -o /dev/null "http://127.0.0.1:$API_PORT/api/live" 2>/dev/null && break
@@ -244,6 +289,7 @@ fi
   OFFICE_API_URL="http://127.0.0.1:$API_PORT" \
     nohup npx next start -p "$CONSOLE_PORT" \
     </dev/null >/tmp/office-console-dev.log 2>&1 &
+  echo "$!" > "$RUN_DIR/console.pid"
   disown $! 2>/dev/null || true
 )
 for _ in $(seq 1 60); do

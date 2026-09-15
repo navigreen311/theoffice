@@ -470,6 +470,13 @@ def main() -> int:
     )
 
     args = parser.parse_args()
+    # Opt-in `.env` loading (broker/env.py): after parsing, so `--help` needs no environment,
+    # and before any subcommand reads os.environ. An exported variable always wins.
+    from broker.env import load_dotenv_file
+
+    filled = load_dotenv_file()
+    if filled:
+        print(f"broker: filled from .env: {', '.join(filled)}", file=sys.stderr)
     if args.command == "serve":
         return _serve(args.host, args.port, args.reload)
     if args.command == "sweep":

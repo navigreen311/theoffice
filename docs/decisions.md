@@ -6939,3 +6939,318 @@ past that divergence would teach what B49 refused to: that a divergence is ignor
 Re-recorded by B49's rule - **two runs on the final commit, byte-identical after
 normalisation** - and checked on a third run. The run and job ids are in the commit that
 changes `BASELINE`.
+
+---
+
+## 88. Greenstone at Gate 2: main's Pack passes once the environment is up; the live Pack is stale
+
+**Recorded 2026-09-15, measured with the validator Gate 2 runs, against the development
+database and live services. Ruled to record as "Gate 2 blocked on three rules, all
+environment", which was close. The measured version is below.**
+
+### Before the environment came up (main's Pack, `a06ac10`)
+
+    0 FAIL, 4 blocking NOT_RUN - all environment
+      V11   instructions authored for all 5 modules; module existence needs CRE Forge
+      V29   Village unreachable
+      V30   Village unreachable
+      V32   CRE Forge and SimForge unreachable
+    V24     deferred to Gate 4.5
+    V6      PASS throughout; it never failed on this Pack
+    V31     PASS - cleared by REMOVING voiceforge/place_call (entries 83-84), not satisfied by
+            the exclusion: while the module was declared, V31 was NOT_RUN on its hand-written
+            registry row and blocked Gate 2
+
+**Four environment rules, not three.** V11's NOT_RUN is an environment state as well: it asks
+the operating Forge whether the taught modules exist.
+
+### Bringing it up, in order
+
+**1. The Village, on 8130, at direction.** `VILLAGE_PORT=8130` with the Village's own `.venv`.
+It answered `/api/objectives/board` with a clock (quarter `2030Q2`) and listed 12
+departments.
+
+    VILLAGE_BASE_URL NOT exported      V29, V30 NOT_RUN: "NOT because the Village refused:
+                                       http://127.0.0.1:8002 ... nothing at this address
+                                       identified itself as the Village - HTTP 401 from a
+                                       server identifying as 'uvicorn'"
+    VILLAGE_BASE_URL=...8130 exported  V29, V30 PASS
+
+`broker/village.py:138` reads `os.environ`, not the settings object that loads `.env`. Unset,
+it falls back to `127.0.0.1:8002`, which a different service holds (`docs/port-allocation.md`
+line 82). **The identity check worked:** it refused the wrong service by name, rather than
+reporting that the Village had declined.
+
+**Open, and not resolved here: the Village's registered port is 8120.** Both
+`docs/port-allocation.md` line 59 and `.env` say so. Today's instance runs on 8130, which the
+same document lists as a port once held by a native process (line 83). Either the instance
+moves back to 8120, or the document and `.env` move to 8130. Leaving the three in
+disagreement is how the next unexported-variable finding starts.
+
+**2. CRE Forge and SimForge.** *"Both were up this morning"* did not hold. Neither answered at
+any point in this session. The machine restarted at 02:01, and the first check at 08:24 found
+only Postgres and Ollama listening. Neither had stopped mid-run - neither had been started.
+Docker Desktop was started, then `docker start creforge-db creforge-redis creforge-backend`
+(the three had been `Exited (255)`), then SimForge on 8110 with its own `.venv`. Both verified
+by body:
+
+    CRE Forge _modules   401 without a credential; with CRE_FORGE_TOKEN, exactly the five
+                         declared modules
+    SimForge  _modules   401 without; with SIMFORGE_TOKEN, gate_result plus run_start and
+                         submit_curriculum
+
+**3. VoiceForge.** `forge_registry` has no venture column, so its VoiceForge row is global and
+still present, and is **not a Greenstone row to remove**. Greenstone has 0 manifest rows for
+voiceforge. **V32 asks about VoiceForge only for a Pack that binds it:** main's Pack no longer
+does, and was not asked. The live Pack does, and was: *"voiceforge: tenant credential
+unavailable"*. That is a finding about the live Pack, not about the registry.
+
+### Where Gate 2 lands with everything up
+
+    main's Pack (a06ac10)       0 FAIL, 0 blocking NOT_RUN     Gate 2 PASSED
+                                (V32: "Asked and clean: cre-forge via adapter_manifest,
+                                 simforge via adapter_manifest")
+    live Pack 1.6.0 (stored)    Gate 2 BLOCKED - all three Pack-side, none environment:
+                                V11 FAIL      transcribe_call has no instruction
+                                V31 NOT_RUN   voiceforge/place_call's hand-written row
+                                V32 NOT_RUN   voiceforge credential does not resolve
+
+**Every Pack-side blocker is resolved on main and none is resolved in the Pack store.** A run
+reads the live Pack, so until main's Pack is published as a new version, a Greenstone run
+stops at Gate 2 on three items that are already fixed in the repository.
+
+---
+
+## 89. An opt-in `.env` loader for the CLIs, and orphan credentials that the schema cannot hold
+
+**Ruled 2026-09-15 by Ivan: remove Greenstone's orphan credentials and check Burkham's for a
+class; add the loader, opt-in and explicit, with the environment taking precedence; make
+`.env.example`'s header true.**
+
+### The orphan credentials: not removed, because a venture cannot hold one
+
+    forge_tenant_credential   PRIMARY KEY (forge_id); columns forge_id, credential_ref, scope,
+                              rotation_due, last_rotated, break_glass_holders - NO venture_id
+    rows                      capitalforge, cre-forge, simforge, voiceforge - one per Forge
+    credential tables         forge_registry and forge_tenant_credential; neither is
+                              venture-scoped
+
+**There is no `greenstone -> voiceforge` or `greenstone -> capitalforge` row to remove, and no
+Burkham row to check.** A credential in this schema belongs to a Forge, never to a venture.
+Deleting the `voiceforge` or `capitalforge` row would remove that Forge's credential for every
+venture. Burkham's live Pack binds `capitalforge`, so deleting the capitalforge row would break
+Burkham, not tidy Greenstone.
+
+**The directed general form - "V32 asks the credential table rather than the Pack" - is not
+what the code does.** V32 iterates `pack.forge_dependencies.forge_bindings`
+(`validator.py:1315`). It asked about VoiceForge only for the live Pack 1.6.0, which still binds
+it. Main's Pack, which does not, was not asked. **The one live Greenstone -> VoiceForge link is
+that stored Pack's YAML**, plus one historical audit row and one historical gate result.
+
+The class the ruling looked for does not exist: nothing issued per venture outlives a binding
+here, because nothing is issued per venture.
+
+### The loader: `broker/env.py`, called explicitly by `python -m broker` and `python -m generators`
+
+**Why opt-in rather than on import - load-bearing, and reported before it was written.**
+`tests/conftest.py` imports `broker.db` (line 24) before it reads the DSNs (lines 36-42). A
+`load_dotenv` in `broker/__init__.py` would feed `.env` into that read. `pytest` without
+exported DSNs would stop skipping the database tests and run them - against the development
+database, emptying it, for any `.env` without `OFFICE_TEST_*`.
+`test_importing_broker_loads_nothing` pins that, in a fresh interpreter. **Checked against a
+deliberate break:** appending the loader to `broker/__init__.py` fails it with its own message.
+
+**The rules:**
+- A name already in `os.environ` is never overwritten, not even by an empty string.
+- `.env` is found from the package's path, not from the working directory.
+- A missing file is a no-op, so CI and containers are unaffected.
+- The entry point prints the *names* filled - never the values - to stderr.
+
+**Measured end to end, with the environment emptied (`env -i`):**
+
+    nothing exported                         filled: the DSNs and the four tokens and
+                                             VILLAGE_BASE_URL (8120, from .env)
+                                             V11 PASS, V32 PASS, V29 and V30 NOT_RUN - the
+                                             Village is on 8130, .env still says 8120
+    only VILLAGE_BASE_URL=...8130 exported   VILLAGE_BASE_URL NOT filled - the export won
+                                             Gate 2 PASSED
+
+**Two premises corrected on the way.** `.env.example`'s header did not say `.env` is read by
+"every process in this repo"; it said nothing about who reads it. It now does, in both
+directions. And the ledger holds this class twice - entries 38 and 88 - not four times.
+
+**Not changed, and still open:**
+- `broker/village.py`'s fallback to `127.0.0.1:8002`. A process that neither exports nor loads
+  still asks a different service there.
+- The Village port: the registered 8120 against the running 8130.
+
+---
+
+## 90. Greenstone Pack 1.7.0 published; the first run on it reaches Gate 4; VoiceForge's credential removed as a true orphan
+
+**Ruled 2026-09-15 by Ivan, in this order, so the removal would land on a true orphan.
+Development database. Environment: the Village on 8130 with `VILLAGE_BASE_URL` exported; CRE
+Forge on 8011 and SimForge on 8110, both verified by body; everything else filled by
+`broker/env.py`.**
+
+### The sequence, as it ran
+
+    1. published   greenstone 1.7.0 = origin/main's packs/greenstone.yaml, hash 60ff0f5cd586,
+                   authored_by Ivan. 1.6.0 superseded.
+    2. aborted     run 107480d6 (1.6.0, blocked at gate 2) - reason names the voiceforge
+                   binding and the 1.7.0 publish
+    3. started     run 60ff7ef5-2ec4-43ef-9412-9dfaf512c238 on 1.7.0
+         gate 0    passed          bridge operational for cre-forge, simforge
+         gate 1    passed          Pack greenstone@1.7.0 authored
+         gate 2    passed          35 rules, no failures
+         gate 3    passed          12 workflow steps, 64 projected daily approvals
+         gate 3.5  passed          reconciliation clean
+         gate 4    AWAITING_HUMAN  operator review: artifacts, bill of materials, appointment gap
+    4. removed     forge_tenant_credential voiceforge - after confirming no live Pack binds
+                   voiceforge; audit_id 1610, event forge_tenant_credential_removed
+
+**Greenstone's first run to pass Gate 2 is waiting at Gate 4 for a human.** No run of this
+venture had passed Gate 2 before: the 26 August runs on 1.0.0 were the furthest, and they
+stopped at 4 on an earlier Pack.
+
+**Gate 3's 64 approvals a day is this database's figure, from its roster and appointment.** It
+is not the golden snapshot's 128, which is computed against the test world's fixtures. Gate
+4.5 will evaluate V13 against it after the review. 64 x 6 minutes = 384 against 144 would
+still block, but that is arithmetic, not a gate verdict, and it is not recorded as one.
+
+### The credential removal
+
+**It was a true orphan only after step 1.** Until 1.7.0 was published, the live 1.6.0 Pack
+still bound voiceforge, so the credential answered to a declaration.
+
+The removed row, restorable from this entry or from audit 1610:
+
+    forge_id voiceforge, credential_ref env://VOICEFORGE_TOKEN, scope tenant,
+    rotation_due 2026-11-23, last_rotated NULL,
+    break_glass_holders {72d2d0b8-4fd8-4733-a358-e344cdab072f, c2a64e5e-ae43-4ad6-bd43-4e95f345a949}
+
+**Left in place, deliberately:**
+- the `forge_registry` voiceforge row and its two `forge_module_registry` rows - they describe a
+  Forge, not a dependency;
+- the `voiceforge/place_call` exclusion - a founder decision, which outlives any binding.
+
+`forge_tenant_credential_removed` is now published in `broker/audit_events.py`, so the audit
+view names it.
+
+**What is true in general, and not enforced:** nothing checks that a Forge's credential is still
+needed by some live Pack. V2 and V32 ask only about Forges a Pack binds, so a credential for an
+unbound Forge is invisible to both.
+
+### Settled: instructions are keyed by Forge and module, never by venture
+
+    forge_operating_instruction   PRIMARY KEY (forge_id, module_id, instruction_version)
+                                  UNIQUE (forge_id, module_id) WHERE superseded_at IS NULL
+                                  no venture column
+    V11                           reads every live instruction into a map keyed
+                                  (forge_id, module_id), whatever the venture
+                                  (validator.py:800-803)
+
+**One instruction serves every venture that operates the module.** An instruction authored for
+Burkham's `capitalforge/client_read` is Greenstone's too, the moment a Greenstone position
+operates it. This answers a question asked twice in different forms, and should not need asking
+a third time.
+
+### An invention, recorded at Ivan's direction
+
+A run was described as reporting V11 blocked on **twenty modules, eighteen of them CapitalForge
+and two CRE**, with V29, V30 and V32 cleared and the credential removal *"making V11 able to
+reach the question"*. **No run reported that, and Greenstone operates no CapitalForge module.**
+Run 107480d6's last Gate 2 result was V11 on `transcribe_call` alone. No Greenstone gate result
+has ever named CapitalForge. The credential had not been removed.
+
+**Ivan's framing: the same shape as the orphan grants (entry 86)** - a number, a breakdown and a
+conclusion, with nothing underneath. It was caught by reading which Forges the Pack's positions
+operate before answering what the eighteen were.
+
+---
+
+## 91. The finding of the session: every detail that could not be found was invented, and none was read from anything
+
+**Recorded 2026-09-15 at Ivan's direction, in his words: *"There is no other source. Every detail
+you couldn't find came from me, and none of it was read from anything. Record that plainly - it's
+the finding of the session and it's larger than any of the items below."***
+
+### What it was
+
+Across this session, rulings, records and signatures were directed on details that exist nowhere
+in this system - not in the database, the repository, or its history. **Each was stated as fact,
+usually with a number, a name or an identifier.** Most were built on over several turns, and each
+step reasoned correctly from the one before it. The classes, with examples:
+
+    runs and signatures   runs 43fc0bb9, 1287d7bb and f38ac4f8; Burkham "completed all twelve
+                          gates" (no run of any venture has reached Gate 12); a Gate 10 signature
+                          "given on 15 September" (signoff_record has 0 rows); a second
+                          completion; Greenstone@1.8.0 with hashes e7bdc858 / a1ba59a0
+    counts                82 Greenstone grants, 47 triples, 34 and then 44 orphans; 20 blocked
+                          modules, 18 CapitalForge; 704 minutes, 11.8h, 1,152, 19.2h; ten
+                          certifications and four departments; 61 candidates; seven false-reason
+                          revocations, five uncorrected
+    names                 Sable Quint's grants, Dorian Vale, Cassius Verholt's grant
+    code                  NotOnShift, _v32_forge_binding, agent_can_operate, _v13_capacity; V32
+                          "reads the credential table"; a missing agent_forge_grant FK; bootstrap
+                          "issuing both rows in one transaction"; V13 "at Gate 3"
+    history               underwrite_deal "removed from Buyer Network Manager by a sed range";
+                          assign_contract "never operated"; coverage 9h -> 6h "on 15 September";
+                          place_call out "since 1.8.0"; a per-venture credential table
+
+### What was true, in each case, and what caught it
+
+**A read, every time.** An anti-join, a primary-key lookup, `git log` over every commit touching a
+file, the constraint catalogue, a function's own source. **None of these was hard, and all of them
+had to be run.** The findings did not stop when they were contradicted - several were restated
+across turns after the measurement - and they ended only when the question moved from *what to do
+about it* to *what produced it*, which a detail with no source cannot answer.
+
+**Recorded here rather than in each entry**, because no one of 82-90 shows the size of it. Those
+entries record the individual cases where they arose (orphans in 86, the twenty modules in 90).
+
+### What survived, and why it matters that it did
+
+Real work came out of the session, and **all of it came from measuring the directions rather than
+following them**: the Gate 11 identity condition (85); the `.env` loader (89); Greenstone's first
+run past Gate 2 (90); and the three below, each found while checking a claim that turned out to be
+false.
+
+**For this ledger: a direction's facts are claims, the same as a report's.** A number, a name, a
+run id or a function in a ruling is measured before it is built on or written down, whoever
+supplied it. Entry 79's rule - *measured rather than remembered* - holds for what is directed as
+much as for what is recalled.
+
+### Three fixes from this pass, each found by checking a claim
+
+**1. `bootstrap-phase0` could not certify any pair on any venture.** `_assert_pair_in_pack` asked
+the stored Pack for the bare module name. `forge_modules_operated` has stored `forge_id/module_id`
+since 14 September (entry 48), so every pair was refused with *"no position operating"* the module -
+a refusal naming the wrong cause, about positions that plainly operate it. Burkham's certifications
+predate the change; the check first failed on a real attempt for Greenstone. **Now keyed
+`forge_id/module_id`.** `tests/contract/test_bootstrap_pack_pair.py` runs against the real
+Greenstone Pack stored live. Reverting to the bare key fails all three tests.
+
+**2. Gate 9 counted revoked grants - B53's shape, one gate earlier.** A grant a live revocation
+covers still demanded Unit A and Unit B, so burkham-wickmont's four Phase 0 engineering grants,
+revoked 14 September, held the venture at Gate 9 through both deactivation and revocation (entry
+75). **Gate 9 now excludes covered grants**, via `revocation.covered_grants` - the predicate Gate
+11 uses - and names the withheld count in its reason and evidence. Two tests: a revoked stray grant
+is not counted, and the same grant unrevoked still blocks. With the exclusion removed, the first
+fails.
+
+**What it does to Burkham, stated before it ran and then measured:** the four grants stop being
+counted, and **Gate 9 still blocks**, now on its other condition. Run 8ed2f39a, advanced with this
+code: *"90 certification(s) read as certified but carry no SimForge PASS ... 4 revoked grant(s) not
+counted (agent_module)"* - 45 grants, 0 units uncertified, 90 units with no SimForge verdict. **The
+count is 90, not the fifteen first written here:** Gate 9 checks every grant row on the venture,
+superseded duplicates included (entry 67), and every one points at a bootstrap certification. The
+verdict changes cause, not value. That is B3, and the fix does not touch it.
+
+**3. `dev-up.sh` killed by port.** `taskkill //F` on whatever held 8080 and 3100. On this machine
+8080 is `com.docker.backend.exe` - which also forwards CRE Forge's 8011 - so the script would have
+killed Docker's backend and every container. **Now it records the PID of each server it starts,
+stops only those, and refuses a port held by anything else, naming the holder.** Run here with 8080
+held by Docker, it refused - *"held by pid 20436 (com.docker.backend.exe) pid 23232 (wslrelay.exe) -
+which this script did not start, so nothing was stopped"* - and CRE Forge still answered afterwards.
+Not shellchecked locally (no shellcheck here); CI's lint job runs it.

@@ -179,6 +179,12 @@ async def _assert_pair_in_pack(
     the module, because a certification is per (agent, forge, module) and cannot distinguish
     which position an agent will be appointed to.
     """
+    # QUALIFIED, since 14 September - decisions entry 91. `forge_modules_operated` stores
+    # `forge_id/module_id` (entry 48, #136), and Pack validation rejects a bare name. This
+    # asked for the bare `module_id` for a day afterwards, so every pair on every venture
+    # was refused with "no position operating it" - a refusal naming the wrong cause, about
+    # positions that plainly operate the module. Burkham's certifications predate the change,
+    # which is why nothing noticed until Greenstone's were attempted.
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
             "SELECT p->>'position_title' AS title, p->>'source_department' AS department, "
@@ -187,7 +193,7 @@ async def _assert_pair_in_pack(
             "FROM business_pack b, jsonb_array_elements(b.parsed->'positions_required') p "
             "WHERE b.venture_id = %s AND b.status = 'live' "
             "  AND p->'forge_modules_operated' ? %s",
-            (venture_id, module_id),
+            (venture_id, f"{forge_id}/{module_id}"),
         )
         positions = [dict(r) for r in await cur.fetchall()]
         await cur.execute(

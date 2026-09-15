@@ -123,7 +123,19 @@ import sys
 #:     job 104508683091   branch  8d455d0       run 35006348454 attempt 2
 #:
 #: byte-identical after normalisation, 432 lines, the same eight FAILs.
-BASELINE = "88904f90974af084eb0509857203ebfb7816bbdabfe62a777c5d5f6411a71d30"
+#:
+#: **Re-recorded 2026-09-15 for PR #143 (decisions entry 91), by the same rule.** The one
+#: intended line: `all 48 event types` -> `all 49`, from `forge_tenant_credential_removed`
+#: joining the glossary. The first pair did NOT agree - the second run carried thirteen
+#: `grep: unknown devices method` lines, because the token-leak check passed a random token
+#: that began with "-" to grep as an option and silently checked nothing (fixed in d7688d4,
+#: `grep -e`). Recorded from two runs after that fix:
+#:
+#:     job 104566985411   branch  d7688d4       run 35024155523 attempt 1
+#:     job 104568439387   branch  d7688d4       run 35024155523 attempt 2
+#:
+#: byte-identical, 432 lines, no grep noise, the same eight FAILs.
+BASELINE = "e302d9d1384341c71b91c156ed6915f41e431bb56b55e8d229e463e2812d7597"
 
 _STEP_START = "##[group]Run ./scripts/console-smoke.sh"
 _STEP_END = "Process completed with exit code"

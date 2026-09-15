@@ -391,7 +391,7 @@ done
 step "The token never reaches the browser"
 for path in $ROUTES; do
   curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT$path" > "$WORK"/page.html
-  if grep -qF "$TOKEN" "$WORK"/page.html; then
+  if grep -qF -e "$TOKEN" "$WORK"/page.html; then
     fail "$path leaked the bearer token into the HTML"
   fi
 done
@@ -742,7 +742,7 @@ PY
 leaked=0
 for path in $ROUTES; do
   curl -s -b "$COOKIE_JAR" "http://127.0.0.1:$CONSOLE_PORT$path" > "$WORK"/page.html
-  if grep -qF "$PERSONA_MARKER" "$WORK"/page.html; then
+  if grep -qF -e "$PERSONA_MARKER" "$WORK"/page.html; then
     fail "$path leaked a persona body into the HTML"
     leaked=1
   fi
