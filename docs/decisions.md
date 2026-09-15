@@ -6588,3 +6588,74 @@ written. Full suite: 1561 passed.
 
 **The stash (`stash@{0}` on `coord/greenstone-remove-place-call`) is superseded and has not
 been dropped.** Dropping it is a separate, deliberate act.
+
+---
+
+## 84. What removing `place_call` is and is not, and four directions that did not match the system
+
+**Ruled 2026-09-15 by Ivan: land the Pack edit. Each ruling is recorded as given, and each
+fact attached to it as measured.**
+
+### What the edit is
+
+**It corrects a declaration of an act no agent may perform. It does not remove authority.**
+§3.4 forbids an agent initiating an outbound call as principal (entry 6).
+`voiceforge/place_call` has been in `forge_module_exclusion` throughout, and **no grant for
+it has ever existed**: `agent_forge_grant` holds 0 rows for the module, in any venture. The
+edit takes it out of two positions' `forge_modules_operated` and out of the voiceforge
+binding's `modules_expected`. What disappears is a plan: 4 workflow steps, 5 planned grants
+that the trigger would have refused, 1 manifest row, and 32 approvals a day. No agent loses
+anything it held or could have held.
+
+**No Forge answers for it.** The voiceforge registry row is hand-written, points at
+`https://example.invalid`, and has no credential that resolves. Entry 6 records the
+capability as never built.
+
+### Four directions that did not match the system
+
+    directed                                     measured
+    -------------------------------------------  -----------------------------------------------
+    V6 blocks Gate 2 on place_call               V6 PASSES - voiceforge/place_call has a registry
+                                                 row, which is all V6 asks. The rule that blocks
+                                                 Gate 2 on it is V31, NOT_RUN: "Acquisition
+                                                 Analyst: voiceforge/place_call (hand-written row,
+                                                 never verified)". V31 is not deferred, so it
+                                                 blocks. The edit clears it: 5 NOT_RUN -> 4.
+    the two grants issued from it are revoked    No grant was ever issued from it. Nothing to
+    under G1                                     revoke.
+    Amelie's two are already covered by an      Her 13 September revocation (d89bc046) is scope
+    agent_module revocation from 13 September    AGENT, not agent_module: "no longer in the
+                                                 Village roster. Revoked automatically by
+                                                 sync-roster when the departure was applied." It
+                                                 was LIFTED on 14 September and covers nothing.
+                                                 Her Greenstone grants are covered by the two
+                                                 agent_module revocations of 15 September
+                                                 (entry 83), whose reason is provenance, not
+                                                 departure.
+    revoke Sable Quint's client_read and         Sable Quint has no Office identity and no grant.
+    scan_communication                           The only row is a village_agent, ref
+                                                 dep-test-stayer, department engineering, status
+                                                 departed. The two engineering-department
+                                                 holders of exactly those modules are Brina
+                                                 Arvane's grants, revoked 14 September. Nothing
+                                                 was revoked.
+
+**Amelie's revocations are two different facts and are kept apart.** A departure written by
+a sync-roster run on 13 September, then lifted, is not the same as a grant issued for a
+department no position uses. Neither revocation's reason mentions the other.
+
+### Entry 73's hold was correct, and the reverse was nearly recorded
+
+It was directed that entry 73 held the edit *"on a test dependency that wasn't there."*
+**The dependency was there.** On `origin/main`,
+`test_directory_reports_the_failing_rules_message_not_the_rule_name` asserts
+`"place_call" in failure["message"]`. V11 builds its excluded list only from modules that
+positions operate (`_v11_instructions_authored`), so removing `place_call` from the
+positions removes it from the message and fails the assertion. Entry 83's commit `b3ad04f`
+is what gave the test a different subject.
+
+**How the reverse got stated:** a description of the working branch - "the test exists,
+passes, and place_call isn't its fixture" - was read as a description of main. It was true
+for about an hour, and only on a branch nothing had pushed. **What would have caught it is
+the same thing the direction named: reading the test, on the ref in question, rather than a
+description of it.** `git show origin/main:<path>` shows the line in question.
