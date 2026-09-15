@@ -57,8 +57,8 @@
       "required_by": [
         "workflow step 13",
         "workflow step 17",
-        "workflow step 2",
-        "workflow step 5"
+        "workflow step 3",
+        "workflow step 6"
       ]
     },
     {
@@ -69,8 +69,8 @@
       "module_id": "property_lookup",
       "required": true,
       "required_by": [
-        "workflow step 3",
-        "workflow step 6"
+        "workflow step 2",
+        "workflow step 5"
       ]
     },
     {

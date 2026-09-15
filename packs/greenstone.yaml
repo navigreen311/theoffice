@@ -79,7 +79,7 @@ positions_required:
       - Source off-market candidates from public records and owner outreach
       - Pull comparable sales and rent rolls
       - Produce a first-pass value estimate
-    forge_modules_operated: [property_lookup, comp_analysis, place_call]
+    forge_modules_operated: [cre-forge/property_lookup, cre-forge/comp_analysis, voiceforge/place_call]
     source_department: research
     compliance_flags_in_scope: [tsr_disclosure_required]
     headcount: 3
@@ -92,7 +92,7 @@ positions_required:
       - Build the underwriting model for a qualified candidate
       - Set the maximum allowable offer
       - Flag title and zoning risk
-    forge_modules_operated: [comp_analysis, underwrite_deal]
+    forge_modules_operated: [cre-forge/comp_analysis, cre-forge/underwrite_deal]
     source_department: banking
     compliance_flags_in_scope: []
     headcount: 2
@@ -124,7 +124,7 @@ positions_required:
       - Maintain the vetted buyer list and their stated criteria
       - Match a contracted deal to buyers by fit
       - Circulate the assignment package
-    forge_modules_operated: [buyer_match, assign_contract, place_call, transcribe_call]
+    forge_modules_operated: [cre-forge/buyer_match, cre-forge/assign_contract, voiceforge/place_call, voiceforge/transcribe_call]
     source_department: operations
     compliance_flags_in_scope: [recording_consent_required]
     headcount: 2

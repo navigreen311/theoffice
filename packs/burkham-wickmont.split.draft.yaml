@@ -2,6 +2,15 @@
 #
 # SUPERSEDED, NOT MAINTAINED, NEVER PUBLISHED — note added 2026-09-08
 #
+#   NOT QUALIFIED, 14 September 2026. Entry 48's ruling qualified
+#   `forge_modules_operated` to `forge_id/module_id` across both LIVE Packs - 19 names.
+#   This file is deliberately not among them: it is never loaded, and it names six
+#   modules that exist in no registry (`client_lookup`, `lender_match`,
+#   `assemble_evidence`, `build_packet`, `bureau_pull`, `readiness_score`), so
+#   qualifying them would mean inventing a Forge for each. The bare names below are
+#   evidence of when this file stopped being maintained, which is the only thing it is
+#   still for.
+#
 #   `burkham-wickmont.draft.yaml` is the source. This file is a superseded variant kept
 #   for the Gate 4.5 comparison it was written for, and it is NOT maintained alongside
 #   the main draft. Nothing in this repository reads it — verified 2026-09-08, zero

@@ -45,10 +45,10 @@ async def generate(pack: BusinessPack, conn: AsyncConnection | None = None) -> R
     for p in sorted(pack.positions_required, key=lambda x: x.position_title):
         declared = sorted(set(p.compliance_flags_in_scope))
         implied = sorted(
-            {f for m in p.forge_modules_operated for f in implied_by_module.get(m, [])}
+            {f for m in p.module_ids for f in implied_by_module.get(m, [])}
         )
         if conn is not None:
-            unresolved |= {m for m in p.forge_modules_operated if m not in known_modules}
+            unresolved |= {m for m in p.module_ids if m not in known_modules}
 
         stages = p.lifecycle_stages_owned or all_stages
         positions.append(

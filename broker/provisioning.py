@@ -374,7 +374,7 @@ async def _gate_6(ctx: _Context) -> GateOutcome:
     defined. Saying which is which is the whole content of this gate.
     """
     artifacts = ctx.require_artifacts()
-    modules = {m for p in artifacts.roles.positions for m in p.forge_modules_operated}
+    modules = {m for p in artifacts.roles.positions for m in p.module_ids}
     flags = {f for p in artifacts.roles.positions for f in p.effective_compliance_flags}
     stages = {
         stage
@@ -983,7 +983,7 @@ def _department_forge_modules(
     """
     grouped: dict[tuple[str, str], set[str]] = {}
     for position in positions:
-        for module_id in position.forge_modules_operated:
+        for module_id in position.module_ids:
             forge_id = module_forge.get(module_id)
             if forge_id is None:
                 continue
@@ -1262,7 +1262,7 @@ def _certification_candidates(artifacts: Any) -> dict[str, list[dict[str, str]]]
         position = positions.get(appointment.position_title)
         if position is None:
             continue
-        for module_id in position.forge_modules_operated:
+        for module_id in position.module_ids:
             by_module.setdefault(module_id, []).extend(
                 {"office_agent_id": c.office_agent_id, "agent_name": c.agent_name}
                 for c in appointment.requires_certification

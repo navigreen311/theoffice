@@ -65,7 +65,7 @@ def generate(pack: BusinessPack, roles: RoleDefinition) -> Workflow:
                 for p in owners
                 if p.position_title != position.position_title
             )
-            for module in position.forge_modules_operated:
+            for module in position.module_ids:
                 number += 1
                 flags = position.effective_compliance_flags
                 steps.append(

@@ -43,7 +43,7 @@ def one_module(greenstone: BusinessPack) -> tuple[BusinessPack, str, str]:
     for position in pack.positions_required:
         position.forge_modules_operated = []
         position.trust_tier_ceiling = "propose"
-    pack.positions_required[0].forge_modules_operated = [module]
+    pack.positions_required[0].forge_modules_operated = [f"{forge}/{module}"]
     pack.positions_required[0].trust_tier_ceiling = "auto_execute"
     return pack, forge, module
 
@@ -121,7 +121,9 @@ def test_a_refusal_outranks_an_unresolved_module(greenstone):
     for position in pack.positions_required:
         position.forge_modules_operated = []
         position.trust_tier_ceiling = "propose"
-    pack.positions_required[0].forge_modules_operated = [known, unknown]
+    pack.positions_required[0].forge_modules_operated = [
+        f"{forge}/{known}", f"{forge}/{unknown}"
+    ]
     pack.positions_required[0].trust_tier_ceiling = "auto_execute"
 
     refusals, unresolved = unattended_writes(
