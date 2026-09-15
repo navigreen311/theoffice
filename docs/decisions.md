@@ -6231,3 +6231,150 @@ exercised on every call and that **nothing upstream is built to satisfy**. Green
 arriving, and its mirror: red by never being prepared for. Neither is visible from inside
 the ladder, because the ladder's last gate reports on what it granted rather than on whether
 anything can act.
+
+---
+
+## 80. Provisioning grants authority; nothing schedules it. A scope finding, not a gap
+
+**Decided 2026-09-15. Read-only throughout; nothing was assigned and no gate was changed.**
+
+**Decision.** The ladder does not assign shifts, and it is right not to. **B55 is
+reclassified from a gap to a scope finding.** It is not a defect in any gate, it is not a
+missing gate, and it is not to be closed by amending Gate 5, 11 or 12.
+
+Provisioning grants authority. Scheduling says when that authority can be exercised. They are
+different jobs: the ladder does the first correctly, and nothing in the system does the second.
+
+### What "operating" means
+
+A venture that has passed every gate, with its grants issued and activated and no agent on
+shift, is **authorised and not staffed**. Gate 12's "live" is true of it, and every call is
+refused, correctly, by `assert_on_shift_for`. That is the whole output of provisioning, not
+a partial one.
+
+**Burkham is not in that state and should not be quoted as if it were.** Run 8ed2f39a is
+blocked at gate 9, with 0 signoffs and 0 of 49 grants active.
+
+### Why the ladder is the wrong owner: the reasons that survive a read
+
+- **The spec puts the calendar in the Village.** master-prompt-v4, line 109: *"Shifts exist
+  as a Village mechanic."* §7.4: *"The Office allocates within them; it does not override
+  them."* `broker/village.py:343`: *"The Village owns the shift calendar."* `docs/shifts.md`,
+  known gaps, verified 2026-08-23: *"Nothing schedules rotations … scheduling policy is
+  deliberately absent here."*
+- **A run happens once, and shifts recur.** A gate that wrote a shift would staff the
+  venture for one window.
+- **A run covers one venture, and allocating agents means choosing between ventures.**
+  `one_venture_per_agent_quarter` decides between ventures, and `ux_run_active` scopes a run
+  to one. Amelie Wystan holds grants for both burkham-wickmont and greenstone, so a Burkham
+  gate could take her quarter only by writing first.
+- **No gate has a window.** `assign_shift` takes five inputs. A gate has three of them: the
+  agent, the venture and `ctx.actor`. The quarter is read live from the Village, which
+  `provisioning.py` never calls. The window exists nowhere: `capacity_demand.shift_pattern`
+  is free text and nothing reads it.
+
+### Three reasons offered for this decision, and why they are not carried in
+
+The conclusion is right, and that is exactly when a wrong reason gets through unchecked.
+Each was checked against the code:
+
+    offered                                   measured
+    ----------------------------------------  ---------------------------------------------
+    broker/shifts.py says a shift is where    Not in that file, and not in broker/, client/
+    the human answers, and provisioning has   or generators/. shifts.py records the assigner
+    no idea who is on duty                    as actor_type "human". escalation.py puts
+                                              "who covers a shift" under OPERATIONAL, the
+                                              Village's own chain, not the human path.
+
+    bootstrap_phase0 hardcodes a quarter      It reads the quarter from the Village
+                                              (bootstrap_phase0.py:587). What it hardcodes
+                                              is the WINDOW: now-1min to now+8h (:602-603).
+
+    Gate 5 would have to invent an operator,  Gate 5 has one: ctx.actor, already passed as
+    and Phase 0 has neither                   granted_by. Phase 0 has one:
+                                              attributable_actor, written as assigned_by
+                                              (:604). Both have an operator. Neither has a
+                                              window.
+
+**The window is the entire difference.** Nobody in provisioning can say when an agent works.
+
+**The session's option letters are not used here.** "C" was first offered as *drop the time
+window and make the agent-quarter the boundary*, and that is not what was decided. That
+question is still open: what time base an Office shift uses, given that the Village runs its
+own clock and its own shift calendar.
+
+### What is missing: scoped here, not built
+
+`assign_shift` exists, is tested, and enforces its own refusals: an unflushed previous
+shift, an unknown quarter, and a quarter conflict. Its only callers are `rotate()`, which
+nothing calls, and `bootstrap_phase0`, which invents a window because it has nobody to ask.
+**Nothing calls it with a real operator and a real window.** No console action, no CLI verb
+and no route exists for it. A route would also trip
+`test_the_api_exposes_no_route_that_bypasses_a_control`, which rejects any write path
+containing `shift`. Whether building one is today's work has not been decided.
+
+---
+
+## 81. The shift-window gap: overlaps are refused, gaps are not, and a scheduler inherits that
+
+**Recorded 2026-09-15, before anything schedules, so the first scheduler is written by
+someone who has read this.**
+
+### The asymmetry
+
+**One agent cannot hold two overlapping shifts.** The schema refuses it through
+`no_overlapping_shifts_per_agent`, an exclusion over `tstzrange(shift_start, shift_end)`.
+`assign_shift` does not check this itself. An overlap arrives as a raw `ExclusionViolation`
+from the database, not as a named refusal.
+
+**Nothing refuses a gap.** No constraint, no check in `assign_shift`, no sweep. When a shift
+ends and nothing follows it, the agent is off shift, and the next brokered call is refused
+with `OffShift`: *"agent is not on shift"*. **Nobody decided that.** Nothing is written when
+a shift lapses. The first trace is the refused call's own audit event,
+`call_refused_off_shift`.
+
+    overlap between two shifts, one agent    refused, by the schema
+    gap between two shifts, one agent        permitted, and silent
+    back-to-back (end == next start)         permitted - tstzrange defaults to '[)'
+
+Continuous coverage can be expressed in the schema. **Nothing requires it.**
+
+### What a naive scheduler gets wrong
+
+1. **It reads "no overlap" as "coverage".** The constraint it can see is the one that does
+   not matter for staffing.
+2. **It treats a refused assignment as an error to retry later.** Shift N ends on time
+   whether or not shift N+1 was written. `ShiftBlocked` (an unflushed predecessor),
+   `QuarterUnknown` (the Village is down) and `QuarterConflict` all refuse N+1 **after N
+   has already been committed to ending**. Each one leaves the agent off shift until
+   somebody notices.
+3. **It assumes something reports the state.** Nothing lists agents that hold active grants
+   and have no current or next shift. The capacity figures' `allocated` count
+   (`broker/app.py:695`) looks only at a current shift, and it counts shifts on *other*
+   ventures.
+
+A related inheritance: **a row names one quarter**, whichever the Village reported at
+assignment time, whatever quarters the window actually spans.
+`one_venture_per_agent_quarter` checks that one quarter and no other.
+
+### A correction to how this was introduced
+
+It was put as *"Phase 0 avoids it by assigning a quarter; anything shorter creates the
+state."* **Phase 0 does not assign a quarter.** It assigns eight hours, `now - 1 min` to
+`now + 8 h` (`bootstrap_phase0.py:602-603`), and stamps whatever quarter the Village
+reports. So **Phase 0 is the first instance of the gap, not the exception to it.** Every
+bootstrap shift ended eight hours after it started, and its agent went off shift by nobody's
+decision.
+
+**No window length avoids the gap.** A quarter-long window ends too. A longer window only
+moves the date, and it also postpones the PHI flush, which runs only in `rotate()`, which
+nothing calls.
+
+### What `assign-shift` does about it
+
+**Nothing, deliberately.** The operator command, `python -m broker assign-shift`, writes one
+window, and that window
+ends in exactly this state. The difference is that a named operator chose that end, so the
+off-shift state that follows was decided by someone. It becomes *nobody's* decision only when
+something is expected to follow and doesn't. That expectation is what a scheduler creates,
+and the reason this entry exists before one does.

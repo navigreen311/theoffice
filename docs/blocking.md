@@ -5056,3 +5056,17 @@ because no rule compares them.
 ladder, which is the point - a run can complete and report success over a venture that
 cannot make a single call.
 
+### Reclassified 2026-09-15: a scope finding, not a gap (decisions entry 80)
+
+**The ladder did not leave a step behind. Scheduling was never a provisioning job.** The
+paragraph above says the ladder "generalised the authorising half and left the scheduling
+half behind". Read against the spec, the second half was never the ladder's to carry. §7.4
+puts the shift calendar in the Village, a run covers one venture while allocation chooses
+between ventures, and no gate has a window to write.
+
+A venture that passes every gate with no agent on shift is **authorised and not staffed**.
+That is the complete output of provisioning. **Do not close this item by amending a gate.**
+What is absent is anything that calls `assign_shift` with a real operator and a real window,
+and that is a separate thing to build. The **Blocks** line above still holds, because no
+brokered call can succeed until that exists.
+
