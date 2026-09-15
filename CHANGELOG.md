@@ -5,6 +5,25 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **`python -m broker assign-shift`: a named operator puts one agent on shift for a real
+  window.** Decisions entry 80: provisioning grants authority and nothing schedules it, so a
+  venture that clears the ladder is authorised and not staffed. The command has the same
+  shape as `bootstrap-phase0`: it reports unless `--confirm` is given and exits non-zero on
+  every refusal. Its only write is `shifts.assign_shift`.
+  - **Refuses a venture with no active grants**, and an agent none of whose grants
+    resolves. Both are asked of `grants.resolve_grant` and `revocation.covered_grants`,
+    not restated.
+  - **Refuses an operator without `venture_operator` or stronger for the venture**, via
+    `humans.authorize`, which checks role and venture scope together. Test-fixture
+    accounts are refused as operators.
+  - **Refuses a window that is not real:** no timezone, inverted, already over, or
+    backdated more than five minutes. `now` is the database clock.
+  - Overlaps, an unflushed previous shift, an unknown Village quarter and a quarter
+    conflict are reported by name before the write, not raised as a traceback.
+  - `tests/contract/test_assign_shift.py`: a brokered call refused `OffShift` before the
+    command succeeds after it, plus every refusal. Mutation-checked: removing either
+    grant refusal, or the write, fails the tests that should fail.
+  - **Not a scheduler.** The window ends and nothing follows it (entry 81).
 - **Pack module conformance — resolving a Pack against the Forge, not against a row.**
   A Pack's `modules_expected` is a list a human wrote and a `forge_module_registry` row
   is a row a human wrote, so V6 compared two claims. The Burkham Pack declared twelve

@@ -5,6 +5,7 @@
     python -m broker sweep --restore-drill  # plus Gate 13, quarterly
     python -m broker health                 # freshness of every control
     python -m broker human create --name … --email …   # the FIRST human only
+    python -m broker assign-shift --venture … --agent … --operator … --start now --end …
 
 `serve` exists rather than `uvicorn broker.app:app` because **uvicorn explicitly
 installs `WindowsProactorEventLoopPolicy` on Windows**, overriding the selector policy
@@ -150,6 +151,70 @@ async def _bootstrap_human(name: str, email: str, role: str) -> int:
     print(f"human_id: {human_id}")
     print(f"token:    {token}")
     print("\nThis token is shown once and cannot be recovered. Store it now.")
+    return 0
+
+
+async def _assign_shift(
+    venture_id: str, agent: str, operator_email: str, start: str, end: str, confirm: bool,
+) -> int:
+    """Put one agent on shift for one venture, for a window a named operator chose.
+
+    Decisions entry 80: provisioning grants authority and nothing schedules it. This is the
+    operator's half, through `shifts.assign_shift` and nothing else. Reports unless
+    `--confirm` is given, and exits non-zero on every refusal - a command that puts an agent
+    on duty must not be able to report success it did not have.
+    """
+    from broker import staffing
+
+    async with connection() as conn:
+        try:
+            checked = await staffing.plan(
+                conn, venture_id=venture_id, agent=agent, operator_email=operator_email,
+                start=start, end=end,
+            )
+        except Exception as exc:
+            print(f"assign-shift failed: {type(exc).__name__}: {exc}")
+            return 1
+
+        for line in staffing.describe(checked):
+            print(line)
+
+        if not checked.ok:
+            print("\nRefused:")
+            for refusal in checked.refusals:
+                print(f"  - {refusal}")
+            print("\nNothing was written.")
+            return 1
+
+        if not confirm:
+            print(
+                "\nNothing was written. Re-run with --confirm to assign this shift.\n"
+                "The window ends and nothing assigns the next one (decisions entry 81)."
+            )
+            return 0
+
+        try:
+            written, shift_id = await staffing.apply(
+                conn, venture_id=venture_id, agent=agent, operator_email=operator_email,
+                start=start, end=end,
+            )
+        except staffing.StaffingError as exc:
+            print("\nRefused at write time:")
+            for refusal in exc.refusals:
+                print(f"  - {refusal}")
+            print("\nNothing was written.")
+            return 1
+        except Exception as exc:
+            print(f"assign-shift failed: {type(exc).__name__}: {exc}")
+            return 1
+
+    assert written.end is not None
+    print(f"\nAssigned.\n  shift_id  {shift_id}\n  quarter   {written.quarter}")
+    print(
+        f"\nAt {written.end.isoformat()} {written.agent_name} goes off shift, and nothing "
+        "will assign the next window. That is decisions entry 81, not a fault in this "
+        "command."
+    )
     return 0
 
 
@@ -381,6 +446,29 @@ def main() -> int:
         help="Actually issue. Without this the command only reports what it would do.",
     )
 
+    sh = sub.add_parser(
+        "assign-shift",
+        help="Put one agent on shift for one venture, for a window you choose",
+    )
+    sh.add_argument("--venture", required=True, help="Venture the shift is for")
+    sh.add_argument(
+        "--agent", required=True, help="The agent's office_agent_id or Village agent ref"
+    )
+    sh.add_argument(
+        "--operator", required=True,
+        help="Email of the person putting the agent on duty. Needs venture_operator or "
+             "stronger for --venture; test fixtures are refused.",
+    )
+    sh.add_argument(
+        "--start", required=True,
+        help="'now' (the database clock), or ISO-8601 with an offset",
+    )
+    sh.add_argument("--end", required=True, help="ISO-8601 with an offset. No default.")
+    sh.add_argument(
+        "--confirm", action="store_true",
+        help="Write the shift. Without this the command only reports what it would do.",
+    )
+
     args = parser.parse_args()
     if args.command == "serve":
         return _serve(args.host, args.port, args.reload)
@@ -395,6 +483,12 @@ def main() -> int:
             _bootstrap_phase0(
                 args.venture, args.agent, args.confirm,
                 args.forge, args.module, args.department, args.certify_only,
+            )
+        )
+    if args.command == "assign-shift":
+        return asyncio.run(
+            _assign_shift(
+                args.venture, args.agent, args.operator, args.start, args.end, args.confirm,
             )
         )
     if args.command == "human":

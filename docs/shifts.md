@@ -151,19 +151,58 @@ because the failure lands somewhere else.
 
 ---
 
+## Putting an agent on shift: `assign-shift`
+
+**Provisioning grants authority; scheduling says when it can be exercised** (decisions entry
+80). A venture that clears every gate is authorised and not staffed, and the ladder is right
+to leave it that way. `assign-shift` is the operator's half: one named person, one agent,
+one venture, one real window, written through `assign_shift` and nothing else.
+
+```bash
+# Reports, writes nothing:
+.venv/Scripts/python -m broker assign-shift --venture greenstone \
+    --agent <office_agent_id or Village ref> --operator you@yourdomain \
+    --start now --end 2026-09-15T23:00:00-07:00
+# Same arguments plus --confirm writes the shift.
+```
+
+Everything is checked before anything is written, and every refusal exits 1:
+
+| Refused when | Because |
+|---|---|
+| the operator is unknown, a test fixture, inactive, or holds nothing at `venture_operator` or above **for this venture** | a shift records who put the agent on duty |
+| the agent's identity is unknown or not `active` | |
+| the window has no timezone, ends before it starts, is already over, or starts more than 5 minutes ago | a real window, never a backdated one |
+| **the venture has no active grants** (activated, and not covered by a live revocation) | a shift there staffs nothing |
+| **none of the agent's grants resolves** (`grants.resolve_grant`, the call path's own check) | on shift it could call nothing |
+| the window overlaps one of the agent's shifts, follows an unflushed one, or lands in a quarter the agent already works for another venture | the rules `assign_shift` and the schema already hold, reported by name |
+
+`--start now` means the **database's** clock, the one `assert_on_shift_for` reads.
+
+**What it does not do.** The window ends and nothing assigns the next one. The schema refuses
+an overlap and **nothing refuses a gap** (entry 81). The command says so when it succeeds.
+A console action was considered and deferred: `test_the_api_exposes_no_route_that_bypasses_a_control`
+rejects any write route containing `shift`, and that question is a separate decision.
+
+---
+
 ## Run
 
 ```bash
 .venv/Scripts/python -m pytest tests/isolation -q
 .venv/Scripts/python -m pytest tests/contract/test_shift_gate.py -q
+.venv/Scripts/python -m pytest tests/contract/test_assign_shift.py -q
 ```
 
 ## Known gaps
 
-*Last verified: 2026-08-23.*
+*Last verified: 2026-09-15.*
 
 - **Nothing schedules rotations.** `rotate()` exists and is tested; no scheduler calls it
   at a real boundary. Until one does, the flush happens when someone asks for it.
+  `assign-shift` writes one window by hand; it is not a scheduler.
+- **Nothing refuses a gap between shifts** (decisions entry 81). An agent whose shift ends
+  with nothing after it is off shift by nobody's decision, and nothing reports it.
 - **Deputy cushion and rest-day rotation are Village mechanics** (Part 7.4). The Office
   allocates within them and does not override them, so scheduling policy is deliberately
   absent here.
