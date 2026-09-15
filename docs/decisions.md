@@ -6022,3 +6022,138 @@ grants - `cre-forge/property_lookup` and `simforge/gate_result` - are active, ou
 scoped to burkham-wickmont, and among the dangling refs above. **Whatever settles `engineering`
 settles one of her three grants.** A resolution that does not say what happens to the other two
 has not finished.
+
+---
+
+## 77. The instrument we were checking the others with had never discriminated
+
+**Found 2026-09-14, on Ivan's instruction to diff Smoke against main's capture before merging #138
+rather than reason from docs-only.** *"Docs-only is a good reason to expect it's the documented red
+and not a substitute for checking — the ninth-failure case merged on exactly that reasoning."* The
+check passed. The instrument did not.
+
+### What the check found
+
+    FAILs      main=8   branch=8    identical, byte for byte
+    could-not-run   1        1
+    lines         432      432
+    hashes     934af341…  vs  b4ace092…
+
+**Eight and eight, identical, and two different digests.** The whole content difference was one
+timestamp on line 1 — `##[group]Run ./scripts/console-smoke.sh`, the line that opens the compared
+region — which the normaliser is built to strip and didn't.
+
+### The cause, and the correction to my first account of it
+
+A UTF-8 BOM sits between the start of that line and the timestamp, and `_TIMESTAMP` is anchored
+with `^`. B49 has the mechanism.
+
+**I reported the cause before finishing the measurement, and got it wrong in a way that mattered.**
+What I said was: every log GitHub serves carries a BOM at byte 0, so `--check` has never worked,
+including through the fetch the script documents. I had confirmed a BOM at byte 0 on the documented
+fetch and stopped there. Measured properly:
+
+    gh api .../jobs/<id>/logs       1 BOM, on a line the script discards
+    gh run view --log              12 BOMs, one per STEP - including the step-start line
+
+**So the instrument was correct through the port it documents and broken through the one we
+substituted for it.** "The tool never worked" and "we were using it through an undocumented port"
+are different findings with different repairs, and I recorded the first before checking whether it
+was the second. The BOM at byte 0 was real; the inference from it was not.
+
+`lstrip` at read time — the fix as first ruled, and as I first wrote it — does not fix this. It
+removes one BOM and the one that costs the digest is the twelfth. The hashes were unchanged after
+it, which is how the real shape surfaced.
+
+### The shape, third instance this week
+
+    entry 63   Gate 7 passed because its input set was empty
+    entry 76   Gate 9's second refusal has never run - a prior branch always answers first
+    entry 77   --check never distinguished anything - a working diff always answered first
+
+**In all three, something reported for a long time without ever having discriminated.** The first
+two were found with instruments; this one was in an instrument, and it was the one being used to
+check the other two. Nothing here was caught by a test, a gate or a review — it was caught by
+someone declining to accept a good reason in place of a measurement.
+
+### What the warning could not do
+
+`smoke_normalise.py` opens with a section refusing *"a number that could only be reproduced by the
+shell history that produced it"* — written after a prose recipe produced an irreproducible hash.
+`BASELINE` then had that exact property for four days. **The guard against unverifiable numbers was
+itself a paragraph**, and a paragraph does not run. Its replacement is three tests, two of which
+fail without the fix.
+
+### The baseline, re-recorded from two runs
+
+    c9f1f858148f6c83c262ba332a488eb9a9cd22a6240edd0b2a19d307bfeb08cf
+
+Taken from the documented fetch on two different runs — main `504ba1f` and branch `9aacd6f` — whose
+normalised text is byte-identical. **The previous baseline was taken from one run**, which is the
+condition that let it be wrong without anyone being able to tell. One run produces a number; two
+runs agreeing produce a baseline.
+
+The two fetch paths still cannot agree, and will not: `gh run view --log` renders the ANSI escape
+on the step's echoed command as `^[` where `gh api` returns the ESC byte. Recorded rather than
+normalised away, because masking a difference is how a comparison stops comparing.
+
+---
+
+## 78. Three gates whose behaviour nobody could observe, and the instrument that found them
+
+**Recorded 2026-09-14. The third instance of one shape in two days, and the first time it
+was looked for deliberately rather than stumbled into.**
+
+### The three
+
+    entry 63   Gate 7 passed because its input set was empty - 49 grants, all revoked,
+               and an empty set cannot contain an active one
+    entry 77   `smoke_normalise --check` never distinguished two runs, because a working
+               FAIL-line diff always answered first
+    B53        Gate 11 activated grants a live revocation covered, because no run had
+               ever reached Gate 11 on a venture holding a revocation
+
+**In each, something reported for a long time without ever having discriminated.** Not a
+wrong answer - no answer, wearing the shape of one. Gate 7 said PASSED over nothing.
+`--check` said DIVERGENT on every capture including clean ones. Gate 11's UPDATE had
+never met a revoked grant, so its silence about revocation had never cost anything.
+
+### What is different about the third
+
+The first two were found after the fact - Gate 7 by measuring a verdict that looked
+wrong, the normaliser by a hash that differed when the logs did not. **B53 was found
+before it happened**, by asking what the next gate does rather than by running it.
+
+The instrument is ordinary and worth naming because it is repeatable: **before signing
+Gate 10, list the rows Gate 11 would touch.** Not the count afterwards - the list, in
+advance, with each row's state beside it. Ivan asked for exactly that, in those terms:
+*"I want the list before it does, not the count after."*
+
+The list was 49 rows. Four of them carried `REVOKED` in a column the gate does not read.
+
+### Why the count would not have shown it
+
+This is the part worth keeping. `49 activated` is a true sentence. So is `45 activated`.
+Neither says anything about revocation, and a reader comparing them has no reason to
+suspect the difference is four grants whose authority a named human withdrew that
+afternoon. **The defect is invisible in every summary of the thing it damages** - which
+is the same property entry 63 recorded about Gate 7's reason line, and the same property
+entry 77 recorded about a digest nobody read.
+
+So the fix carries the withheld count in the **reason line**, not only in the evidence -
+and V38 carries its warning into Gate 12's reason line for the same reason. A number that
+only appears in a JSON blob is a number that has to be gone looking for.
+
+### The shape, stated so the next one is findable
+
+A control that has never been exercised is not a control that works. It is a control that
+has not been tested by the world yet, and the three ways that happens are all here:
+
+    green by narrowing     the set was filtered until it was empty         (entry 63)
+    green by absence       a prior branch always answered first            (entry 77)
+    green by never arriving  the code path had no traffic to refuse        (B53)
+
+**All three look identical from the outside**, and none of them is a bug in the usual
+sense - every line involved is correct. What is missing in each case is any assertion
+that the rule was ever handed something to rule on. Entry 63 named that gap and did not
+close it; it is still open, and it is now three findings wide.

@@ -438,8 +438,26 @@ async def test_greenstone_passes_gate_2_in_a_fully_prepared_world(
         report = await validate(greenstone, conn)
 
     assert report.failures == [], report.render()
-    assert report.not_run == [r for r in report.not_run if r.rule_id == "V24"], (
-        "only V24 may be deferred; every other rule must have run"
+
+    # V24 is deferred to Gate 4.5 by design. V38 defers for a different reason worth
+    # stating rather than tolerating: **it reads `agent_forge_grant`, and Gate 5 is what
+    # writes it.** At Gate 2 a venture on its first run holds no grants, so V38 has
+    # nothing to check and says so - NOT_RUN, which this codebase does not treat as a
+    # pass. It answers for real on a re-run, which is the case it was built for: a
+    # venture whose previous run left grants behind.
+    #
+    # Anything else deferring here is still a finding.
+    deferrable = {"V24", "V38"}
+    unexpected = [r.rule_id for r in report.not_run if r.rule_id not in deferrable]
+    assert not unexpected, (
+        f"{unexpected} did not run in a fully prepared world. Only V24 (deferred to "
+        "Gate 4.5) and V38 (reads grants, which do not exist until Gate 5) may defer."
+    )
+    v38 = report.get("V38")
+    assert v38 is not None and v38.verdict is Verdict.NOT_RUN
+    assert "no grants" in v38.message, (
+        "V38 must say WHY it did not run. A deferred rule that does not name its "
+        "reason is indistinguishable from one that quietly passed."
     )
 
 

@@ -130,3 +130,58 @@ def test_a_real_difference_survives_normalisation():
     clean = _log("  8 check(s) failed")
     ninth = _log("  FAIL 3 identifier(s) render as primary text:", "  9 check(s) failed")
     assert normalise(clean) != normalise(ninth)
+
+# --------------------------------------------------------------------------- B49
+# A UTF-8 BOM, and the reason the digest was per-run for as long as anyone used
+# `gh run view --log`. That command emits a BOM at the start of every STEP - twelve in
+# one console-smoke job - and one of them opens the `##[group]Run ./scripts/
+# console-smoke.sh` line itself. `_TIMESTAMP` is anchored with `^`, so that line missed
+# the anchor while every line after it matched, and the compared region began with a
+# per-run timestamp.
+#
+# The documented fetch (`gh api .../jobs/<id>/logs`) returns exactly one BOM, at byte 0,
+# on a line this script discards - which is why the number was right when it was fetched
+# the documented way and wrong every time it was not.
+
+BOM = "\ufeff"
+
+
+def test_a_bom_on_the_step_start_line_does_not_reach_the_compared_text():
+    """**The defect.** One character, on the one line where it costs the whole digest."""
+    clean = _log("  a check passed")
+    bommed = clean.replace(
+        f"{TS}##[group]Run ./scripts/console-smoke.sh",
+        f"{BOM}{TS}##[group]Run ./scripts/console-smoke.sh",
+    )
+    assert bommed != clean, "the fixture did not actually place a BOM"
+
+    out = normalise(bommed)
+    assert BOM not in out, "a BOM survived into the text the merge gate hashes"
+    assert TS.strip() not in out, (
+        "the step-start line kept its timestamp. This is the whole of B49: the compared "
+        "region begins with a per-run value, so the digest is unique to the run and "
+        "`--check` reports DIVERGENT on a clean capture, forever."
+    )
+
+
+def test_two_captures_of_one_run_normalise_alike_however_the_boms_fell():
+    """The property that matters, stated as a property rather than as a case.
+
+    Where the BOMs land is a fact about the FETCH, not about the console. A normaliser
+    whose answer depends on it is measuring the wrong thing.
+    """
+    body = ("  a check passed", "  FAIL  a check did not", "  1 check(s) could not run")
+    plain = _log(*body)
+    every_line = "\n".join(BOM + ln for ln in plain.splitlines()) + "\n"
+    assert normalise(plain) == normalise(every_line)
+
+
+def test_a_bom_on_a_discarded_line_was_always_harmless():
+    """The documented fetch's shape, recorded so the distinction is not lost again.
+
+    `gh api` puts one BOM on `Current runner version:`, which precedes the step and is
+    dropped. Asserting it makes the difference between the two fetch paths a checked
+    fact rather than a remembered one.
+    """
+    plain = _log("  a check passed")
+    assert normalise(BOM + plain) == normalise(plain)
