@@ -6659,3 +6659,86 @@ passes, and place_call isn't its fixture" - was read as a description of main. I
 for about an hour, and only on a branch nothing had pushed. **What would have caught it is
 the same thing the direction named: reading the test, on the ref in question, rather than a
 description of it.** `git show origin/main:<path>` shows the line in question.
+
+---
+
+## 85. Gate 11 activated grants for agents whose identity was not active. A, done; C and B, not done, because the rows they act on do not exist
+
+**Ruled 2026-09-15 by Ivan, as A, then C, then B. A is built. C and B were directed at a
+missing foreign key and 44 orphan grants, and neither exists. Both are recorded here as not
+done, with the measurements.**
+
+### A - identity status in Gate 11: built
+
+**The defect is B53's sibling: a gate activating on one condition when two matter.** Gate
+11's UPDATE was `WHERE venture_id = %s AND activated_at IS NULL AND NOT covered`. It never
+read `office_agent_identity`. The foreign key guarantees that a grant's identity **exists**,
+not that it is **active**. A grant held by a suspended, revoked or retired agent was in the
+set Gate 11 activated.
+
+**It is the record, not the authority, as with B53.** `resolve_grant` refuses a non-active
+identity on every call (`IdentityInactive`, `grants.py:216`). Without the condition, the row
+says a signer activated authority its holder could never exercise.
+
+**Found while writing the test: Gate 10 catches the first attempt.** Suspending an appointed
+agent changes the regenerated artifacts, so the existing signature goes VOID and the run waits
+at Gate 10. **A signature over the new artifacts clears Gate 10**, and Gate 11's UPDATE is
+venture-wide over `activated_at IS NULL`. The suspended agent's Gate 5 grants were therefore
+still in the set, and that is the path the test walks.
+
+    UPDATE agent_forge_grant g ... FROM office_agent_identity i
+     WHERE i.office_agent_id = g.office_agent_id AND i.status = 'active'
+       AND g.venture_id = %s AND g.activated_at IS NULL AND NOT (g.grant_id = ANY(covered))
+
+Withheld grants are counted per cause, each grant once, revocation first. The reason line
+names the identity clause only when it is non-zero, the same rule B53 set for revocations.
+Evidence gains `withheld_inactive_identity` and `inactive_identity_statuses`.
+
+**Checked against the old predicate:** with the status term removed, the new test fails on
+its activation assertion. The control test ("activates everything when nothing is withheld")
+also asserts the identity count is 0.
+
+**Exposure today: none.** All 54 identities are active, and no grant belongs to a non-active
+one.
+
+`agent_can_operate`, cited in the ruling as the function that already asks this question,
+**does not exist**: not in code, docs or database functions. The check that does exist is
+`resolve_grant`'s `IdentityInactive`.
+
+### C - "the FK, NOT VALID, existing rows kept": not done, because the FK exists
+
+    agent_forge_grant_office_agent_id_fkey
+      FOREIGN KEY (office_agent_id) REFERENCES office_agent_identity(office_agent_id)
+
+It was declared in `db/versions/0001_core_schema.py:114`
+(`office_agent_id UUID NOT NULL REFERENCES office_agent_identity`), it is live and VALID in
+both `theoffice` and `theoffice_test`, and no migration drops it. A second constraint would
+duplicate it, and `NOT VALID` would record that existing rows were never checked, when they
+have been checked since the first migration.
+
+### B - "revoke the 44": not done, because there are no orphan grants
+
+    theoffice        burkham-wickmont   49 grants   0 without an identity
+    theoffice        greenstone          2 grants   0 without an identity
+    theoffice_test   (no grants)
+
+**Greenstone holds 2 grants, not 82.** Sable Quint has no identity and no grant. A revocation
+names an `office_agent_id`, so 44 revocations for rows that do not exist would be 44 records
+of something that never happened. If a grant without an identity could exist, `resolve_grant`
+inner-joins the identity (`grants.py:110`) and would refuse it `NotGranted`, not `NotOnShift`
+(no such class exists; the shift refusal is `OffShift`).
+
+**The ordering argument** - the FK landing against the true state, with the revocations as
+the correction - **is not recorded.** It orders two acts on rows that are not there.
+
+### Also measured and not recorded as directed
+
+- **"bootstrap-phase0 issues both rows in one transaction"** - it does not
+  (`bootstrap_phase0.py:382`: *"Resumable rather than atomic, and deliberately. Each step of
+  this bootstrap commits on its own."*). **Burkham's grants resolve to real identities because
+  of the foreign key**, not because they came through a safe path.
+- **"The revocation check I had you add to Gate 11 yesterday"** is B53 (PR #140), from another
+  session, not this one.
+- **"Two false-reason revocations corrected, five remaining":** none was corrected here. **11
+  revocations carry the roster-departure text; all 11 were lifted on 14 September** and none
+  covers anything.
