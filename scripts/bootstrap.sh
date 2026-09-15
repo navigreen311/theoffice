@@ -85,7 +85,12 @@ fi
 # here so a fresh checkout gets the separation without reading a doc about it.
 if [ -n "${OFFICE_TEST_ADMIN_DSN:-}" ]; then
   step "Test database"
-  TEST_DB="$(printf '%s' "$OFFICE_TEST_ADMIN_DSN" | sed -E 's#.*/([^/?]+)(\?.*)?$##')"
+  # The replacement was a literal control byte rather than `\1`, so this produced an
+  # EMPTY name: the existence check matched nothing and `CREATE DATABASE ""` failed the
+  # script under `set -e`. This branch could never have run to completion. An escaping
+  # artefact, the same class as the one that hit `dev-up.sh` (entry 91), found while
+  # adding the marker below - because the marker is what this branch now has to write.
+  TEST_DB="$(printf '%s' "$OFFICE_TEST_ADMIN_DSN" | sed -E 's#.*/([^/?]+)(\?.*)?$#\1#')"
   if psql "$ADMIN_NO_DB" -tAc        "SELECT 1 FROM pg_database WHERE datname = '$TEST_DB'" | grep -q 1; then
     echo "  $TEST_DB exists"
   else
@@ -94,6 +99,13 @@ if [ -n "${OFFICE_TEST_ADMIN_DSN:-}" ]; then
   fi
   OFFICE_ADMIN_DSN="$OFFICE_TEST_ADMIN_DSN" "$VPY" -m alembic upgrade head >/dev/null
   echo "  migrated to head"
+  # The suite and the dev seed both wipe every certification and instruction in whatever
+  # database they are handed, so they refuse one that does not carry this marker. It is
+  # set here because this is the one place that knows a database was created to be thrown
+  # away. Idempotent: re-running restates the same value.
+  psql "$ADMIN_NO_DB" -q -c \
+    "ALTER DATABASE \"$TEST_DB\" SET office.disposable_world = '$TEST_DB'" >/dev/null
+  echo "  marked disposable (office.disposable_world = $TEST_DB)"
 else
   step "Test database"
   echo "  OFFICE_TEST_ADMIN_DSN is not set: the suite will empty the development"

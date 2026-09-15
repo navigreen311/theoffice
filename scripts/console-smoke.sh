@@ -402,6 +402,25 @@ step "Seed a development world if the bridge is empty"
 # most important screens have nothing to render. A smoke test that quietly settles for
 # that reports a pass over four checks it never performed.
 if [ "$(curl -s -H "$API_AUTH" "http://127.0.0.1:$API_PORT/api/forges")" = "[]" ]; then
+  # The emptiness check above reads through the API, which runs on OFFICE_APP_DSN, while
+  # the seed writes over OFFICE_ADMIN_DSN. It says what a database contains, never which
+  # database it is - and the seed deletes every certification and instruction in whatever
+  # it is pointed at. So the marker is checked here too, over the DSN the seed will
+  # actually use, before anything is written. Silent on success: this script's output is
+  # a merge gate (scripts/smoke_normalise.py).
+  "$VPY" - "$OFFICE_ADMIN_DSN" <<'PY' || die "the seed refused this database; see above"
+import sys
+import psycopg
+sys.path.insert(0, ".")
+from tests.world import NotADisposableDatabaseError, assert_disposable
+
+with psycopg.connect(sys.argv[1]) as conn:
+    try:
+        assert_disposable(conn)
+    except NotADisposableDatabaseError as refusal:
+        print(f"  refusing to seed: {refusal}", file=sys.stderr)
+        raise SystemExit(1) from None
+PY
   "$VPY" scripts/seed_dev_world.py
 else
   say "the Forge registry is not empty"

@@ -260,6 +260,69 @@ def dispatch_from_registry(
     forge_modules.forget()
 
 
+#: The database-level setting a disposable database carries, and the only thing that
+#: makes `build_world` and `teardown_world` willing to run.
+DISPOSABLE_MARKER = "office.disposable_world"
+
+
+class NotADisposableDatabaseError(RuntimeError):
+    """The database is not marked disposable, so nothing was read or written."""
+
+
+def assert_disposable(conn: psycopg.Connection) -> str:
+    """Refuse any database that has not been marked disposable. Returns its name.
+
+    **WHAT IS REFUSED, AND WHY.** `teardown_world` runs first inside `build_world`, and it
+    is not scoped to a venture or to this fixture's own rows: it deletes EVERY row of
+    `certification` and EVERY row of `forge_operating_instruction`, every proposal
+    belonging to any agent identity, and the registry, credential and module rows of three
+    Forges. Against the development database on 15 September 2026 that would have removed
+    18 bootstrap-attested certifications, 16 authored instructions - including the five CRE
+    Forge manuals written that morning - and both Greenstone grants, then re-registered two
+    Forges at `https://example.invalid` and rewritten every module row to
+    `is_mutating = TRUE`, which is the exact defect `verify_forge_modules.py` exists to
+    catch (decisions entry 95). Nothing checked. The seed's only guards were its callers':
+    `dev-up.sh` seeds when `forge_registry` is empty and `console-smoke.sh` when
+    `/api/forges` returns `[]` - both of which say what the database contains, never which
+    database it is.
+
+    **THE MARKER IS IN THE DATABASE, NOT IN THE ENVIRONMENT.** A name rule (`*_test`) was
+    the obvious check and would be wrong twice: CI runs this suite against a database
+    called `theoffice`, and a rule about spelling is passed by anything spelled that way.
+    An environment variable is worse - the caller sets it, and the caller is what is
+    already wrong when this fires. So the database itself carries the permission:
+
+        ALTER DATABASE theoffice_test SET office.disposable_world = 'theoffice_test';
+
+    The value must equal the database's own name, so a marked database restored under
+    another name is not marked, and a marker copied between environments names the wrong
+    database and refuses. Setting it takes database-owner rights and a deliberate statement
+    that names the database twice; no test run, no script and no export can produce it by
+    accident.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT current_database(), current_setting(%s, true)", (DISPOSABLE_MARKER,)
+        )
+        database, marker = cur.fetchone()
+
+    if marker == database:
+        return str(database)
+
+    raise NotADisposableDatabaseError(
+        f"{database!r} is not marked disposable, so nothing was written. This wipes every "
+        f"certification and every operating instruction in the database it runs against, "
+        f"not just its own rows. If {database!r} really is a throwaway test database, mark "
+        f"it once:\n\n"
+        f"    ALTER DATABASE \"{database}\" SET {DISPOSABLE_MARKER} = '{database}';\n\n"
+        f"then reconnect - the setting is applied at connection time. If it is the "
+        f"development database, point OFFICE_TEST_ADMIN_DSN at a test database instead "
+        f"(./scripts/bootstrap.sh creates and marks one)."
+        + (f" It currently carries the marker {marker!r}, which is not its own name."
+           if marker else "")
+    )
+
+
 def build_world(admin: psycopg.Connection) -> None:
     """A fully prepared world: Forges bridged, instructions authored, roster present.
 
@@ -269,7 +332,10 @@ def build_world(admin: psycopg.Connection) -> None:
 
     The adapters are a separate call - `dispatch_from_registry` - because they are the
     one part of the world that is not a row. A suite that runs Gate 2 needs both.
+
+    Refuses any database not marked disposable - see `assert_disposable`.
     """
+    assert_disposable(admin)
     seed_departments()
     teardown_world(admin)
     with admin.cursor() as cur:
@@ -401,6 +467,13 @@ def certify(conn: psycopg.Connection, agent_ids, modules, *, forge=FORGE_ID,
 
 
 def teardown_world(conn: psycopg.Connection) -> None:
+    """Delete the world. Refuses any database not marked disposable.
+
+    Guarded in its own right rather than only through `build_world`: the deletes are
+    here, fixtures call it directly to clean up, and a guard that only covers the
+    caller that happens to be destructive today is a guard that goes stale.
+    """
+    assert_disposable(conn)
     with conn.cursor() as cur:
         cur.execute("DELETE FROM venture_forge_manifest WHERE venture_id = 'greenstone'")
         cur.execute("DELETE FROM venture_budget WHERE venture_id = 'greenstone'")

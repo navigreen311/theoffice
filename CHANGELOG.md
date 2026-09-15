@@ -25,7 +25,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     grant refusal, or the write, fails the tests that should fail.
   - **Not a scheduler.** The window ends and nothing follows it (entry 81).
 
+### Added
+- **The development seed refuses any database that is not marked disposable** (decisions
+  entry 97). `tests/world.py::build_world` deletes every certification and every operating
+  instruction in the database it is handed; its callers only ever checked what that database
+  contained. It now requires the database-level setting `office.disposable_world`, whose value
+  must be the database's own name - a marker that lives in the database rather than in the
+  caller's environment. `teardown_world`, `scripts/seed_dev_world.py` and
+  `scripts/console-smoke.sh` all check it; `bootstrap.sh` and CI set it on the databases they
+  create. Five tests, including one that refuses the real development DSN.
+
 ### Fixed
+- **`scripts/bootstrap.sh` can create a test database again.** Its name extraction held a
+  literal control byte where `\1` belonged, so the name came out empty and `CREATE DATABASE ""`
+  failed the script under `set -e` - the branch had never run to completion.
 - **`bootstrap-phase0` certifies again** (decisions entry 91). Its Pack check asked for bare
   module names after `forge_modules_operated` became `forge_id/module_id` (entry 48), so it
   refused every pair on every venture with a message naming the wrong cause.
