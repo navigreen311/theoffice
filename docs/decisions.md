@@ -7368,3 +7368,38 @@ certified, alphabetically:
 - **Certify Selene Voren too:** Ronan and Selene. Seraphine is split off.
 - **Certify any manager, or any Burkham IC:** they sort ahead of all four. A Burkham IC appointed
   here then meets `one_venture_per_agent_quarter` at shift assignment.
+
+---
+
+## 93. Greenstone's Deal Underwriter: declared, unfilled, pending activation; Ivan and Ira Green underwrite V1
+
+**Ruled 2026-09-15 by Ivan. Recorded, not built.** Entry 92 found the schema cannot express it.
+
+### The ruling
+
+- **Deal Underwriter stays declared and unfilled, pending activation.**
+- **Ivan Green and Ira Green are Greenstone's underwriters of record for V1.**
+- **Activation:** promote a Village agent once Ivan and Ira have written 10-20 real MAOs and
+  the pattern is extractable.
+- **Not shared with Burkham.** Different domain: Burkham underwrites capital placement,
+  Greenstone underwrites CRE (comps, cap rates, CapEx-adjusted MAO).
+- **Not staffed with managers.** Underwriting is specialist work.
+
+### What it extends, quoted from source
+
+The ruling cites spec §7.2 as "Ivan or Ira on every seller call for the first 10 completed
+deals". The text, Greenstone specifications v1 §7.2:
+
+    Founder-led acquisition calls -- Ivan or Ira on any seller call above a Yellow viability
+    threshold (Phase 1: ALL seller calls until Village agents demonstrate reliable performance
+    across 10 completed deals)
+
+**The extension is new.** §7.2 covers seller calls, and its release condition is agent
+performance across completed deals. This ruling's condition is a count of human-written MAOs.
+
+### What it does not yet change
+
+- **Not expressible:** `Position.headcount` is `ge=1`, and a position has no pending state.
+- **Blocks today:** V24 fails Gate 4.5 on the unfilled position.
+- **Still counted:** its 32 approvals a day stay in the projection at `propose`.
+- **Nothing edited:** the Pack is unchanged, and so are its scenarios, trigger and modules.
