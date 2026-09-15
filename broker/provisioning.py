@@ -50,7 +50,13 @@ from broker.simforge import (
 from generators import pipeline as generator_pipeline
 from generators import runtime_config as runtime_gen
 from generators.artifacts import GeneratedArtifacts
-from generators.validator import Verdict, validate, validate_gate_4_5
+from generators.validator import (
+    DEFERRED_RULES,
+    Verdict,
+    validate,
+    validate_gate_4_5,
+    validate_gate_12,
+)
 
 PASSED = "passed"
 BLOCKED = "blocked"
@@ -177,9 +183,14 @@ async def _gate_2(ctx: _Context) -> GateOutcome:
             + "; ".join(f"{r.rule_id}: {r.message}" for r in report.failures[:3]),
             evidence,
         )
-    # NOT_RUN is not a pass. V24 is legitimately deferred to Gate 4.5; anything else
-    # unrun means this Pack has not been validated.
-    unrun = [r.rule_id for r in report.not_run if r.rule_id != "V24"]
+    # NOT_RUN is not a pass. The deferred sets are legitimately evaluated later - V24 at
+    # Gate 4.5 against appointment output, V38 at Gate 12 against issued grants - and
+    # anything else unrun means this Pack has not been validated.
+    #
+    # Read from `validator.DEFERRED_RULES` rather than spelled here. The literal `"V24"`
+    # that used to sit in this line was a second place the deferral was declared, and the
+    # first rule added to the other set blocked every run until somebody noticed.
+    unrun = [r.rule_id for r in report.not_run if r.rule_id not in DEFERRED_RULES]
     if unrun:
         return GateOutcome(
             "2", BLOCKED,
@@ -1521,12 +1532,38 @@ async def _gate_10(ctx: _Context) -> GateOutcome:
 
 
 async def _gate_11(ctx: _Context) -> GateOutcome:
-    """Activate production grants - only against a valid, unvoided signature.
+    """Activate production grants - only against a valid, unvoided signature, and never
+    one a live revocation covers.
 
-    Gate 10 already checked this, but it is checked again here rather than trusted from
-    the previous step. Activation is the moment agents gain production authority, and a
-    gate that trusts its predecessor's verdict is a gate that can be reached by any path
-    that sets the predecessor's state.
+    Gate 10 already checked the signature, but it is checked again here rather than
+    trusted from the previous step. Activation is the moment agents gain production
+    authority, and a gate that trusts its predecessor's verdict is a gate that can be
+    reached by any path that sets the predecessor's state.
+
+    B53 - THE UPDATE DID NOT KNOW ABOUT REVOCATION
+    ==============================================
+
+        The predicate was `WHERE venture_id = %s AND activated_at IS NULL`, and that is
+        every grant the venture has, revoked ones included. **Two controls over one
+        invariant, and the second did not know about the first:** `resolve_grant` refuses
+        a revoked grant on every call, and this gate handed it `activated_at = now()` and
+        `activated_by = <the signer>` without asking.
+
+        Not a hole in the authority - the call path still refuses, and `check_revocations`
+        runs before anything else in `resolve_grant`. **A hole in the record.** Four
+        `burkham-wickmont` grants were revoked on 14 September with a documented reason;
+        this gate would have stamped the same human as their activator hours later, and
+        the row would then assert both, with no ordering visible in either.
+
+        **It had never fired.** No run has reached Gate 11, so the UPDATE has never
+        executed against a venture holding a revocation. Same shape as entry 63's Gate 7
+        passing on an empty set, and found the same way - by asking what the next gate
+        does before letting it run, rather than by watching it do it.
+
+        `revocation.covered_grants()` is the predicate, reused rather than restated. A
+        second spelling of "covered" is a second thing to keep in step, and the module's
+        own docstring says why it cannot be a column: a venture-scope revocation must
+        cover grants issued after it was declared.
     """
     artifacts = ctx.require_artifacts()
     current = artifacts_hash(artifacts)
@@ -1542,20 +1579,46 @@ async def _gate_11(ctx: _Context) -> GateOutcome:
             {"artifacts_hash": current, "voided": len(status.voided)},
         )
 
+    covered = await revocation.covered_grants(ctx.conn, venture_id=ctx.venture_id)
     async with ctx.conn.cursor() as cur:
         await cur.execute(
             "UPDATE agent_forge_grant SET activated_at = now(), activated_by = %s "
-            "WHERE venture_id = %s AND activated_at IS NULL",
-            (ctx.actor, ctx.venture_id),
+            " WHERE venture_id = %s AND activated_at IS NULL "
+            "   AND NOT (grant_id = ANY(%s))",
+            (ctx.actor, ctx.venture_id, list(covered)),
         )
         activated = cur.rowcount
+        # Counted after the UPDATE, from the same predicate, so the figure is what this
+        # gate actually declined rather than what it would decline if asked again.
+        await cur.execute(
+            "SELECT count(*) FROM agent_forge_grant "
+            " WHERE venture_id = %s AND activated_at IS NULL "
+            "   AND grant_id = ANY(%s)",
+            (ctx.venture_id, list(covered)),
+        )
+        row = await cur.fetchone()
+        skipped = int(row[0]) if row else 0
     await ctx.conn.commit()
 
+    scopes = sorted({c.scope for c in covered.values()})
+    # Named in the reason, not only in the evidence. "49 activated" and "45 activated"
+    # are the same sentence to a reader who does not already know four were withheld,
+    # and this gate is the last thing between a signature and production authority.
+    withheld = (
+        f"; {skipped} grant(s) NOT activated - covered by a live "
+        f"{'/'.join(scopes)} revocation"
+        if skipped else ""
+    )
     return GateOutcome(
         "11", PASSED,
         f"{activated} grant(s) activated against signature(s) "
-        f"{[s['signoff_id'][:8] for s in status.valid]}",
-        {"activated": activated, "artifacts_hash": current},
+        f"{[s['signoff_id'][:8] for s in status.valid]}{withheld}",
+        {
+            "activated": activated,
+            "withheld_revoked": skipped,
+            "revocation_scopes": scopes,
+            "artifacts_hash": current,
+        },
     )
 
 
@@ -1568,11 +1631,28 @@ async def _gate_12(ctx: _Context) -> GateOutcome:
         )
         row = await cur.fetchone()
     assert row is not None
+
+    # V38, here rather than at Gate 2: it asks whether every grant this venture holds can
+    # actually be SELECTED, and `resolve_grant` answers one row per (agent, forge,
+    # module). The line below is the one it qualifies - `assignable` counts rows, and a
+    # triple carrying three grants contributes three to it while exactly one is
+    # reachable. A warning, not a block: nothing acts on the unreachable rows and no
+    # authority changes, but the count describes more than the code can select.
+    report = await validate_gate_12(ctx.pack.pack, ctx.conn)
+    evidence: dict[str, Any] = {
+        "assignable": int(row["assignable"]),
+        "total": int(row["total"]),
+        "warnings": [r.rule_id for r in report.warnings],
+        **{r.rule_id: r.message for r in report.results},
+    }
+    advisory = "".join(
+        f" Advisory {r.rule_id}: {r.message}" for r in report.warnings
+    )
     return GateOutcome(
         "12", PASSED,
         f"live: {row['assignable']} of {row['total']} grant(s) assignable; trust tiers "
-        "active, revocation armed",
-        {"assignable": int(row["assignable"]), "total": int(row["total"])},
+        f"active, revocation armed.{advisory}",
+        evidence,
     )
 
 

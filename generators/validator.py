@@ -201,11 +201,43 @@ class ValidationReport:
 # V30 were registered below and absent here, so the fixture meta-test demanded document
 # fixtures for rules that cannot be evaluated without the Village. A literal is needed
 # here rather than `set(_WORLD_RULES)` only because the registry is defined further down.
-NEEDS_WORLD = {"V2", "V6", "V11", "V28", "V29", "V30", "V31", "V32", "V33", "V34"}
+NEEDS_WORLD = {"V2", "V6", "V11", "V28", "V29", "V30", "V31", "V32", "V33", "V34",
+               "V38"}
 
 # V24 is evaluated at Gate 4.5 against appointment output, which does not exist at
 # Gate 2. Recorded as metadata rather than a comment so the meta-test can see it.
 GATE_45_RULES = {"V24"}
+
+# V38 reads `agent_forge_grant`, and Gate 5 is what writes it. At Gate 2 a venture on its
+# first run holds no grants at all, so the rule cannot answer - and `_gate_2` BLOCKS on
+# any NOT_RUN but V24, by design: "NOT_RUN is not a pass". A rule that can never answer
+# at Gate 2 therefore does not belong at Gate 2; placing it there blocks every first run
+# of every venture.
+#
+# Gate 12 is where it belongs, and not merely because the rows exist by then. Gate 12 is
+# the gate that writes `live: N of M grant(s) assignable` into the run record - the exact
+# count the unreachable duplicates inflate. The rule and the sentence it qualifies are
+# now in the same place.
+GATE_12_RULES = {"V38"}
+
+#: Rule numbers deliberately left unimplemented, and why.
+#:
+#: `test_every_rule_from_v1_is_implemented_with_no_gaps` exists so **a rule cannot be
+#: quietly dropped** - a gap in the numbering is the evidence. A bare gap would defeat
+#: it: a deleted V35 and a reserved V35 would look identical. So a reservation is
+#: declared here, the test checks contiguity across implemented *and* reserved ids, and
+#: it also refuses a reserved id that turns out to be implemented after all.
+#:
+#: The cost of a wrong number is a document citing a rule that does not mean what it
+#: says, which is why V38 did not simply take the next free slot.
+RESERVED_RULE_IDS: dict[str, str] = {
+    "V35": "the discharge-TESTING gap V34 leaves open - V34 checks a discharge exists "
+           "and is current, not that anyone verified the control still works. Named in "
+           "docs/plans/human-held-obligations-PREDICTION.md and PARALLEL_BUILD.md "
+           "before this table existed, so the number is already cited in writing.",
+    "V36": "unallocated.",
+    "V37": "unallocated.",
+}
 
 _RULES: list[tuple[str, Severity, str, Callable[[BusinessPack], tuple[bool, str]]]] = []
 
@@ -265,6 +297,13 @@ LATER_GATE_REASONS = {
         "optimistic one. It also pools every reviewer together rather than checking each "
         "role against its own workload, which it cannot do until the workflow exists - so "
         "a role that is over capacity on its own can still pass here.",
+    ),
+    "V38": (
+        "12",
+        "Reads the grants a run issued, and Gate 5 is what issues them - a venture on "
+        "its first run holds none here. Settled at Gate 12, beside the "
+        "`live: N of M grant(s) assignable` line it qualifies, because that count is "
+        "what an unselectable duplicate inflates.",
     ),
 }
 
@@ -1495,6 +1534,117 @@ async def _v34_human_held_discharged(
     return True, "; ".join(parts)
 
 
+async def _v38_grants_are_selectable(
+    conn: AsyncConnection, pack: BusinessPack
+) -> tuple[bool | None, str]:
+    """Every grant this venture holds can actually be selected. WARNS.
+
+    `resolve_grant` answers one grant per (agent, forge, module):
+
+        ORDER BY g.granted_at DESC
+        LIMIT 1
+
+    So when a triple carries more than one row, the newest answers and **the rest can
+    never be selected by anything**. They are not dormant, not superseded, not revoked -
+    there is no state on them that says so. They are rows that no code path can reach,
+    and after Gate 11 they are rows that no code path can reach *while reporting
+    themselves as active and assignable*.
+
+    WHY THIS WARNS RATHER THAN BLOCKS
+    =================================
+
+        Nothing acts on them and nothing degrades. Authority is unaffected: exactly one
+        grant answers per triple, at the tier of the newest, whether there is one row
+        behind it or three. **What is affected is every count that counts rows.**
+        `is_assignable` is GENERATED from the two certification refs and `activated_at`,
+        so activation flips the duplicates to assignable, and six readers then describe
+        a venture as holding three times the authority it holds:
+
+            broker/app.py:3038        per-venture assignable_grants, drives "live"
+            broker/app.py:800         the unassignable count on the venture detail
+            broker/ventures.py:360    the venture listing
+            broker/roster.py:538,577  assignable_grants, per agent, on the roster view
+            broker/provisioning.py    Gate 12's reason - "live: N of M assignable",
+                                      written into the run record permanently
+
+        The readers that count DISTINCT agents are unaffected, which is the tell: the
+        defect is in the description, not in the thing described. **An active grant
+        nothing can select is a name asserting more than the code knows** - which is
+        the reason this is worth surfacing and not worth blocking.
+
+    WHY IT EXISTS AT ALL
+    ====================
+
+        **The duplicates were measured before activation, not discovered after.** Entry
+        67 counted them - thirty rows, two per triple, one writer `bootstrap-phase0` and
+        one `runtime_config.apply`, no reconciliation between them. Entry 58 reserved
+        the disposition deliberately. The reservation then survived four sessions, and a
+        third layer arrived while it did: fifteen triples now carry three rows each.
+
+        A reservation nothing reports is indistinguishable from an oversight. This rule
+        is what makes it visible on every run instead of remembered by whoever was
+        there - which is the whole difference between a decision deferred and a decision
+        lost.
+
+    Reports NOT_RUN for a venture holding no grants at all: a Pack validated before its
+    first run has nothing to be selectable, and answering "clean" would be a pass over
+    an empty set - the shape entry 63 is about.
+    """
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            """
+            SELECT i.agent_name, g.forge_id, g.module_id,
+                   count(*)                       AS rows_held,
+                   count(DISTINCT g.trust_tier)   AS distinct_tiers
+              FROM agent_forge_grant g
+              JOIN office_agent_identity i ON i.office_agent_id = g.office_agent_id
+             WHERE g.venture_id = %s
+             GROUP BY 1, 2, 3
+             ORDER BY count(*) DESC, 1, 2, 3
+            """,
+            (pack.venture_id,),
+        )
+        triples = [dict(r) for r in await cur.fetchall()]
+
+    if not triples:
+        return (
+            None,
+            "this venture holds no grants, so nothing has been checked for "
+            "selectability. A Pack validated before its first run has nothing here yet.",
+        )
+
+    crowded = [t for t in triples if t["rows_held"] > 1]
+    if not crowded:
+        return (
+            True,
+            f"{len(triples)} (agent, forge, module) triple(s) hold exactly one grant "
+            "each; every grant is reachable",
+        )
+
+    unreachable = sum(t["rows_held"] - 1 for t in crowded)
+    # Named separately because it is the sharper half: two rows at one tier are a
+    # duplicate, two rows at different tiers are two answers to "what may this agent
+    # do", and only the newest is ever given.
+    disagreeing = [t for t in crowded if t["distinct_tiers"] > 1]
+    worst = ", ".join(
+        f"{t['agent_name']}/{t['forge_id']}/{t['module_id']} x{t['rows_held']}"
+        for t in crowded[:3]
+    )
+    detail = (
+        f"; {len(disagreeing)} of them hold grants at DIFFERENT trust tiers, so the "
+        "rows disagree about what the agent may do and only the newest is ever asked"
+        if disagreeing else ""
+    )
+    return (
+        False,
+        f"{unreachable} grant(s) across {len(crowded)} triple(s) can never be selected - "
+        f"`resolve_grant` takes the newest by granted_at and returns one row{detail}. "
+        f"Worst: {worst}. They hold no authority and inflate every count that counts "
+        "rows rather than agents. Disposition reserved at entry 58; measured at "
+        "entry 67.",
+    )
+
+
 _WORLD_RULES = {
     "V2": (Severity.FAIL, "Bridge operational for every hard Forge binding (Gate 0)",
            _v2_bridge_operational),
@@ -1517,7 +1667,38 @@ _WORLD_RULES = {
     "V34": (Severity.FAIL,
             "Every human-held obligation has a current discharge",
             _v34_human_held_discharged),
+    # V35-V37 are reserved rather than skipped; see `RESERVED_RULE_IDS` for each
+    # reason. The gap is declared so that a DROPPED rule still shows up as one.
+    "V38": (Severity.WARN, "Every grant this venture holds can be selected",
+            _v38_grants_are_selectable),
 }
+
+#: Gate 2 skips the deferred sets; `all_rule_ids` and the reports still name them, so a
+#: deferred rule is visibly deferred rather than absent.
+DEFERRED_RULES = GATE_45_RULES | GATE_12_RULES
+
+
+async def validate_gate_12(
+    pack: BusinessPack, conn: AsyncConnection
+) -> ValidationReport:
+    """The rules that can only be asked once a run has issued and activated grants.
+
+    Separate from `validate` for the reason `validate_gate_4_5` is: a rule evaluated
+    against state a later gate produces is not a Pack rule, and running it early to keep
+    one entry point would mean either a false pass or a block on every first run. The
+    second is what happened when V38 was first written into the Gate 2 set.
+    """
+    report = ValidationReport()
+    for rule_id in sorted(GATE_12_RULES, key=lambda r: int(r[1:])):
+        severity, _desc, fn = _WORLD_RULES[rule_id]
+        ok, message = await fn(conn, pack)
+        verdict = (
+            Verdict.NOT_RUN if ok is None
+            else Verdict.PASS if ok
+            else (Verdict.FAIL if severity is Severity.FAIL else Verdict.WARN)
+        )
+        report.results.append(RuleResult(rule_id, severity, verdict, message))
+    return report
 
 
 # --------------------------------------------------------------------------- entry point
@@ -1552,6 +1733,13 @@ async def validate(
             report.results.append(RuleResult(
                 rule_id, Severity.FAIL, Verdict.NOT_RUN,
                 "evaluated at Gate 4.5 against appointment output, which does not "
+                "exist at Gate 2.",
+            ))
+            continue
+        elif rule_id in GATE_12_RULES:
+            report.results.append(RuleResult(
+                rule_id, Severity.WARN, Verdict.NOT_RUN,
+                "evaluated at Gate 12 against the grants a run issued, which do not "
                 "exist at Gate 2.",
             ))
             continue
@@ -1601,6 +1789,9 @@ _WORLD_RULE_BLOCKS = {
     "V32": ("forge_dependencies",),
     "V33": ("forge_dependencies", "forge_operating_instructions"),
     "V34": ("market",),
+    # Not a Pack block: V38 reads `agent_forge_grant`, which no Pack field describes.
+    # The Pack asks for positions; the grants are what a run made of them.
+    "V38": (),
 }
 
 

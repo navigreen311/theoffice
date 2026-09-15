@@ -6096,3 +6096,64 @@ runs agreeing produce a baseline.
 The two fetch paths still cannot agree, and will not: `gh run view --log` renders the ANSI escape
 on the step's echoed command as `^[` where `gh api` returns the ESC byte. Recorded rather than
 normalised away, because masking a difference is how a comparison stops comparing.
+
+---
+
+## 78. Three gates whose behaviour nobody could observe, and the instrument that found them
+
+**Recorded 2026-09-14. The third instance of one shape in two days, and the first time it
+was looked for deliberately rather than stumbled into.**
+
+### The three
+
+    entry 63   Gate 7 passed because its input set was empty - 49 grants, all revoked,
+               and an empty set cannot contain an active one
+    entry 77   `smoke_normalise --check` never distinguished two runs, because a working
+               FAIL-line diff always answered first
+    B53        Gate 11 activated grants a live revocation covered, because no run had
+               ever reached Gate 11 on a venture holding a revocation
+
+**In each, something reported for a long time without ever having discriminated.** Not a
+wrong answer - no answer, wearing the shape of one. Gate 7 said PASSED over nothing.
+`--check` said DIVERGENT on every capture including clean ones. Gate 11's UPDATE had
+never met a revoked grant, so its silence about revocation had never cost anything.
+
+### What is different about the third
+
+The first two were found after the fact - Gate 7 by measuring a verdict that looked
+wrong, the normaliser by a hash that differed when the logs did not. **B53 was found
+before it happened**, by asking what the next gate does rather than by running it.
+
+The instrument is ordinary and worth naming because it is repeatable: **before signing
+Gate 10, list the rows Gate 11 would touch.** Not the count afterwards - the list, in
+advance, with each row's state beside it. Ivan asked for exactly that, in those terms:
+*"I want the list before it does, not the count after."*
+
+The list was 49 rows. Four of them carried `REVOKED` in a column the gate does not read.
+
+### Why the count would not have shown it
+
+This is the part worth keeping. `49 activated` is a true sentence. So is `45 activated`.
+Neither says anything about revocation, and a reader comparing them has no reason to
+suspect the difference is four grants whose authority a named human withdrew that
+afternoon. **The defect is invisible in every summary of the thing it damages** - which
+is the same property entry 63 recorded about Gate 7's reason line, and the same property
+entry 77 recorded about a digest nobody read.
+
+So the fix carries the withheld count in the **reason line**, not only in the evidence -
+and V38 carries its warning into Gate 12's reason line for the same reason. A number that
+only appears in a JSON blob is a number that has to be gone looking for.
+
+### The shape, stated so the next one is findable
+
+A control that has never been exercised is not a control that works. It is a control that
+has not been tested by the world yet, and the three ways that happens are all here:
+
+    green by narrowing     the set was filtered until it was empty         (entry 63)
+    green by absence       a prior branch always answered first            (entry 77)
+    green by never arriving  the code path had no traffic to refuse        (B53)
+
+**All three look identical from the outside**, and none of them is a bug in the usual
+sense - every line involved is correct. What is missing in each case is any assertion
+that the rule was ever handed something to rule on. Entry 63 named that gap and did not
+close it; it is still open, and it is now three findings wide.

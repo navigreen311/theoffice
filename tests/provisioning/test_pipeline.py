@@ -18,7 +18,7 @@ import uuid
 import psycopg
 import pytest
 
-from broker import humans, packs, provisioning
+from broker import humans, packs, provisioning, revocation
 from broker.db import connection
 from broker.errors import GrantNotActivated
 from broker.grants import resolve_grant
@@ -523,6 +523,194 @@ async def test_gate_11_activates_grants_against_a_valid_signature(
     assert activated == total
     assert assignable == total
     assert activated_by == total, "who activated is part of the record"
+
+
+@pytest.fixture(autouse=True)
+def clear_revocations(world, admin: psycopg.Connection):
+    """`wipe_venture` does not reach `revocation`, and its `office_agent_id` is a
+    foreign key onto the identities teardown deletes - so a row left here fails the
+    NEXT test, in a teardown, naming a constraint instead of a cause.
+    `test_gate_7_revocation` carries the same fixture for the same reason.
+
+    **`world` is in the signature for ordering, not for use.** Fixtures tear down in
+    reverse order of setup, so depending on `world` puts this cleanup BEFORE
+    `teardown_world`. Written without it, the DELETE ran after teardown had already hit
+    the foreign key and aborted the connection, and the failure reported
+    `InFailedSqlTransaction` - the poisoned transaction, not the constraint that
+    poisoned it.
+    """
+    with admin.cursor() as cur:
+        cur.execute("DELETE FROM revocation")
+    admin.commit()
+    yield
+    admin.rollback()  # a failing test can leave this connection mid-transaction
+    with admin.cursor() as cur:
+        cur.execute("DELETE FROM revocation")
+    admin.commit()
+
+
+# ------------------------------------------------------------------------- B53
+# Gate 11 activated every inactive grant on the venture, revoked ones included. The
+# predicate was `WHERE venture_id = %s AND activated_at IS NULL` - two controls over one
+# invariant, and the second did not know about the first.
+#
+# It never fired: no run had reached Gate 11 on a venture holding a revocation, so the
+# UPDATE had never met one. Found by reading what the next gate does before signing the
+# gate in front of it, which is the same way entry 63's Gate 7 was found.
+
+
+async def test_gate_11_does_not_activate_a_revoked_grant(
+    feasible_pack, operator, signer, admin: psycopg.Connection
+):
+    """**The defect.** A revoked grant must not come back active.
+
+    The call path would refuse it either way - `check_revocations` runs first in
+    `resolve_grant` - so this is not about authority. It is about the record: without
+    the fix the row carries a documented revocation AND `activated_by = <the signer>`,
+    with no ordering visible in either, and the signer is recorded as having activated
+    what they revoked.
+    """
+    async with connection() as conn:
+        run_id = await _to_gate_10(conn, operator, signer)
+
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "SELECT grant_id, office_agent_id, forge_id, module_id "
+                "  FROM agent_forge_grant WHERE venture_id = %s ORDER BY granted_at",
+                (VENTURE,),
+            )
+            grants = list(await cur.fetchall())
+        assert len(grants) >= 2, "this test needs a grant to revoke and one to spare"
+        target, agent_id, forge_id, module_id = grants[0]
+
+        await revocation.revoke(
+            conn, scope="agent_module",
+            reason="revoked before Gate 11 ran, to prove Gate 11 asks",
+            revoked_by=operator.human_id, revoked_by_role="venture_operator",
+            office_agent_id=agent_id, forge_id=forge_id, module_id=module_id,
+        )
+
+        outcomes = await provisioning.advance(
+            conn, run_id=run_id, actor=operator.human_id, held_out=HeldOutPasses()
+        )
+
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "SELECT activated_at, activated_by FROM agent_forge_grant "
+                " WHERE grant_id = %s", (target,),
+            )
+            revoked_row = await cur.fetchone()
+            await cur.execute(
+                "SELECT count(*) FROM agent_forge_grant "
+                " WHERE venture_id = %s AND activated_at IS NOT NULL", (VENTURE,),
+            )
+            activated_total = (await cur.fetchone())[0]
+
+    gate_11 = next(o for o in outcomes if o.gate == "11")
+    assert gate_11.verdict == provisioning.PASSED, (
+        "a revoked grant is not a reason to block the venture - the other grants are "
+        "fine and the run should complete"
+    )
+
+    assert revoked_row is not None
+    assert revoked_row[0] is None, (
+        "Gate 11 activated a grant covered by a live revocation. The call path still "
+        "refuses it, so nothing is exercisable - but the row now says this human both "
+        "revoked and activated it, and the audit trail cannot say which came first."
+    )
+    assert revoked_row[1] is None, "and nobody should be recorded as its activator"
+
+    assert activated_total == len(grants) - 1
+    assert gate_11.evidence["withheld_revoked"] == 1
+    assert gate_11.evidence["activated"] == len(grants) - 1
+    # The reason line, not only the evidence: "N activated" reads the same to somebody
+    # who does not know one was withheld.
+    assert "NOT activated" in gate_11.reason
+    assert "agent_module" in gate_11.reason
+
+
+async def test_gate_11_still_activates_everything_when_nothing_is_revoked(
+    feasible_pack, operator, signer
+):
+    """The control, and the one that matters most in this pair.
+
+    Every other assertion here is that something stops being activated. A Gate 11 that
+    activated nothing would satisfy them all and provision no venture. This is the same
+    load-bearing shape `test_gate_7_revocation` names in its own docstring.
+    """
+    async with connection() as conn:
+        run_id = await _to_gate_10(conn, operator, signer)
+        outcomes = await provisioning.advance(
+            conn, run_id=run_id, actor=operator.human_id, held_out=HeldOutPasses()
+        )
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "SELECT count(*), count(activated_at) FROM agent_forge_grant "
+                " WHERE venture_id = %s", (VENTURE,),
+            )
+            total, activated = await cur.fetchone()
+
+    gate_11 = next(o for o in outcomes if o.gate == "11")
+    assert activated == total and total > 0
+    assert gate_11.evidence["withheld_revoked"] == 0
+    assert "NOT activated" not in gate_11.reason, (
+        "the withheld clause must be absent, not zero - a reason line that always "
+        "mentions revocation trains a reader to skip it"
+    )
+
+
+async def test_a_revocation_lifted_before_gate_11_does_not_withhold_the_grant(
+    feasible_pack, operator, signer, admin: psycopg.Connection
+):
+    """Withholding is a live question, not a stamp.
+
+    `covered_grants` is recomputed against the `revocation` table every time it is
+    asked, so a revocation lifted before Gate 11 runs withholds nothing. If this fails,
+    something is remembering coverage that the module's own docstring says must never be
+    cached - *"a venture-scope revocation must cover grants issued after it was
+    declared, which a column stamped at revoke time cannot do."*
+
+    **Reinstated before the run reaches Gate 11, deliberately.** Rewinding a completed
+    run to replay Gate 11 puts already-activated grants in front of Gate 7, which blocks
+    on them - correctly, and that is a different rule being tested by accident.
+    """
+    async with connection() as conn:
+        run_id = await _to_gate_10(conn, operator, signer)
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "SELECT grant_id, office_agent_id, forge_id, module_id "
+                "  FROM agent_forge_grant WHERE venture_id = %s ORDER BY granted_at",
+                (VENTURE,),
+            )
+            _, agent_id, forge_id, module_id = (await cur.fetchall())[0]
+
+        revocation_id = await revocation.revoke(
+            conn, scope="agent_module", reason="revoked, then lifted before Gate 11",
+            revoked_by=operator.human_id, revoked_by_role="venture_operator",
+            office_agent_id=agent_id, forge_id=forge_id, module_id=module_id,
+        )
+        await revocation.reinstate(
+            conn, revocation_id=revocation_id,
+            reinstated_by=operator.human_id, reinstated_by_role="venture_operator",
+            reason="the reason it was revoked no longer holds",
+        )
+
+        outcomes = await provisioning.advance(
+            conn, run_id=run_id, actor=operator.human_id, held_out=HeldOutPasses()
+        )
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "SELECT count(*), count(activated_at) FROM agent_forge_grant "
+                " WHERE venture_id = %s", (VENTURE,),
+            )
+            total, activated = await cur.fetchone()
+
+    gate_11 = next(o for o in outcomes if o.gate == "11")
+    assert gate_11.evidence["withheld_revoked"] == 0, (
+        "a lifted revocation still withheld the grant, so coverage is being remembered "
+        "rather than recomputed"
+    )
+    assert activated == total and total > 0
 
 
 async def test_the_call_path_accepts_the_grant_once_it_is_activated(

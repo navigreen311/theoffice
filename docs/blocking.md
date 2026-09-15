@@ -4910,3 +4910,96 @@ the ANSI escape on the step's echoed command as the two characters `^[` where `g
 ESC byte. Same job, different digest, permanently. Captures must be compared with captures taken
 the same way, and `BASELINE` is specific to the documented fetch.
 
+---
+
+## B53 — Gate 11 activated grants a live revocation covered, and nothing had ever watched it try
+
+**`theoffice`** · RESOLVED 2026-09-14, same commit. Gate 11's activation was:
+
+    UPDATE agent_forge_grant SET activated_at = now(), activated_by = %s
+     WHERE venture_id = %s AND activated_at IS NULL
+
+**Revocation is not in the predicate.** Every inactive grant the venture holds was
+activated, revoked ones included.
+
+**Two controls over one invariant, and the second did not know about the first.**
+`resolve_grant` calls `check_revocations` before anything else, so a revoked grant is
+refused on every call. Gate 11 stamped it `activated_at = now()` and
+`activated_by = <the signer>` without asking.
+
+### It is a defect in the record, not a hole in the authority
+
+Nothing became exercisable. `covered_grants` and `check_revocations` share one predicate
+and the call path still refuses. What breaks is the row: four `burkham-wickmont` grants
+were revoked on 14 September with a documented reason, and this gate would have written
+the same human in as their activator hours later. The row then asserts both, with **no
+ordering visible in either** - `revocation.revoked_at` and `agent_forge_grant.activated_at`
+are in different tables and nothing joins them for a reader.
+
+Gate 7 already contemplates the state: its evidence carries `active_but_revoked`. So the
+system knew the combination was possible and the gate that creates it did not.
+
+### Why it had never fired
+
+**No run has ever reached Gate 11 on a venture holding a revocation.** The UPDATE has
+never met one. The tests that cover Gate 11 activate grants on a venture with an empty
+`revocation` table, and they pass in both worlds.
+
+**Found by asking what the next gate does before letting it run** - specifically, by
+listing the rows Gate 11 would touch *before* signing Gate 10, rather than by signing and
+reading the result. That is the same instrument that found entry 63's Gate 7, and this is
+its third catch.
+
+### The fix
+
+`revocation.covered_grants()` reused rather than restated - one definition of *covered*,
+computed live, which is what that module's docstring requires and why it is not a column.
+The withheld count is recounted from the same predicate after the UPDATE, and named in
+the **reason line** rather than only in the evidence:
+
+    N grant(s) activated against signature(s) [...]; 4 grant(s) NOT activated
+      - covered by a live agent_module revocation
+
+Three tests in `tests/provisioning/test_pipeline.py`, driven through
+`provisioning.advance`. The defect test fails without the fix, verified by toggling the
+term out; the second is the control that a Gate 11 activating *nothing* would fail; the
+third proves coverage is recomputed rather than stamped.
+
+---
+
+## B54 — V38, and the Gate-2 deferral list that only one rule could join
+
+**`theoffice`** · RESOLVED 2026-09-14, same commit. Found while adding V38.
+
+`_gate_2` blocks on any NOT_RUN it does not recognise, correctly - *"NOT_RUN is not a
+pass"*. The recognition was a literal:
+
+    unrun = [r.rule_id for r in report.not_run if r.rule_id != "V24"]
+
+**A hardcoded exception list that a second exception cannot join.** V38 reads
+`agent_forge_grant`, and Gate 5 is what writes it, so a venture on its first run holds no
+grants and V38 answers NOT_RUN honestly. Placed in the Gate 2 set, it **blocked every
+first run of every venture** - 60 test failures, all downstream of runs stopping at Gate
+2, every one of them a `next()` over an outcome list that no longer contained the gate
+the test was looking for.
+
+The rule was not wrong and the gate was not wrong. The deferral was declared in two
+places - `GATE_45_RULES` in the validator and `"V24"` in the gate - and only one of them
+knew there could be more than one kind.
+
+**Resolved** by `DEFERRED_RULES = GATE_45_RULES | GATE_12_RULES`, read by the gate
+instead of spelled there. V38 moved to Gate 12, which is its right home for a better
+reason than the rows existing by then: **Gate 12 writes `live: N of M grant(s)
+assignable` into the run record, and that count is what an unselectable duplicate
+inflates.** The rule and the sentence it qualifies are now in the same place.
+
+Two smaller things the move surfaced, both existing guards doing their job:
+
+- `LATER_GATE_REASONS` needed a V38 entry, or the console shows a bare NOT_RUN with no
+  gate named. A contract test demanded it.
+- The no-gaps test (*"so a rule cannot be quietly dropped"*) would have been defeated by
+  a bare V35-V37 gap: a **deleted** V35 and a **reserved** V35 look identical from there.
+  `RESERVED_RULE_IDS` now declares each with a reason, the test checks contiguity across
+  implemented and reserved ids, and it refuses a reserved id that turns out to be
+  implemented.
+

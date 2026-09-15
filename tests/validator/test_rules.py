@@ -127,10 +127,30 @@ def test_every_rule_from_v1_is_implemented_with_no_gaps():
     declarations compared to each other. V32 resolves them against what the Forge
     actually dispatches, and V31 asks whether the tier granted over a module is one it
     survives.
+
+    V38 arrived with V35-V37 unwritten, which would have put a bare gap in this
+    sequence - and a bare gap defeats the guard, because a DELETED V35 and a RESERVED
+    V35 look the same from here. So the reservation is declared in
+    `validator.RESERVED_RULE_IDS` and checked, rather than left to be remembered.
     """
     ids = validator.all_rule_ids()
-    assert ids == [f"V{i}" for i in range(1, len(ids) + 1)], f"got {ids}"
-    assert len(ids) == 34
+    reserved = validator.RESERVED_RULE_IDS
+
+    overlap = sorted(set(ids) & set(reserved))
+    assert not overlap, (
+        f"{overlap} are both implemented and declared reserved. A reservation that is "
+        "also a rule reserves nothing and hides a number that is genuinely in use."
+    )
+    assert all(r.strip() for r in reserved.values()), (
+        "every reserved id needs a reason; a bare set is a gap with extra steps"
+    )
+
+    everything = sorted(set(ids) | set(reserved), key=lambda r: int(r[1:]))
+    assert everything == [f"V{i}" for i in range(1, len(everything) + 1)], (
+        f"implemented {ids}, reserved {sorted(reserved)}"
+    )
+    assert len(ids) == 35, "35 rules implemented"
+    assert len(everything) == 38, "V1..V38 all accounted for, implemented or reserved"
 
 
 @pytest.mark.parametrize("rule_id", DOCUMENT_RULES)
@@ -202,7 +222,10 @@ async def test_report_is_deterministic(greenstone):
     assert [(r.rule_id, r.verdict, r.message) for r in a.results] == [
         (r.rule_id, r.verdict, r.message) for r in b.results
     ]
-    assert [r.rule_id for r in a.results] == [f"V{i}" for i in range(1, 35)]
+    implemented = sorted(
+        set(validator.all_rule_ids()), key=lambda r: int(r[1:])
+    )
+    assert [r.rule_id for r in a.results] == implemented
 
 
 async def test_render_names_the_offending_value(greenstone):
