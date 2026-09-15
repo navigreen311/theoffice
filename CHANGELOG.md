@@ -26,6 +26,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - **Not a scheduler.** The window ends and nothing follows it (entry 81).
 
 ### Changed
+- **`python -m broker` and `python -m generators` load `.env` at startup** (`broker/env.py`,
+  decisions entry 89). Opt-in, never on `import broker`, so pytest's DSN read is unchanged.
+  An exported variable always wins. Ends the unexported-variable class for the CLIs (entries
+  38 and 88): `VILLAGE_BASE_URL`, the `env://` tokens, and the validator's database check.
+  `.env.example`'s header now lists who reads the file and who does not.
 - **Greenstone's VoiceForge binding removed** (decisions entry 87). It bound `place_call`
   (founder-forbidden) and `transcribe_call`, which nothing serves: no Office adapter, a
   registry row at `example.invalid`, no credential and no manual. V32 could never resolve it.

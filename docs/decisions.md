@@ -7018,3 +7018,68 @@ unavailable"*. That is a finding about the live Pack, not about the registry.
 **Every Pack-side blocker is resolved on main and none is resolved in the Pack store.** A run
 reads the live Pack, so until main's Pack is published as a new version, a Greenstone run
 stops at Gate 2 on three items that are already fixed in the repository.
+
+---
+
+## 89. An opt-in `.env` loader for the CLIs, and orphan credentials that the schema cannot hold
+
+**Ruled 2026-09-15 by Ivan: remove Greenstone's orphan credentials and check Burkham's for a
+class; add the loader, opt-in and explicit, with the environment taking precedence; make
+`.env.example`'s header true.**
+
+### The orphan credentials: not removed, because a venture cannot hold one
+
+    forge_tenant_credential   PRIMARY KEY (forge_id); columns forge_id, credential_ref, scope,
+                              rotation_due, last_rotated, break_glass_holders - NO venture_id
+    rows                      capitalforge, cre-forge, simforge, voiceforge - one per Forge
+    credential tables         forge_registry and forge_tenant_credential; neither is
+                              venture-scoped
+
+**There is no `greenstone -> voiceforge` or `greenstone -> capitalforge` row to remove, and no
+Burkham row to check.** A credential in this schema belongs to a Forge, never to a venture.
+Deleting the `voiceforge` or `capitalforge` row would remove that Forge's credential for every
+venture. Burkham's live Pack binds `capitalforge`, so deleting the capitalforge row would break
+Burkham, not tidy Greenstone.
+
+**The directed general form - "V32 asks the credential table rather than the Pack" - is not
+what the code does.** V32 iterates `pack.forge_dependencies.forge_bindings`
+(`validator.py:1315`). It asked about VoiceForge only for the live Pack 1.6.0, which still binds
+it. Main's Pack, which does not, was not asked. **The one live Greenstone -> VoiceForge link is
+that stored Pack's YAML**, plus one historical audit row and one historical gate result.
+
+The class the ruling looked for does not exist: nothing issued per venture outlives a binding
+here, because nothing is issued per venture.
+
+### The loader: `broker/env.py`, called explicitly by `python -m broker` and `python -m generators`
+
+**Why opt-in rather than on import - load-bearing, and reported before it was written.**
+`tests/conftest.py` imports `broker.db` (line 24) before it reads the DSNs (lines 36-42). A
+`load_dotenv` in `broker/__init__.py` would feed `.env` into that read. `pytest` without
+exported DSNs would stop skipping the database tests and run them - against the development
+database, emptying it, for any `.env` without `OFFICE_TEST_*`.
+`test_importing_broker_loads_nothing` pins that, in a fresh interpreter. **Checked against a
+deliberate break:** appending the loader to `broker/__init__.py` fails it with its own message.
+
+**The rules:**
+- A name already in `os.environ` is never overwritten, not even by an empty string.
+- `.env` is found from the package's path, not from the working directory.
+- A missing file is a no-op, so CI and containers are unaffected.
+- The entry point prints the *names* filled - never the values - to stderr.
+
+**Measured end to end, with the environment emptied (`env -i`):**
+
+    nothing exported                         filled: the DSNs and the four tokens and
+                                             VILLAGE_BASE_URL (8120, from .env)
+                                             V11 PASS, V32 PASS, V29 and V30 NOT_RUN - the
+                                             Village is on 8130, .env still says 8120
+    only VILLAGE_BASE_URL=...8130 exported   VILLAGE_BASE_URL NOT filled - the export won
+                                             Gate 2 PASSED
+
+**Two premises corrected on the way.** `.env.example`'s header did not say `.env` is read by
+"every process in this repo"; it said nothing about who reads it. It now does, in both
+directions. And the ledger holds this class twice - entries 38 and 88 - not four times.
+
+**Not changed, and still open:**
+- `broker/village.py`'s fallback to `127.0.0.1:8002`. A process that neither exports nor loads
+  still asks a different service there.
+- The Village port: the registered 8120 against the running 8130.

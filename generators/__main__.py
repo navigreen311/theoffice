@@ -77,6 +77,13 @@ def main() -> int:
     )
 
     args = parser.parse_args()
+    # Opt-in `.env` loading (broker/env.py). Without it, OFFICE_APP_DSN in `.env` but not
+    # exported made `_validate` run with no database and report every world rule NOT_RUN.
+    from broker.env import load_dotenv_file
+
+    filled = load_dotenv_file()
+    if filled:
+        print(f"generators: filled from .env: {', '.join(filled)}", file=sys.stderr)
     if args.command == "validate":
         return asyncio.run(_validate(args.pack, use_db=not args.no_db))
     return 2
