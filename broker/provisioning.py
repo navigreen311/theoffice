@@ -1392,12 +1392,30 @@ async def _gate_9(ctx: _Context) -> GateOutcome:
         )
         rows = [dict(r) for r in await cur.fetchall()]
 
+    # REVOKED GRANTS ARE NOT ASKED FOR A CERTIFICATION - decisions entry 91, B53's shape.
+    #
+    # Gate 11 learned in B53 that a grant a live revocation covers is not one it may
+    # activate. This gate had the same blind spot from the other side: it counted every
+    # grant on the venture, so a grant revoked BECAUSE it should never have existed still
+    # demanded Unit A and Unit B, and burkham-wickmont's four Phase 0 engineering grants -
+    # revoked 14 September, certifiable by nobody - held the whole venture at Gate 9 (entry
+    # 75). Neither deactivation nor revocation could clear it, because neither is a thing
+    # this query read. `covered_grants` is reused rather than restated, as it is in Gate 11.
+    covered = await revocation.covered_grants(ctx.conn, venture_id=ctx.venture_id)
+    withheld = [r for r in rows if uuid.UUID(r["grant_id"]) in covered]
+    rows = [r for r in rows if uuid.UUID(r["grant_id"]) not in covered]
+    withheld_scopes = sorted({covered[uuid.UUID(r["grant_id"])].scope for r in withheld})
+    withheld_note = (
+        f" {len(withheld)} revoked grant(s) not counted ({'/'.join(withheld_scopes)})."
+        if withheld else ""
+    )
+
     if not rows:
         return GateOutcome(
             "9", BLOCKED,
             "no grants to certify. A venture with nothing granted has passed no "
-            "Readiness Gate; it has simply not been asked one.",
-            {"grants": 0},
+            f"Readiness Gate; it has simply not been asked one.{withheld_note}",
+            {"grants": 0, "withheld_revoked": len(withheld)},
         )
 
     by_state: dict[str, int] = {}
@@ -1424,6 +1442,9 @@ async def _gate_9(ctx: _Context) -> GateOutcome:
         "not_certified": failing[:20],
         "not_certified_total": len(failing),
         "certified_without_simforge_verdict": unattested[:20],
+        "withheld_revoked": len(withheld),
+        "withheld_revoked_grants": [r["grant_id"] for r in withheld][:20],
+        "revocation_scopes": withheld_scopes,
     }
 
     if failing:
@@ -1435,7 +1456,7 @@ async def _gate_9(ctx: _Context) -> GateOutcome:
             "9", BLOCKED,
             f"{len(failing)} of {len(rows) * 2} certification unit(s) are not certified "
             f"({summary}). Every grant needs Unit A on its module and Unit B on its "
-            "department before the Readiness Gate is passed.",
+            f"department before the Readiness Gate is passed.{withheld_note}",
             evidence,
         )
     if unattested:
@@ -1443,12 +1464,13 @@ async def _gate_9(ctx: _Context) -> GateOutcome:
             "9", BLOCKED,
             f"{len(unattested)} certification(s) read as certified but carry no SimForge "
             "PASS. A certification nothing external attested is a certification The "
-            "Office wrote for itself.",
+            f"Office wrote for itself.{withheld_note}",
             evidence,
         )
     return GateOutcome(
         "9", PASSED,
-        f"{len(rows) * 2} certification unit(s) certified across {len(rows)} grant(s)",
+        f"{len(rows) * 2} certification unit(s) certified across {len(rows)} grant(s)"
+        f"{withheld_note}",
         evidence,
     )
 
