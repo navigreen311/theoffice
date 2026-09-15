@@ -16,6 +16,7 @@ names what to do about it.
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 import psycopg
@@ -118,31 +119,48 @@ def test_the_development_database_is_refused():
     Asking the environment here would test the test database twice and pass for the wrong
     reason.
 
-    Skipped where the suite has no separate database - on a runner both DSNs name the one
-    disposable database, and there is nothing to refuse.
+    **It does not skip.** A runner has no `.env` and one database, so there is no
+    development DSN there - and this job refuses a run with any skip in it, correctly: a
+    skip reads as a pass in every summary. So where there is no development database the
+    test falls back to `postgres`, the maintenance database every cluster has and nobody
+    would ever mark disposable. Both cases assert the same thing: a database this suite
+    was not pointed at is refused, from a real connection to it.
+    """
+    dev_dsn = _declared_development_dsn()
+    with psycopg.connect(dev_dsn) as other:
+        assert other.info.dbname != os.environ["OFFICE_ADMIN_DSN"].rsplit("/", 1)[-1], (
+            "this must connect to a database other than the marked one under test"
+        )
+        with pytest.raises(NotADisposableDatabaseError) as refusal:
+            assert_disposable(other)
+        assert other.info.dbname in str(refusal.value)
+
+
+def _declared_development_dsn() -> str:
+    """The development DSN from `.env`, or the maintenance database as the stand-in.
+
+    Read out of the FILE rather than the environment: `tests/conftest.py` overwrites
+    `OFFICE_ADMIN_DSN` with the test DSN so the code under test and the fixtures agree on
+    one database. Asking the environment here would connect to the test database, which is
+    marked, and the test would fail for the wrong reason - or worse, pass one.
     """
     env_file = Path(__file__).resolve().parents[1] / ".env"
-    if not env_file.exists():
-        pytest.skip("no .env, so no development DSN to refuse")
+    test_dsn = os.environ["OFFICE_ADMIN_DSN"]  # conftest has pointed this at the test DB
 
-    declared = {
-        key.strip(): value.strip()
-        for key, _, value in (
-            line.partition("=")
-            for line in env_file.read_text(encoding="utf-8").splitlines()
-            if "=" in line and not line.lstrip().startswith("#")
-        )
-    }
-    dev_dsn = declared.get("OFFICE_ADMIN_DSN", "").replace("+psycopg", "")
-    test_dsn = os.environ.get("OFFICE_TEST_ADMIN_DSN")
-    if not dev_dsn or not test_dsn:
-        pytest.skip("no separate development and test DSNs are configured")
+    if env_file.exists():
+        declared = {
+            key.strip(): value.strip()
+            for key, _, value in (
+                line.partition("=")
+                for line in env_file.read_text(encoding="utf-8").splitlines()
+                if "=" in line and not line.lstrip().startswith("#")
+            )
+        }
+        dev_dsn = declared.get("OFFICE_ADMIN_DSN", "").replace("+psycopg", "")
+        if dev_dsn:
+            with psycopg.connect(dev_dsn) as dev, psycopg.connect(test_dsn) as test:
+                if dev.info.dbname != test.info.dbname:
+                    return dev_dsn
 
-    with psycopg.connect(dev_dsn) as dev, psycopg.connect(test_dsn) as test:
-        if dev.info.dbname == test.info.dbname:
-            pytest.skip("the development and test DSNs name the same database")
-
-        # Read-only: the refusal happens before anything is written, which is the claim.
-        with pytest.raises(NotADisposableDatabaseError) as refusal:
-            assert_disposable(dev)
-        assert dev.info.dbname in str(refusal.value)
+    # No separate development database. `postgres` always exists and is never disposable.
+    return re.sub(r"/[^/?]+(\?.*)?$", "/postgres", test_dsn)
