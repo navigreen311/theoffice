@@ -6939,3 +6939,82 @@ past that divergence would teach what B49 refused to: that a divergence is ignor
 Re-recorded by B49's rule - **two runs on the final commit, byte-identical after
 normalisation** - and checked on a third run. The run and job ids are in the commit that
 changes `BASELINE`.
+
+---
+
+## 88. Greenstone at Gate 2: main's Pack passes once the environment is up; the live Pack is stale
+
+**Recorded 2026-09-15, measured with the validator Gate 2 runs, against the development
+database and live services. Ruled to record as "Gate 2 blocked on three rules, all
+environment", which was close. The measured version is below.**
+
+### Before the environment came up (main's Pack, `a06ac10`)
+
+    0 FAIL, 4 blocking NOT_RUN - all environment
+      V11   instructions authored for all 5 modules; module existence needs CRE Forge
+      V29   Village unreachable
+      V30   Village unreachable
+      V32   CRE Forge and SimForge unreachable
+    V24     deferred to Gate 4.5
+    V6      PASS throughout; it never failed on this Pack
+    V31     PASS - cleared by REMOVING voiceforge/place_call (entries 83-84), not satisfied by
+            the exclusion: while the module was declared, V31 was NOT_RUN on its hand-written
+            registry row and blocked Gate 2
+
+**Four environment rules, not three.** V11's NOT_RUN is an environment state as well: it asks
+the operating Forge whether the taught modules exist.
+
+### Bringing it up, in order
+
+**1. The Village, on 8130, at direction.** `VILLAGE_PORT=8130` with the Village's own `.venv`.
+It answered `/api/objectives/board` with a clock (quarter `2030Q2`) and listed 12
+departments.
+
+    VILLAGE_BASE_URL NOT exported      V29, V30 NOT_RUN: "NOT because the Village refused:
+                                       http://127.0.0.1:8002 ... nothing at this address
+                                       identified itself as the Village - HTTP 401 from a
+                                       server identifying as 'uvicorn'"
+    VILLAGE_BASE_URL=...8130 exported  V29, V30 PASS
+
+`broker/village.py:138` reads `os.environ`, not the settings object that loads `.env`. Unset,
+it falls back to `127.0.0.1:8002`, which a different service holds (`docs/port-allocation.md`
+line 82). **The identity check worked:** it refused the wrong service by name, rather than
+reporting that the Village had declined.
+
+**Open, and not resolved here: the Village's registered port is 8120.** Both
+`docs/port-allocation.md` line 59 and `.env` say so. Today's instance runs on 8130, which the
+same document lists as a port once held by a native process (line 83). Either the instance
+moves back to 8120, or the document and `.env` move to 8130. Leaving the three in
+disagreement is how the next unexported-variable finding starts.
+
+**2. CRE Forge and SimForge.** *"Both were up this morning"* did not hold. Neither answered at
+any point in this session. The machine restarted at 02:01, and the first check at 08:24 found
+only Postgres and Ollama listening. Neither had stopped mid-run - neither had been started.
+Docker Desktop was started, then `docker start creforge-db creforge-redis creforge-backend`
+(the three had been `Exited (255)`), then SimForge on 8110 with its own `.venv`. Both verified
+by body:
+
+    CRE Forge _modules   401 without a credential; with CRE_FORGE_TOKEN, exactly the five
+                         declared modules
+    SimForge  _modules   401 without; with SIMFORGE_TOKEN, gate_result plus run_start and
+                         submit_curriculum
+
+**3. VoiceForge.** `forge_registry` has no venture column, so its VoiceForge row is global and
+still present, and is **not a Greenstone row to remove**. Greenstone has 0 manifest rows for
+voiceforge. **V32 asks about VoiceForge only for a Pack that binds it:** main's Pack no longer
+does, and was not asked. The live Pack does, and was: *"voiceforge: tenant credential
+unavailable"*. That is a finding about the live Pack, not about the registry.
+
+### Where Gate 2 lands with everything up
+
+    main's Pack (a06ac10)       0 FAIL, 0 blocking NOT_RUN     Gate 2 PASSED
+                                (V32: "Asked and clean: cre-forge via adapter_manifest,
+                                 simforge via adapter_manifest")
+    live Pack 1.6.0 (stored)    Gate 2 BLOCKED - all three Pack-side, none environment:
+                                V11 FAIL      transcribe_call has no instruction
+                                V31 NOT_RUN   voiceforge/place_call's hand-written row
+                                V32 NOT_RUN   voiceforge credential does not resolve
+
+**Every Pack-side blocker is resolved on main and none is resolved in the Pack store.** A run
+reads the live Pack, so until main's Pack is published as a new version, a Greenstone run
+stops at Gate 2 on three items that are already fixed in the repository.
