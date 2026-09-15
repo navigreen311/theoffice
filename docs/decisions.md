@@ -4913,10 +4913,27 @@ people who can act in it, and 124 test fixtures still hold the same top role.**
 **Found 2026-09-13 by measurement. The shape Ivan named is exactly right and the mechanism is not
 the one described, so both are here - the finding is sharper than either version.**
 
-### What Gate 7 did
+**Corrected 2026-09-14 by Ivan, in place rather than in a new entry.** The finding below was
+argued from one measurement and an invented pair: *a venture with fifty correctly inactive grants
+and a venture with fifty revoked ones both produce PASSED.* The pair has since occurred, on this
+venture, eighteen hours apart. The argument is replaced by the demonstration - same gate, same
+code, same verdict, opposite inputs - and the entry now quotes the second reason line instead of
+imagining it.
 
-    gate 7   passed   "0 grant(s) registered, none active;
+### What Gate 7 did, twice
+
+    13 Sep   passed   "0 grant(s) registered, none active;
                        34 activated grant(s) discounted by a live agent revocation"
+             evidence {grants: 0, already_active: 0, revoked: 49, active_but_revoked: 34}
+
+    14 Sep   passed   "49 grant(s) registered, none active"
+             evidence {grants: 49, already_active: 0, revoked: 0, active_but_revoked: 0}
+
+**The second is the verdict this gate exists to give**, and it took the revocations being lifted
+(entry 64), the grants being re-issued against a republished Pack, and forty-nine activations
+being returned to inactive by hand (entry 74's `deactivate`) to produce it. Forty-nine grants
+examined, none active before Gate 11, nothing discounted. **The first is the same word over an
+empty set.**
 
 `_gate_7` exists to assert *grants are issued inactive and activated only against a valid
 sign-off*. Its whole force is one branch:
@@ -4926,7 +4943,7 @@ sign-off*. Its whole force is one branch:
                            before Gate 11 ...")
 
 `active` is grants that are activated **and not covered by a revocation**. Measured on this
-venture:
+venture on the 13th:
 
     grants total                                          49
     covered by a live revocation                          49
@@ -4936,13 +4953,20 @@ venture:
 its question of is empty, and an empty set cannot contain an active grant.** The gate passed
 because it had nothing to look at.
 
-**"Zero of zero" and "all correct" are the same verdict here.** A venture with fifty correctly
-inactive grants and a venture with fifty revoked ones both produce PASSED, and the message
-distinguishes them only if somebody reads the clause after the semicolon. The evidence block is
-better than the message - it carries `grants`, `already_active`, `revoked` and
-`active_but_revoked` separately, and its own comment says why: *"'0 active' on a venture holding
-activated grants is a claim that has to say why it is true."* **The numbers are all there. What is
-missing is any rule that reads them.**
+**"Zero of zero" and "all correct" are the same verdict here, and now both have been recorded.**
+The verdict is identical: `PASSED`, from the same branch, on the same line of the same function.
+**The whole difference is one integer in a sentence** - `0 grant(s) registered` against
+`49 grant(s) registered` - because `len(live)` is interpolated into the reason and compared to
+nothing. The evidence block is better than the message: it carries `grants`, `already_active`,
+`revoked` and `active_but_revoked` separately, and its own comment says why: *"'0 active' on a
+venture holding activated grants is a claim that has to say why it is true."*
+
+**And that integer is the only place the distinction exists.** No rule compares it. The gate does
+not assert it examined anything; the run history renders a verdict and a reason; a reader who
+wants to know whether Gate 7 looked at a grant has to open the evidence JSON and already know
+which field answers the question. **A correct verdict and a vacuous one are typographically
+adjacent and nowhere separated** - that is the finding, and it survived the state that made it
+visible being repaired.
 
 ### What would have caught it: nothing
 
@@ -5005,6 +5029,13 @@ input set is revoked? Gate 7 currently answers *pass*. Gate 9 answers *block* ov
 this run stopped, now with a measured cause rather than a suspected one.
 
 That is upstream of both gates and it is where a third path most likely is. Not answered tonight.
+
+**Answered on the 14th, and the disagreement outlived the answer.** Entry 64 lifted the
+revocations; there are none live on this venture now. Gate 7 passes over forty-nine real rows and
+Gate 9 still blocks - over four of them, not forty-nine (entry 72). **The two gates never
+disagreed about the same thing:** Gate 7 asks whether a grant is active before Gate 11, Gate 9
+asks whether it is certified, and a grant can honestly be both inactive and uncertified. The
+suspected third path was not there. What was there is the sentence above it.
 ---
 
 ## 64. "All 34" was a count of grants, and lifting all of them would have undone yesterday's work
@@ -5768,3 +5799,67 @@ So it shapes the artifact, the approval projection **and** `agent_forge_grant.tr
 which `resolve_grant` gates every call on. That is entry 52's whole subject: the field was
 declarable, storable and enforceable, and inert only because the artifact between them
 flattened it.
+
+---
+
+## 75. Where the ladder stops: eight units, four grants, one ruling
+
+**Recorded 2026-09-14. Run `8ed2f39a-61fb-44eb-9c90-8f2192781884`, burkham-wickmont@0.10.0,
+artifacts hash `e210fdc8be997047`, blocked at Gate 9.**
+
+### The ladder as it stands
+
+    0    passed   bridge operational for capitalforge, simforge
+    1    passed   Pack burkham-wickmont@0.10.0 authored, hash 7b2900de37b26093
+    2    passed   34 rules, no failures
+    3    passed   15 workflow step(s), 80 projected daily approval(s)
+    3.5  passed   reconciliation clean
+    4    passed   operator recorded a review of the artifacts
+    4.5  passed   capacity and budget feasible
+    5    passed   15 grant(s) issued INACTIVE, 12 manifest row(s)
+    6    passed   instructions for 10 module(s), 16 compliance flag(s) explained
+    7    passed   49 grant(s) registered, none active
+    8    passed   85 scenario(s) generated; 0 of 10 modules accepted by SimForge;
+                  0 of 3 department unit(s) opened
+    9    BLOCKED  8 of 98 certification unit(s) are not certified (8 x never_certified)
+
+**Twelve gates cleared, one refusing.** Gate 7's line is the one entry 63 was corrected for: it
+is now a real pass over forty-nine rows rather than the same word over an empty set.
+
+### The eight units are four grants counted twice
+
+Gate 9 checks Unit A and Unit B per grant, so 49 grants make 98 units. Ninety are certified.
+The eight that are not are **four grants with `operation_cert_ref` and `dept_context_cert_ref`
+both NULL** - every other grant on this venture carries both.
+
+    97fcff2f   Cedric Noren     engineering   capitalforge/client_read
+    de5213e5   Brina Arvane     engineering   capitalforge/scan_communication
+    ead35ef7   Amelie Wystan    engineering   capitalforge/client_read
+    f68365c3   Brina Arvane     engineering   capitalforge/client_read
+
+**These are entry 72's four, unchanged in identity and changed in one respect: they are no longer
+active.** Entry 74's deactivation returned all forty-nine of this venture's grants to inactive,
+these included. That cleared Gate 7 and did nothing at all to Gate 9, which is correct - `_gate_9`
+selects `WHERE g.venture_id = %s` with no activation term, because certification is a property of
+a grant and not of its activation. **Deactivating removed the authority and left the gap.**
+
+### 68 -> 8, and what each step was worth
+
+    68   the run as it stood before entry 71
+    ...  entry 71 repaired the certification refs and taught the upsert to maintain them
+    ...  both Packs republished at 0.10.0 / 1.6.0, executing entry 48's qualification
+    ...  a fresh run started against 0.10.0, gates 0-8 re-evaluated from scratch
+     8   after entry 74's deactivation
+
+**Four operations, one residual.** Three of them moved the number; the fourth did not and was
+never going to. The sixty that went were repairs to grants that had a certification and could not
+find it. The eight that remain are grants that have none to find.
+
+### Why it stays there
+
+Held by entry 72, deliberately. The two available remedies were refused there and neither has
+become available since: certifying `engineering/capitalforge` mints a unit B for a department no
+Burkham position draws from, and deleting the rows withdraws authority through the one mechanism
+that leaves no record.
+
+**The run does not advance, and the reason is on the record rather than in a workaround.**
