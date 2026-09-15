@@ -104,8 +104,8 @@ EVENTS: tuple[Event, ...] = (
           "that Forge any more. `forge_tenant_credential` has no reason column and one row "
           "per Forge, so this entry carries the reason and the full removed row for "
           "restoration. First written 2026-09-15 for voiceforge (decisions entry 90), by hand "
-          "and not by a module - published with no writer, which the walker permits.",
-          "decisions.md entry 90", SYSTEM),
+          "through `audit.write_event` - no module writes it, which the walker permits.",
+          "broker.audit", SYSTEM),
     Event("console_revocation_created", "Revocation issued",
           "The kill switch. Takes effect on the target's next call.",
           "broker.app", CONSOLE),
