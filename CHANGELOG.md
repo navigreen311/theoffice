@@ -37,6 +37,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   port held by anything else, naming the holder.
 
 ### Changed
+- **Greenstone's compliance officer is Ira Green, not Dana** (decisions entry 92). Dana was
+  invented (entry 59). Ira Green is a real account, named in the Pack by her exact
+  display_name so the access overview can match her. She is declared at 2 coverage hours and
+  10 review minutes, and is Ivan's backup. Gate 4.5's V13 now reads 1,280 review-minutes
+  against 72, 18 times over (it was 5); the remedy ruled is fewer escalations, not more
+  hours. `amend_for_capacity` adds five reviewers instead of four to keep later gates
+  reachable. Not published to the dev database.
 - **`python -m broker` and `python -m generators` load `.env` at startup** (`broker/env.py`,
   decisions entry 89). Opt-in, never on `import broker`, so pytest's DSN read is unchanged.
   An exported variable always wins. Ends the unexported-variable class for the CLIs (entries
