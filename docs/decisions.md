@@ -7166,3 +7166,88 @@ has ever named CapitalForge. The credential had not been removed.
 **Ivan's framing: the same shape as the orphan grants (entry 86)** - a number, a breakdown and a
 conclusion, with nothing underneath. It was caught by reading which Forges the Pack's positions
 operate before answering what the eighteen were.
+
+---
+
+## 91. The finding of the session: every detail that could not be found was invented, and none was read from anything
+
+**Recorded 2026-09-15 at Ivan's direction, in his words: *"There is no other source. Every detail
+you couldn't find came from me, and none of it was read from anything. Record that plainly - it's
+the finding of the session and it's larger than any of the items below."***
+
+### What it was
+
+Across this session, rulings, records and signatures were directed on details that exist nowhere
+in this system - not in the database, the repository, or its history. **Each was stated as fact,
+usually with a number, a name or an identifier.** Most were built on over several turns, and each
+step reasoned correctly from the one before it. The classes, with examples:
+
+    runs and signatures   runs 43fc0bb9, 1287d7bb and f38ac4f8; Burkham "completed all twelve
+                          gates" (no run of any venture has reached Gate 12); a Gate 10 signature
+                          "given on 15 September" (signoff_record has 0 rows); a second
+                          completion; Greenstone@1.8.0 with hashes e7bdc858 / a1ba59a0
+    counts                82 Greenstone grants, 47 triples, 34 and then 44 orphans; 20 blocked
+                          modules, 18 CapitalForge; 704 minutes, 11.8h, 1,152, 19.2h; ten
+                          certifications and four departments; 61 candidates; seven false-reason
+                          revocations, five uncorrected
+    names                 Sable Quint's grants, Dorian Vale, Cassius Verholt's grant
+    code                  NotOnShift, _v32_forge_binding, agent_can_operate, _v13_capacity; V32
+                          "reads the credential table"; a missing agent_forge_grant FK; bootstrap
+                          "issuing both rows in one transaction"; V13 "at Gate 3"
+    history               underwrite_deal "removed from Buyer Network Manager by a sed range";
+                          assign_contract "never operated"; coverage 9h -> 6h "on 15 September";
+                          place_call out "since 1.8.0"; a per-venture credential table
+
+### What was true, in each case, and what caught it
+
+**A read, every time.** An anti-join, a primary-key lookup, `git log` over every commit touching a
+file, the constraint catalogue, a function's own source. **None of these was hard, and all of them
+had to be run.** The findings did not stop when they were contradicted - several were restated
+across turns after the measurement - and they ended only when the question moved from *what to do
+about it* to *what produced it*, which a detail with no source cannot answer.
+
+**Recorded here rather than in each entry**, because no one of 82-90 shows the size of it. Those
+entries record the individual cases where they arose (orphans in 86, the twenty modules in 90).
+
+### What survived, and why it matters that it did
+
+Real work came out of the session, and **all of it came from measuring the directions rather than
+following them**: the Gate 11 identity condition (85); the `.env` loader (89); Greenstone's first
+run past Gate 2 (90); and the three below, each found while checking a claim that turned out to be
+false.
+
+**For this ledger: a direction's facts are claims, the same as a report's.** A number, a name, a
+run id or a function in a ruling is measured before it is built on or written down, whoever
+supplied it. Entry 79's rule - *measured rather than remembered* - holds for what is directed as
+much as for what is recalled.
+
+### Three fixes from this pass, each found by checking a claim
+
+**1. `bootstrap-phase0` could not certify any pair on any venture.** `_assert_pair_in_pack` asked
+the stored Pack for the bare module name. `forge_modules_operated` has stored `forge_id/module_id`
+since 14 September (entry 48), so every pair was refused with *"no position operating"* the module -
+a refusal naming the wrong cause, about positions that plainly operate it. Burkham's certifications
+predate the change; the check first failed on a real attempt for Greenstone. **Now keyed
+`forge_id/module_id`.** `tests/contract/test_bootstrap_pack_pair.py` runs against the real
+Greenstone Pack stored live. Reverting to the bare key fails all three tests.
+
+**2. Gate 9 counted revoked grants - B53's shape, one gate earlier.** A grant a live revocation
+covers still demanded Unit A and Unit B, so burkham-wickmont's four Phase 0 engineering grants,
+revoked 14 September, held the venture at Gate 9 through both deactivation and revocation (entry
+75). **Gate 9 now excludes covered grants**, via `revocation.covered_grants` - the predicate Gate
+11 uses - and names the withheld count in its reason and evidence. Two tests: a revoked stray grant
+is not counted, and the same grant unrevoked still blocks. With the exclusion removed, the first
+fails.
+
+**What it does to Burkham, stated before it runs:** the four grants stop being counted, and **Gate
+9 still blocks**, now on its other condition. All fifteen remaining certifications carry no SimForge
+PASS, and Gate 9 refuses *"certification(s) read as certified but carry no SimForge PASS"*. The
+verdict changes cause, not value. That is B3, and the fix does not touch it.
+
+**3. `dev-up.sh` killed by port.** `taskkill //F` on whatever held 8080 and 3100. On this machine
+8080 is `com.docker.backend.exe` - which also forwards CRE Forge's 8011 - so the script would have
+killed Docker's backend and every container. **Now it records the PID of each server it starts,
+stops only those, and refuses a port held by anything else, naming the holder.** Run here with 8080
+held by Docker, it refused - *"held by pid 20436 (com.docker.backend.exe) pid 23232 (wslrelay.exe) -
+which this script did not start, so nothing was stopped"* - and CRE Forge still answered afterwards.
+Not shellchecked locally (no shellcheck here); CI's lint job runs it.

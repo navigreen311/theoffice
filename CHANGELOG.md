@@ -25,6 +25,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     grant refusal, or the write, fails the tests that should fail.
   - **Not a scheduler.** The window ends and nothing follows it (entry 81).
 
+### Fixed
+- **`bootstrap-phase0` certifies again** (decisions entry 91). Its Pack check asked for bare
+  module names after `forge_modules_operated` became `forge_id/module_id` (entry 48), so it
+  refused every pair on every venture with a message naming the wrong cause.
+- **Gate 9 no longer counts grants a live revocation covers**, the same shape as B53's Gate 11
+  fix. Burkham's four revoked Phase 0 grants stop holding it there; Gate 9 still blocks
+  Burkham, on certifications with no SimForge PASS.
+- **`scripts/dev-up.sh` no longer kills whatever holds its ports.** On Windows with Docker
+  Desktop, 8080 is Docker's backend. It now stops only the PIDs it recorded, and refuses a
+  port held by anything else, naming the holder.
+
 ### Changed
 - **`python -m broker` and `python -m generators` load `.env` at startup** (`broker/env.py`,
   decisions entry 89). Opt-in, never on `import broker`, so pytest's DSN read is unchanged.
