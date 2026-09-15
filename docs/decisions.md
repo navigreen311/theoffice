@@ -6742,3 +6742,113 @@ the correction - **is not recorded.** It orders two acts on rows that are not th
 - **"Two false-reason revocations corrected, five remaining":** none was corrected here. **11
   revocations carry the roster-departure text; all 11 were lifted on 14 September** and none
   covers anything.
+
+---
+
+## 86. The orphan-grant finding was invented, and what survives it
+
+**Recorded 2026-09-15 at Ivan's direction, in his framing: the largest invention in this
+thread.** His words: *"the numbers, the two names, and the FK refusal all came from me
+rather than from any report."*
+
+### What was built on nothing
+
+Across six turns, a finding was stated, extended and ruled on:
+
+    an orphan count          34 grants, "41% of Greenstone's 82", later 44
+    two agent names          Sable Quint, Dorian Vale
+    a resolve_grant verdict  "NotOnShift" - the refusal "accidental, not a control"
+    a Gate 11 consequence    44 grants made live for agents the system has no record of
+    a migration question     FK NOT VALID, and whether B-then-C or C-then-B
+    three remedies           A, B and C, ruled on in an order
+
+**Every step reasoned correctly from the one before it, and the first step was false.**
+Around it were other figures with no source: Greenstone "82 grants, 47 triples", PR #143,
+`agent_can_operate`, bootstrap "issuing both rows in one transaction", and a Gate 11
+revocation check "added yesterday" by this session.
+
+### What was true the whole time
+
+    grants without an identity row      0 of 51 (theoffice), 0 of 0 (theoffice_test)
+    agent_forge_grant.office_agent_id   NOT NULL; FK to office_agent_identity since migration
+                                        0001, VALIDATED, not deferrable, ON DELETE NO ACTION,
+                                        enforcement triggers enabled on both tables
+    Sable Quint                         a village_agent row only - dep-test-stayer,
+                                        engineering, departed; no identity, no grant; named
+                                        in two village_roster_imported audit rows (09-13)
+    Dorian Vale                         no row anywhere
+    NotOnShift                          no such class; the shift refusal is OffShift
+    agent_can_operate                   does not exist
+
+Neither scenario put forward - an identity deleted after issuance, or an id minted with no
+identity - can produce such a row here. The foreign key refuses both.
+
+### What caught it
+
+**A count, run the first time the finding was stated:** grants whose `office_agent_id` has
+no identity row, by `NOT EXISTS`. It returned 0. It was repeated on each later turn and
+returned 0 each time. **The finding was restated and built on regardless, so the count
+alone did not stop it.** What ended it was asking what WROTE the rows - a question that
+needs a source, a function and a run. Against a validated foreign key and a zero anti-join,
+there was nothing to name.
+
+**The lesson for this ledger:** a finding reported without its instrument can be built on
+for as many turns as nobody asks for the instrument. The same rule this ledger applies to
+its own numbers - entry 79's *"measured rather than remembered"* - applies to a direction.
+
+### What survives, as measured
+
+**One real change came out of the thread: entry 85.** Gate 11 now requires an active
+identity. It was measured before it was built: exposure is nil today, and the gap is real on
+the re-sign path.
+
+**Grants:**
+
+    burkham-wickmont   49 grants   19 triples   19 newest   30 superseded
+    greenstone          2 grants    2 triples    2 newest    0 superseded
+    all                51 grants   21 triples
+
+Greenstone's two are Amelie Wystan's bootstrap grants, `cre-forge/property_lookup` and
+`simforge/gate_result`, both revoked 15 September (entry 83). **"51 grants" is the whole
+database, not Greenstone.**
+
+**Revocations - "seven with false reasons, five uncorrected" was not measured and is not
+recorded.** The 26 revocations group as:
+
+    11  agent         roster-departure text        a departure that did not happen   0 live
+     9  agent_module  "Certified at propose ..."   not re-examined here             0 live
+     4  agent_module  Burkham engineering, 09-14   see below                        4 LIVE
+     2  agent_module  Greenstone engineering       provenance as measured (83)      2 LIVE
+
+**Found while checking that claim: the 4 live Burkham revocations name a mechanism that
+did not exist when their grants were issued.** Their reason says the department was *"a
+hardcoded default parameter value - `department: str = "engineering"`, written three
+times"*. That parameter entered `bootstrap_phase0.py` in PR #118 on **13 September**
+(`git log -S`). The four grants were issued on **3 September**, by code (`d3c7573`,
+`8e80b20`) with no such parameter. That code hardcoded `department = 'engineering'` as a
+literal in its agent query. **The conclusion stands - no Burkham position draws from
+engineering - and the named mechanism is wrong.** A true conclusion with a false reason, on
+four live revocations, not corrected here. Correcting a reason has no domain path:
+`reinstate()` commits on its own, and a direct UPDATE leaves no record. That is itself open.
+
+### Greenstone's position, from the database
+
+    live Pack            1.6.0 (41ea93d6), still declares voiceforge/place_call
+    active run           none; venture table has no greenstone row
+    grants callable      0 (2 held, both covered by live revocations)
+    forge_registry       cre-forge, simforge, voiceforge - all GREEN with a credential_ref;
+                         voiceforge's base_url is https://example.invalid
+    live instructions    0 for cre-forge, voiceforge and simforge
+    reachable now        Village no, CRE Forge no, SimForge no
+
+**A run would start** (live Pack, no active run), pass **Gate 0** on stored registry rows
+alone, pass **Gate 1**, and **stop at Gate 2**. The validator on the stored live Pack:
+
+    V11 FAIL      no live instructions for the 6 operated modules (place_call excluded)
+    V29, V30      NOT_RUN - Village unreachable
+    V31           NOT_RUN - voiceforge/place_call, a hand-written row (clears with #142)
+    V32           NOT_RUN - cre-forge and simforge unreachable; voiceforge's credential ref
+                  does not resolve
+    V24           NOT_RUN, deferred to Gate 4.5
+
+**No grant would be written:** Gate 5 is three gates past where it stops.
