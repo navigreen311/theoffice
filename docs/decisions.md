@@ -5863,3 +5863,106 @@ Burkham position draws from, and deleting the rows withdraws authority through t
 that leaves no record.
 
 **The run does not advance, and the reason is on the record rather than in a workaround.**
+
+---
+
+## 76. What Gate 9 counts, and the second refusal standing behind the first
+
+**Ruled withdrawn 2026-09-14 by Ivan, before anything was built. A ruling to deactivate the four
+engineering grants was issued and retracted on two independent grounds, and the read it prompted
+found a third thing nobody had looked at.**
+
+### The ruling and its two errors
+
+The ruling was: deactivate the four, because `deactivate()` is the third state entry 72 lacked -
+neither withdrawing authority nor certifying to clear a line - and it landed after that entry was
+written. Ivan's own summary of what went wrong: *"I ruled on a mechanism's scope without checking
+it, and on an outcome without checking what the gate counts."*
+
+**First: the mechanism's scope.** `deactivate()` is venture-scoped -
+`WHERE venture_id = %s AND activated_at IS NOT NULL`. It had already run on this venture on the
+15th and taken all thirty-four active grants, these four among them. They were **already
+inactive**. A second call refuses, because there is nothing active left to deactivate.
+
+**Second, and the one that matters: the outcome.** Deactivating them could not have cleared Gate 9
+even with a per-grant scope, because Gate 9 does not look at `activated_at` at all.
+
+### What Gate 9 counts
+
+Every grant row for the venture. One condition, and it is not about the grant.
+
+    FROM agent_forge_grant g
+    LEFT JOIN certification ca ON ca.unit = 'A' AND ca.cert_id::text = g.operation_cert_ref
+    LEFT JOIN certification cb ON cb.unit = 'B' AND cb.cert_id::text = g.dept_context_cert_ref
+   WHERE g.venture_id = %s
+
+**`WHERE g.venture_id = %s` is the whole filter.** No `activated_at`, no `is_assignable`, no
+revocation predicate, no join to the roster. Forty-nine rows in, two units each, ninety-eight
+units out - and measured just now, all forty-nine are inactive and `is_assignable` is false on
+every one of them, which changes the count by nothing.
+
+A unit clears on one condition: **the ref column names a `certification` row of the right unit
+whose `state` is `certified`.** `COALESCE(state, 'never_certified')` means a NULL ref and a ref
+pointing at nothing are the same answer. The four engineering grants have both refs NULL; no other
+grant on this venture does.
+
+**So the option set is exactly entry 72's two and always was.** Certification, or the grant not
+existing. Deactivation was never a third door into this room - it is a real third state, and it is
+a third state for *activation*, which is a different question from *certification*. The two are
+independent by design, and that independence is what made the ruling wrong.
+
+**Entry 72 stands.** Not reaffirmed after reconsideration - never actually challenged. The
+mechanism that appeared to supersede it does not operate on the thing it blocks.
+
+### The third thing, which nobody had looked at
+
+Gate 9 has two refusals and only the first has ever fired.
+
+    if failing:     -> "8 of 98 certification unit(s) are not certified"
+    if unattested:  -> "N certification(s) read as certified but carry no SimForge PASS.
+                        A certification nothing external attested is a certification
+                        The Office wrote for itself."
+
+`unattested` is every unit whose state is `certified` and whose `simforge_verdict` is not `PASS`.
+Measured on this venture:
+
+    certification rows in the entire database          18
+    carrying simforge_verdict = 'PASS'                  0
+    carrying simforge_verdict = NULL                   18
+
+    units that would reach the second branch           90
+
+**Clearing the eight does not pass Gate 9. It moves the block from eight units to ninety.** The
+first branch has been standing in front of the second the whole time, and the second is the more
+serious of the two: the eight are grants nobody certified, and the ninety are certifications
+nothing attested. Every certification this venture holds was bootstrap-written - which the Gate 4
+review said in terms, *"all bootstrap-attested, none derived from a scenario run"* - and Gate 9
+already has the rule that refuses them. It has simply never been reached.
+
+**This is green-by-absence again, pointed the other way.** Entry 63's Gate 7 passed because its
+input set was empty. Gate 9's second rule has never run because a prior rule always answered
+first. Neither is a bug and both mean the same thing: a verdict nobody has seen is not a verdict
+that works.
+
+### What this does to "one gate from the furthest anything has been"
+
+It removes it. The run is not one remedy away from advancing; it is one remedy away from meeting
+a refusal that applies to ninety units instead of eight, and that refusal wants something no part
+of this deployment currently produces - a SimForge PASS against a held-out scenario run. Gate 8
+reported `0 of 10 module(s) accepted by SimForge` on this very run.
+
+### A loose thread, recorded where it was found
+
+`greenstone`'s two grants carry `operation_cert_ref` and `dept_context_cert_ref` values that name
+no row in `certification` - 18 rows exist, all `capitalforge`, none matching. Both grants are
+**active**. So the one venture holding live activated grants is holding them on certification
+refs that point at nothing, and Gate 9 would report all four of its units `never_certified` if a
+run ever asked. Not investigated here.
+
+### Amelie Wystan, still in two ventures
+
+Unchanged and still unaccounted for. Her burkham grant is one of the four; her two greenstone
+grants - `cre-forge/property_lookup` and `simforge/gate_result` - are active, outside anything
+scoped to burkham-wickmont, and among the dangling refs above. **Whatever settles `engineering`
+settles one of her three grants.** A resolution that does not say what happens to the other two
+has not finished.
