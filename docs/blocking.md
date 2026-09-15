@@ -4868,3 +4868,45 @@ configuration change nobody would expect to need a code change beside it.
 
 That is the shape worth recording: the defect is invisible while the feature is unconfigured, and
 the act that makes it visible is the act that makes it urgent.
+
+---
+
+## B49 — the Smoke merge gate's hash was decided by a BOM, on captures taken the convenient way
+
+**`theoffice`** · RESOLVED 2026-09-14, same commit. `scripts/smoke_normalise.py --check` compares a
+normalised console-smoke step against `BASELINE`. It reported `DIVERGENT` on clean runs for as long
+as anyone was feeding it a `gh run view --log` capture, and the cause is one character.
+
+`_TIMESTAMP` is anchored with `^`. **`gh run view --log` emits a UTF-8 BOM at the start of every
+STEP** — twelve of them in the console-smoke job — and one of those opens the
+`##[group]Run ./scripts/console-smoke.sh` line itself, which is where the compared region begins.
+That line missed the anchor while every line after it matched, so the compared text began with a
+per-run timestamp and the digest was unique to the run by construction.
+
+**The documented fetch was never affected.** `gh api .../jobs/<id>/logs` returns exactly one BOM,
+at byte 0, on a `Current runner version:` line that precedes the step and is discarded. So the
+instrument was correct through the port it documents, and wrong through the one that got
+substituted for it — the difference being invisible because the number was not what anyone was
+reading.
+
+**What was actually deciding merges.** The protocol in use compares the FAIL lines of two
+normalised captures with `diff`. That is a real comparison and it is what every merge this week was
+decided by; the hash was computed, seen to differ, and set aside each time. **A guard that is
+always overridden by a working alternative never reports that it has stopped working.**
+
+**The file's own warning is about this and did not catch it.** Its opening section refuses a number
+reproducible only by the shell history that produced it. `BASELINE` had exactly that property — and
+the warning is a paragraph, which is not a check. Caveat 19's rule applied one level up: *name the
+thing you are comparing, from the system, before you compare it.*
+
+**Resolved** by stripping the BOM per line rather than per file, so the answer no longer depends on
+which line the junk landed on; three tests added, two of which fail without the fix. `BASELINE`
+re-recorded as `c9f1f858…`, this time from **two** runs whose normalised text is byte-identical
+(jobs 104219635333 and 104227014142) rather than from one — one run produces a number, two runs
+make it a baseline.
+
+**One residue, recorded not fixed.** The two fetch paths cannot agree: `gh run view --log` renders
+the ANSI escape on the step's echoed command as the two characters `^[` where `gh api` returns the
+ESC byte. Same job, different digest, permanently. Captures must be compared with captures taken
+the same way, and `BASELINE` is specific to the documented fetch.
+

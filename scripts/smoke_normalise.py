@@ -44,6 +44,47 @@ USAGE
 
     `--check` refuses an empty capture rather than reporting a mismatch, because an empty
     file hashes to something and that something is not a verdict.
+
+B49 - THE HASH IS BROKEN BY A FETCH THIS SCRIPT DOES NOT DOCUMENT
+=================================================================
+
+    **Fetch it the way USAGE says and the hash was always correct.** `gh api
+    .../jobs/<id>/logs` returns one BOM, at byte 0, on a `Current runner version:` line
+    that precedes `_STEP_START` and is discarded before anything is hashed.
+
+    **Fetch it with `gh run view --log` and the hash was never correct.** That command
+    emits a BOM at the start of every STEP - twelve in the console-smoke job - and one of
+    them opens the `##[group]Run ./scripts/console-smoke.sh` line itself. `_TIMESTAMP` is
+    anchored with `^`, so that line missed the anchor while every line after it matched:
+    the compared region began with a per-run timestamp, and the digest was unique to the
+    run by construction. `--check` reported DIVERGENT on a clean run, every time.
+
+    **So this is not an instrument that never worked. It is an instrument used through an
+    undocumented port.** The convenient command was substituted for the documented one,
+    it differs in a way nothing declared, and the difference was invisible because the
+    number was not the thing being read.
+
+    Nobody noticed because nobody was using the number. The verification protocol this
+    script exists to serve had settled into `diff`-ing the FAIL lines of two normalised
+    captures - a real comparison, and the one every merge this week was actually decided
+    by. The hash was computed, seen to differ, and set aside each time.
+
+    **The warning at the top of this file did not catch it, and the warning is about
+    this.** It refuses a number reproducible only by the shell history that produced it.
+    The digest had precisely that property - reproducible only if you fetched the log the
+    same way - and the prose could not catch it, because a paragraph about reproducibility
+    is not a check on reproducibility. That is the same defect one level up: the guard
+    against unverifiable numbers was itself a paragraph.
+
+    **Third instance of one shape this week**, and the others are real. Gate 7 passed
+    because its input set was empty (entry 63); Gate 9's second refusal has never run
+    because a prior branch always answered first (entry 76); `--check` was set aside for
+    a diff that answered first. In all three, something reported for a long time without
+    ever having discriminated - and in this one it was in the instrument being used to
+    check the other two.
+
+    Fixed by stripping the BOM per line rather than per file, so the answer no longer
+    depends on which line the junk landed on.
 """
 
 from __future__ import annotations
@@ -53,9 +94,25 @@ import pathlib
 import re
 import sys
 
-#: The documented failure: eight FAILs and one could-not-run, from the run recorded in
-#: `PARALLEL_BUILD.md`. A PR whose normalised step hashes to this has introduced nothing.
-BASELINE = "50f95788f3f35a37256f9fe30383378164a98708c98d2acc475fc94ba0f33f80"
+#: The documented failure: eight FAILs and one could-not-run. A PR whose normalised step
+#: hashes to this has introduced nothing.
+#:
+#: **Re-recorded 2026-09-14 (B49), and this time from two runs rather than one.** The
+#: previous value could not be reproduced from any capture, which is what B49 turned out
+#: to be about. This one was taken from the documented fetch on two different runs -
+#:
+#:     job 104219635333   main    504ba1f-1     run 34917974505
+#:     job 104227014142   branch  9aacd6f       run 34920396861
+#:
+#: - whose normalised text is byte-identical. **Two runs agreeing is what makes a number
+#: a baseline; one run only ever produces a number.**
+#:
+#: It is specific to `gh api .../jobs/<id>/logs`, the fetch USAGE names. `gh run view
+#: --log` renders the ANSI escape on the step's echoed command as the two characters
+#: `^[` instead of the ESC byte, so that path has a different digest for the same job and
+#: always will. Compare captures taken the same way, or compare the text and not the
+#: number.
+BASELINE = "c9f1f858148f6c83c262ba332a488eb9a9cd22a6240edd0b2a19d307bfeb08cf"
 
 _STEP_START = "##[group]Run ./scripts/console-smoke.sh"
 _STEP_END = "Process completed with exit code"
@@ -75,7 +132,12 @@ def normalise(raw: str) -> str:
     lines: list[str] = []
     inside = False
     for line in raw.splitlines():
-        stripped = _TIMESTAMP.sub("", line)
+        # Per line, not once at the top. `gh run view --log` emits a BOM at the start of
+        # every STEP - twelve in one job - and one of them is the `##[group]Run
+        # ./scripts/console-smoke.sh` line that opens the compared region. A BOM there
+        # pushes that line off `_TIMESTAMP`'s `^` anchor, so it keeps a per-run
+        # timestamp and the digest becomes unique to the run. B49.
+        stripped = _TIMESTAMP.sub("", line.lstrip("\ufeff"))
         if _STEP_START in stripped:
             inside = True
         if not inside:
@@ -97,7 +159,10 @@ def main() -> int:
     path = pathlib.Path(sys.argv[1])
     mode = sys.argv[2] if len(sys.argv) > 2 else ""
 
-    raw = path.read_text(encoding="utf-8", errors="replace")
+    # Byte 0 of every capture is a UTF-8 BOM. On the documented `gh api` path it sits on
+    # a line this script discards, so it never reached the digest; stripped anyway,
+    # because a normaliser that depends on which line the junk landed on is not one.
+    raw = path.read_text(encoding="utf-8", errors="replace").lstrip("\ufeff")
     if not raw.strip():
         # Refused rather than hashed. An empty capture produces a stable digest and no
         # verdict, which is how a fetch failure becomes a "divergence".

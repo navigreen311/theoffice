@@ -6022,3 +6022,77 @@ grants - `cre-forge/property_lookup` and `simforge/gate_result` - are active, ou
 scoped to burkham-wickmont, and among the dangling refs above. **Whatever settles `engineering`
 settles one of her three grants.** A resolution that does not say what happens to the other two
 has not finished.
+
+---
+
+## 77. The instrument we were checking the others with had never discriminated
+
+**Found 2026-09-14, on Ivan's instruction to diff Smoke against main's capture before merging #138
+rather than reason from docs-only.** *"Docs-only is a good reason to expect it's the documented red
+and not a substitute for checking — the ninth-failure case merged on exactly that reasoning."* The
+check passed. The instrument did not.
+
+### What the check found
+
+    FAILs      main=8   branch=8    identical, byte for byte
+    could-not-run   1        1
+    lines         432      432
+    hashes     934af341…  vs  b4ace092…
+
+**Eight and eight, identical, and two different digests.** The whole content difference was one
+timestamp on line 1 — `##[group]Run ./scripts/console-smoke.sh`, the line that opens the compared
+region — which the normaliser is built to strip and didn't.
+
+### The cause, and the correction to my first account of it
+
+A UTF-8 BOM sits between the start of that line and the timestamp, and `_TIMESTAMP` is anchored
+with `^`. B49 has the mechanism.
+
+**I reported the cause before finishing the measurement, and got it wrong in a way that mattered.**
+What I said was: every log GitHub serves carries a BOM at byte 0, so `--check` has never worked,
+including through the fetch the script documents. I had confirmed a BOM at byte 0 on the documented
+fetch and stopped there. Measured properly:
+
+    gh api .../jobs/<id>/logs       1 BOM, on a line the script discards
+    gh run view --log              12 BOMs, one per STEP - including the step-start line
+
+**So the instrument was correct through the port it documents and broken through the one we
+substituted for it.** "The tool never worked" and "we were using it through an undocumented port"
+are different findings with different repairs, and I recorded the first before checking whether it
+was the second. The BOM at byte 0 was real; the inference from it was not.
+
+`lstrip` at read time — the fix as first ruled, and as I first wrote it — does not fix this. It
+removes one BOM and the one that costs the digest is the twelfth. The hashes were unchanged after
+it, which is how the real shape surfaced.
+
+### The shape, third instance this week
+
+    entry 63   Gate 7 passed because its input set was empty
+    entry 76   Gate 9's second refusal has never run - a prior branch always answers first
+    entry 77   --check never distinguished anything - a working diff always answered first
+
+**In all three, something reported for a long time without ever having discriminated.** The first
+two were found with instruments; this one was in an instrument, and it was the one being used to
+check the other two. Nothing here was caught by a test, a gate or a review — it was caught by
+someone declining to accept a good reason in place of a measurement.
+
+### What the warning could not do
+
+`smoke_normalise.py` opens with a section refusing *"a number that could only be reproduced by the
+shell history that produced it"* — written after a prose recipe produced an irreproducible hash.
+`BASELINE` then had that exact property for four days. **The guard against unverifiable numbers was
+itself a paragraph**, and a paragraph does not run. Its replacement is three tests, two of which
+fail without the fix.
+
+### The baseline, re-recorded from two runs
+
+    c9f1f858148f6c83c262ba332a488eb9a9cd22a6240edd0b2a19d307bfeb08cf
+
+Taken from the documented fetch on two different runs — main `504ba1f` and branch `9aacd6f` — whose
+normalised text is byte-identical. **The previous baseline was taken from one run**, which is the
+condition that let it be wrong without anyone being able to tell. One run produces a number; two
+runs agreeing produce a baseline.
+
+The two fetch paths still cannot agree, and will not: `gh run view --log` renders the ANSI escape
+on the step's echoed command as `^[` where `gh api` returns the ESC byte. Recorded rather than
+normalised away, because masking a difference is how a comparison stops comparing.
