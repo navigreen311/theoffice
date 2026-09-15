@@ -45,12 +45,10 @@
       ],
       "forge_modules_operated": [
         "cre-forge/assign_contract",
-        "cre-forge/buyer_match",
-        "voiceforge/transcribe_call"
+        "cre-forge/buyer_match"
       ],
       "headcount": 2,
       "implied_compliance_flags": [
-        "recording_consent_required",
         "tsr_disclosure_required"
       ],
       "lifecycle_stages_owned": [

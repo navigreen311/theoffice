@@ -214,34 +214,13 @@
       "compliance_flag": "recording_consent_required, tsr_disclosure_required",
       "failure_and_escalation": "Proposal is rejected or times out: return to Buyer Network Manager with the reviewer's reason. Repeated rejection escalates to the venture operator.",
       "forge_modules": [
-        "transcribe_call"
-      ],
-      "inputs": [
-        "assign_context",
-        "transcribe_call_request"
-      ],
-      "number": 11,
-      "outputs": [
-        "transcribe_call_result"
-      ],
-      "position": "Buyer Network Manager",
-      "stage": "Assign",
-      "step": "Assign: Buyer Network Manager operates transcribe_call",
-      "success_metric": "transcribe_call returns a complete result and the ledger row records manifest_match=required",
-      "supporting": [],
-      "trigger": "agent_initiated"
-    },
-    {
-      "compliance_flag": "recording_consent_required, tsr_disclosure_required",
-      "failure_and_escalation": "Proposal is rejected or times out: return to Buyer Network Manager with the reviewer's reason. Repeated rejection escalates to the venture operator.",
-      "forge_modules": [
         "assign_contract"
       ],
       "inputs": [
         "close_context",
         "assign_contract_request"
       ],
-      "number": 12,
+      "number": 11,
       "outputs": [
         "assign_contract_result"
       ],
@@ -262,7 +241,7 @@
         "close_context",
         "buyer_match_request"
       ],
-      "number": 13,
+      "number": 12,
       "outputs": [
         "buyer_match_result"
       ],
@@ -270,27 +249,6 @@
       "stage": "Close",
       "step": "Close: Buyer Network Manager operates buyer_match",
       "success_metric": "buyer_match returns a complete result and the ledger row records manifest_match=required",
-      "supporting": [],
-      "trigger": "agent_initiated"
-    },
-    {
-      "compliance_flag": "recording_consent_required, tsr_disclosure_required",
-      "failure_and_escalation": "Proposal is rejected or times out: return to Buyer Network Manager with the reviewer's reason. Repeated rejection escalates to the venture operator.",
-      "forge_modules": [
-        "transcribe_call"
-      ],
-      "inputs": [
-        "close_context",
-        "transcribe_call_request"
-      ],
-      "number": 14,
-      "outputs": [
-        "transcribe_call_result"
-      ],
-      "position": "Buyer Network Manager",
-      "stage": "Close",
-      "step": "Close: Buyer Network Manager operates transcribe_call",
-      "success_metric": "transcribe_call returns a complete result and the ledger row records manifest_match=required",
       "supporting": [],
       "trigger": "agent_initiated"
     }

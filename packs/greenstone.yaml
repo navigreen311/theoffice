@@ -132,10 +132,13 @@ positions_required:
       - Match a contracted deal to buyers by fit
       - Circulate the assignment package
     # `voiceforge/place_call` removed 2026-09-15 - forbidden, as above.
-    # `voiceforge/transcribe_call` STAYS: the founder decision permits VoiceForge to
-    # assist a human on a call (transcription, coaching, note-taking) and forbids only
-    # dialling or speaking as one. Removing both would over-apply the ruling.
-    forge_modules_operated: [cre-forge/buyer_match, cre-forge/assign_contract, voiceforge/transcribe_call]
+    # `voiceforge/transcribe_call` removed 2026-09-15 with the whole VoiceForge binding
+    # (decisions entry 87). Not on the founder decision - it permits transcription - but
+    # because nothing serves it: no Office adapter, a registry row at example.invalid, no
+    # credential that resolves, no manual anywhere. `recording_consent_required` stays in
+    # scope below: the duty to capture consent on a recorded call belongs to whoever is
+    # on the call, and it does not leave with the Forge.
+    forge_modules_operated: [cre-forge/buyer_match, cre-forge/assign_contract]
     source_department: operations
     compliance_flags_in_scope: [recording_consent_required]
     headcount: 2
@@ -204,19 +207,13 @@ forge_dependencies:
       credential_mode: brokered
       cost_center: greenstone-training
 
-    - forge: voiceforge
-      api_version: 2.0.0
-      criticality: soft
-      # `place_call` removed 2026-09-15 - forbidden, as above. The binding stays,
-      # because `transcribe_call` is still operated and V32 resolves this list
-      # against the adapter. A binding listing a module no position operates is
-      # what V6 and V31 read, so the two halves are removed together.
-      modules_expected: [transcribe_call]
-      compliance_flags_propagated: [recording_consent_required]
-      fallback_behavior: manual_handoff
-      rate_limit_policy: {max_rps: 2, burst: 5, backoff: exponential, on_429: skip}
-      credential_mode: brokered
-      cost_center: greenstone-outreach
+    # VOICEFORGE BINDING REMOVED 2026-09-15 (decisions entry 87). It bound two modules:
+    # `place_call`, which a founder decision forbids (entry 6), and `transcribe_call`,
+    # which nothing serves - VoiceForge has no Office adapter, its registry row points at
+    # https://example.invalid and its credential ref does not resolve, and no manual for
+    # the module exists. V32 could never resolve it, so Gate 2 could never pass with it.
+    # What returns it: a VoiceForge that exists, an adapter for it, and a module somebody
+    # wants an agent to hold.
 
   external_software:
     - name: County recorder bulk data

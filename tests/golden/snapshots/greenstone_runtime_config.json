@@ -97,13 +97,6 @@
       "trust_tier": "propose"
     },
     {
-      "forge_id": "voiceforge",
-      "grant_id": "ac0fbe63-4877-5113-807d-787c68ccf69d",
-      "module_id": "transcribe_call",
-      "office_agent_id": "66666666-6666-5666-8666-666666666666",
-      "trust_tier": "propose"
-    },
-    {
       "forge_id": "cre-forge",
       "grant_id": "01f3fc09-679d-56b1-b8b0-5e3497787d17",
       "module_id": "assign_contract",
@@ -114,13 +107,6 @@
       "forge_id": "cre-forge",
       "grant_id": "2dbdcf9a-79e9-555e-954a-710ef5b8d79f",
       "module_id": "buyer_match",
-      "office_agent_id": "77777777-7777-5777-8777-777777777777",
-      "trust_tier": "propose"
-    },
-    {
-      "forge_id": "voiceforge",
-      "grant_id": "7f180599-7ff0-56b0-89e6-3814d3d11d84",
-      "module_id": "transcribe_call",
       "office_agent_id": "77777777-7777-5777-8777-777777777777",
       "trust_tier": "propose"
     }
@@ -134,7 +120,7 @@
       "module_id": "assign_contract",
       "required": true,
       "required_by": [
-        "workflow step 12",
+        "workflow step 11",
         "workflow step 9"
       ]
     },
@@ -147,7 +133,7 @@
       "required": true,
       "required_by": [
         "workflow step 10",
-        "workflow step 13"
+        "workflow step 12"
       ]
     },
     {
@@ -186,18 +172,6 @@
       ]
     },
     {
-      "criticality": "soft",
-      "declared": true,
-      "forge_id": "voiceforge",
-      "module_gap": false,
-      "module_id": "transcribe_call",
-      "required": true,
-      "required_by": [
-        "workflow step 11",
-        "workflow step 14"
-      ]
-    },
-    {
       "criticality": "hard",
       "declared": true,
       "forge_id": "cre-forge",
@@ -218,10 +192,6 @@
     "simforge": {
       "burst": 3.0,
       "max_rps": 1.0
-    },
-    "voiceforge": {
-      "burst": 5.0,
-      "max_rps": 2.0
     }
   },
   "venture_id": "greenstone"

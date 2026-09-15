@@ -6852,3 +6852,90 @@ alone, pass **Gate 1**, and **stop at Gate 2**. The validator on the stored live
     V24           NOT_RUN, deferred to Gate 4.5
 
 **No grant would be written:** Gate 5 is three gates past where it stops.
+
+---
+
+## 87. Greenstone's VoiceForge binding removed, its CRE instructions authored, and the Smoke baseline re-recorded
+
+**Ruled 2026-09-15 by Ivan, as three items.**
+
+### The CRE instructions: authored (development database, not this diff)
+
+`scripts/author_cre_forge_instructions.py` ran against `theoffice`. It wrote five instructions
+at version 1.1.0 against Forge API 1.4.0, the registry's version, all attributed to Ivan:
+
+    cre-forge/property_lookup   5aab8992fefb4910
+    cre-forge/comp_analysis     d57e1d204bbb51c7
+    cre-forge/buyer_match       648e494d60261641
+    cre-forge/underwrite_deal   f06db69c8768d907
+    cre-forge/assign_contract   cacf28ef5ba0113b     five distinct hashes, so V33 holds
+
+This is a script run and not an authoring project: the content was already written, from CRE
+Forge's own adapter and services, on 7 September. It was not the CapitalForge derivation.
+`derive_capitalforge_instructions.py` reads only `docs/instructions/capitalforge-*.md`, and no
+CRE manual exists there. The live-instruction count had been 0 since the database reset on
+13 September.
+
+### The VoiceForge binding: removed
+
+**What it bound:**
+- `place_call` - founder-forbidden (entry 6), already off the positions (entries 83-84).
+- `transcribe_call` - which **nothing serves.** VoiceForge has no Office adapter, its registry
+  row points at `https://example.invalid`, its credential reference does not resolve, and no
+  manual for the module exists in any repository here.
+
+V32 could never resolve the binding, so **Gate 2 could never pass with it in the Pack.**
+Building an adapter to satisfy it would have been work in service of a binding nobody needs.
+
+**Removed:** `voiceforge/transcribe_call` from the Buyer Network Manager, and the whole
+`forge: voiceforge` block from `forge_dependencies`.
+
+**Not removed:** the Pack's `TWO_PARTY_CONSENT_RECORDING` framework, the Buyer Network
+Manager's declared `recording_consent_required`, and scenarios bn-001 and bn-003. The duty to
+capture consent on a recorded call belongs to whoever is on the call, and it does not leave
+with a Forge. The flag is now declared rather than implied by a module.
+
+**What returns it:** a VoiceForge that exists, an Office adapter for it, and a module somebody
+wants an agent to hold. All three, not one of them.
+
+**Consequences, measured:**
+
+    workflow and grant plan    transcribe_call's steps and planned grants gone
+    approvals a day            160 -> 128 (768 review-minutes against 144; V13 still blocks)
+    snapshots                  seven re-recorded; no transcribe_call or voiceforge line remains
+    V26, V27 tests             had borrowed Greenstone's only soft binding - VoiceForge - as
+                               their fixture, and lost their subject. They now make their own
+                               soft binding and module gap. Entry 73's shape, a third time.
+    end-to-end content test    re-anchored transcribe_call -> comp_analysis, on the operating
+                               Forge, so the next binding removal cannot move it again
+
+**V26 now passes on an empty set** for this Pack: "soft dependencies declare a fallback", with
+no soft dependencies to declare one. Recorded, not changed. It is entry 63's shape, and it
+does not block anything.
+
+### Gate 2, measured after both changes
+
+    edited Pack                0 FAIL, 5 NOT_RUN
+      V11 NOT_RUN   all 5 instructions authored (comp_analysis and property_lookup rated
+                    thin, which passes); whether the modules exist needs CRE Forge reachable
+      V29, V30      NOT_RUN - Village unreachable
+      V32 NOT_RUN   cre-forge and simforge unreachable
+      V24           deferred to Gate 4.5
+      V31           gone with voiceforge/place_call
+    live Pack 1.6.0 (stored)   V11 FAIL on transcribe_call alone, until a new version is
+                               published
+
+**Nothing left at Gate 2 is authoring.** Every remaining item is a service that is not
+running: the Village on 8120, CRE Forge on 8011, SimForge on 8110.
+
+### The Smoke baseline: re-recorded
+
+**A baseline that reports a false diff is the hash problem in a different field.** B49 fixed a
+digest decided by a BOM. This one was decided by a count: the baseline was recorded on 15
+September from a run on #138's branch, when the validator had 34 rules. #140 added V38, and
+main's own Smoke run has differed on `(34)` -> `(35)` in two lines ever since. Merging #142
+past that divergence would teach what B49 refused to: that a divergence is ignorable.
+
+Re-recorded by B49's rule - **two runs on the final commit, byte-identical after
+normalisation** - and checked on a third run. The run and job ids are in the commit that
+changes `BASELINE`.

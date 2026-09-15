@@ -385,34 +385,34 @@ async def test_authored_content_reaches_the_artifact_end_to_end(
     P-06/07/08 fill. This threads a content set through `generate` and asserts the
     authored fields arrive.
 
-    `transcribe_call` is used because it is a real Greenstone module with a live
+    `comp_analysis` is used because it is a real Greenstone module with a live
     instruction; the content is built here rather than read from `scenarios/`, so the
     test says what it depends on instead of depending on a file it does not name.
 
-    RE-ANCHORED 15 September 2026 from `place_call`, in the same change that removes it
-    from the Pack (decisions entry 83). `place_call` is forbidden and no position
-    operates it any more, so the curriculum has no row for it to carry authored content
-    into. `transcribe_call` is the same Forge and the half of it the founder decision
-    permits, and the property - authored fields arrive in the artifact - is unchanged.
+    RE-ANCHORED twice on 15 September 2026: from `place_call` when that left the Pack
+    (entry 83), then from `transcribe_call` when the whole VoiceForge binding did (entry
+    87). Each time the property - authored fields arrive in the artifact - was unchanged
+    and only the module moved. `comp_analysis` is on the operating Forge, which a Pack
+    cannot provision without, so the next binding removal is not going to move it again.
     """
     from generators import curriculum as curriculum_gen
     from generators import scenario_content as sc
 
     authored = sc.ModuleContent(
-        module_id="transcribe_call",
-        forge_id="voiceforge",
+        module_id="comp_analysis",
+        forge_id="cre-forge",
         scenarios={
             "happy_path": sc.AuthoredScenario(
                 scenario_class="happy_path",
-                situation="A manager asks for the buyer call they just finished to be transcribed.",
-                expected_behavior="Transcribe the call and return the transcript to the manager.",
+                situation="An analyst needs comparable sales for a candidate before valuing it.",
+                expected_behavior="Run comp_analysis for the subject and report the comps.",
                 expected_escalation="None; the boundary is a named recipient.",
             )
         },
         not_applicable={"rate_limited": "No section of this instruction has one."},
     )
     content = sc.ScenarioContentSet(
-        root=sc.default_root(), root_exists=True, modules={"transcribe_call": authored}
+        root=sc.default_root(), root_exists=True, modules={"comp_analysis": authored}
     )
 
     certify_for_positions(admin)
@@ -429,7 +429,7 @@ async def test_authored_content_reaches_the_artifact_end_to_end(
         )
 
     rows = {s.scenario_class: s for s in curriculum.operation_scenarios
-            if s.module_id == "transcribe_call"}
+            if s.module_id == "comp_analysis"}
 
     assert rows["happy_path"].summary == authored.scenarios["happy_path"].situation
     assert rows["happy_path"].expected_escalation
@@ -443,7 +443,7 @@ async def test_authored_content_reaches_the_artifact_end_to_end(
 
     covered = {c.dimension: c for c in curriculum.coverage}
     assert covered["modules_with_authored_scenario_content"].covered == 1
-    assert "transcribe_call" not in covered["modules_with_authored_scenario_content"].uncovered
+    assert "comp_analysis" not in covered["modules_with_authored_scenario_content"].uncovered
 
 
 async def test_domain_and_operation_scenarios_are_never_merged(artifacts):

@@ -8,7 +8,7 @@
       "module_id": "assign_contract",
       "required": true,
       "required_by": [
-        "workflow step 12",
+        "workflow step 11",
         "workflow step 9"
       ]
     },
@@ -21,7 +21,7 @@
       "required": true,
       "required_by": [
         "workflow step 10",
-        "workflow step 13"
+        "workflow step 12"
       ]
     },
     {
@@ -57,18 +57,6 @@
       "required_by": [
         "workflow step 2",
         "workflow step 4"
-      ]
-    },
-    {
-      "criticality": "soft",
-      "declared": true,
-      "forge_id": "voiceforge",
-      "module_gap": false,
-      "module_id": "transcribe_call",
-      "required": true,
-      "required_by": [
-        "workflow step 11",
-        "workflow step 14"
       ]
     },
     {

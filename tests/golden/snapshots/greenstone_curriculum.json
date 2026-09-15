@@ -7,8 +7,8 @@
       "uncovered": []
     },
     {
-      "covered": 6,
-      "denominator": 6,
+      "covered": 5,
+      "denominator": 5,
       "dimension": "modules_with_operation_scenarios",
       "uncovered": []
     },
@@ -25,21 +25,20 @@
       "uncovered": []
     },
     {
-      "covered": 6,
-      "denominator": 6,
+      "covered": 5,
+      "denominator": 5,
       "dimension": "modules_with_authored_instructions",
       "uncovered": []
     },
     {
       "covered": 0,
-      "denominator": 6,
+      "denominator": 5,
       "dimension": "modules_with_authored_scenario_content",
       "uncovered": [
         "assign_contract",
         "buyer_match",
         "comp_analysis",
         "property_lookup",
-        "transcribe_call",
         "underwrite_deal"
       ]
     },
@@ -54,14 +53,13 @@
     },
     {
       "covered": 0,
-      "denominator": 6,
+      "denominator": 5,
       "dimension": "modules_accounting_for_every_submittable_class",
       "uncovered": [
         "assign_contract",
         "buyer_match",
         "comp_analysis",
         "property_lookup",
-        "transcribe_call",
         "underwrite_deal"
       ]
     }
@@ -402,54 +400,6 @@
       "role": "",
       "scenario_class": "permission_denied",
       "scenario_id": "op-property_lookup-permission_denied",
-      "summary": ""
-    },
-    {
-      "compliance_flags_exercised": [],
-      "domain": "operation",
-      "expected_behavior": "",
-      "expected_escalation": "",
-      "instruction_content_hash": "d3eda70b37910a69d3248d2499153c4c34a138e1a19873ee190e6f11ee998c11",
-      "instruction_section": "retry_vs_escalate",
-      "kind": "operation",
-      "module_id": "transcribe_call",
-      "never_do_entry": "",
-      "not_applicable_reason": "",
-      "role": "",
-      "scenario_class": "escalation_required",
-      "scenario_id": "op-transcribe_call-escalation_required",
-      "summary": ""
-    },
-    {
-      "compliance_flags_exercised": [],
-      "domain": "operation",
-      "expected_behavior": "",
-      "expected_escalation": "",
-      "instruction_content_hash": "d3eda70b37910a69d3248d2499153c4c34a138e1a19873ee190e6f11ee998c11",
-      "instruction_section": "correct_sequence",
-      "kind": "operation",
-      "module_id": "transcribe_call",
-      "never_do_entry": "",
-      "not_applicable_reason": "",
-      "role": "",
-      "scenario_class": "happy_path",
-      "scenario_id": "op-transcribe_call-happy_path",
-      "summary": ""
-    },
-    {
-      "compliance_flags_exercised": [],
-      "domain": "operation",
-      "expected_behavior": "",
-      "expected_escalation": "",
-      "instruction_content_hash": "d3eda70b37910a69d3248d2499153c4c34a138e1a19873ee190e6f11ee998c11",
-      "instruction_section": "failure_signatures",
-      "kind": "operation",
-      "module_id": "transcribe_call",
-      "never_do_entry": "",
-      "not_applicable_reason": "",
-      "role": "",
-      "scenario_class": "permission_denied",
-      "scenario_id": "op-transcribe_call-permission_denied",
       "summary": ""
     },
     {

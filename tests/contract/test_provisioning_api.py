@@ -308,10 +308,10 @@ async def test_the_real_pack_blocks_at_gate_4_5_through_the_api(world, api, pack
 
     assert result["status"] == "blocked"
     assert result["current_gate"] == "4.5"
-    # 160 since voiceforge/place_call left the Pack on 2026-09-15 (decisions entry 83):
-    # the 32 a day V13 billed for a module no agent may call. See test_pipeline.py for
-    # the full arc of this figure.
-    assert "160 approvals" in result["outcomes"][-1]["reason"]
+    # 128 since the VoiceForge binding left the Pack on 2026-09-15 (decisions entries 83
+    # and 87): place_call was forbidden and transcribe_call was served by nothing. See
+    # test_pipeline.py for the full arc of this figure.
+    assert "128 approvals" in result["outcomes"][-1]["reason"]
 
 
 async def test_a_run_from_the_console_stops_at_gate_9_5(world, api, feasible_yaml):

@@ -92,7 +92,7 @@ async def test_a_run_stops_at_the_first_blocking_gate_and_names_it(
     """P3 - a state machine, not a script.
 
     This is the real Greenstone Pack, and it blocks at 4.5 on a real finding: the
-    generated workflow routes 160 compliance approvals a day against one officer's four
+    generated workflow routes 128 compliance approvals a day against one officer's four
     coverage hours. The gate stops there and says the number, rather than continuing to
     Gate 5 and issuing grants for a venture nobody can supervise.
     """
@@ -129,7 +129,11 @@ async def test_a_run_stops_at_the_first_blocking_gate_and_names_it(
         # a day were review demand for work that can never happen. Unlike September 2,
         # nothing real was removed. The gate still blocks - the reviewer is Dana, who
         # does not exist (entry 59) - so this is still not an improvement.
-        assert "160 approvals" in blocking.reason
+        #
+        # 128 later the same day (entry 87): the VoiceForge binding went, and with it
+        # `transcribe_call`'s steps. Nothing served that module either, so again no
+        # capability left - only demand for one. Still blocks.
+        assert "128 approvals" in blocking.reason
         assert "compliance officer" in blocking.reason
         assert state is not None
         assert state.status == "blocked"

@@ -53,13 +53,11 @@
           "agent_name": "Faye Buyers",
           "certified_modules": [
             "assign_contract",
-            "buyer_match",
-            "transcribe_call"
+            "buyer_match"
           ],
           "certified_tiers": {
             "cre-forge/assign_contract": "propose",
-            "cre-forge/buyer_match": "propose",
-            "voiceforge/transcribe_call": "propose"
+            "cre-forge/buyer_match": "propose"
           },
           "department": "operations",
           "office_agent_id": "66666666-6666-5666-8666-666666666666"
@@ -68,13 +66,11 @@
           "agent_name": "Gil Network",
           "certified_modules": [
             "assign_contract",
-            "buyer_match",
-            "transcribe_call"
+            "buyer_match"
           ],
           "certified_tiers": {
             "cre-forge/assign_contract": "propose",
-            "cre-forge/buyer_match": "propose",
-            "voiceforge/transcribe_call": "propose"
+            "cre-forge/buyer_match": "propose"
           },
           "department": "operations",
           "office_agent_id": "77777777-7777-5777-8777-777777777777"

@@ -26,6 +26,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - **Not a scheduler.** The window ends and nothing follows it (entry 81).
 
 ### Changed
+- **Greenstone's VoiceForge binding removed** (decisions entry 87). It bound `place_call`
+  (founder-forbidden) and `transcribe_call`, which nothing serves: no Office adapter, a
+  registry row at `example.invalid`, no credential and no manual. V32 could never resolve it.
+  The Pack's recording-consent framework and the Buyer Network Manager's declared flag stay.
+  Approvals fall 160 -> 128, and V13 still blocks. The V26 and V27 rule tests build their own
+  soft binding now, rather than borrowing VoiceForge's.
+- **Gate 11 activates only grants whose agent identity is active** (entry 85). Suspended,
+  revoked or retired agents' grants are withheld and named in the reason line, as B53 does
+  for revoked grants.
 - **`voiceforge/place_call` removed from the Greenstone Pack** (decisions entries 73 and 83).
   It is forbidden in `forge_module_exclusion` by a founder decision, so no grant for it could
   ever exist; declaring it only produced review demand. `voiceforge/transcribe_call` stays.
