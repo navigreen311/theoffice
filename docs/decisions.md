@@ -6157,3 +6157,77 @@ has not been tested by the world yet, and the three ways that happens are all he
 sense - every line involved is correct. What is missing in each case is any assertion
 that the rule was ever handed something to rule on. Entry 63 named that gap and did not
 close it; it is still open, and it is now three findings wide.
+
+---
+
+## 79. Three corrections and a step nothing performs
+
+**Recorded 2026-09-14, at the close of the session. Read-only throughout; nothing was
+signed, activated or completed.**
+
+### What was NOT recorded, and why
+
+**A Gate 10 signature and a run completion were both directed and neither was written.**
+The run is where it has been since 19:57:
+
+    run 8ed2f39a   gate=9   status=blocked   pack=0.10.0
+    signoff_record 0 rows, database-wide
+    grants         49 total, 0 active, 0 assignable
+
+Gates 10, 11 and 12 have never been evaluated on this run - no rows. There is no completion
+to record. The Gate 10 note was declined separately, with five measured falsehoods set out
+and substitutions proposed; that authorisation did not arrive, so nothing was signed.
+
+**A record of a completion that did not happen is the one thing this ledger cannot carry.**
+Every other entry here is recoverable by re-reading the system. That one would not be.
+
+### The numbers, corrected against the database rather than against memory
+
+    directed            measured
+    ------------------  --------------------------------------------------------
+    34 activated        45 - Gate 11's exact predicate, run live, returns 45
+    30 activated        the same 45; 34 is entry 64's pre-deactivation count
+    19 unselectable     30 unselectable; 19 is the count of distinct TRIPLES
+    15 triples          19 triples: 15 crowded at x3 (45 rows) + 4 singletons
+
+**Entry 67 measured the duplicates at two per triple. It is three now** - bootstrap, then
+`runtime_config.apply` on the aborted run, then again on this one. Each run adds a layer and
+nothing reconciles, so the figure is not stable and a number quoted from an earlier entry is
+a number about an earlier world.
+
+### The Gate 11 fix is correct, untested by any run, and NOT inert
+
+B53's fix withholds revoked grants from activation. It has **never executed in production**,
+because no run has reached Gate 11 - it is proven by a test that fails without it, not by a
+green run, and a green run would not have proven it either.
+
+**The reason offered for calling it unexercised was inverted, and the distinction matters.**
+*"The four were already inactive, so `covered_grants()` excluded nothing"* - being inactive
+is what makes a grant a CANDIDATE for Gate 11; being covered is what withholds it. The four
+are inactive **and** covered, so they are exactly the rows the new term removes. Against the
+live database:
+
+    with the NOT (grant_id = ANY(covered)) term      45
+    without it                                       49
+
+**The fix does work on this venture's real state. What it has not had is a run.** Those are
+different claims and only the second is true.
+
+### The finding: the ladder authorises and does not schedule
+
+Recorded as B55. Every brokered call asserts `assert_on_shift_for`; **no gate writes a
+shift**; `shift_assignment` holds zero rows for zero agents. `bootstrap_phase0` assigns one
+as the fifth of its five writes and says why - *"a grant without a shift is refused"* - and
+the ladder has no equivalent step.
+
+**So Gate 12's "live" means authorised, not operating.** A venture can clear all twelve
+gates and be unable to make a single call, and nothing in the run would say so: `is_assignable`
+is generated from certification refs and `activated_at`, and no rule compares a grant to a
+shift.
+
+**This is the same shape as entries 63, 77 and 78, arriving from the other side.** Those were
+controls that had never been exercised. This is a control - `assert_on_shift_for` - that is
+exercised on every call and that **nothing upstream is built to satisfy**. Green by never
+arriving, and its mirror: red by never being prepared for. Neither is visible from inside
+the ladder, because the ladder's last gate reports on what it granted rather than on whether
+anything can act.

@@ -5003,3 +5003,56 @@ Two smaller things the move surfaced, both existing guards doing their job:
   implemented and reserved ids, and it refuses a reserved id that turns out to be
   implemented.
 
+---
+
+## B55 — the ladder authorises and does not schedule: no gate assigns a shift, and no agent has one
+
+**`theoffice`** · Found 2026-09-14, read-only, NOT fixed. **Not a defect in any gate. A step
+nothing in the ladder performs.**
+
+Every brokered call passes through `client/office_client.py:260`:
+
+    await shifts.assert_on_shift_for(conn, office_agent_id=..., venture_id=...)
+
+which raises `OffShift` when `current_shift` returns nothing: *"agent is not on shift; calls
+must occur within an assigned shift."*
+
+**Nothing in the sixteen gates writes a `shift_assignment` row.** `grep` for `assign_shift`
+and `shift_assignment` across `broker/provisioning.py` and `generators/` returns nothing at
+all. `bootstrap_phase0` does it as the fifth of its five writes - its docstring is explicit:
+*"this issues the minimum: one identity, two certifications, one grant, one shift"*, and
+*"a grant without a shift is refused by `assert_on_shift_for`."* **The ladder has no
+equivalent step.**
+
+So a venture can pass all twelve gates - artifacts signed, grants activated, certifications
+in force, revocation armed - and every agent it appointed is refused at the first call, by a
+rule that is correct and that nothing upstream satisfies.
+
+### Measured
+
+    shift_assignment rows, whole database             0
+    distinct agents ever on shift                     0
+    gates that write a shift row                      0
+    callers of assert_on_shift_for                    1  (every brokered call)
+
+**Nobody has a shift. Not the bootstrap agents, not anybody.** The bootstrap writes one and
+the table is empty now; whether the rows expired or were never committed is not established
+here and should not be guessed at.
+
+### Why this is the honest reading of Gate 12
+
+Gate 12 reports `live: N of M grant(s) assignable; trust tiers active, revocation armed`.
+Every clause is true and **"live" means authorised, not operating.** `is_assignable` is
+generated from two certification refs and `activated_at`; it says nothing about whether a
+call can be made, and no gate asks.
+
+The distinction the ladder does not draw: **authorisation is a property of a grant,
+scheduling is a property of a shift, and provisioning produces only the first.** Phase 0
+produced both because it was written as one command with one agent in mind. The ladder
+generalised the authorising half and left the scheduling half behind, and nothing notices
+because no rule compares them.
+
+**Blocks:** any brokered call by any agent on any venture, today. It does not block the
+ladder, which is the point - a run can complete and report success over a venture that
+cannot make a single call.
+
