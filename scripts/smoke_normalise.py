@@ -112,7 +112,18 @@ import sys
 #: `^[` instead of the ESC byte, so that path has a different digest for the same job and
 #: always will. Compare captures taken the same way, or compare the text and not the
 #: number.
-BASELINE = "c9f1f858148f6c83c262ba332a488eb9a9cd22a6240edd0b2a19d307bfeb08cf"
+#:
+#: **Re-recorded 2026-09-15 (decisions entry 87), by the same rule.** `c9f1f858` went stale
+#: when #140 added V38: main's own Smoke run then differed on `(34)` -> `(35)` in two lines,
+#: so every PR reported DIVERGENT and the check could not tell a regression from a rule
+#: count. The new value also carries #142's one intended line, `8 declared` -> `6 declared`,
+#: from Greenstone's VoiceForge manifest rows leaving. Two runs on the same commit:
+#:
+#:     job 104506941439   branch  8d455d0       run 35006348454 attempt 1
+#:     job 104508683091   branch  8d455d0       run 35006348454 attempt 2
+#:
+#: byte-identical after normalisation, 432 lines, the same eight FAILs.
+BASELINE = "88904f90974af084eb0509857203ebfb7816bbdabfe62a777c5d5f6411a71d30"
 
 _STEP_START = "##[group]Run ./scripts/console-smoke.sh"
 _STEP_END = "Process completed with exit code"

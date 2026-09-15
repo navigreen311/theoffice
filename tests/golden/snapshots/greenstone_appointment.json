@@ -6,13 +6,11 @@
           "agent_name": "Ada Sourcing",
           "certified_modules": [
             "comp_analysis",
-            "place_call",
             "property_lookup"
           ],
           "certified_tiers": {
             "cre-forge/comp_analysis": "auto_execute",
-            "cre-forge/property_lookup": "auto_execute",
-            "voiceforge/place_call": "auto_execute"
+            "cre-forge/property_lookup": "auto_execute"
           },
           "department": "research",
           "office_agent_id": "11111111-1111-5111-8111-111111111111"
@@ -21,13 +19,11 @@
           "agent_name": "Bram Records",
           "certified_modules": [
             "comp_analysis",
-            "place_call",
             "property_lookup"
           ],
           "certified_tiers": {
             "cre-forge/comp_analysis": "auto_execute",
-            "cre-forge/property_lookup": "auto_execute",
-            "voiceforge/place_call": "auto_execute"
+            "cre-forge/property_lookup": "auto_execute"
           },
           "department": "research",
           "office_agent_id": "22222222-2222-5222-8222-222222222222"
@@ -36,13 +32,11 @@
           "agent_name": "Cleo Comps",
           "certified_modules": [
             "comp_analysis",
-            "place_call",
             "property_lookup"
           ],
           "certified_tiers": {
             "cre-forge/comp_analysis": "auto_execute",
-            "cre-forge/property_lookup": "auto_execute",
-            "voiceforge/place_call": "auto_execute"
+            "cre-forge/property_lookup": "auto_execute"
           },
           "department": "research",
           "office_agent_id": "33333333-3333-5333-8333-333333333333"
@@ -59,15 +53,11 @@
           "agent_name": "Faye Buyers",
           "certified_modules": [
             "assign_contract",
-            "buyer_match",
-            "place_call",
-            "transcribe_call"
+            "buyer_match"
           ],
           "certified_tiers": {
             "cre-forge/assign_contract": "propose",
-            "cre-forge/buyer_match": "propose",
-            "voiceforge/place_call": "propose",
-            "voiceforge/transcribe_call": "propose"
+            "cre-forge/buyer_match": "propose"
           },
           "department": "operations",
           "office_agent_id": "66666666-6666-5666-8666-666666666666"
@@ -76,15 +66,11 @@
           "agent_name": "Gil Network",
           "certified_modules": [
             "assign_contract",
-            "buyer_match",
-            "place_call",
-            "transcribe_call"
+            "buyer_match"
           ],
           "certified_tiers": {
             "cre-forge/assign_contract": "propose",
-            "cre-forge/buyer_match": "propose",
-            "voiceforge/place_call": "propose",
-            "voiceforge/transcribe_call": "propose"
+            "cre-forge/buyer_match": "propose"
           },
           "department": "operations",
           "office_agent_id": "77777777-7777-5777-8777-777777777777"

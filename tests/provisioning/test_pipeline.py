@@ -92,7 +92,7 @@ async def test_a_run_stops_at_the_first_blocking_gate_and_names_it(
     """P3 - a state machine, not a script.
 
     This is the real Greenstone Pack, and it blocks at 4.5 on a real finding: the
-    generated workflow routes 160 compliance approvals a day against one officer's four
+    generated workflow routes 128 compliance approvals a day against one officer's four
     coverage hours. The gate stops there and says the number, rather than continuing to
     Gate 5 and issuing grants for a venture nobody can supervise.
     """
@@ -122,7 +122,18 @@ async def test_a_run_stops_at_the_first_blocking_gate_and_names_it(
         # dispatches. The gate blocks either way, which is why the fall to 160 was not
         # an improvement and this rise is not a regression: the review load was always
         # going to be real once the work was.
-        assert "192 approvals" in blocking.reason
+        #
+        # 160 again from 2026-09-15, for a different reason (decisions entries 73 and
+        # 83). `voiceforge/place_call` left the Pack: it is forbidden in
+        # forge_module_exclusion, so no agent could ever hold it, and its 32 approvals
+        # a day were review demand for work that can never happen. Unlike September 2,
+        # nothing real was removed. The gate still blocks - the reviewer is Dana, who
+        # does not exist (entry 59) - so this is still not an improvement.
+        #
+        # 128 later the same day (entry 87): the VoiceForge binding went, and with it
+        # `transcribe_call`'s steps. Nothing served that module either, so again no
+        # capability left - only demand for one. Still blocks.
+        assert "128 approvals" in blocking.reason
         assert "compliance officer" in blocking.reason
         assert state is not None
         assert state.status == "blocked"
@@ -653,10 +664,104 @@ async def test_gate_11_still_activates_everything_when_nothing_is_revoked(
     gate_11 = next(o for o in outcomes if o.gate == "11")
     assert activated == total and total > 0
     assert gate_11.evidence["withheld_revoked"] == 0
+    assert gate_11.evidence["withheld_inactive_identity"] == 0
     assert "NOT activated" not in gate_11.reason, (
         "the withheld clause must be absent, not zero - a reason line that always "
         "mentions revocation trains a reader to skip it"
     )
+
+
+async def test_gate_11_does_not_activate_a_grant_whose_agent_is_not_active(
+    feasible_pack, operator, signer, admin: psycopg.Connection
+):
+    """B53's sibling: a gate activating on one condition when two matter.
+
+    The foreign key on `agent_forge_grant.office_agent_id` guarantees the identity
+    EXISTS. It says nothing about its status, and Gate 11 never read it. `resolve_grant`
+    refuses a non-active identity on every call (`IdentityInactive`), so this is the
+    record rather than the authority: without the condition, a suspended agent's grant
+    carries `activated_by = <the signer>` for authority that agent could never exercise.
+
+    **Gate 10 catches it first, until somebody re-signs.** Suspending an appointed agent
+    changes the regenerated artifacts, so the existing signature goes VOID and the run
+    waits at Gate 10 - found while writing this test. A signature over the NEW artifacts
+    clears Gate 10, and Gate 11's UPDATE is venture-wide over `activated_at IS NULL`, so
+    the suspended agent's Gate 5 grants were still in the set it activated. The test walks
+    that path rather than the one Gate 10 already closes.
+    """
+    async with connection() as conn:
+        run_id = await _to_gate_10(conn, operator, signer)
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "SELECT office_agent_id, count(*) FROM agent_forge_grant "
+                " WHERE venture_id = %s GROUP BY office_agent_id "
+                " ORDER BY office_agent_id LIMIT 1",
+                (VENTURE,),
+            )
+            agent_id, held = await cur.fetchone()
+            await cur.execute("SELECT count(*) FROM agent_forge_grant WHERE venture_id = %s",
+                              (VENTURE,))
+            total = (await cur.fetchone())[0]
+        assert total > held, "this test needs grants on another, still-active agent"
+
+    with admin.cursor() as cur:
+        cur.execute(
+            "UPDATE office_agent_identity SET status = 'suspended' WHERE office_agent_id = %s",
+            (agent_id,),
+        )
+    admin.commit()
+    try:
+        async with connection() as conn:
+            voided = await provisioning.advance(
+                conn, run_id=run_id, actor=operator.human_id, held_out=HeldOutPasses()
+            )
+            gate_10 = next(o for o in voided if o.gate == "10")
+            assert gate_10.verdict == provisioning.AWAITING_HUMAN, (
+                "suspending an appointed agent should void the signature - if it no longer "
+                "does, Gate 10 stopped protecting this path and Gate 11 is the only guard"
+            )
+            await humans.sign_off(
+                conn, gate="gate_10", venture_id=VENTURE, human=signer,
+                artifact_kind="provisioning_artifacts",
+                artifact_hash_value=gate_10.evidence["artifacts_hash"],
+                note="re-signed over the artifacts regenerated without the suspended agent",
+            )
+            outcomes = await provisioning.advance(
+                conn, run_id=run_id, actor=operator.human_id, held_out=HeldOutPasses()
+            )
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "SELECT count(activated_at), count(activated_by) FROM agent_forge_grant "
+                    " WHERE venture_id = %s AND office_agent_id = %s", (VENTURE, agent_id),
+                )
+                suspended_activated, suspended_activator = await cur.fetchone()
+                await cur.execute(
+                    "SELECT count(activated_at) FROM agent_forge_grant WHERE venture_id = %s",
+                    (VENTURE,),
+                )
+                activated_total = (await cur.fetchone())[0]
+    finally:
+        with admin.cursor() as cur:
+            cur.execute(
+                "UPDATE office_agent_identity SET status = 'active' "
+                " WHERE office_agent_id = %s", (agent_id,),
+            )
+        admin.commit()
+
+    gate_11 = next(o for o in outcomes if o.gate == "11")
+    assert gate_11.verdict == provisioning.PASSED, (
+        "one suspended agent is not a reason to block the venture"
+    )
+    assert suspended_activated == 0 and suspended_activator == 0, (
+        "Gate 11 activated grants for a suspended identity - the call path refuses them, "
+        "and the row now records a signer activating authority nobody could use"
+    )
+    assert activated_total == total - held
+    assert gate_11.evidence["withheld_inactive_identity"] == held
+    assert gate_11.evidence["inactive_identity_statuses"] == {"suspended": held}
+    assert gate_11.evidence["withheld_revoked"] == 0
+    assert "agent identity not active" in gate_11.reason
+    assert "suspended" in gate_11.reason
 
 
 async def test_a_revocation_lifted_before_gate_11_does_not_withhold_the_grant(

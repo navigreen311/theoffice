@@ -1582,14 +1582,18 @@ async def _gate_11(ctx: _Context) -> GateOutcome:
     covered = await revocation.covered_grants(ctx.conn, venture_id=ctx.venture_id)
     async with ctx.conn.cursor() as cur:
         await cur.execute(
-            "UPDATE agent_forge_grant SET activated_at = now(), activated_by = %s "
-            " WHERE venture_id = %s AND activated_at IS NULL "
-            "   AND NOT (grant_id = ANY(%s))",
+            "UPDATE agent_forge_grant g SET activated_at = now(), activated_by = %s "
+            "  FROM office_agent_identity i "
+            " WHERE i.office_agent_id = g.office_agent_id AND i.status = 'active' "
+            "   AND g.venture_id = %s AND g.activated_at IS NULL "
+            "   AND NOT (g.grant_id = ANY(%s))",
             (ctx.actor, ctx.venture_id, list(covered)),
         )
         activated = cur.rowcount
-        # Counted after the UPDATE, from the same predicate, so the figure is what this
-        # gate actually declined rather than what it would decline if asked again.
+        # Counted after the UPDATE, from the same predicates, so the figures are what this
+        # gate actually declined rather than what it would decline if asked again. Each
+        # withheld grant is counted once, revocation first: a revoked grant held by an
+        # inactive agent is withheld for the reason somebody documented.
         await cur.execute(
             "SELECT count(*) FROM agent_forge_grant "
             " WHERE venture_id = %s AND activated_at IS NULL "
@@ -1598,7 +1602,17 @@ async def _gate_11(ctx: _Context) -> GateOutcome:
         )
         row = await cur.fetchone()
         skipped = int(row[0]) if row else 0
+        await cur.execute(
+            "SELECT i.status, count(*) FROM agent_forge_grant g "
+            "  JOIN office_agent_identity i ON i.office_agent_id = g.office_agent_id "
+            " WHERE g.venture_id = %s AND g.activated_at IS NULL "
+            "   AND i.status <> 'active' AND NOT (g.grant_id = ANY(%s)) "
+            " GROUP BY i.status ORDER BY i.status",
+            (ctx.venture_id, list(covered)),
+        )
+        inactive_by_status = {str(r[0]): int(r[1]) for r in await cur.fetchall()}
     await ctx.conn.commit()
+    inactive = sum(inactive_by_status.values())
 
     scopes = sorted({c.scope for c in covered.values()})
     # Named in the reason, not only in the evidence. "49 activated" and "45 activated"
@@ -1609,6 +1623,16 @@ async def _gate_11(ctx: _Context) -> GateOutcome:
         f"{'/'.join(scopes)} revocation"
         if skipped else ""
     )
+    # IDENTITY STATUS - the second condition (decisions entry 85). The foreign key on
+    # `office_agent_id` guarantees the identity EXISTS, not that it is active, and
+    # `resolve_grant` refuses a non-active identity on every call. So, as with B53, this is
+    # the record and not the authority: without it a suspended or departed agent's grant
+    # carries `activated_by = <the signer>` for authority nobody could exercise.
+    if inactive:
+        statuses = ", ".join(f"{n} {s}" for s, n in inactive_by_status.items())
+        withheld += (
+            f"; {inactive} grant(s) NOT activated - agent identity not active ({statuses})"
+        )
     return GateOutcome(
         "11", PASSED,
         f"{activated} grant(s) activated against signature(s) "
@@ -1617,6 +1641,8 @@ async def _gate_11(ctx: _Context) -> GateOutcome:
             "activated": activated,
             "withheld_revoked": skipped,
             "revocation_scopes": scopes,
+            "withheld_inactive_identity": inactive,
+            "inactive_identity_statuses": inactive_by_status,
             "artifacts_hash": current,
         },
     )

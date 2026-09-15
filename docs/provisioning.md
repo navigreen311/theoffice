@@ -171,9 +171,11 @@ exist. That is Gate 0's philosophy applied to certification — no engagement pr
 against a capability that does not exist — and skipping it would produce a venture that
 reads as fully provisioned and has been certified for nothing.
 
-**Greenstone's own Pack blocks at Gate 4.5.** The generated workflow routes 192 compliance
-approvals a day at six minutes each against one officer's four coverage hours: 1152
-review-minutes needed against 144 available. Gate 2's estimate passes and Gate 4.5's does
+**Greenstone's own Pack blocks at Gate 4.5.** The generated workflow routes 128 compliance
+approvals a day at six minutes each against one officer's four coverage hours: 768
+review-minutes needed against 144 available. It was 192 (1152 minutes) until the
+VoiceForge binding left the Pack on 2026-09-15 - `place_call`, which no agent may hold, and
+`transcribe_call`, which nothing served (decisions entries 83 and 87). Gate 2's estimate passes and Gate 4.5's does
 not, which is not a bug in either — Gate 2 cannot see a workflow that does not exist yet,
 which is precisely why the blueprint puts a second capacity check after the generators run.
 

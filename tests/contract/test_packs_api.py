@@ -47,6 +47,10 @@ pytestmark = [requires_db, pytest.mark.db]
 
 VENTURE = "greenstone"
 
+#: An exclusion this file records for itself, for a module the reference Pack still
+#: operates. See `test_directory_reports_the_failing_rules_message_not_the_rule_name`.
+EXCLUDED_FIXTURE = ("cre-forge", "underwrite_deal")
+
 
 def auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
@@ -163,10 +167,23 @@ async def test_directory_reports_the_failing_rules_message_not_the_rule_name(
     on. The page shows the second.
 
     `comp_analysis`, not `place_call`, and the change is the point of the second half
-    of this test: `voiceforge/place_call` is in `forge_module_exclusion`, so V11 no
-    longer asks for its instruction - a module no agent may hold has nothing to be
-    certified against. Deleting its instruction is now a no-op for this rule, which is
-    exactly why the subject had to move to a module that is still teachable.
+    of this test: an excluded module needs no instruction - a module no agent may hold
+    has nothing to be certified against - so the subject of the missing-instruction half
+    has to be a module that is still teachable.
+
+    THE EXCLUDED MODULE IS THIS TEST'S OWN, SINCE 15 SEPTEMBER 2026 (decisions entry 83)
+    ================================================================================
+
+        The second half used to name `voiceforge/place_call`, which it got for free
+        because Greenstone's production Pack declared a forbidden module. That made one
+        venture's Pack the only fixture for a real property - an exclusion is NAMED in
+        V11's message, never silently absent - and entry 73 held the whole Pack edit
+        for four sessions because removing `place_call` would have left this assertion
+        with no subject.
+
+        So the exclusion is constructed here, for a module the Pack still operates, and
+        removed afterwards. The property no longer depends on any Pack declaring a
+        forbidden module, which is coverage on purpose rather than by accident.
     """
     token = world.token
     admin = world.admin
@@ -174,9 +191,24 @@ async def test_directory_reports_the_failing_rules_message_not_the_rule_name(
         cur.execute(
             "DELETE FROM forge_operating_instruction WHERE module_id = 'comp_analysis'"
         )
+        cur.execute(
+            "INSERT INTO forge_module_exclusion (forge_id, module_id, reason, evidence, "
+            "recorded_by) VALUES (%s, %s, %s, %s, %s)",
+            (EXCLUDED_FIXTURE[0], EXCLUDED_FIXTURE[1],
+             "test fixture: V11 must name an excluded module", "tests only",
+             "tests/contract/test_packs_api.py"),
+        )
     admin.commit()
 
-    body = (await api.get("/api/packs/directory", headers=auth(token))).json()
+    try:
+        body = (await api.get("/api/packs/directory", headers=auth(token))).json()
+    finally:
+        with admin.cursor() as cur:
+            cur.execute(
+                "DELETE FROM forge_module_exclusion WHERE forge_id = %s AND module_id = %s",
+                EXCLUDED_FIXTURE,
+            )
+        admin.commit()
     pack = next(p for p in body["packs"] if p["venture_id"] == VENTURE)
 
     assert pack["validation"]["state"] == "failing"
@@ -187,7 +219,7 @@ async def test_directory_reports_the_failing_rules_message_not_the_rule_name(
     # And the excluded module is NAMED, not silently absent. Silence would make an
     # exclusion indistinguishable from coverage: a reader seeing every operated module
     # accounted for cannot tell which were taught and which were refused.
-    assert "place_call" in failure["message"], (
+    assert EXCLUDED_FIXTURE[1] in failure["message"], (
         "an excluded module vanished from the message - a reader cannot tell a module "
         "that needs no curriculum from one that has one"
     )

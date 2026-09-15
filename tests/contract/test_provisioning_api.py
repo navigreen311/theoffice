@@ -308,10 +308,10 @@ async def test_the_real_pack_blocks_at_gate_4_5_through_the_api(world, api, pack
 
     assert result["status"] == "blocked"
     assert result["current_gate"] == "4.5"
-    # 192 since assign_contract was bound on 2026-09-06, restoring the workflow
-    # step that generate_loi's removal had taken out. See test_pipeline.py for
-    # the full arc of this figure.
-    assert "192 approvals" in result["outcomes"][-1]["reason"]
+    # 128 since the VoiceForge binding left the Pack on 2026-09-15 (decisions entries 83
+    # and 87): place_call was forbidden and transcribe_call was served by nothing. See
+    # test_pipeline.py for the full arc of this figure.
+    assert "128 approvals" in result["outcomes"][-1]["reason"]
 
 
 async def test_a_run_from_the_console_stops_at_gate_9_5(world, api, feasible_yaml):

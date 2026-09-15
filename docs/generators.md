@@ -65,9 +65,11 @@ workflow does not exist yet. The Task Ledger computes the real number from the r
 workflow. For Greenstone as authored those disagree by an order of magnitude:
 
 ```
-GATE 4.5 V13 FAIL: compliance_officer: 192 approvals x 6 min = 1152 minutes
+GATE 4.5 V13 FAIL: compliance_officer: 128 approvals x 6 min = 768 minutes
                    against 144 available
 ```
+
+(192 and 1152 until 2026-09-15, when the VoiceForge binding left the Pack; decisions entries 83 and 87.)
 
 Neither check is buggy. This is exactly why the blueprint puts a second capacity gate
 after the generators run, and Gate 4.5 now implements it — resolving V24 (unfilled

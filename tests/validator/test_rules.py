@@ -86,14 +86,16 @@ MUST_FAIL: dict[str, Callable[[BusinessPack], None]] = {
     "V23": lambda p: p.scenarios.__setitem__(slice(None), p.scenarios[:1]),
     # WARN rules
     "V25": lambda p: p.forge_dependencies.forge_bindings[0].modules_expected.clear(),
-    "V26": lambda p: setattr(
-        next(b for b in p.forge_dependencies.forge_bindings if b.criticality == "soft"),
-        "fallback_behavior", None,
+    # V26 and V27 build their own soft binding. They used to borrow the reference Pack's
+    # first `criticality: soft` binding, and Greenstone's only one was VoiceForge - removed
+    # 2026-09-15 (decisions entry 87), which left both rules with no subject: the same
+    # accidental-fixture shape entry 73 held a Pack edit on. The mutation now makes the
+    # condition it tests for, so it holds whatever the reference Pack declares.
+    "V26": lambda p: (
+        setattr(p.forge_dependencies.forge_bindings[0], "criticality", "soft"),
+        setattr(p.forge_dependencies.forge_bindings[0], "fallback_behavior", None),
     ),
-    "V27": lambda p: setattr(
-        next(b for b in p.forge_dependencies.forge_bindings if b.criticality == "soft"),
-        "module_gap", True,
-    ),
+    "V27": lambda p: setattr(p.forge_dependencies.forge_bindings[0], "module_gap", True),
 }
 
 # Document rules only. V2/V6/V11 need the world; V24 is Gate 4.5.

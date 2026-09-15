@@ -10,17 +10,14 @@
         "Produce a first-pass value estimate"
       ],
       "effective_compliance_flags": [
-        "recording_consent_required",
         "tsr_disclosure_required"
       ],
       "forge_modules_operated": [
         "cre-forge/comp_analysis",
-        "cre-forge/property_lookup",
-        "voiceforge/place_call"
+        "cre-forge/property_lookup"
       ],
       "headcount": 3,
       "implied_compliance_flags": [
-        "recording_consent_required",
         "tsr_disclosure_required"
       ],
       "lifecycle_stages_owned": [
@@ -48,13 +45,10 @@
       ],
       "forge_modules_operated": [
         "cre-forge/assign_contract",
-        "cre-forge/buyer_match",
-        "voiceforge/place_call",
-        "voiceforge/transcribe_call"
+        "cre-forge/buyer_match"
       ],
       "headcount": 2,
       "implied_compliance_flags": [
-        "recording_consent_required",
         "tsr_disclosure_required"
       ],
       "lifecycle_stages_owned": [

@@ -62,6 +62,7 @@ psql "$OFFICE_ADMIN_DSN" -c "SELECT * FROM audit_log_verify_chain()"
 .venv/Scripts/python -m broker sweep                    # the verification sweeps
 .venv/Scripts/python -m broker health                   # freshness of every control
 .venv/Scripts/python -m broker serve --port 8080        # the Operations API
+.venv/Scripts/python -m broker assign-shift --help      # put one agent on shift (docs/shifts.md)
 cd console && npm run dev                               # the console on :3000
 ./scripts/console-smoke.sh                              # both, verified end to end
 .venv/Scripts/python scripts/seed_dev_world.py          # bridged Forges + a certified roster

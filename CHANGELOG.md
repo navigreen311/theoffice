@@ -5,6 +5,47 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **`python -m broker assign-shift`: a named operator puts one agent on shift for a real
+  window.** Decisions entry 80: provisioning grants authority and nothing schedules it, so a
+  venture that clears the ladder is authorised and not staffed. The command has the same
+  shape as `bootstrap-phase0`: it reports unless `--confirm` is given and exits non-zero on
+  every refusal. Its only write is `shifts.assign_shift`.
+  - **Refuses a venture with no active grants**, and an agent none of whose grants
+    resolves. Both are asked of `grants.resolve_grant` and `revocation.covered_grants`,
+    not restated.
+  - **Refuses an operator without `venture_operator` or stronger for the venture**, via
+    `humans.authorize`, which checks role and venture scope together. Test-fixture
+    accounts are refused as operators.
+  - **Refuses a window that is not real:** no timezone, inverted, already over, or
+    backdated more than five minutes. `now` is the database clock.
+  - Overlaps, an unflushed previous shift, an unknown Village quarter and a quarter
+    conflict are reported by name before the write, not raised as a traceback.
+  - `tests/contract/test_assign_shift.py`: a brokered call refused `OffShift` before the
+    command succeeds after it, plus every refusal. Mutation-checked: removing either
+    grant refusal, or the write, fails the tests that should fail.
+  - **Not a scheduler.** The window ends and nothing follows it (entry 81).
+
+### Changed
+- **Greenstone's VoiceForge binding removed** (decisions entry 87). It bound `place_call`
+  (founder-forbidden) and `transcribe_call`, which nothing serves: no Office adapter, a
+  registry row at `example.invalid`, no credential and no manual. V32 could never resolve it.
+  The Pack's recording-consent framework and the Buyer Network Manager's declared flag stay.
+  Approvals fall 160 -> 128, and V13 still blocks. The V26 and V27 rule tests build their own
+  soft binding now, rather than borrowing VoiceForge's.
+- **Gate 11 activates only grants whose agent identity is active** (entry 85). Suspended,
+  revoked or retired agents' grants are withheld and named in the reason line, as B53 does
+  for revoked grants.
+- **`voiceforge/place_call` removed from the Greenstone Pack** (decisions entries 73 and 83).
+  It is forbidden in `forge_module_exclusion` by a founder decision, so no grant for it could
+  ever exist; declaring it only produced review demand. `voiceforge/transcribe_call` stays.
+  Projected compliance approvals fall from 192 to 160 a day, and V13 still blocks at Gate 4.5.
+  - **The test entry 73 held on got its own fixture first.**
+    `test_directory_reports_the_failing_rules_message_not_the_rule_name` now records its
+    own exclusion (`cre-forge/underwrite_deal`) to assert that V11 names an excluded module,
+    instead of depending on a production Pack declaring a forbidden one. Checked against a
+    deliberate break: dropping V11's excluded-module note fails it.
+  - Seven golden snapshots re-recorded, with every changed line read;
+    `test_authored_content_reaches_the_artifact_end_to_end` re-anchored to `transcribe_call`.
 - **Pack module conformance — resolving a Pack against the Forge, not against a row.**
   A Pack's `modules_expected` is a list a human wrote and a `forge_module_registry` row
   is a row a human wrote, so V6 compared two claims. The Burkham Pack declared twelve

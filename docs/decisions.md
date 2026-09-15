@@ -6157,3 +6157,785 @@ has not been tested by the world yet, and the three ways that happens are all he
 sense - every line involved is correct. What is missing in each case is any assertion
 that the rule was ever handed something to rule on. Entry 63 named that gap and did not
 close it; it is still open, and it is now three findings wide.
+
+---
+
+## 79. Three corrections and a step nothing performs
+
+**Recorded 2026-09-14, at the close of the session. Read-only throughout; nothing was
+signed, activated or completed.**
+
+### What was NOT recorded, and why
+
+**A Gate 10 signature and a run completion were both directed and neither was written.**
+The run is where it has been since 19:57:
+
+    run 8ed2f39a   gate=9   status=blocked   pack=0.10.0
+    signoff_record 0 rows, database-wide
+    grants         49 total, 0 active, 0 assignable
+
+Gates 10, 11 and 12 have never been evaluated on this run - no rows. There is no completion
+to record. The Gate 10 note was declined separately, with five measured falsehoods set out
+and substitutions proposed; that authorisation did not arrive, so nothing was signed.
+
+**A record of a completion that did not happen is the one thing this ledger cannot carry.**
+Every other entry here is recoverable by re-reading the system. That one would not be.
+
+### The numbers, corrected against the database rather than against memory
+
+    directed            measured
+    ------------------  --------------------------------------------------------
+    34 activated        45 - Gate 11's exact predicate, run live, returns 45
+    30 activated        the same 45; 34 is entry 64's pre-deactivation count
+    19 unselectable     30 unselectable; 19 is the count of distinct TRIPLES
+    15 triples          19 triples: 15 crowded at x3 (45 rows) + 4 singletons
+
+**Entry 67 measured the duplicates at two per triple. It is three now** - bootstrap, then
+`runtime_config.apply` on the aborted run, then again on this one. Each run adds a layer and
+nothing reconciles, so the figure is not stable and a number quoted from an earlier entry is
+a number about an earlier world.
+
+### The Gate 11 fix is correct, untested by any run, and NOT inert
+
+B53's fix withholds revoked grants from activation. It has **never executed in production**,
+because no run has reached Gate 11 - it is proven by a test that fails without it, not by a
+green run, and a green run would not have proven it either.
+
+**The reason offered for calling it unexercised was inverted, and the distinction matters.**
+*"The four were already inactive, so `covered_grants()` excluded nothing"* - being inactive
+is what makes a grant a CANDIDATE for Gate 11; being covered is what withholds it. The four
+are inactive **and** covered, so they are exactly the rows the new term removes. Against the
+live database:
+
+    with the NOT (grant_id = ANY(covered)) term      45
+    without it                                       49
+
+**The fix does work on this venture's real state. What it has not had is a run.** Those are
+different claims and only the second is true.
+
+### The finding: the ladder authorises and does not schedule
+
+Recorded as B55. Every brokered call asserts `assert_on_shift_for`; **no gate writes a
+shift**; `shift_assignment` holds zero rows for zero agents. `bootstrap_phase0` assigns one
+as the fifth of its five writes and says why - *"a grant without a shift is refused"* - and
+the ladder has no equivalent step.
+
+**So Gate 12's "live" means authorised, not operating.** A venture can clear all twelve
+gates and be unable to make a single call, and nothing in the run would say so: `is_assignable`
+is generated from certification refs and `activated_at`, and no rule compares a grant to a
+shift.
+
+**This is the same shape as entries 63, 77 and 78, arriving from the other side.** Those were
+controls that had never been exercised. This is a control - `assert_on_shift_for` - that is
+exercised on every call and that **nothing upstream is built to satisfy**. Green by never
+arriving, and its mirror: red by never being prepared for. Neither is visible from inside
+the ladder, because the ladder's last gate reports on what it granted rather than on whether
+anything can act.
+
+---
+
+## 80. Provisioning grants authority; nothing schedules it. A scope finding, not a gap
+
+**Decided 2026-09-15. Read-only throughout; nothing was assigned and no gate was changed.**
+
+**Decision.** The ladder does not assign shifts, and it is right not to. **B55 is
+reclassified from a gap to a scope finding.** It is not a defect in any gate, it is not a
+missing gate, and it is not to be closed by amending Gate 5, 11 or 12.
+
+Provisioning grants authority. Scheduling says when that authority can be exercised. They are
+different jobs: the ladder does the first correctly, and nothing in the system does the second.
+
+### What "operating" means
+
+A venture that has passed every gate, with its grants issued and activated and no agent on
+shift, is **authorised and not staffed**. Gate 12's "live" is true of it, and every call is
+refused, correctly, by `assert_on_shift_for`. That is the whole output of provisioning, not
+a partial one.
+
+**Burkham is not in that state and should not be quoted as if it were.** Run 8ed2f39a is
+blocked at gate 9, with 0 signoffs and 0 of 49 grants active.
+
+### Why the ladder is the wrong owner: the reasons that survive a read
+
+- **The spec puts the calendar in the Village.** master-prompt-v4, line 109: *"Shifts exist
+  as a Village mechanic."* §7.4: *"The Office allocates within them; it does not override
+  them."* `broker/village.py:343`: *"The Village owns the shift calendar."* `docs/shifts.md`,
+  known gaps, verified 2026-08-23: *"Nothing schedules rotations … scheduling policy is
+  deliberately absent here."*
+- **A run happens once, and shifts recur.** A gate that wrote a shift would staff the
+  venture for one window.
+- **A run covers one venture, and allocating agents means choosing between ventures.**
+  `one_venture_per_agent_quarter` decides between ventures, and `ux_run_active` scopes a run
+  to one. Amelie Wystan holds grants for both burkham-wickmont and greenstone, so a Burkham
+  gate could take her quarter only by writing first.
+- **No gate has a window.** `assign_shift` takes five inputs. A gate has three of them: the
+  agent, the venture and `ctx.actor`. The quarter is read live from the Village, which
+  `provisioning.py` never calls. The window exists nowhere: `capacity_demand.shift_pattern`
+  is free text and nothing reads it.
+
+### Three reasons offered for this decision, and why they are not carried in
+
+The conclusion is right, and that is exactly when a wrong reason gets through unchecked.
+Each was checked against the code:
+
+    offered                                   measured
+    ----------------------------------------  ---------------------------------------------
+    broker/shifts.py says a shift is where    Not in that file, and not in broker/, client/
+    the human answers, and provisioning has   or generators/. shifts.py records the assigner
+    no idea who is on duty                    as actor_type "human". escalation.py puts
+                                              "who covers a shift" under OPERATIONAL, the
+                                              Village's own chain, not the human path.
+
+    bootstrap_phase0 hardcodes a quarter      It reads the quarter from the Village
+                                              (bootstrap_phase0.py:587). What it hardcodes
+                                              is the WINDOW: now-1min to now+8h (:602-603).
+
+    Gate 5 would have to invent an operator,  Gate 5 has one: ctx.actor, already passed as
+    and Phase 0 has neither                   granted_by. Phase 0 has one:
+                                              attributable_actor, written as assigned_by
+                                              (:604). Both have an operator. Neither has a
+                                              window.
+
+**The window is the entire difference.** Nobody in provisioning can say when an agent works.
+
+**The session's option letters are not used here.** "C" was first offered as *drop the time
+window and make the agent-quarter the boundary*, and that is not what was decided. That
+question is still open: what time base an Office shift uses, given that the Village runs its
+own clock and its own shift calendar.
+
+### What is missing: scoped here, not built
+
+`assign_shift` exists, is tested, and enforces its own refusals: an unflushed previous
+shift, an unknown quarter, and a quarter conflict. Its only callers are `rotate()`, which
+nothing calls, and `bootstrap_phase0`, which invents a window because it has nobody to ask.
+**Nothing calls it with a real operator and a real window.** No console action, no CLI verb
+and no route exists for it. A route would also trip
+`test_the_api_exposes_no_route_that_bypasses_a_control`, which rejects any write path
+containing `shift`. Whether building one is today's work has not been decided.
+
+---
+
+## 81. The shift-window gap: overlaps are refused, gaps are not, and a scheduler inherits that
+
+**Recorded 2026-09-15, before anything schedules, so the first scheduler is written by
+someone who has read this.**
+
+### The asymmetry
+
+**One agent cannot hold two overlapping shifts.** The schema refuses it through
+`no_overlapping_shifts_per_agent`, an exclusion over `tstzrange(shift_start, shift_end)`.
+`assign_shift` does not check this itself. An overlap arrives as a raw `ExclusionViolation`
+from the database, not as a named refusal.
+
+**Nothing refuses a gap.** No constraint, no check in `assign_shift`, no sweep. When a shift
+ends and nothing follows it, the agent is off shift, and the next brokered call is refused
+with `OffShift`: *"agent is not on shift"*. **Nobody decided that.** Nothing is written when
+a shift lapses. The first trace is the refused call's own audit event,
+`call_refused_off_shift`.
+
+    overlap between two shifts, one agent    refused, by the schema
+    gap between two shifts, one agent        permitted, and silent
+    back-to-back (end == next start)         permitted - tstzrange defaults to '[)'
+
+Continuous coverage can be expressed in the schema. **Nothing requires it.**
+
+### What a naive scheduler gets wrong
+
+1. **It reads "no overlap" as "coverage".** The constraint it can see is the one that does
+   not matter for staffing.
+2. **It treats a refused assignment as an error to retry later.** Shift N ends on time
+   whether or not shift N+1 was written. `ShiftBlocked` (an unflushed predecessor),
+   `QuarterUnknown` (the Village is down) and `QuarterConflict` all refuse N+1 **after N
+   has already been committed to ending**. Each one leaves the agent off shift until
+   somebody notices.
+3. **It assumes something reports the state.** Nothing lists agents that hold active grants
+   and have no current or next shift. The capacity figures' `allocated` count
+   (`broker/app.py:695`) looks only at a current shift, and it counts shifts on *other*
+   ventures.
+
+A related inheritance: **a row names one quarter**, whichever the Village reported at
+assignment time, whatever quarters the window actually spans.
+`one_venture_per_agent_quarter` checks that one quarter and no other.
+
+### A correction to how this was introduced
+
+It was put as *"Phase 0 avoids it by assigning a quarter; anything shorter creates the
+state."* **Phase 0 does not assign a quarter.** It assigns eight hours, `now - 1 min` to
+`now + 8 h` (`bootstrap_phase0.py:602-603`), and stamps whatever quarter the Village
+reports. So **Phase 0 is the first instance of the gap, not the exception to it.** Every
+bootstrap shift ended eight hours after it started, and its agent went off shift by nobody's
+decision.
+
+**No window length avoids the gap.** A quarter-long window ends too. A longer window only
+moves the date, and it also postpones the PHI flush, which runs only in `rotate()`, which
+nothing calls.
+
+### What `assign-shift` does about it
+
+**Nothing, deliberately.** The operator command, `python -m broker assign-shift`, writes one
+window, and that window
+ends in exactly this state. The difference is that a named operator chose that end, so the
+off-shift state that follows was decided by someone. It becomes *nobody's* decision only when
+something is expected to follow and doesn't. That expectation is what a scheduler creates,
+and the reason this entry exists before one does.
+
+---
+
+## 82. The smallest real test ran and stopped at activation. What it proved, and what it did not
+
+**Recorded 2026-09-15.** Development database. Agent Evander Zephar (operations), module
+`capitalforge/client_read`, venture `burkham-wickmont`, operator Ivan. Every figure below
+was read back from the database after the run, not remembered from it.
+
+### What happened
+
+    assign-shift --confirm      exit 1, three refusals, shift_assignment 0 rows before and after
+    OfficeClient.call           GrantNotActivated (403), raised inside resolve_grant
+    audit_log                   one row: 1593 call_refused_grant_not_activated,
+                                trace 4bf1ff11-14b5-4289-9729-1803e573911e
+    agent_call_ledger           no row - written only after dispatch, and nothing dispatched
+    CapitalForge ledger_events  no office.module.called row since the call
+
+Each layer's function was wrapped with a trace that logged entry and exit and changed
+nothing. The trace has exactly one entry: `resolve_grant`, which raised.
+
+### What was proven, observed end to end for the first time
+
+1. **`assign-shift` refuses on real data, not only on fixtures:** a venture with 0 of 49
+   grants active, and an agent none of whose three grants resolves.
+2. **Grant selection took the newest of three rows** for (Evander, capitalforge,
+   client_read, burkham-wickmont). The refusal names `0b9ccb2d`, granted 13 September
+   17:18:52, the newest of the three. Entry 67's rule, observed.
+3. **The live certification check ran and passed.** Unit A (`client_read`) and Unit B
+   (`operations`) are both `certified` at `auto_execute`, with `simforge_verdict`,
+   `agent_model`, `score` and `threshold` all NULL. **It reads `state` and nothing else**
+   (`grants.py:238-246`), so it cannot tell these rows from certifications earned in
+   SimForge.
+4. **The activation check refuses a real grant**, and the refusal is audited with a trace.
+5. **`resolve_grant` runs before the shift assertion.** An agent with no shift was refused
+   for activation and never asked about a shift.
+
+### Six claims directed for this record, and why they are not in it
+
+    directed                                   measured
+    -----------------------------------------  ------------------------------------------------
+    a shift asserted against a live window     No shift was written; assign-shift refused.
+                                               assert_on_shift_for was never entered.
+    a grant resolved to the newest of three    Selected: yes (proven, item 2). Resolved: no,
+                                               refused at activation.
+    a certification checked live and           True (item 3), and it passed.
+    bootstrap-attested
+    a tier compared against the Pack's         Not reached. And not that comparison: the call
+    per-module declaration                     path caps the GRANT's tier by Unit A's
+                                               certified tier (grants.py:266-267) and does not
+                                               read the Pack at call time.
+    a 200 from a real Forge                    Nothing dispatched. CapitalForge was not running,
+                                               and the burkham-wickmont tenant holds 0
+                                               businesses, so client_read has no client to read.
+    a ledger row on each side joining on       0 rows on each side for this call.
+    X-Forge-Request-Id
+
+**The join has never been observed in this database either.** CapitalForge holds 63
+`office.module.called` rows (3 to 8 September). The Office's `agent_call_ledger` holds 0,
+and its `audit_log` begins on 13 September. Both join keys exist in code:
+`X-Forge-Request-Id` is stored as `forge_side_ref` (`broker/executor.py:107`) against
+CapitalForge's `payload.forgeRequestId`, and `trace_id` matches CapitalForge's `aggregateId`.
+**Neither key has ever matched a row.**
+
+**Directed too, and not recorded:** *"Evander is on shift until 18:00 and at 18:01 he is off
+shift by nobody's decision."* Evander has no shift, and `shift_assignment` holds 0 rows.
+**The gap in entry 81 has still not been observed on a real agent.**
+
+### The caveat, with the right item attached
+
+The certifications this call accepted have no scenario run behind them: they rest on a
+person's word. **The path works as far as it went, and what it verified is that word.**
+
+The item is **B3**, not B4. B4 is SimForge's own `simforge/gate_result` certification, and
+what retires it is a scenario run by a second SimForge instance. B3, *"No SimForge verdict
+for any CapitalForge module"*, covers these rows. It blocks a real client and names no
+retirement step. What would retire it is a SimForge verdict on a CapitalForge curriculum,
+and SimForge's entry 12 (`simforge/docs/calibration/first-battery-run-2026-09-10.md`, PR
+#151) says none has ever been submitted.
+
+### Still unobserved end to end
+
+Everything after activation: the shift assertion against a live window, revocation on a
+call, the manifest, the budget, the tier cap and gate, dispatch, a Forge response, a ledger
+row on either side, and the join between them. **Every one has been reasoned about and
+tested against a stub. None has been observed against a real Forge in this database.**
+
+### Why the run went no further
+
+All 49 burkham-wickmont grants are inactive, and activation happens at Gate 11. Run
+8ed2f39a is blocked at gate 9. Going further means completing the ladder or writing
+`activated_at` by hand, and the second is the bypass `grants.deactivate` was written to
+undo. **The refusal is the result.**
+
+---
+
+## 83. Greenstone: two engineering grants revoked on its own terms, an exclusion that already held, and `place_call` off the Pack
+
+**Ruled 2026-09-15 by Ivan, as three items (G1, G2, G3). Each ruling is recorded as given
+and each is carried out as measured. Where the two differ, the difference is stated rather
+than smoothed over.**
+
+### G1 - the engineering grants: two revoked, not four
+
+**Ruled:** revoke Greenstone's engineering grants, with the same verb as Burkham's, on
+Greenstone's own terms rather than inherited ones.
+
+**Greenstone held two, not four.** The four were burkham-wickmont's, and they were revoked on
+14 September. That revocation's own reason set Greenstone apart: *"Amelie Wystan's two grants
+there have the same provenance and are NOT covered by this."*
+
+    revocation 6c67fd31   Amelie Wystan   cre-forge/property_lookup   agent_module   ivan
+    revocation 193183e3   Amelie Wystan   simforge/gate_result        agent_module   ivan
+
+Both were issued through `humans.authorize`, then `revocation.revoke`, at 10:12:06. Both are
+per grant, and both blast radii read *"One grant revoked."* **These were the only two active
+grants in the database.** Until one is activated, nothing in the database holds authority a
+call could use.
+
+**The grounds, as ruled and as measured:**
+
+    ruled                                        measured
+    -------------------------------------------  -----------------------------------------------
+    no Greenstone position draws from            true - positions draw from research, banking
+    engineering                                  and operations
+    no capacity block accounts for it            true - packs/greenstone.yaml never names
+                                                 engineering
+    from DEFAULT_DEPARTMENT, before --department NOT AS NAMED. No DEFAULT_DEPARTMENT has ever
+    existed                                      existed here (git log -S, all branches).
+                                                 property_lookup: issued by Ivan through the
+                                                 Phase 0.8 bootstrap (d3c7573), whose query
+                                                 hardcoded WHERE department = 'engineering' as a
+                                                 LITERAL, before PR #118 added --department.
+                                                 gate_result: issued AND activated by
+                                                 smoke-e4fc20ff, origin test_fixture, with no
+                                                 script committed that day - worse than a
+                                                 default, because a fixture names nobody who can
+                                                 answer for it.
+
+**Every certification reference on both grants points at a row that does not exist.** Each
+revocation's reason carries its own provenance, so the record can be read from the row alone.
+
+**Neither these revocations nor Burkham's four have an audit entry.** `revocation.revoke`
+writes the revocation row, with actor, role, reason and blast radius, and no audit event.
+Only the console route adds one, `console_revocation_created`, and that event name would
+have mislabelled a revocation made outside the console. **Six authority withdrawals in two
+days are absent from `audit_log`.** They are recorded here as a gap, not closed here.
+
+### G2 - "add the exclusion": nothing to add, and the decision was already enforced
+
+**Ruled:** add the `place_call` exclusion. §3.4 binds every venture, and the module is in
+Greenstone's Pack with a live grant, so the decision is unenforced there.
+
+**Measured: the exclusion exists, and there is no grant.**
+
+    broker/module_exclusions.py:278          voiceforge/place_call declared, forbidden
+    forge_module_exclusion (dev and test)    recorded
+    apply_module_exclusions.py --check       "All 21 declared exclusions are recorded and match."
+    agent_forge_grant, module place_call     0 rows, any venture
+    trigger                                  agent_forge_grant_exclusion_guard present
+
+**The founder decision has been enforced on Greenstone the whole time.** A grant for
+`place_call` cannot be written, and none has been. What the Pack still held was a
+*declaration*: demand with no possible grant behind it. That is G3's subject, and nothing was
+done under G2.
+
+### G3 - the test given its own fixture, then the Pack edit
+
+**Ruled:** restore the deleted test, then land the Pack edit, using G2's exclusion as a fixture
+that is not `place_call`. Record that the test was deleted rather than re-anchored.
+
+**Measured: no test was deleted.** `git log --all -G "def test_.*(exclu|place_call)"` shows
+additions only. #126 *re-anchored* two tests and added a third. The test entry 73 held on,
+`test_directory_reports_the_failing_rules_message_not_the_rule_name`, has existed all along
+and still asserted `place_call`. **So the record says re-anchored, because that is what
+happened.** The ruling's reason stands on its own: a test guarding a real property must not
+lose its subject because a production fixture moved. That is exactly what entry 73 held the
+edit for.
+
+**G2 had no exclusion to lend, so the fixture is the test's own.** It records an exclusion
+for `cre-forge/underwrite_deal`, a module the Pack still operates, and removes it in a
+`finally`. The property - V11 NAMES an excluded module rather than silently leaving it out -
+no longer depends on any Pack declaring a forbidden module.
+
+**Checked against a deliberate break:** with V11's excluded-module note removed, the test
+fails with its own message. Restored, it passes.
+
+**Then the Pack edit**, redone against the qualified module names from #136. It was not
+popped from the stash, which would have undone that qualification on two of the three lines:
+
+    Acquisition Analyst       voiceforge/place_call removed
+    Buyer Network Manager     voiceforge/place_call removed; voiceforge/transcribe_call STAYS
+    voiceforge binding        modules_expected: [transcribe_call]
+
+`test_authored_content_reaches_the_artifact_end_to_end` was re-anchored to `transcribe_call`,
+and the stale "Greenstone's roles operate place_call" comment was corrected.
+
+**Seven golden snapshots re-recorded, and the diff read line by line.** Every removed line is
+`place_call` or a trailing comma it left behind. Curriculum coverage goes from 7 modules to 6,
+and projected approvals from **192 to 160** - the 32 a day entry 73 measured. **V13 still
+fails: 7x over rather than 8x**, for entry 73's reason. Its reviewer is Dana, who does not
+exist. Two tests asserted the literal `"192 approvals"` at Gate 4.5
+(`test_the_real_pack_blocks_at_gate_4_5_through_the_api` and
+`test_a_run_stops_at_the_first_blocking_gate_and_names_it`). Both now assert 160, with the
+reason in a comment. Both still assert the block. `docs/provisioning.md` and
+`docs/generators.md` were updated to match; `blocking.md`'s dated state tables were left as
+written. Full suite: 1561 passed.
+
+**The stash (`stash@{0}` on `coord/greenstone-remove-place-call`) is superseded and has not
+been dropped.** Dropping it is a separate, deliberate act.
+
+---
+
+## 84. What removing `place_call` is and is not, and four directions that did not match the system
+
+**Ruled 2026-09-15 by Ivan: land the Pack edit. Each ruling is recorded as given, and each
+fact attached to it as measured.**
+
+### What the edit is
+
+**It corrects a declaration of an act no agent may perform. It does not remove authority.**
+§3.4 forbids an agent initiating an outbound call as principal (entry 6).
+`voiceforge/place_call` has been in `forge_module_exclusion` throughout, and **no grant for
+it has ever existed**: `agent_forge_grant` holds 0 rows for the module, in any venture. The
+edit takes it out of two positions' `forge_modules_operated` and out of the voiceforge
+binding's `modules_expected`. What disappears is a plan: 4 workflow steps, 5 planned grants
+that the trigger would have refused, 1 manifest row, and 32 approvals a day. No agent loses
+anything it held or could have held.
+
+**No Forge answers for it.** The voiceforge registry row is hand-written, points at
+`https://example.invalid`, and has no credential that resolves. Entry 6 records the
+capability as never built.
+
+### Four directions that did not match the system
+
+    directed                                     measured
+    -------------------------------------------  -----------------------------------------------
+    V6 blocks Gate 2 on place_call               V6 PASSES - voiceforge/place_call has a registry
+                                                 row, which is all V6 asks. The rule that blocks
+                                                 Gate 2 on it is V31, NOT_RUN: "Acquisition
+                                                 Analyst: voiceforge/place_call (hand-written row,
+                                                 never verified)". V31 is not deferred, so it
+                                                 blocks. The edit clears it: 5 NOT_RUN -> 4.
+    the two grants issued from it are revoked    No grant was ever issued from it. Nothing to
+    under G1                                     revoke.
+    Amelie's two are already covered by an      Her 13 September revocation (d89bc046) is scope
+    agent_module revocation from 13 September    AGENT, not agent_module: "no longer in the
+                                                 Village roster. Revoked automatically by
+                                                 sync-roster when the departure was applied." It
+                                                 was LIFTED on 14 September and covers nothing.
+                                                 Her Greenstone grants are covered by the two
+                                                 agent_module revocations of 15 September
+                                                 (entry 83), whose reason is provenance, not
+                                                 departure.
+    revoke Sable Quint's client_read and         Sable Quint has no Office identity and no grant.
+    scan_communication                           The only row is a village_agent, ref
+                                                 dep-test-stayer, department engineering, status
+                                                 departed. The two engineering-department
+                                                 holders of exactly those modules are Brina
+                                                 Arvane's grants, revoked 14 September. Nothing
+                                                 was revoked.
+
+**Amelie's revocations are two different facts and are kept apart.** A departure written by
+a sync-roster run on 13 September, then lifted, is not the same as a grant issued for a
+department no position uses. Neither revocation's reason mentions the other.
+
+### Entry 73's hold was correct, and the reverse was nearly recorded
+
+It was directed that entry 73 held the edit *"on a test dependency that wasn't there."*
+**The dependency was there.** On `origin/main`,
+`test_directory_reports_the_failing_rules_message_not_the_rule_name` asserts
+`"place_call" in failure["message"]`. V11 builds its excluded list only from modules that
+positions operate (`_v11_instructions_authored`), so removing `place_call` from the
+positions removes it from the message and fails the assertion. Entry 83's commit `b3ad04f`
+is what gave the test a different subject.
+
+**How the reverse got stated:** a description of the working branch - "the test exists,
+passes, and place_call isn't its fixture" - was read as a description of main. It was true
+for about an hour, and only on a branch nothing had pushed. **What would have caught it is
+the same thing the direction named: reading the test, on the ref in question, rather than a
+description of it.** `git show origin/main:<path>` shows the line in question.
+
+---
+
+## 85. Gate 11 activated grants for agents whose identity was not active. A, done; C and B, not done, because the rows they act on do not exist
+
+**Ruled 2026-09-15 by Ivan, as A, then C, then B. A is built. C and B were directed at a
+missing foreign key and 44 orphan grants, and neither exists. Both are recorded here as not
+done, with the measurements.**
+
+### A - identity status in Gate 11: built
+
+**The defect is B53's sibling: a gate activating on one condition when two matter.** Gate
+11's UPDATE was `WHERE venture_id = %s AND activated_at IS NULL AND NOT covered`. It never
+read `office_agent_identity`. The foreign key guarantees that a grant's identity **exists**,
+not that it is **active**. A grant held by a suspended, revoked or retired agent was in the
+set Gate 11 activated.
+
+**It is the record, not the authority, as with B53.** `resolve_grant` refuses a non-active
+identity on every call (`IdentityInactive`, `grants.py:216`). Without the condition, the row
+says a signer activated authority its holder could never exercise.
+
+**Found while writing the test: Gate 10 catches the first attempt.** Suspending an appointed
+agent changes the regenerated artifacts, so the existing signature goes VOID and the run waits
+at Gate 10. **A signature over the new artifacts clears Gate 10**, and Gate 11's UPDATE is
+venture-wide over `activated_at IS NULL`. The suspended agent's Gate 5 grants were therefore
+still in the set, and that is the path the test walks.
+
+    UPDATE agent_forge_grant g ... FROM office_agent_identity i
+     WHERE i.office_agent_id = g.office_agent_id AND i.status = 'active'
+       AND g.venture_id = %s AND g.activated_at IS NULL AND NOT (g.grant_id = ANY(covered))
+
+Withheld grants are counted per cause, each grant once, revocation first. The reason line
+names the identity clause only when it is non-zero, the same rule B53 set for revocations.
+Evidence gains `withheld_inactive_identity` and `inactive_identity_statuses`.
+
+**Checked against the old predicate:** with the status term removed, the new test fails on
+its activation assertion. The control test ("activates everything when nothing is withheld")
+also asserts the identity count is 0.
+
+**Exposure today: none.** All 54 identities are active, and no grant belongs to a non-active
+one.
+
+`agent_can_operate`, cited in the ruling as the function that already asks this question,
+**does not exist**: not in code, docs or database functions. The check that does exist is
+`resolve_grant`'s `IdentityInactive`.
+
+### C - "the FK, NOT VALID, existing rows kept": not done, because the FK exists
+
+    agent_forge_grant_office_agent_id_fkey
+      FOREIGN KEY (office_agent_id) REFERENCES office_agent_identity(office_agent_id)
+
+It was declared in `db/versions/0001_core_schema.py:114`
+(`office_agent_id UUID NOT NULL REFERENCES office_agent_identity`), it is live and VALID in
+both `theoffice` and `theoffice_test`, and no migration drops it. A second constraint would
+duplicate it, and `NOT VALID` would record that existing rows were never checked, when they
+have been checked since the first migration.
+
+### B - "revoke the 44": not done, because there are no orphan grants
+
+    theoffice        burkham-wickmont   49 grants   0 without an identity
+    theoffice        greenstone          2 grants   0 without an identity
+    theoffice_test   (no grants)
+
+**Greenstone holds 2 grants, not 82.** Sable Quint has no identity and no grant. A revocation
+names an `office_agent_id`, so 44 revocations for rows that do not exist would be 44 records
+of something that never happened. If a grant without an identity could exist, `resolve_grant`
+inner-joins the identity (`grants.py:110`) and would refuse it `NotGranted`, not `NotOnShift`
+(no such class exists; the shift refusal is `OffShift`).
+
+**The ordering argument** - the FK landing against the true state, with the revocations as
+the correction - **is not recorded.** It orders two acts on rows that are not there.
+
+### Also measured and not recorded as directed
+
+- **"bootstrap-phase0 issues both rows in one transaction"** - it does not
+  (`bootstrap_phase0.py:382`: *"Resumable rather than atomic, and deliberately. Each step of
+  this bootstrap commits on its own."*). **Burkham's grants resolve to real identities because
+  of the foreign key**, not because they came through a safe path.
+- **"The revocation check I had you add to Gate 11 yesterday"** is B53 (PR #140), from another
+  session, not this one.
+- **"Two false-reason revocations corrected, five remaining":** none was corrected here. **11
+  revocations carry the roster-departure text; all 11 were lifted on 14 September** and none
+  covers anything.
+
+---
+
+## 86. The orphan-grant finding was invented, and what survives it
+
+**Recorded 2026-09-15 at Ivan's direction, in his framing: the largest invention in this
+thread.** His words: *"the numbers, the two names, and the FK refusal all came from me
+rather than from any report."*
+
+### What was built on nothing
+
+Across six turns, a finding was stated, extended and ruled on:
+
+    an orphan count          34 grants, "41% of Greenstone's 82", later 44
+    two agent names          Sable Quint, Dorian Vale
+    a resolve_grant verdict  "NotOnShift" - the refusal "accidental, not a control"
+    a Gate 11 consequence    44 grants made live for agents the system has no record of
+    a migration question     FK NOT VALID, and whether B-then-C or C-then-B
+    three remedies           A, B and C, ruled on in an order
+
+**Every step reasoned correctly from the one before it, and the first step was false.**
+Around it were other figures with no source: Greenstone "82 grants, 47 triples", PR #143,
+`agent_can_operate`, bootstrap "issuing both rows in one transaction", and a Gate 11
+revocation check "added yesterday" by this session.
+
+### What was true the whole time
+
+    grants without an identity row      0 of 51 (theoffice), 0 of 0 (theoffice_test)
+    agent_forge_grant.office_agent_id   NOT NULL; FK to office_agent_identity since migration
+                                        0001, VALIDATED, not deferrable, ON DELETE NO ACTION,
+                                        enforcement triggers enabled on both tables
+    Sable Quint                         a village_agent row only - dep-test-stayer,
+                                        engineering, departed; no identity, no grant; named
+                                        in two village_roster_imported audit rows (09-13)
+    Dorian Vale                         no row anywhere
+    NotOnShift                          no such class; the shift refusal is OffShift
+    agent_can_operate                   does not exist
+
+Neither scenario put forward - an identity deleted after issuance, or an id minted with no
+identity - can produce such a row here. The foreign key refuses both.
+
+### What caught it
+
+**A count, run the first time the finding was stated:** grants whose `office_agent_id` has
+no identity row, by `NOT EXISTS`. It returned 0. It was repeated on each later turn and
+returned 0 each time. **The finding was restated and built on regardless, so the count
+alone did not stop it.** What ended it was asking what WROTE the rows - a question that
+needs a source, a function and a run. Against a validated foreign key and a zero anti-join,
+there was nothing to name.
+
+**The lesson for this ledger:** a finding reported without its instrument can be built on
+for as many turns as nobody asks for the instrument. The same rule this ledger applies to
+its own numbers - entry 79's *"measured rather than remembered"* - applies to a direction.
+
+### What survives, as measured
+
+**One real change came out of the thread: entry 85.** Gate 11 now requires an active
+identity. It was measured before it was built: exposure is nil today, and the gap is real on
+the re-sign path.
+
+**Grants:**
+
+    burkham-wickmont   49 grants   19 triples   19 newest   30 superseded
+    greenstone          2 grants    2 triples    2 newest    0 superseded
+    all                51 grants   21 triples
+
+Greenstone's two are Amelie Wystan's bootstrap grants, `cre-forge/property_lookup` and
+`simforge/gate_result`, both revoked 15 September (entry 83). **"51 grants" is the whole
+database, not Greenstone.**
+
+**Revocations - "seven with false reasons, five uncorrected" was not measured and is not
+recorded.** The 26 revocations group as:
+
+    11  agent         roster-departure text        a departure that did not happen   0 live
+     9  agent_module  "Certified at propose ..."   not re-examined here             0 live
+     4  agent_module  Burkham engineering, 09-14   see below                        4 LIVE
+     2  agent_module  Greenstone engineering       provenance as measured (83)      2 LIVE
+
+**Found while checking that claim: the 4 live Burkham revocations name a mechanism that
+did not exist when their grants were issued.** Their reason says the department was *"a
+hardcoded default parameter value - `department: str = "engineering"`, written three
+times"*. That parameter entered `bootstrap_phase0.py` in PR #118 on **13 September**
+(`git log -S`). The four grants were issued on **3 September**, by code (`d3c7573`,
+`8e80b20`) with no such parameter. That code hardcoded `department = 'engineering'` as a
+literal in its agent query. **The conclusion stands - no Burkham position draws from
+engineering - and the named mechanism is wrong.** A true conclusion with a false reason, on
+four live revocations, not corrected here. Correcting a reason has no domain path:
+`reinstate()` commits on its own, and a direct UPDATE leaves no record. That is itself open.
+
+### Greenstone's position, from the database
+
+    live Pack            1.6.0 (41ea93d6), still declares voiceforge/place_call
+    active run           none; venture table has no greenstone row
+    grants callable      0 (2 held, both covered by live revocations)
+    forge_registry       cre-forge, simforge, voiceforge - all GREEN with a credential_ref;
+                         voiceforge's base_url is https://example.invalid
+    live instructions    0 for cre-forge, voiceforge and simforge
+    reachable now        Village no, CRE Forge no, SimForge no
+
+**A run would start** (live Pack, no active run), pass **Gate 0** on stored registry rows
+alone, pass **Gate 1**, and **stop at Gate 2**. The validator on the stored live Pack:
+
+    V11 FAIL      no live instructions for the 6 operated modules (place_call excluded)
+    V29, V30      NOT_RUN - Village unreachable
+    V31           NOT_RUN - voiceforge/place_call, a hand-written row (clears with #142)
+    V32           NOT_RUN - cre-forge and simforge unreachable; voiceforge's credential ref
+                  does not resolve
+    V24           NOT_RUN, deferred to Gate 4.5
+
+**No grant would be written:** Gate 5 is three gates past where it stops.
+
+---
+
+## 87. Greenstone's VoiceForge binding removed, its CRE instructions authored, and the Smoke baseline re-recorded
+
+**Ruled 2026-09-15 by Ivan, as three items.**
+
+### The CRE instructions: authored (development database, not this diff)
+
+`scripts/author_cre_forge_instructions.py` ran against `theoffice`. It wrote five instructions
+at version 1.1.0 against Forge API 1.4.0, the registry's version, all attributed to Ivan:
+
+    cre-forge/property_lookup   5aab8992fefb4910
+    cre-forge/comp_analysis     d57e1d204bbb51c7
+    cre-forge/buyer_match       648e494d60261641
+    cre-forge/underwrite_deal   f06db69c8768d907
+    cre-forge/assign_contract   cacf28ef5ba0113b     five distinct hashes, so V33 holds
+
+This is a script run and not an authoring project: the content was already written, from CRE
+Forge's own adapter and services, on 7 September. It was not the CapitalForge derivation.
+`derive_capitalforge_instructions.py` reads only `docs/instructions/capitalforge-*.md`, and no
+CRE manual exists there. The live-instruction count had been 0 since the database reset on
+13 September.
+
+### The VoiceForge binding: removed
+
+**What it bound:**
+- `place_call` - founder-forbidden (entry 6), already off the positions (entries 83-84).
+- `transcribe_call` - which **nothing serves.** VoiceForge has no Office adapter, its registry
+  row points at `https://example.invalid`, its credential reference does not resolve, and no
+  manual for the module exists in any repository here.
+
+V32 could never resolve the binding, so **Gate 2 could never pass with it in the Pack.**
+Building an adapter to satisfy it would have been work in service of a binding nobody needs.
+
+**Removed:** `voiceforge/transcribe_call` from the Buyer Network Manager, and the whole
+`forge: voiceforge` block from `forge_dependencies`.
+
+**Not removed:** the Pack's `TWO_PARTY_CONSENT_RECORDING` framework, the Buyer Network
+Manager's declared `recording_consent_required`, and scenarios bn-001 and bn-003. The duty to
+capture consent on a recorded call belongs to whoever is on the call, and it does not leave
+with a Forge. The flag is now declared rather than implied by a module.
+
+**What returns it:** a VoiceForge that exists, an Office adapter for it, and a module somebody
+wants an agent to hold. All three, not one of them.
+
+**Consequences, measured:**
+
+    workflow and grant plan    transcribe_call's steps and planned grants gone
+    approvals a day            160 -> 128 (768 review-minutes against 144; V13 still blocks)
+    snapshots                  seven re-recorded; no transcribe_call or voiceforge line remains
+    V26, V27 tests             had borrowed Greenstone's only soft binding - VoiceForge - as
+                               their fixture, and lost their subject. They now make their own
+                               soft binding and module gap. Entry 73's shape, a third time.
+    end-to-end content test    re-anchored transcribe_call -> comp_analysis, on the operating
+                               Forge, so the next binding removal cannot move it again
+
+**V26 now passes on an empty set** for this Pack: "soft dependencies declare a fallback", with
+no soft dependencies to declare one. Recorded, not changed. It is entry 63's shape, and it
+does not block anything.
+
+### Gate 2, measured after both changes
+
+    edited Pack                0 FAIL, 5 NOT_RUN
+      V11 NOT_RUN   all 5 instructions authored (comp_analysis and property_lookup rated
+                    thin, which passes); whether the modules exist needs CRE Forge reachable
+      V29, V30      NOT_RUN - Village unreachable
+      V32 NOT_RUN   cre-forge and simforge unreachable
+      V24           deferred to Gate 4.5
+      V31           gone with voiceforge/place_call
+    live Pack 1.6.0 (stored)   V11 FAIL on transcribe_call alone, until a new version is
+                               published
+
+**Nothing left at Gate 2 is authoring.** Every remaining item is a service that is not
+running: the Village on 8120, CRE Forge on 8011, SimForge on 8110.
+
+### The Smoke baseline: re-recorded
+
+**A baseline that reports a false diff is the hash problem in a different field.** B49 fixed a
+digest decided by a BOM. This one was decided by a count: the baseline was recorded on 15
+September from a run on #138's branch, when the validator had 34 rules. #140 added V38, and
+main's own Smoke run has differed on `(34)` -> `(35)` in two lines ever since. Merging #142
+past that divergence would teach what B49 refused to: that a divergence is ignorable.
+
+Re-recorded by B49's rule - **two runs on the final commit, byte-identical after
+normalisation** - and checked on a third run. The run and job ids are in the commit that
+changes `BASELINE`.
