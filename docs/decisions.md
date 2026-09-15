@@ -5624,3 +5624,147 @@ denominator is a fiction, and removing the waste leaves the fiction.
 Two entries were planned as 73 and 74 - the artifact-staleness family, and the corrections
 count - and are now **74 and 75**. Written down rather than left as a reserved gap,
 because a gap in this ledger is the exact hazard one of those entries is about.
+
+---
+
+## 74. A patch nearly retired on a fact that had expired, and every step caught by a read
+
+**Recorded 2026-09-14. One entry rather than two: the corrections are the story's evidence
+rather than a finding beside it, because every one of them came from reading FunnelForge's
+code or The Office's own files.**
+
+### The sequence
+
+**1. A patch deferred nine times, read on the ninth.**
+`docs/plans/funnelforge-position-DEFERRED.patch` held two Burkham Pack edits as a unified
+diff. P-13 held it at merge on 9 September, P-16 declined to apply it, B39 took ownership and
+built a lander without running it. The ninth deferral was the first time anybody read it.
+
+What the reading found, none of it as described:
+
+    "it keeps failing to apply"        `git apply --check` exit 0, every time checked
+    "a Pack four versions dead"        applied to the current Pack
+    "written against a FunnelForge     targets `packs/burkham-wickmont.draft.yaml`;
+     Pack"                             there is no FunnelForge Pack
+    "the qualification replaced its    `forge_modules_operated` still bare, all 19 refs
+     modules_touched shape"
+    "trust_tier_ceiling superseded"    used by all five live Burkham positions
+    "V31 passes, the position exists"  never landed; both counts zero
+
+**2. The blocker had been resolved in another repository, and never crossed back.**
+The patch was held because V31 refuses `auto_execute` over a mutating `at_most_once` module,
+and seven of its nine were that shape. **FunnelForge PR #160 merged 2026-09-12 04:55 UTC** and
+gave `/api/emails/send` an idempotency store: an atomic Redis claim holding across replicas, a
+repeat answered from the record rather than sent, failing closed with a 503, a 24-hour window
+matched to Resend's.
+
+Nothing in The Office noticed. The declaration here is a hand-written string about another
+repository's code, and no test, constraint, gate or rule compares them.
+
+**3. Entry 55 asserted the remedy was unassigned, a day after it merged.**
+Written 13 September: *"The remedy is not in this repository. It is an idempotency key on
+FunnelForge's send path - `EmailQueue` has none... one field in another repository, and nobody
+has been assigned it."* It had been assigned, shipped and merged the previous day. **That
+sentence was false when it was written**, and the ledger had no way to know.
+
+**4. The declaration was corrected, and the correction overshot.**
+Seven `at_most_once` declarations became `key` in a single replace-all, on the evidence of a
+PR that changed `/api/emails/send` and nothing else.
+
+Six were right. **`schedule_blueprint_call` posts to `SCHEDULING_BOOK`**, and
+`apps/api/src/modules/scheduling/` contains no reference to an idempotency key - the store is
+reached only from `emails/routes.ts` and four siblings. The adapter forwards `Idempotency-Key`
+on every upstream call, so the header **arrives at the booking route and is ignored**, which is
+worse than not sending it: a caller could believe the guard applies.
+
+**5. A manual caught it, by not inheriting.**
+`funnelforge-schedule-blueprint-call.md` §6 had said so all along - *"a duplicate appointment
+is two rows in a calendar for one conversation, and nothing in this module can cancel either
+one."* It reasoned from its own route. Five send manuals carry one sentence verbatim - *"the
+adapter failure table and the retry rule are identical here and are not repeated"* - and
+inherited a conclusion drawn from a premise about a route they do share. When that premise
+expired, five became wrong at once and no word of any of them moved.
+
+**A template that produces a true sentence six times has not checked it once.**
+
+### The corrections, enumerated
+
+Twenty-one claims that measurement contradicted, across this thread. Not judgment calls -
+claims about what was in the tree, each settled by a grep or a query.
+
+**Named something that does not exist:**
+
+    _grants_for                        no matches, whole repo
+    a third certified_tiers consumer   one producer, two consumers, both correct
+    Gate 5.5                           GATE_SEQUENCE runs "5", "6"
+    GATE_55_RULES / GATE_2_RULES       not identifiers in this repository
+    plan.shifts                        no artifact carries shifts
+    plaid-consumer-data-consent-v1     absent from the entire repository
+    four unresolved library refs       zero, across the Pack and all 24 instructions
+    test_v6_blocks_when_module_refs_…  no such test
+    test_burkham_pack_declares_its_…   no such test
+    send_email                         no such module; nine declarations, nine manuals
+    a Q1 about atomic vs two-phase     never asked; the lander was already two-phase
+
+**Was the opposite of the measurement:**
+
+    Gate 7 awaiting_human              passed at 17:18, and is not a human gate
+    "all 34 revocations"               eleven; 34 counted grants discounted
+    the patch "keeps failing to apply" applied cleanly every time
+    "a Pack four versions dead"        applied to the current Pack
+    "the qualification replaced it"    19 refs still bare
+    "trust_tier_ceiling superseded"    used by all five live positions
+    "the position exists"              never landed
+    "written against a FunnelForge Pack"  targets Burkham's
+    B53 "sits unassigned"              merged 2026-09-12
+    entry 48's subject                 forge_modules_operated, settled twice by re-reading
+    "same shape as Burkham"            Burkham does the opposite, measured across five
+
+**Every correction came from a read.** Not one came from the ledger, a test, a constraint or a
+gate. The records were consistent with every claim on that list, because a record says what
+was true when it was written and has no opinion about what is true now.
+
+**And the reads were cheap.** Each cost a grep and produced a better question than the one
+that prompted it: the `_grants_for` hunt found the flattening entry 52 records; the Gate 7
+hunt found a gate passing on an empty set; the patch hunt found a blocker resolved and never
+crossed back. **The measurement is not the tax on the instruction. It is the part that found
+the thing.**
+
+### What nothing in this system could have caught
+
+    forge_module_registry.idempotency_support   a hand-written string in THIS repository
+                                                describing code in ANOTHER one
+
+    verification_method = 'hand'                16 of 20 registered modules
+    verification_method = 'adapter_manifest'     4 of 20 (cre-forge only)
+
+`ModuleShape.is_evidence` already draws the distinction in terms - *"`hand` is a claim. The
+other two were obtained from the Forge."* **Nothing reads it.** No rule, no gate and no test
+treats a claim differently from an observation, so sixteen assertions about another system's
+behaviour sit in the registry with the same standing as four that were measured.
+
+**The seven sends are the demonstration.** They were `at_most_once`, correctly, until
+12 September. They stayed `at_most_once` for two days after that stopped being true. Then six
+became `key` correctly and one became `key` wrongly, and the wrong one was caught by a manual
+rather than by anything structural. Four states in three days, on a field nothing verifies.
+
+`tests/adapters/test_funnelforge_idempotency_hop.py` is the first test anywhere that checks
+one of the sixteen, and it checks the half this repository owns - that the header leaves the
+adapter. **The other half is still a claim**, gathered by reading `idempotency-store.ts`, and
+it will stay one until FunnelForge's own suite is reachable from here.
+
+### A narrower note on `_grants_for`
+
+The hunt for it produced a correct general worry and a wrong specific one. `module_trust_tiers`
+does **not** stop at the artifact and the validator: traced end to end, it reaches the grant
+row.
+
+    generators/runtime_config.py:74    overrides_by_title = {title: p.module_trust_tiers}
+    generators/runtime_config.py:89    declared = overrides.get(f"{forge}/{module}", ceiling)
+    generators/runtime_config.py:117   trust_tier=_lower(declared, certified_tiers.get(...))
+    generators/runtime_config.py:238   INSERT INTO agent_forge_grant (..., trust_tier, ...)
+
+So it shapes the artifact, the approval projection **and** `agent_forge_grant.trust_tier`,
+which `resolve_grant` gates every call on. That is entry 52's whole subject: the field was
+declarable, storable and enforceable, and inert only because the artifact between them
+flattened it.
