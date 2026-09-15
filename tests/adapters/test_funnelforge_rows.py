@@ -60,7 +60,7 @@ from generators.workflow import generate as generate_workflow
 
 ROOT = Path(__file__).resolve().parents[2]
 PACK_PATH = ROOT / "packs" / "burkham-wickmont.draft.yaml"
-DEFERRED_PATCH = ROOT / "docs" / "plans" / "funnelforge-position-DEFERRED.patch"
+PLAN_PATH = ROOT / "docs" / "plans" / "funnelforge-position-PLAN.md"
 FORGE = "funnelforge"
 API_VERSION = "1.0.0"
 
@@ -94,23 +94,26 @@ def _declared_in_pack() -> list[str] | None:
     return list(bindings[0].modules_expected) if bindings else None
 
 
-def _declared_in_deferred_patch() -> list[str] | None:
-    """The held declaration, read out of the patch that preserves it.
+def _declared_in_plan() -> list[str] | None:
+    """The held declaration, read out of the plan document that carries it.
 
-    Read only - `docs/plans/funnelforge-position-DEFERRED.patch` belongs to the
-    coordinator. Reading it here is what stops the held declaration drifting away from
-    the adapter while it sits on the shelf: a patch nothing checks is a patch that stops
-    applying, and the record's promise that it can be re-applied would then be a claim
-    with nothing behind it.
+    **Read from the PLAN since 14 September 2026**, not the `.patch` it replaced. Reading
+    it here is what stops the held declaration drifting away from the adapter while it
+    sits on the shelf: a declaration nothing checks is one that stops matching, and the
+    record's promise that it can be landed would then be a claim with nothing behind it.
+
+    The plan spells the list the same way both Packs do - a key on its own line, then a
+    bracketed flow sequence - so the one reader below serves both sources. Its entries are
+    qualified `forge_id/module_id` like every other Pack module reference since entry 48
+    was executed, and the bare ids are recovered here because the registry keys on them.
     """
-    if not DEFERRED_PATCH.exists():
+    if not PLAN_PATH.exists():
         return None
-    added = [
-        line[1:]
-        for line in DEFERRED_PATCH.read_text(encoding="utf-8").splitlines()
-        if line.startswith("+") and not line.startswith("+++")
-    ]
-    return _flow_sequence_after(added, "modules_expected")
+    # Plain lines, not diff lines. The `.patch` reader kept only those starting with `+`
+    # and stripped the marker; a plan document has no markers, and keeping that filter is
+    # how this read an empty list while reporting the source as present.
+    lines = PLAN_PATH.read_text(encoding="utf-8").splitlines()
+    return _flow_sequence_after(lines, "modules_expected")
 
 
 def declaration() -> set[str]:
@@ -120,14 +123,14 @@ def declaration() -> set[str]:
     input to these tests - it makes every intersection assertion below trivially true,
     which is exactly the shape of failure that produced this function.
     """
-    for read in (_declared_in_pack, _declared_in_deferred_patch):
+    for read in (_declared_in_pack, _declared_in_plan):
         found = read()
         if found:
             return set(found)
     raise AssertionError(
         f"no FunnelForge declaration found in {PACK_PATH.name} and none in "
-        f"{DEFERRED_PATCH.name}. One of the two must carry it: the Pack once the "
-        "deferred edit is re-applied, the patch while it is held.\n"
+        f"{PLAN_PATH.name}. One of the two must carry it: the Pack once the "
+        "planned edit is applied, the plan while it is held.\n"
         "  If the edit HAS been applied and the patch deleted, that is the expected end "
         "state - delete the deferred-patch branch of declaration() rather than letting "
         "these tests pass on an empty set.\n"
@@ -159,7 +162,11 @@ def deferred_position() -> Position:
             "Book Blueprint calls against the published appointment types",
             "Record newsletter and gated-download contacts, and read funnel analytics",
         ],
-        forge_modules_operated=sorted(declaration()),
+        # `declaration()` returns BARE ids because it reads `modules_expected`,
+        # whose container already names the Forge. `forge_modules_operated` has
+        # no such container, so it is qualified here - the two halves of entry
+        # 48's rule, visible in one expression.
+        forge_modules_operated=[f"{FORGE}/{m}" for m in sorted(declaration())],
         source_department="marketing",
         compliance_flags_in_scope=[],
         headcount=1,
@@ -235,14 +242,15 @@ def test_the_declaration_is_readable_from_wherever_it_currently_lives():
     declaration disagrees with the adapter" from "there is no declaration at all".
     """
     in_pack = _declared_in_pack()
-    in_patch = _declared_in_deferred_patch()
-    assert in_pack or in_patch, (
-        "neither the Pack nor the deferred patch declares FunnelForge"
+    in_plan = _declared_in_plan()
+    assert in_pack or in_plan, (
+        "neither the Pack nor the plan document declares FunnelForge"
     )
-    if in_pack and in_patch:
-        assert set(in_pack) == set(in_patch), (
-            "the Pack and the deferred patch declare different module sets. If the "
-            "edit has been applied, delete the patch; do not leave two declarations."
+    if in_pack and in_plan:
+        assert set(in_pack) == set(in_plan), (
+            "the Pack and the plan document declare different module sets. If the "
+            "edit has been applied, retire the plan's blocks; do not leave two "
+            "declarations that can disagree."
         )
 
 

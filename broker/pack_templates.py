@@ -133,7 +133,11 @@ def skeleton(
                 "position_title": PLACEHOLDER,
                 "reports_to": PLACEHOLDER,
                 "duties": [PLACEHOLDER],
-                "forge_modules_operated": [PLACEHOLDER],
+                # Qualified, because `forge_modules_operated` is - and the guard in
+                # `generators.pack.Position` is absolute on purpose. A template that
+                # emitted a bare placeholder would be the one Pack in the system
+                # allowed to break the rule, which is how a rule stops being one.
+                "forge_modules_operated": [f"{PLACEHOLDER}/{PLACEHOLDER}"],
                 "source_department": PLACEHOLDER,
                 "compliance_flags_in_scope": [
                     _FRAMEWORK_FLAGS.get(f, PLACEHOLDER) for f in frameworks

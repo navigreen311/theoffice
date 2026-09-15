@@ -77,7 +77,7 @@ async def generate(
     produced_uncertified = 0
 
     for position in roles.positions:
-        modules = position.forge_modules_operated
+        modules = position.module_ids
         forges_touched = sorted({forge_of[m] for m in modules if m in forge_of})
         unresolved = [m for m in modules if m not in forge_of]
 

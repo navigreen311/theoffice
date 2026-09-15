@@ -126,7 +126,7 @@ async def generate(
         for s in sorted(pack.scenarios, key=lambda s: s.scenario_id)
     ]
 
-    modules = sorted({m for p in roles.positions for m in p.forge_modules_operated})
+    modules = sorted({m for p in roles.positions for m in p.module_ids})
     operation: list[CurriculumScenario] = []
     for module in modules:
         module_content = authored.for_module(module)
@@ -258,7 +258,7 @@ def _coverage(
     """Eight dimensions, each with its denominator and its misses named."""
     positions = {p.position_title for p in roles.positions}
     roles_with_domain = {s.role for s in domain}
-    modules = {m for p in roles.positions for m in p.forge_modules_operated}
+    modules = {m for p in roles.positions for m in p.module_ids}
     modules_with_ops = {s.module_id for s in operation if s.module_id}
     flags = {f for p in roles.positions for f in p.effective_compliance_flags}
     flags_exercised = {
@@ -283,7 +283,7 @@ def _coverage(
     # position is covered when every module it operates has an operation scenario.
     covered_positions = {
         p.position_title for p in roles.positions
-        if set(p.forge_modules_operated) <= modules_with_ops
+        if set(p.module_ids) <= modules_with_ops
     }
 
     return [

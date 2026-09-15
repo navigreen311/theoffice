@@ -89,6 +89,18 @@ class DefinedPosition:
     position_title: str
     reports_to: str
     duties: list[str]
+
+    #: `forge_id/module_id` for each operated module, carrying the Pack's declaration
+    #: through unchanged.
+    #:
+    #: **Qualified 14 September 2026, executing entry 48. This moved `artifacts_hash`**,
+    #: which is what a Gate 10 signature binds to - the same class of change as
+    #: `certified_tiers` in entry 52, and the reason both live Packs were republished and
+    #: their runs restarted rather than re-signed in place.
+    #:
+    #: Use `module_ids` to compare against anything keyed on the bare id, and
+    #: `module_pairs` wherever the Forge matters. Splitting inline is what this
+    #: qualification was ruled against.
     forge_modules_operated: list[str]
     source_department: str
     declared_compliance_flags: list[str]
@@ -110,6 +122,22 @@ class DefinedPosition:
     #: construction site - this class is frozen, slotted, and hashed into `artifacts_hash`, so a
     #: field inserted in the middle would be a signature change dressed as an addition.
     module_trust_tiers: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def module_ids(self) -> list[str]:
+        """The bare `module_id` of each operated module, in order.
+
+        The named projection for comparing against anything keyed on the bare id -
+        `forge_module_registry`, `forge_operating_instruction`, the curriculum's module
+        set. Mirrors `generators.pack.Position.module_ids`, and exists for the same
+        reason: splitting is fine, splitting invisibly inside a comparison is not.
+        """
+        return [m.split("/", 1)[1] for m in self.forge_modules_operated]
+
+    @property
+    def module_pairs(self) -> list[tuple[str, str]]:
+        """`(forge_id, module_id)` for each operated module, in order."""
+        return [(f, m) for f, m in (x.split("/", 1) for x in self.forge_modules_operated)]
 
 
 @dataclass(frozen=True, slots=True)

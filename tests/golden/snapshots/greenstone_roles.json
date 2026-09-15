@@ -14,9 +14,9 @@
         "tsr_disclosure_required"
       ],
       "forge_modules_operated": [
-        "comp_analysis",
-        "place_call",
-        "property_lookup"
+        "cre-forge/comp_analysis",
+        "cre-forge/property_lookup",
+        "voiceforge/place_call"
       ],
       "headcount": 3,
       "implied_compliance_flags": [
@@ -47,10 +47,10 @@
         "tsr_disclosure_required"
       ],
       "forge_modules_operated": [
-        "assign_contract",
-        "buyer_match",
-        "place_call",
-        "transcribe_call"
+        "cre-forge/assign_contract",
+        "cre-forge/buyer_match",
+        "voiceforge/place_call",
+        "voiceforge/transcribe_call"
       ],
       "headcount": 2,
       "implied_compliance_flags": [
@@ -78,8 +78,8 @@
         "tsr_disclosure_required"
       ],
       "forge_modules_operated": [
-        "comp_analysis",
-        "underwrite_deal"
+        "cre-forge/comp_analysis",
+        "cre-forge/underwrite_deal"
       ],
       "headcount": 2,
       "implied_compliance_flags": [

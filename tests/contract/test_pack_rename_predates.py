@@ -431,10 +431,24 @@ def test_the_two_ledgers_partition_the_one_ledger():
     It was a public name before this change and it keeps its old meaning rather than
     quietly widening to include renames - a name that grows a new meaning under an
     unchanged spelling is how the callers of one become the callers of the other.
+
+    **THREE sub-ledgers since 14 September 2026.** `V3_QUALIFICATIONS` joined them when
+    entry 48 added a kind neither of the other two could describe: a field that is
+    present, populated and unchanged in meaning, whose required SPELLING moved. This test
+    caught that addition rather than passing over it - the union assertion is what makes a
+    fourth kind impossible to add silently, and that is the whole reason it is written as
+    a partition rather than as three separate type checks.
     """
-    assert set(packs.V3_TIGHTENINGS) | set(packs.V3_RENAMES) == set(
-        packs.V3_SCHEMA_CHANGES
+    ledgers = [packs.V3_TIGHTENINGS, packs.V3_RENAMES, packs.V3_QUALIFICATIONS]
+    assert set().union(*ledgers) == set(packs.V3_SCHEMA_CHANGES), (
+        "the sub-ledgers do not cover V3_SCHEMA_CHANGES. A kind that belongs to none of "
+        "them is invisible to every caller that reads a sub-ledger, including the matcher."
     )
-    assert not set(packs.V3_TIGHTENINGS) & set(packs.V3_RENAMES)
+    for i, first in enumerate(ledgers):
+        for second in ledgers[i + 1 :]:
+            assert not set(first) & set(second), "a change appears in two sub-ledgers"
     assert all(isinstance(t, packs.SchemaTightening) for t in packs.V3_TIGHTENINGS)
     assert all(isinstance(r, packs.SchemaRename) for r in packs.V3_RENAMES)
+    assert all(
+        isinstance(q, packs.SchemaQualification) for q in packs.V3_QUALIFICATIONS
+    )

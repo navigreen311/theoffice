@@ -298,7 +298,7 @@ async def test_v11_passes_once_every_operated_module_has_instructions(
     exists, because `cre-forge/generate_loi` had a complete-looking instruction and no
     handler anywhere.
     """
-    operated = tuple({m for p in greenstone.positions_required for m in p.forge_modules_operated})
+    operated = tuple({m for p in greenstone.positions_required for m in p.module_ids})
     author_instructions(admin, operated)
 
     async with connection() as conn:
@@ -431,7 +431,7 @@ async def test_greenstone_passes_gate_2_in_a_fully_prepared_world(
     the rows — which is the point of V32: rows are what somebody typed, and a prepared
     world is one where the Forge itself dispatches them.
     """
-    operated = tuple({m for p in greenstone.positions_required for m in p.forge_modules_operated})
+    operated = tuple({m for p in greenstone.positions_required for m in p.module_ids})
     author_instructions(admin, operated)
 
     async with connection() as conn:
@@ -467,7 +467,7 @@ async def test_v31_refuses_auto_execute_over_a_mutating_at_most_once_module(
     timeout produces a second record of the same act and the audit trail then shows
     two. An unattended agent is the caller with nobody to stop it.
     """
-    module = greenstone.positions_required[0].forge_modules_operated[0]
+    module = greenstone.positions_required[0].module_ids[0]
     with admin.cursor() as cur:
         cur.execute(
             "UPDATE forge_module_registry SET is_mutating = TRUE, "
@@ -491,7 +491,7 @@ async def test_v31_is_not_run_when_the_module_has_no_registry_row(
     greenstone, bridged_world, admin
 ):
     """An unknown shape is not a safe shape."""
-    module = greenstone.positions_required[0].forge_modules_operated[0]
+    module = greenstone.positions_required[0].module_ids[0]
     with admin.cursor() as cur:
         cur.execute("DELETE FROM forge_module_registry WHERE module_id = %s", (module,))
     admin.commit()
@@ -716,7 +716,7 @@ async def test_v11_fails_when_instructions_teach_a_module_the_forge_does_not_dis
     """
     from broker import forge_modules
 
-    operated = tuple({m for p in greenstone.positions_required for m in p.forge_modules_operated})
+    operated = tuple({m for p in greenstone.positions_required for m in p.module_ids})
     author_instructions(admin, operated)
     absent = greenstone.forge_dependencies.forge_bindings[0].modules_expected[0]
 
@@ -750,7 +750,7 @@ async def test_v11_is_not_run_when_the_forge_cannot_be_asked(
     """
     from broker import forge_modules
 
-    operated = tuple({m for p in greenstone.positions_required for m in p.forge_modules_operated})
+    operated = tuple({m for p in greenstone.positions_required for m in p.module_ids})
     author_instructions(admin, operated)
     forge_modules.forget()
 
@@ -780,7 +780,7 @@ async def test_v11_missing_instructions_outrank_an_unreachable_forge(
 async def test_v33_passes_when_every_instruction_has_its_own_hash(
     greenstone, bridged_world, admin
 ):
-    operated = tuple({m for p in greenstone.positions_required for m in p.forge_modules_operated})
+    operated = tuple({m for p in greenstone.positions_required for m in p.module_ids})
     author_instructions(admin, operated)
 
     async with connection() as conn:
@@ -870,7 +870,7 @@ async def test_v33_ignores_a_superseded_instruction(
     It is not a live instruction and must not collide with one. Deleting instead of
     superseding is the exception, not the rule — see docs/instruction-deletions.md.
     """
-    operated = tuple({m for p in greenstone.positions_required for m in p.forge_modules_operated})
+    operated = tuple({m for p in greenstone.positions_required for m in p.module_ids})
     author_instructions(admin, operated)
 
     with admin.cursor() as cur:

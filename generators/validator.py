@@ -608,7 +608,7 @@ def v23(pack: BusinessPack) -> tuple[bool, str]:
 
 @rule("V25", Severity.WARN, "Declared Forge with zero required_by references")
 def v25(pack: BusinessPack) -> tuple[bool, str]:
-    used = {m for p in pack.positions_required for m in p.forge_modules_operated}
+    used = {m for p in pack.positions_required for m in p.module_ids}
     unused = [
         b.forge for b in pack.forge_dependencies.forge_bindings
         if b.forge.lower() != "simforge"
@@ -737,7 +737,7 @@ async def _v11_instructions_authored(
     """
     from broker.curriculum_quality import assess
 
-    modules = {m for p in pack.positions_required for m in p.forge_modules_operated}
+    modules = {m for p in pack.positions_required for m in p.module_ids}
     if not modules:
         return True, "no modules operated"
 
@@ -1141,7 +1141,7 @@ def unattended_writes(
     for position in pack.positions_required:
         if position.trust_tier_ceiling != UNATTENDED_TIER:
             continue
-        for module in position.forge_modules_operated:
+        for module in position.module_ids:
             forges = declared.get(module) or {pack.forge_dependencies.operating_forge.lower()}
             known = [shapes[(f, module)] for f in sorted(forges) if (f, module) in shapes]
             if not known:

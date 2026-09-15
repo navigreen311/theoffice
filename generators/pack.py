@@ -23,7 +23,15 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
+from pydantic_core import PydanticCustomError
 
 SCHEMA_VERSION = 3
 
@@ -288,6 +296,35 @@ class Position(Strict):
     position_title: str
     reports_to: str
     duties: list[str]
+
+    #: The modules this position operates, each as `forge_id/module_id`.
+    #:
+    #: **QUALIFY WHERE THE FIELD DOES NOT ALREADY CARRY THE FORGE. LEAVE IT BARE WHERE IT
+    #: DOES.** That is the whole rule, it is checkable by reading the field's container,
+    #: and it decides every module reference in a Pack:
+    #:
+    #:     forge_modules_operated          a flat list on a position. Nothing around it
+    #:                                     names a Forge, so a bare name means nothing on
+    #:                                     its own -> QUALIFY
+    #:     module_trust_tiers              same position, same problem -> QUALIFY
+    #:     forge_bindings[].modules_expected  nested inside a ForgeBinding whose first
+    #:                                     field is `forge` -> the container carries it
+    #:                                     -> LEAVE BARE. Qualifying would write the Forge
+    #:                                     twice per entry and create a second place for
+    #:                                     the two to disagree.
+    #:     grant / certification / registry columns   `forge_id` and `module_id` are
+    #:                                     separate columns -> already carried -> unchanged
+    #:
+    #: Qualified 14 September 2026, executing entry 48's ruling of the 13th. Until then
+    #: this was bare while `module_trust_tiers` on the same position was qualified, and
+    #: the validator below reconciled them by *discarding* the forge half to compare -
+    #: two spellings for one concept, bridged by throwing information away.
+    #:
+    #: `module_forge_map`'s own docstring records what the bare form cannot express: a
+    #: module id registered by two Forges resolves to whichever row came first, which it
+    #: calls "deterministic rather than correct". Zero collisions existed when this
+    #: landed. **Latent ambiguity is the cheapest state to fix, and the second Forge bound
+    #: to a department is when it stops being latent.**
     forge_modules_operated: list[str]
     source_department: str
     compliance_flags_in_scope: list[str]
@@ -320,6 +357,85 @@ class Position(Strict):
     #: certified below its declared tier operates at the certified one.
     module_trust_tiers: dict[str, TrustTier] = Field(default_factory=dict)
 
+    @property
+    def module_ids(self) -> list[str]:
+        """The bare `module_id` of each operated module, in declared order.
+
+        **The projection that makes the qualified declaration usable, named rather than
+        inlined.** `forge_module_registry` keys on `(forge_id, module_id)` as two columns,
+        so every lookup against it needs the bare half - and before entry 48 was executed
+        each call site did that split silently inside a comparison, which is the shape the
+        ruling objected to. Splitting is not the defect; splitting *invisibly* is. This is
+        the same operation with a name, so a reader sees a projection happening.
+
+        Use `module_pairs` wherever the Forge is also needed. Reach for this one only when
+        comparing against something that carries the Forge separately.
+        """
+        return [m.split("/", 1)[1] for m in self.forge_modules_operated]
+
+    @property
+    def module_pairs(self) -> list[tuple[str, str]]:
+        """`(forge_id, module_id)` for each operated module, in declared order.
+
+        The shape `forge_module_registry`, `agent_forge_grant` and `certification` all key
+        on. Preferred over `module_ids` anywhere the Forge matters, because it cannot lose
+        the half that the qualification exists to carry.
+        """
+        return [(f, m) for f, m in (x.split("/", 1) for x in self.forge_modules_operated)]
+
+    @field_validator("forge_modules_operated")
+    @classmethod
+    def _modules_are_qualified(cls, value: list[str], info: ValidationInfo) -> list[str]:
+        """Each entry is `forge_id/module_id`, and the two failure kinds are signalled apart.
+
+        A FIELD validator rather than a model one, so the error's location NAMES the
+        field - `positions_required.0.forge_modules_operated`. A model validator reports
+        at the position, which elides to `("positions_required",)` and cannot be told from
+        any other failure on the same object. `broker.packs.V3_QUALIFICATIONS` keys on the
+        field path, so the location is load-bearing rather than cosmetic.
+
+        TWO BRANCHES, TWO ERROR TYPES, AND THE SPLIT IS THE POINT.
+
+        A BARE name is a document written before entry 48 landed on 14 September 2026 -
+        valid under the revision of v3 it was published as, and a row to migrate rather
+        than a document to inspect. It is signalled with a `PydanticCustomError` whose
+        type the Pack store's ledger names, so a stored row reports as OLD not MALFORMED.
+
+        A name with MORE than one separator was never valid under any revision. It stays a
+        plain `ValueError`, which `_predated_tightenings` refuses like every other
+        validator failure - *"a wrong type or a failed validator is a document that
+        disagrees with the schema, not one that is older than it."*
+
+        The distinction is made HERE, once, where the values are in hand. The matcher
+        reads the signal rather than re-deriving it: a second derivation is a second place
+        to disagree.
+        """
+        title = info.data.get("position_title", "position")
+
+        unqualified = sorted(m for m in value if m.count("/") == 0)
+        if unqualified:
+            raise PydanticCustomError(
+                "unqualified_module_ref",
+                "{title}: forge_modules_operated entries must be 'forge_id/module_id'. "
+                "Unqualified: {names}. Nothing around this list names a Forge, so a bare "
+                "module name is unambiguous only while one Forge is bound - and "
+                "`forge_module_registry`'s key has always been the pair. QUALIFY WHERE "
+                "THE FIELD DOES NOT ALREADY CARRY THE FORGE; "
+                "`forge_bindings[].modules_expected` stays bare because its container's "
+                "first field is `forge`.",
+                {"title": title, "names": ", ".join(unqualified)},
+            )
+
+        malformed = sorted(m for m in value if m.count("/") > 1)
+        if malformed:
+            raise ValueError(
+                f"{title}: forge_modules_operated entries are 'forge_id/module_id', "
+                f"exactly one separator. Malformed: {', '.join(malformed)}. This is not a "
+                "Pack that predates the qualification - no revision of v3 ever accepted "
+                "this shape."
+            )
+        return value
+
     @model_validator(mode="after")
     def _overrides_are_qualified_and_operated(self) -> Position:
         """Keys are `forge_id/module_id`, and name a module this position operates.
@@ -341,10 +457,11 @@ class Position(Strict):
                 f"Unqualified: {', '.join(unqualified)}. A bare module name is unambiguous only "
                 "while one Forge is bound."
             )
+        # Both sides qualified since 14 September 2026, so they are compared directly.
+        # This used to be `k.split("/", 1)[1] not in operated` - the forge half discarded
+        # to make a qualified key match a bare list, which is what entry 48 ruled against.
         operated = set(self.forge_modules_operated)
-        unknown = sorted(
-            k for k in self.module_trust_tiers if k.split("/", 1)[1] not in operated
-        )
+        unknown = sorted(k for k in self.module_trust_tiers if k not in operated)
         if unknown:
             raise ValueError(
                 f"{self.position_title}: module_trust_tiers names {', '.join(unknown)}, which "

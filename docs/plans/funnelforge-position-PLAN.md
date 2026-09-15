@@ -121,10 +121,11 @@ Insert into `positions_required`, immediately before the line `capacity_demand:`
       - Book Blueprint calls against the published appointment types
       - Record newsletter and gated-download contacts, and read funnel analytics
     forge_modules_operated:
-      [send_intake_acknowledgment, send_scheduling_confirmation,
-       send_deliverable_cover, send_followup_no_engagement,
-       send_brief_cover, distribute_referrer_briefing,
-       schedule_blueprint_call, capture_contact, read_funnel_analytics]
+      [funnelforge/send_intake_acknowledgment, funnelforge/send_scheduling_confirmation,
+       funnelforge/send_deliverable_cover, funnelforge/send_followup_no_engagement,
+       funnelforge/send_brief_cover, funnelforge/distribute_referrer_briefing,
+       funnelforge/schedule_blueprint_call, funnelforge/capture_contact,
+       funnelforge/read_funnel_analytics]
     source_department: marketing        # Burkham calls this "Marketing Ops"
     compliance_flags_in_scope: []
     headcount: 1
@@ -175,9 +176,10 @@ is what a replace-all briefly made it look like. One module of nine needing a di
 tier is exactly the case per-module tiers were built for, and it is why this position can
 now land at all.
 
-**`forge_modules_operated` is bare**, matching all 19 refs in both live Packs. Entry 48
-ruled it should be qualified `forge_id/module_id` and that ruling is unexecuted; whoever
-executes it changes this block with the other 19 rather than leaving it the twentieth.
+**`forge_modules_operated` is qualified**, matching both live Packs. Entry 48 ruled it
+should be and that ruling was executed on 14 September 2026 - this block was changed with
+the other 19 rather than left as the twentieth. `generators.pack.Position` now refuses a
+bare entry, so an unqualified block here would not parse.
 
 ---
 

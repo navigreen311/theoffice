@@ -370,7 +370,7 @@ def test_the_position_is_not_in_the_pack_without_a_landing_receipt() -> None:
         m
         for p in pack.positions_required
         if p.trust_tier_ceiling == "auto_execute"
-        for m in p.forge_modules_operated
+        for m in p.module_ids
         if m in funnelforge_modules
     }
     if not unattended:

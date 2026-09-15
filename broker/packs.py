@@ -115,8 +115,53 @@ class SchemaRename:
         return (*self.field_path[:-1], self.previous_name)
 
 
-#: A change v3 made to what it accepts. Two kinds, because they fail differently.
-SchemaChange = SchemaTightening | SchemaRename
+#: A change v3 made to what it accepts. Three kinds, because they fail differently.
+@dataclass(frozen=True, slots=True)
+class SchemaQualification:
+    """One occasion on which v3 began requiring a fuller SPELLING of an existing value.
+
+    **A third sibling, and it exists because the other two could not describe entry 48.**
+
+        B21  `provenance`   a field that was NOT THERE           -> `missing`
+        B23  the rename     old name refused, new name missing   -> `extra_forbidden`
+        this one            the field is there, populated, and means exactly what it
+                            always meant. Only the required spelling moved.
+
+    `_predated_tightenings` refused this shape outright - *"a wrong type or a failed
+    validator is a document that disagrees with the schema, not one that is older than
+    it"* - **and that refusal was correct until there was one.** It is right for every
+    validator failure that is not a spelling requirement added after the fact. So it is
+    kept whole, with one named exception: an error the validator itself marks as *this
+    value is unqualified*, at a path this ledger names.
+
+    The validator makes that distinction once, where it has the information, and signals
+    it as a `PydanticCustomError` type. The matcher reads the signal rather than
+    re-deriving it from the input - a second derivation is a second place to disagree.
+
+    PACK-LEVEL, like both siblings. A field-level qualification would repair one field
+    and pass the rest, which is the half-qualified state entry 48 ruled against.
+    """
+
+    #: Same convention as its siblings: the elided path, list indexes removed.
+    field_path: tuple[str, ...]
+
+    #: The `PydanticCustomError` type the validator raises for THIS qualification.
+    #: Named rather than assumed, so a second qualification cannot silently borrow the
+    #: first one's signal and be diagnosed as it.
+    error_type: str
+
+    landed: str
+    blocking_entry: str
+    requires: str
+
+    @property
+    def label(self) -> str:
+        """How the field is written when a human talks about it."""
+        head, *rest = self.field_path
+        return head + "".join(f"[].{part}" for part in rest)
+
+
+SchemaChange = SchemaTightening | SchemaRename | SchemaQualification
 
 
 #: Every v3 change, oldest first.
@@ -136,6 +181,21 @@ V3_SCHEMA_CHANGES: tuple[SchemaChange, ...] = (
             "(declared / inherited / measured), `established_by` naming a person, a "
             "`detail` sentence, and - when the basis is not `declared` - a `source` "
             "naming what was copied or observed"
+        ),
+    ),
+    SchemaQualification(
+        field_path=("positions_required", "forge_modules_operated"),
+        error_type="unqualified_module_ref",
+        landed="2026-09-14",
+        blocking_entry="entry 48",
+        requires=(
+            "every `forge_modules_operated` entry is written `forge_id/module_id`. The "
+            "modules did not change and neither did the field's meaning - only the "
+            "spelling. The rule is one sentence: QUALIFY WHERE THE FIELD DOES NOT "
+            "ALREADY CARRY THE FORGE. A position's module list is flat, with nothing "
+            "around it naming a Forge, so a bare id is unambiguous only while one Forge "
+            "is bound; `forge_dependencies.forge_bindings[].modules_expected` stays bare "
+            "because its container's first field is `forge`"
         ),
     ),
     SchemaRename(
@@ -158,6 +218,11 @@ V3_SCHEMA_CHANGES: tuple[SchemaChange, ...] = (
 #: than "what has v3 changed".
 V3_TIGHTENINGS: tuple[SchemaTightening, ...] = tuple(
     change for change in V3_SCHEMA_CHANGES if isinstance(change, SchemaTightening)
+)
+
+#: The qualifications alone, for the same reason.
+V3_QUALIFICATIONS: tuple[SchemaQualification, ...] = tuple(
+    change for change in V3_SCHEMA_CHANGES if isinstance(change, SchemaQualification)
 )
 
 #: The renames alone, for the same reason.
@@ -227,6 +292,10 @@ def _predated_tightenings(
     tightenings = {t.field_path: t for t in V3_TIGHTENINGS}
     renames_by_new = {r.field_path: r for r in V3_RENAMES}
     renames_by_old = {r.previous_path: r for r in V3_RENAMES}
+    # Keyed on (error_type, path) so a qualification is explained only by the signal its
+    # OWN validator raises. Keying on the path alone would let a future qualification at
+    # the same path be diagnosed as this one.
+    qualifications = {(q.error_type, q.field_path): q for q in V3_QUALIFICATIONS}
 
     errors = [
         (str(error.get("type")), tuple(error.get("loc", ()))) for error in exc.errors()
@@ -267,9 +336,21 @@ def _predated_tightenings(
                 # somewhere the new one is not missing. Neither is an unmigrated row.
                 return None
             # Counted on the `missing` half only, so a pair is one change, not two.
+        elif (kind, path) in qualifications:
+            # THE ONE NAMED EXCEPTION to the rule below, and it is narrow by
+            # construction: the error type is raised by exactly one validator, for
+            # exactly the case *this value is unqualified*, and the path must be one this
+            # ledger names. A malformed value at the same path - `forge/module/extra` -
+            # raises a plain `value_error` and falls through to the refusal.
+            note(qualifications[(kind, path)])
         else:
             # A wrong type or a failed validator is a document that disagrees with the
             # schema, not one that is older than it.
+            #
+            # UNCHANGED, and deliberately so. The exception above does not weaken this;
+            # it names one error type the validator emits on purpose. Everything else -
+            # including an unqualified-looking value at a path the ledger does not name -
+            # still disqualifies the whole diagnosis.
             return None
 
     if not ordered:
@@ -312,6 +393,18 @@ def _predates_message(
                 f"  * `{change.label}` - renamed from `{change.previous_name}` on "
                 f"{change.landed} (blocking-log {change.blocking_entry}); {where} here "
                 f"still carry the old name. This build requires that {change.requires}."
+            )
+        elif isinstance(change, SchemaQualification):
+            # *This used to be spelled that* - its own wording, for the same reason the
+            # rename has one. "Field required" is false here: the field is present and
+            # populated. What moved is what a valid value looks like, and a reader told
+            # "absent from 5 entries" would go looking for a missing key.
+            lines.append(
+                f"  * `{change.label}` - required to be written `forge_id/module_id` "
+                f"since {change.landed} ({change.blocking_entry}); {where} here carry "
+                "unqualified values. The field is PRESENT and its meaning is unchanged - "
+                f"only the required spelling moved. This build requires that "
+                f"{change.requires}."
             )
         else:
             lines.append(
