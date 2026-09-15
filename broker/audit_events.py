@@ -99,6 +99,13 @@ EVENTS: tuple[Event, ...] = (
           "have. **The column itself was dropped in migration 0036**, so nothing can "
           "write this event again and nothing needs to. See blocking.md B37.",
           "broker.revocation", SYSTEM),
+    Event("forge_tenant_credential_removed", "Forge credential removed",
+          "A Forge's tenant credential row was deleted because no live Business Pack binds "
+          "that Forge any more. `forge_tenant_credential` has no reason column and one row "
+          "per Forge, so this entry carries the reason and the full removed row for "
+          "restoration. First written 2026-09-15 for voiceforge (decisions entry 90), by hand "
+          "and not by a module - published with no writer, which the walker permits.",
+          "decisions.md entry 90", SYSTEM),
     Event("console_revocation_created", "Revocation issued",
           "The kill switch. Takes effect on the target's next call.",
           "broker.app", CONSOLE),

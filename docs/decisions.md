@@ -7083,3 +7083,86 @@ directions. And the ledger holds this class twice - entries 38 and 88 - not four
 - `broker/village.py`'s fallback to `127.0.0.1:8002`. A process that neither exports nor loads
   still asks a different service there.
 - The Village port: the registered 8120 against the running 8130.
+
+---
+
+## 90. Greenstone Pack 1.7.0 published; the first run on it reaches Gate 4; VoiceForge's credential removed as a true orphan
+
+**Ruled 2026-09-15 by Ivan, in this order, so the removal would land on a true orphan.
+Development database. Environment: the Village on 8130 with `VILLAGE_BASE_URL` exported; CRE
+Forge on 8011 and SimForge on 8110, both verified by body; everything else filled by
+`broker/env.py`.**
+
+### The sequence, as it ran
+
+    1. published   greenstone 1.7.0 = origin/main's packs/greenstone.yaml, hash 60ff0f5cd586,
+                   authored_by Ivan. 1.6.0 superseded.
+    2. aborted     run 107480d6 (1.6.0, blocked at gate 2) - reason names the voiceforge
+                   binding and the 1.7.0 publish
+    3. started     run 60ff7ef5-2ec4-43ef-9412-9dfaf512c238 on 1.7.0
+         gate 0    passed          bridge operational for cre-forge, simforge
+         gate 1    passed          Pack greenstone@1.7.0 authored
+         gate 2    passed          35 rules, no failures
+         gate 3    passed          12 workflow steps, 64 projected daily approvals
+         gate 3.5  passed          reconciliation clean
+         gate 4    AWAITING_HUMAN  operator review: artifacts, bill of materials, appointment gap
+    4. removed     forge_tenant_credential voiceforge - after confirming no live Pack binds
+                   voiceforge; audit_id 1610, event forge_tenant_credential_removed
+
+**Greenstone's first run to pass Gate 2 is waiting at Gate 4 for a human.** No run of this
+venture had passed Gate 2 before: the 26 August runs on 1.0.0 were the furthest, and they
+stopped at 4 on an earlier Pack.
+
+**Gate 3's 64 approvals a day is this database's figure, from its roster and appointment.** It
+is not the golden snapshot's 128, which is computed against the test world's fixtures. Gate
+4.5 will evaluate V13 against it after the review. 64 x 6 minutes = 384 against 144 would
+still block, but that is arithmetic, not a gate verdict, and it is not recorded as one.
+
+### The credential removal
+
+**It was a true orphan only after step 1.** Until 1.7.0 was published, the live 1.6.0 Pack
+still bound voiceforge, so the credential answered to a declaration.
+
+The removed row, restorable from this entry or from audit 1610:
+
+    forge_id voiceforge, credential_ref env://VOICEFORGE_TOKEN, scope tenant,
+    rotation_due 2026-11-23, last_rotated NULL,
+    break_glass_holders {72d2d0b8-4fd8-4733-a358-e344cdab072f, c2a64e5e-ae43-4ad6-bd43-4e95f345a949}
+
+**Left in place, deliberately:**
+- the `forge_registry` voiceforge row and its two `forge_module_registry` rows - they describe a
+  Forge, not a dependency;
+- the `voiceforge/place_call` exclusion - a founder decision, which outlives any binding.
+
+`forge_tenant_credential_removed` is now published in `broker/audit_events.py`, so the audit
+view names it.
+
+**What is true in general, and not enforced:** nothing checks that a Forge's credential is still
+needed by some live Pack. V2 and V32 ask only about Forges a Pack binds, so a credential for an
+unbound Forge is invisible to both.
+
+### Settled: instructions are keyed by Forge and module, never by venture
+
+    forge_operating_instruction   PRIMARY KEY (forge_id, module_id, instruction_version)
+                                  UNIQUE (forge_id, module_id) WHERE superseded_at IS NULL
+                                  no venture column
+    V11                           reads every live instruction into a map keyed
+                                  (forge_id, module_id), whatever the venture
+                                  (validator.py:800-803)
+
+**One instruction serves every venture that operates the module.** An instruction authored for
+Burkham's `capitalforge/client_read` is Greenstone's too, the moment a Greenstone position
+operates it. This answers a question asked twice in different forms, and should not need asking
+a third time.
+
+### An invention, recorded at Ivan's direction
+
+A run was described as reporting V11 blocked on **twenty modules, eighteen of them CapitalForge
+and two CRE**, with V29, V30 and V32 cleared and the credential removal *"making V11 able to
+reach the question"*. **No run reported that, and Greenstone operates no CapitalForge module.**
+Run 107480d6's last Gate 2 result was V11 on `transcribe_call` alone. No Greenstone gate result
+has ever named CapitalForge. The credential had not been removed.
+
+**Ivan's framing: the same shape as the orphan grants (entry 86)** - a number, a breakdown and a
+conclusion, with nothing underneath. It was caught by reading which Forges the Pack's positions
+operate before answering what the eighteen were.
