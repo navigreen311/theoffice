@@ -7239,9 +7239,12 @@ revoked 14 September, held the venture at Gate 9 through both deactivation and r
 is not counted, and the same grant unrevoked still blocks. With the exclusion removed, the first
 fails.
 
-**What it does to Burkham, stated before it runs:** the four grants stop being counted, and **Gate
-9 still blocks**, now on its other condition. All fifteen remaining certifications carry no SimForge
-PASS, and Gate 9 refuses *"certification(s) read as certified but carry no SimForge PASS"*. The
+**What it does to Burkham, stated before it ran and then measured:** the four grants stop being
+counted, and **Gate 9 still blocks**, now on its other condition. Run 8ed2f39a, advanced with this
+code: *"90 certification(s) read as certified but carry no SimForge PASS ... 4 revoked grant(s) not
+counted (agent_module)"* - 45 grants, 0 units uncertified, 90 units with no SimForge verdict. **The
+count is 90, not the fifteen first written here:** Gate 9 checks every grant row on the venture,
+superseded duplicates included (entry 67), and every one points at a bootstrap certification. The
 verdict changes cause, not value. That is B3, and the fix does not touch it.
 
 **3. `dev-up.sh` killed by port.** `taskkill //F` on whatever held 8080 and 3100. On this machine
