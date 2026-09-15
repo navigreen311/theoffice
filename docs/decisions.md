@@ -7403,3 +7403,187 @@ performance across completed deals. This ruling's condition is a count of human-
 - **Blocks today:** V24 fails Gate 4.5 on the unfilled position.
 - **Still counted:** its 32 approvals a day stay in the projection at `propose`.
 - **Nothing edited:** the Pack is unchanged, and so are its scenarios, trigger and modules.
+
+---
+
+## 94. Seven Greenstone rulings, each premise measured; three premises do not hold
+
+**Ruled 2026-09-15 by Ivan. Recorded, not built. No Pack, code or data was changed.** Per entry 91
+every premise supplied with a ruling was measured first. A ruling stands whatever its premise did;
+what is recorded here is which reason survives measurement.
+
+**Standing ruling: Ivan Green and Ira Green have identical rights and access.** Every ruling below
+applies to both equally. Measured: in The Office they hold byte-identical grants - one
+`office_human_role` row each, `role='ivan'`, `venture_id` NULL, so `authorize` treats them the same
+everywhere. Three asymmetries exist outside that table and none is a rights rule:
+
+    Ira has never signed in       `last_seen_at` NULL, zero audit rows as actor. Her token was
+                                  issued once; only its hash is stored. `dev-up.sh` reissues
+                                  Ivan's by default (OPERATOR_EMAIL) and has no path for hers.
+    Burkham names only Ivan       one actor labelled "Ivan Green", `isFounder = false`, no
+                                  credential; no actor for Ira. Success-fee approval requires
+                                  `isFounder`, which no live actor holds, so neither can approve.
+    The Packs name them apart     Greenstone: Ivan venture_operator, Ira compliance_officer.
+                                  Nothing in `authorize` reads that.
+
+In the Greenstone console, CRE Forge, CapitalForge, SimForge and VoiceForge **neither founder has an
+account at all**. SimForge runs `auth_mode: dev-bypass`, where every caller is `dev-ivan` holding
+all eight roles, founder included.
+
+### 1. `recording_consent_required` stays on Buyer Network Manager - PREMISE DOES NOT HOLD
+
+The ruling stands; its stated basis does not.
+
+    claim                            measured
+    buyer calls run CRE Forge ->     NO buyer call path exists. Every CRE Forge call path is keyed
+    VoiceForge, recorded             to a property and its owner: `InitiateCallRequest.property_id`
+                                     is required, `Communication.property_id` is NOT NULL,
+                                     the dialer dials `Owner.phone`, `CallRecord` has no buyer
+                                     field. The console's buyer "Call" buttons log to the browser
+                                     console and do nothing else. In the running container
+                                     VoiceForge is `mock_mode: true` and Twilio is not configured.
+                                     The Office removed the VoiceForge binding entirely (entry 87).
+    with Promise Tracking            REAL, and it is the Greenstone console's module 4.3, not CRE
+                                     Forge's and not VoiceForge's. Implemented in `@gsc/calls`.
+                                     Its own doc: "No recording, no transcript, no automatic
+                                     summary. The summary is typed by whoever made the call."
+                                     It accepts a buyer audience.
+    Console policy requires          ONE blueprint sentence: "Every founder-led and Concierge call
+    consent capture                  recorded (with consent)". No console code captures or enforces
+                                     consent to record. The consent module (1.5) covers buyer
+                                     packet authorisation, not recording.
+
+**What is true instead:** if a buyer call is recorded, a human makes it and types the summary.
+**The Pack's own framework entry says "Any recorded call with an owner or broker"** - which does not
+name a buyer, while scenarios bn-001 and bn-003 are buyer calls.
+
+**Where a consent duty for humans can be declared, since this position has no call module:**
+`market.compliance_surface[].human_held`, with `why`, optionally `pending_activation`. V22 then
+counts the flag as accounted for and **V34 fails until a named human files an `obligation_discharge`
+covering NV**. That is Burkham's referral-fee shape exactly. `human_capacity` cannot carry a duty and
+`Position` cannot say whether a human or an agent fills it.
+
+### 2. `tsr_disclosure_required` attaches to no position, pending a Seller Outreach / Acquisitions Manager - EXPRESSIBLE, BUT NOT BY EDITING POSITIONS ALONE
+
+**The flag does not reach positions from the Pack.** `compliance_flags_in_scope` names it on
+Acquisition Analyst, but every position gets it anyway: `forge_module_registry.compliance_flags_implied`
+carries `{tsr_disclosure_required}` on **all five** CRE Forge modules, and `generators/roles.py` unions
+declared and implied. Detaching it from positions therefore requires the registry rows to change, and
+those rows are seeded fixtures (entry 95).
+
+The pending state is expressible today: `human_held` + `pending_activation` on the FTC_TSR entry,
+whose `activates_when` a reviewer can check ("the Seller Outreach position is declared"). V22 stays
+satisfied either way - acq-001 and acq-003 exercise the flag, and nothing forbids a flag being both
+human-held and exercised.
+
+### 3 and 4. MAOs are countersigned; assignment approval is never that deal's MAO author - NOT BUILT, AND THE CONSOLE CANNOT RECORD IT
+
+    what exists              `Underwriting` (console): `recommendedBy` = the authenticated actor,
+                             `version`, `supersededAt`, `workings`. NO approver or countersign
+                             field, and `recommendedBy` does not record whether the actor was a
+                             human or an agent.
+    the LOI ceiling          does not exist. Nothing reads `maoCents` as a ceiling; its only
+                             readers are outcome reports (`atOrUnderMao`). `LoiTrigger` drafts
+                             from an acceptance score and opens a review.
+    assignment approval      `ApprovalKind` has four kinds. LOI, PSA and Assignment Agreement are
+                             deliberately absent - "approve things that cannot yet be created".
+    the precedent            `WireConcurrence`: `@@unique(wireInstructionId, agentId)` plus a
+                             distinct-agent check in `packages/wire/src/rules.ts`. That is the
+                             shape a countersign should copy.
+
+**A consequence of ruling 4 with two founders:** the assignment approver must not be the MAO author,
+so it must be the countersigner. **Rulings 3 and 4 together leave no fallback** - if the
+countersigner is unavailable, nobody may approve that deal's assignment.
+
+**Also unenforceable in The Office.** `assign_contract` proposals are decided there by any
+`venture_operator` or stronger, and The Office holds no MAO, no author and no countersign. Which
+surface is authoritative for ruling 4 is undecided.
+
+### 5. Underwriting time declared separately from review time - THE SCHEMA HAS ONE KIND OF HOUR
+
+`human_capacity.coverage_hours` means review coverage and nothing else, and V13 is the only consumer.
+There is no field for non-review work, so "4h writing, 1h countersigning" cannot be declared without
+a schema change.
+
+**Declared hours per founder, summed as the Packs stand** (live Packs only; "Ivan" and "Ivan Green"
+are one person):
+
+    Ivan   12h   Burkham 6 (compliance_officer) + Greenstone 6 (venture_operator)
+    Ira     6h   Burkham 6 (compliance_officer). Greenstone's live 1.7.0 still names Dana.
+
+With PR #144's Pack published, Ira gains Greenstone's 2h. **With this ruling's hours on top: Ivan 16h
+a day, Ira 9h** - and Ira is also declared for MedLink Pro, Argus and Collingswood, none of which has
+a Pack. **Nothing anywhere sums a person across ventures**, which is why neither total has ever been
+refused.
+
+### 6. MAO tracking as a soft signal, and the activation trigger - NOTHING COUNTS EITHER TODAY
+
+Warn at 5 in-flight, red at 8, overridable; activation at a cumulative 10-20 written. The console can
+count `Underwriting` rows per deal and has a module whose job is this shape - **5.1 Deal Pipeline
+Monitoring & Stack Health**, real and built (`@gsc/pipeline`, health bands, stack view, alerts).
+What is missing is the same field both counts need: **whether the MAO was written by a human**.
+"In flight" also has no definition in the schema; the nearest facts are `supersededAt` and the deal's
+stage.
+
+### 7. Phase 1 volume: ~1 closed assignment a week, 2 by Month 12 - GATE 4.5 CANNOT BE SIZED AGAINST IT
+
+**No deal volume enters the projection.** Demand is `DEFAULT_DAILY_VOLUME_PER_HEADCOUNT = 8` per
+(workflow step, holder, module), an unattributed constant (entry 46). `capacity_demand.agent_days_per_week`
+exists and the projection does not read it. **A Pack cannot state "one closed assignment a week", so
+sizing Gate 4.5 against it needs the per-module volume declaration sketched in entry 93's report.**
+At today's arithmetic Greenstone projects 64 approvals a day against a venture closing one deal a
+week.
+
+---
+
+## 95. The dev database's Forge world is a test fixture, and two gate verdicts rest on it
+
+**Measured 2026-09-15, read-only, while checking entry 94's premises.** Nothing was changed.
+
+`scripts/seed_dev_world.py` calls `tests/world.py::build_world` against `OFFICE_ADMIN_DSN`. It is the
+test world, written into the development database, and parts of it are still there.
+
+### What survives, and what has been overwritten
+
+    still the fixture     forge_registry rows for cre-forge, simforge, voiceforge - including
+                          `health_status = 'GREEN'`, written by the fixture and never recomputed
+                          since; the cre-forge and simforge tenant credentials; every
+                          `compliance_flags_implied` value on those Forges' module rows; both
+                          Greenstone compliance library entries (`nv-two-party-consent-v1`,
+                          `ftc-tsr-v2`), which exist in NO file on disk.
+    overwritten by real   module shapes for 4 cre-forge modules (`verify_forge_modules.py`,
+    tooling               2 September); all operating instructions (Ivan, 13-15 September);
+                          the base_urls (8011, 8110, and capitalforge's, by hand - no code in
+                          this repo writes `forge_registry`).
+    already deleted       the 7 fixture agents and all fixture certifications, removed by
+                          migration 0026 on 29 August. Today's identities are the Village import
+                          and the certifications are `bootstrap-phase0`'s.
+
+### The two verdicts that rest on fixture rows
+
+**Greenstone run 60ff7ef5, Gate 0 "bridge operational for cre-forge, simforge": entirely fixture.**
+V2 reads a stored `health_status` and a credential row; it sends no request. Both rows are the
+fixture's, and the GREEN was written by `tests/world.py`.
+
+**Greenstone Gate 2, V28 "every library_entry_ref resolves": entirely fixture.** Both refs resolve
+only to the two seeded rows. They are on no disk file, so removing them makes V28 report the refs as
+written nowhere.
+
+**Greenstone Gate 3's approval split is fixture-derived.** Deal Underwriter declares no compliance
+flag; it acquires `tsr_disclosure_required` solely from the fixture's per-Forge flag list, and that
+is what routes its 32 approvals to the compliance officer. Without it V13 would read 32 approvals
+against 192 minutes rather than 64 against 384 - **still a FAIL, a different number, and a different
+`artifacts_hash`.**
+
+**Burkham run 8ed2f39a's Gate 9 block does not rest on fixture data.** Its 90 units are
+bootstrap-attested rows issued 13 September. Its Gate 0 half-rests on the fixture's simforge row.
+
+### The guard, and what it does not guard
+
+`dev-up.sh` runs the seed only when `SELECT count(*) FROM forge_registry` is 0; today it is 4.
+`console-smoke.sh` runs it when `/api/forges` returns `[]`. **Neither the seed nor `build_world`
+checks which database it is pointed at** - no host, database-name or environment assertion. Run
+against today's development database it would delete all 18 certifications, all 16 operating
+instructions and both Greenstone grants, then re-register cre-forge and simforge at
+`https://example.invalid` and rewrite every module row to `is_mutating = TRUE` - re-introducing the
+exact `property_lookup` error the verifier was built to catch.
