@@ -79,7 +79,14 @@ positions_required:
       - Source off-market candidates from public records and owner outreach
       - Pull comparable sales and rent rolls
       - Produce a first-pass value estimate
-    forge_modules_operated: [cre-forge/property_lookup, cre-forge/comp_analysis, voiceforge/place_call]
+    # `voiceforge/place_call` removed 2026-09-15 (decisions entries 73 and 83). It is
+    # FORBIDDEN in forge_module_exclusion by a founder decision binding every venture:
+    # no agent may initiate an outbound phone call as principal, whether or not the
+    # module works. Declaring it here could never produce a usable grant -
+    # runtime_config.apply skips excluded modules and a BEFORE INSERT trigger refuses
+    # them anyway. What it did produce was demand: V13 billed human review for a module
+    # no agent may ever call.
+    forge_modules_operated: [cre-forge/property_lookup, cre-forge/comp_analysis]
     source_department: research
     compliance_flags_in_scope: [tsr_disclosure_required]
     headcount: 3
@@ -124,7 +131,11 @@ positions_required:
       - Maintain the vetted buyer list and their stated criteria
       - Match a contracted deal to buyers by fit
       - Circulate the assignment package
-    forge_modules_operated: [cre-forge/buyer_match, cre-forge/assign_contract, voiceforge/place_call, voiceforge/transcribe_call]
+    # `voiceforge/place_call` removed 2026-09-15 - forbidden, as above.
+    # `voiceforge/transcribe_call` STAYS: the founder decision permits VoiceForge to
+    # assist a human on a call (transcription, coaching, note-taking) and forbids only
+    # dialling or speaking as one. Removing both would over-apply the ruling.
+    forge_modules_operated: [cre-forge/buyer_match, cre-forge/assign_contract, voiceforge/transcribe_call]
     source_department: operations
     compliance_flags_in_scope: [recording_consent_required]
     headcount: 2
@@ -196,7 +207,11 @@ forge_dependencies:
     - forge: voiceforge
       api_version: 2.0.0
       criticality: soft
-      modules_expected: [place_call, transcribe_call]
+      # `place_call` removed 2026-09-15 - forbidden, as above. The binding stays,
+      # because `transcribe_call` is still operated and V32 resolves this list
+      # against the adapter. A binding listing a module no position operates is
+      # what V6 and V31 read, so the two halves are removed together.
+      modules_expected: [transcribe_call]
       compliance_flags_propagated: [recording_consent_required]
       fallback_behavior: manual_handoff
       rate_limit_policy: {max_rps: 2, burst: 5, backoff: exponential, on_429: skip}

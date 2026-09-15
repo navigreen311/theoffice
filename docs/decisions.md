@@ -6471,3 +6471,120 @@ All 49 burkham-wickmont grants are inactive, and activation happens at Gate 11. 
 8ed2f39a is blocked at gate 9. Going further means completing the ladder or writing
 `activated_at` by hand, and the second is the bypass `grants.deactivate` was written to
 undo. **The refusal is the result.**
+
+---
+
+## 83. Greenstone: two engineering grants revoked on its own terms, an exclusion that already held, and `place_call` off the Pack
+
+**Ruled 2026-09-15 by Ivan, as three items (G1, G2, G3). Each ruling is recorded as given
+and each is carried out as measured. Where the two differ, the difference is stated rather
+than smoothed over.**
+
+### G1 - the engineering grants: two revoked, not four
+
+**Ruled:** revoke Greenstone's engineering grants, with the same verb as Burkham's, on
+Greenstone's own terms rather than inherited ones.
+
+**Greenstone held two, not four.** The four were burkham-wickmont's, and they were revoked on
+14 September. That revocation's own reason set Greenstone apart: *"Amelie Wystan's two grants
+there have the same provenance and are NOT covered by this."*
+
+    revocation 6c67fd31   Amelie Wystan   cre-forge/property_lookup   agent_module   ivan
+    revocation 193183e3   Amelie Wystan   simforge/gate_result        agent_module   ivan
+
+Both were issued through `humans.authorize`, then `revocation.revoke`, at 10:12:06. Both are
+per grant, and both blast radii read *"One grant revoked."* **These were the only two active
+grants in the database.** Until one is activated, nothing in the database holds authority a
+call could use.
+
+**The grounds, as ruled and as measured:**
+
+    ruled                                        measured
+    -------------------------------------------  -----------------------------------------------
+    no Greenstone position draws from            true - positions draw from research, banking
+    engineering                                  and operations
+    no capacity block accounts for it            true - packs/greenstone.yaml never names
+                                                 engineering
+    from DEFAULT_DEPARTMENT, before --department NOT AS NAMED. No DEFAULT_DEPARTMENT has ever
+    existed                                      existed here (git log -S, all branches).
+                                                 property_lookup: issued by Ivan through the
+                                                 Phase 0.8 bootstrap (d3c7573), whose query
+                                                 hardcoded WHERE department = 'engineering' as a
+                                                 LITERAL, before PR #118 added --department.
+                                                 gate_result: issued AND activated by
+                                                 smoke-e4fc20ff, origin test_fixture, with no
+                                                 script committed that day - worse than a
+                                                 default, because a fixture names nobody who can
+                                                 answer for it.
+
+**Every certification reference on both grants points at a row that does not exist.** Each
+revocation's reason carries its own provenance, so the record can be read from the row alone.
+
+**Neither these revocations nor Burkham's four have an audit entry.** `revocation.revoke`
+writes the revocation row, with actor, role, reason and blast radius, and no audit event.
+Only the console route adds one, `console_revocation_created`, and that event name would
+have mislabelled a revocation made outside the console. **Six authority withdrawals in two
+days are absent from `audit_log`.** They are recorded here as a gap, not closed here.
+
+### G2 - "add the exclusion": nothing to add, and the decision was already enforced
+
+**Ruled:** add the `place_call` exclusion. §3.4 binds every venture, and the module is in
+Greenstone's Pack with a live grant, so the decision is unenforced there.
+
+**Measured: the exclusion exists, and there is no grant.**
+
+    broker/module_exclusions.py:278          voiceforge/place_call declared, forbidden
+    forge_module_exclusion (dev and test)    recorded
+    apply_module_exclusions.py --check       "All 21 declared exclusions are recorded and match."
+    agent_forge_grant, module place_call     0 rows, any venture
+    trigger                                  agent_forge_grant_exclusion_guard present
+
+**The founder decision has been enforced on Greenstone the whole time.** A grant for
+`place_call` cannot be written, and none has been. What the Pack still held was a
+*declaration*: demand with no possible grant behind it. That is G3's subject, and nothing was
+done under G2.
+
+### G3 - the test given its own fixture, then the Pack edit
+
+**Ruled:** restore the deleted test, then land the Pack edit, using G2's exclusion as a fixture
+that is not `place_call`. Record that the test was deleted rather than re-anchored.
+
+**Measured: no test was deleted.** `git log --all -G "def test_.*(exclu|place_call)"` shows
+additions only. #126 *re-anchored* two tests and added a third. The test entry 73 held on,
+`test_directory_reports_the_failing_rules_message_not_the_rule_name`, has existed all along
+and still asserted `place_call`. **So the record says re-anchored, because that is what
+happened.** The ruling's reason stands on its own: a test guarding a real property must not
+lose its subject because a production fixture moved. That is exactly what entry 73 held the
+edit for.
+
+**G2 had no exclusion to lend, so the fixture is the test's own.** It records an exclusion
+for `cre-forge/underwrite_deal`, a module the Pack still operates, and removes it in a
+`finally`. The property - V11 NAMES an excluded module rather than silently leaving it out -
+no longer depends on any Pack declaring a forbidden module.
+
+**Checked against a deliberate break:** with V11's excluded-module note removed, the test
+fails with its own message. Restored, it passes.
+
+**Then the Pack edit**, redone against the qualified module names from #136. It was not
+popped from the stash, which would have undone that qualification on two of the three lines:
+
+    Acquisition Analyst       voiceforge/place_call removed
+    Buyer Network Manager     voiceforge/place_call removed; voiceforge/transcribe_call STAYS
+    voiceforge binding        modules_expected: [transcribe_call]
+
+`test_authored_content_reaches_the_artifact_end_to_end` was re-anchored to `transcribe_call`,
+and the stale "Greenstone's roles operate place_call" comment was corrected.
+
+**Seven golden snapshots re-recorded, and the diff read line by line.** Every removed line is
+`place_call` or a trailing comma it left behind. Curriculum coverage goes from 7 modules to 6,
+and projected approvals from **192 to 160** - the 32 a day entry 73 measured. **V13 still
+fails: 7x over rather than 8x**, for entry 73's reason. Its reviewer is Dana, who does not
+exist. Two tests asserted the literal `"192 approvals"` at Gate 4.5
+(`test_the_real_pack_blocks_at_gate_4_5_through_the_api` and
+`test_a_run_stops_at_the_first_blocking_gate_and_names_it`). Both now assert 160, with the
+reason in a comment. Both still assert the block. `docs/provisioning.md` and
+`docs/generators.md` were updated to match; `blocking.md`'s dated state tables were left as
+written. Full suite: 1561 passed.
+
+**The stash (`stash@{0}` on `coord/greenstone-remove-place-call`) is superseded and has not
+been dropped.** Dropping it is a separate, deliberate act.

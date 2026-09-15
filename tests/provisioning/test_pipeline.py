@@ -122,7 +122,14 @@ async def test_a_run_stops_at_the_first_blocking_gate_and_names_it(
         # dispatches. The gate blocks either way, which is why the fall to 160 was not
         # an improvement and this rise is not a regression: the review load was always
         # going to be real once the work was.
-        assert "192 approvals" in blocking.reason
+        #
+        # 160 again from 2026-09-15, for a different reason (decisions entries 73 and
+        # 83). `voiceforge/place_call` left the Pack: it is forbidden in
+        # forge_module_exclusion, so no agent could ever hold it, and its 32 approvals
+        # a day were review demand for work that can never happen. Unlike September 2,
+        # nothing real was removed. The gate still blocks - the reviewer is Dana, who
+        # does not exist (entry 59) - so this is still not an improvement.
+        assert "160 approvals" in blocking.reason
         assert "compliance officer" in blocking.reason
         assert state is not None
         assert state.status == "blocked"

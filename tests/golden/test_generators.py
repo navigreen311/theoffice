@@ -385,28 +385,34 @@ async def test_authored_content_reaches_the_artifact_end_to_end(
     P-06/07/08 fill. This threads a content set through `generate` and asserts the
     authored fields arrive.
 
-    `place_call` is used because it is a real Greenstone module with a live
+    `transcribe_call` is used because it is a real Greenstone module with a live
     instruction; the content is built here rather than read from `scenarios/`, so the
     test says what it depends on instead of depending on a file it does not name.
+
+    RE-ANCHORED 15 September 2026 from `place_call`, in the same change that removes it
+    from the Pack (decisions entry 83). `place_call` is forbidden and no position
+    operates it any more, so the curriculum has no row for it to carry authored content
+    into. `transcribe_call` is the same Forge and the half of it the founder decision
+    permits, and the property - authored fields arrive in the artifact - is unchanged.
     """
     from generators import curriculum as curriculum_gen
     from generators import scenario_content as sc
 
     authored = sc.ModuleContent(
-        module_id="place_call",
+        module_id="transcribe_call",
         forge_id="voiceforge",
         scenarios={
             "happy_path": sc.AuthoredScenario(
                 scenario_class="happy_path",
-                situation="An analyst asks for a seller to be called about a listing.",
-                expected_behavior="Place the call and report what came back.",
+                situation="A manager asks for the buyer call they just finished to be transcribed.",
+                expected_behavior="Transcribe the call and return the transcript to the manager.",
                 expected_escalation="None; the boundary is a named recipient.",
             )
         },
         not_applicable={"rate_limited": "No section of this instruction has one."},
     )
     content = sc.ScenarioContentSet(
-        root=sc.default_root(), root_exists=True, modules={"place_call": authored}
+        root=sc.default_root(), root_exists=True, modules={"transcribe_call": authored}
     )
 
     certify_for_positions(admin)
@@ -423,7 +429,7 @@ async def test_authored_content_reaches_the_artifact_end_to_end(
         )
 
     rows = {s.scenario_class: s for s in curriculum.operation_scenarios
-            if s.module_id == "place_call"}
+            if s.module_id == "transcribe_call"}
 
     assert rows["happy_path"].summary == authored.scenarios["happy_path"].situation
     assert rows["happy_path"].expected_escalation
@@ -437,7 +443,7 @@ async def test_authored_content_reaches_the_artifact_end_to_end(
 
     covered = {c.dimension: c for c in curriculum.coverage}
     assert covered["modules_with_authored_scenario_content"].covered == 1
-    assert "place_call" not in covered["modules_with_authored_scenario_content"].uncovered
+    assert "transcribe_call" not in covered["modules_with_authored_scenario_content"].uncovered
 
 
 async def test_domain_and_operation_scenarios_are_never_merged(artifacts):
@@ -580,10 +586,10 @@ async def test_runtime_config_apply_is_idempotent(artifacts):
 
     assert first == second, "the same config must plan the same writes both times"
     assert after_first == after_second, "re-applying changed state"
-    # Planned minus excluded, not planned. Greenstone's roles operate
-    # `voiceforge/place_call`, which `forge_module_exclusion` refuses - so a planned
-    # grant that is never written is the correct outcome, and the count that would
-    # have caught a real regression is this one rather than `len(grants)`.
+    # Planned minus excluded, not planned. No Greenstone role operates an excluded
+    # module since `voiceforge/place_call` left the Pack, so `grants_excluded` is empty
+    # here; the exclusion path itself is covered on purpose by
+    # `test_apply_skips_an_excluded_module_and_names_it`, not by this fixture.
     assert len(after_first["grants"]) == (
         len(artifacts.runtime_config.grants) - len(first["grants_excluded"])
     )

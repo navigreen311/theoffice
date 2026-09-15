@@ -24,6 +24,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     command succeeds after it, plus every refusal. Mutation-checked: removing either
     grant refusal, or the write, fails the tests that should fail.
   - **Not a scheduler.** The window ends and nothing follows it (entry 81).
+
+### Changed
+- **`voiceforge/place_call` removed from the Greenstone Pack** (decisions entries 73 and 83).
+  It is forbidden in `forge_module_exclusion` by a founder decision, so no grant for it could
+  ever exist; declaring it only produced review demand. `voiceforge/transcribe_call` stays.
+  Projected compliance approvals fall from 192 to 160 a day, and V13 still blocks at Gate 4.5.
+  - **The test entry 73 held on got its own fixture first.**
+    `test_directory_reports_the_failing_rules_message_not_the_rule_name` now records its
+    own exclusion (`cre-forge/underwrite_deal`) to assert that V11 names an excluded module,
+    instead of depending on a production Pack declaring a forbidden one. Checked against a
+    deliberate break: dropping V11's excluded-module note fails it.
+  - Seven golden snapshots re-recorded, with every changed line read;
+    `test_authored_content_reaches_the_artifact_end_to_end` re-anchored to `transcribe_call`.
 - **Pack module conformance — resolving a Pack against the Forge, not against a row.**
   A Pack's `modules_expected` is a list a human wrote and a `forge_module_registry` row
   is a row a human wrote, so V6 compared two claims. The Burkham Pack declared twelve
