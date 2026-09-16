@@ -7736,3 +7736,140 @@ extraction had a **literal control byte where `\1` belonged**, so the name came 
 existence check matched nothing, and `CREATE DATABASE ""` failed the script under `set -e`. An
 escaping artefact, the same class as the one that hit `dev-up.sh` in entry 91, found because this is
 the branch that now has to write the marker. Fixed, and it marks the database it creates.
+
+---
+
+## 98. Three rulings: Gate 0 blocks on "could not ask", Nevada is all-party, hours ship with volume
+
+**Ruled 2026-09-15 by Ivan. Premises measured per entry 91.**
+
+### 1. Gate 0 blocks when a Forge cannot be checked - BUILT, entry 99
+
+### 2. Nevada is treated as all-party in every compliance library until counsel says otherwise
+
+**Burkham's library does not actually classify Nevada. Its console does, and the console says
+one-party.**
+
+    packs/compliance-library/burkham-wickmont.yaml, compliance/call-recording-consent-v1
+      jurisdiction      [CA, FL, IL, MD, MA, MT, NH, OR, PA, WA, CT] - eleven all-party
+                        states, and NV is NOT among them
+      citation          eleven statutes, none of them Nevada's. NRS 200.620 does not appear
+      escalation 8      "When a call is to be recorded in NEVADA, until the contradiction in
+                        the notes is resolved. Two live artifacts in this portfolio disagree
+                        about whether NV is a one-party or all-party state, and NV is
+                        Burkham's first-listed target geography."
+      provenance        claim tagged `sourced`, asserted by Ivan, status
+                        `draft_pending_claim_library_approval`, counsel review deferred to
+                        state activation. No counsel has read it.
+
+**The classification that a machine reads is in the Burkham console**, not in any library:
+`CONFIRMED_ONE_PARTY_STATES = ['NV', 'NY', 'TX', 'AZ', 'UT']`
+(`packages/calls/src/consent.ts:135`, unchanged since 10 August). That list is the branch.
+
+**Four artifacts, three answers:**
+
+    Burkham console        NV one-party          the only one that any code reads
+    Office fixture row     NV all-party          compliance/nv-two-party-consent-v1, NRS
+                                                 200.620 - seeded from tests/world.py under
+                                                 an author uuid that matches no account
+    CapitalForge docs      NV all-party          docs/tcpa-compliance.md, a table nothing reads
+    Burkham intake doc     NV unlisted           six two-party states, NV not among them
+
+**What would decide a Nevada call today, and what it would decide.** Only Burkham's `@bwc/calls`:
+`mayRecord({jurisdiction: 'NV'})` matches the one-party list, returns
+`clientConsentRequired: false`, and **short-circuits without reading the consent ledger at all**.
+It would record. Three things blunt that today and none of them is the rule: the path has no route
+or UI and is called only by tests, audio capture returns `notBuilt`, and Greenstone's console has no
+recording-consent code whatsoever.
+
+**So executing this ruling is not a library edit.** The library entries carry prose a person reads;
+the console constant is what a machine obeys. **And the library loses its caveats on the way into
+the database:** `claim_provenance`, `notes`, `status` and `depends_on` are not columns, so the loader
+writes eight fields and the stored row reads as settled - `draft_pending_claim_library_approval`
+survives only in the file.
+
+### 3. Real declared hours and per-module volume ship in the same release
+
+**Correct, and the reason is measurable.** Demand is `DEFAULT_DAILY_VOLUME_PER_HEADCOUNT = 8` per
+(step, holder, module); no Pack field feeds volume, and `capacity_demand.agent_days_per_week` is read
+only by Gate 2's V13, never by the projection. Publishing hours alone moves the supply side down -
+Burkham from 432 minutes to 126 - against a demand figure that cannot move, which turns a passing
+gate into a failing one and teaches nothing about the venture. Entry 96 holds both figures.
+
+### Measured alongside, and worth having on the record
+
+**The Office has no MFA in any sense.** `mfa_enrolled_at` is written by nothing - the column has DDL,
+five reads and a test asserting it stays NULL - and it is NULL for every row. Sign-in is one bearer
+token, SHA-256 in `office_human.token_hash`, **with no expiry**; the console cookie is that same
+token with an 8-hour browser lifetime. **Nothing anywhere branches on `auth_method`**, so a Pack
+declaring `sso_mfa` for a Gate 10 signer declares an aspiration. The console already says it in
+place: *"MFA not enrolled - sso_mfa is a claim, not evidence"*.
+
+**Of the nine Pack fields that can name a person, two are resolved against accounts** -
+`human_name` and `backup_human`, by a strip-and-lower match on `display_name`.
+`provenance.established_by`, `forge_operating_instructions[].authored_by`, `kpi_targets[].owner` and
+`budget.cost_alert_recipients` resolve against nothing. Today's access overview reports two missing
+people: **Dana**, because Greenstone's live 1.7.0 still names her - PR #144's Pack is on main and not
+published - and **"Ivan Green"**, because Burkham's Pack spells the account `Ivan` that way. Both
+Packs require distinct humans at Gate 10, so both are runs that cannot be signed.
+
+---
+
+## 99. Gate 0 asks the Forge now, and a Forge nobody could ask does not pass
+
+**Built 2026-09-15 on Ivan's ruling: "Gate 0 blocks when a Forge can't be checked. Could not ask is
+not a pass."** Second item of entry 96's foundation.
+
+### What V2 was
+
+`forge_registry.health_status`, read and returned. **No request was ever sent.** Nothing in this
+repository has ever written that column outside a migration and test fixtures, so every row held
+whatever created it - entry 37 said so in September: *"a row written once stays GREEN forever;
+`last_health_check` records when somebody looked and nothing consults it."*
+
+Measured on 15 September, across the four registered Forges:
+
+    cre-forge      GREEN, never checked      answers 200
+    simforge       GREEN, never checked      answers 200
+    capitalforge   GREEN, checked 3 Sep      answers 200 - and its stored GREEN was WRONG on
+                                             13 September, when port 4000 was refusing
+    voiceforge     GREEN, never checked      cannot resolve. example.invalid, no credential
+
+**Three of four agreed with the world by luck.** The fourth is the case: a Forge at an address RFC
+2606 guarantees cannot resolve, with no credential row at all, reading GREEN at Gate 0.
+
+### What it does now
+
+`broker.forge_modules.read` - the same authenticated `GET {base_url}/_modules` that V32 and
+`verify_forge_modules.py` already make, with the Forge's own auth model, its resolved tenant
+credential and the configured timeout. **No new per-Forge call, no new credential path, no
+migration.** A Forge that answers passes, and the message says how it was asked.
+
+**Three refusals, because they are three different jobs:**
+
+    not in forge_registry     a row somebody has to write
+    no tenant credential      a secret somebody has to provision - refused before any request,
+                              because there is nothing to authenticate with
+    unreachable: <error>      a service somebody has to start
+
+`health_status = 'RED'` still blocks, and is not probed: nothing writes it today, but a human
+writing it is a human withdrawing a Forge from service, and a service that answers must not overrule
+that.
+
+### Why FAIL here and NOT_RUN in V32
+
+**Both rules meet the same unreachable Forge and are right to answer differently.** V32 asks whether
+declared modules are dispatched; an unasked Forge leaves that unknown, so NOT_RUN - and V32's own
+docstring insists that is not a pass. **Gate 0 asks whether the bridge reaches the Forge at all, and
+"unreachable" is the answer to that question rather than the absence of one.** So V2 fails, names the
+Forge and names the reason.
+
+Three tests: a Forge that answers passes and says how it was asked; a registered, healthy,
+credentialed Forge whose endpoint refuses the connection blocks (port 1, so the real HTTP path runs
+without waiting out a timeout); a Forge with no credential blocks before any request.
+
+**It moved two tests that were passing on the stored value.** `test_gate_0_passes_when_every_hard_forge_is_bridged`
+and the ventures directory's "no longer blocked at gate zero" both built the bridge in the database
+only. They now stand the adapters up through `dispatch_from_registry`, the fixture V32 has always
+needed - which is the honest statement of what those tests were previously asserting: that rows
+existed.
