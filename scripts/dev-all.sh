@@ -88,6 +88,20 @@ pids_on_port() {
     | awk '{print $NF}' | sort -u
 }
 
+# Report a service that is not answering, naming whoever holds its port. Used by both
+# paths: --status was the LESS informative of the two until 2026-09-16, which is
+# backwards - the mode somebody runs to diagnose should say more, not less. "Docker
+# Desktop is on this port" is the entire answer, and status mode was withholding it.
+report_down() {
+  local what="$1" port="$2" holder
+  holder="$(port_holder "$port")"
+  if [ -n "$holder" ]; then
+    bad "$what - port held by $holder, which is not it"
+  else
+    bad "$what - nothing is listening on $port"
+  fi
+}
+
 port_holder() {
   local pid name out=""
   for pid in $(pids_on_port "$1"); do
@@ -209,7 +223,7 @@ if probe cre "http://127.0.0.1:$CRE_FORGE_PORT/forge/_modules" '"forge":"cre-for
         "${CRE_FORGE_TOKEN:-}"; then
   ok "answering as cre-forge"
 elif [ "$STATUS_ONLY" -eq 1 ]; then
-  bad "not answering as cre-forge"
+  report_down "not answering as cre-forge" "$CRE_FORGE_PORT"
 else
   say "docker start creforge-db creforge-redis creforge-backend"
   say "(started, never re-created: the override port map lives on the containers)"
@@ -226,7 +240,7 @@ if probe sim "http://127.0.0.1:$SIMFORGE_PORT/office/_modules" '"forge":"simforg
         "${SIMFORGE_TOKEN:-}"; then
   ok "answering as simforge"
 elif [ "$STATUS_ONLY" -eq 1 ]; then
-  bad "not answering as simforge"
+  report_down "not answering as simforge" "$SIMFORGE_PORT"
 elif [ -n "$(pids_on_port "$SIMFORGE_PORT")" ]; then
   bad "port held by $(port_holder "$SIMFORGE_PORT") and it is not SimForge - left alone"
 elif [ -x "$SIMFORGE_DIR/.venv/Scripts/uvicorn.exe" ]; then
@@ -247,7 +261,7 @@ if probe cf "http://127.0.0.1:$CAPITALFORGE_PORT/api/office/_modules" \
         '"forge_id":"capitalforge"' "${CAPITALFORGE_TOKEN:-}"; then
   ok "answering as capitalforge"
 elif [ "$STATUS_ONLY" -eq 1 ]; then
-  bad "not answering as capitalforge"
+  report_down "not answering as capitalforge" "$CAPITALFORGE_PORT"
 elif [ -n "$(pids_on_port "$CAPITALFORGE_PORT")" ]; then
   bad "port held by $(port_holder "$CAPITALFORGE_PORT") and it is not CapitalForge"
 elif [ -d "$CAPITALFORGE_DIR" ]; then
@@ -265,7 +279,7 @@ step "Village :$VILLAGE_PORT"
 if probe village "http://127.0.0.1:$VILLAGE_PORT/api/org/departments" '"department_count"'; then
   ok "answering as the Village"
 elif [ "$STATUS_ONLY" -eq 1 ]; then
-  bad "not answering as the Village"
+  report_down "not answering as the Village" "$VILLAGE_PORT"
 elif [ -n "$(pids_on_port "$VILLAGE_PORT")" ]; then
   bad "port held by $(port_holder "$VILLAGE_PORT") and it is not the Village"
 elif [ -x "$VILLAGE_DIR/.venv/Scripts/python.exe" ]; then
@@ -313,7 +327,7 @@ if probe api "http://127.0.0.1:$API_PORT/api/live" '"status":"live"'; then
     say "      did not start it. Stop it yourself; killing by port takes Docker with it."
   fi
 elif [ "$STATUS_ONLY" -eq 1 ]; then
-  bad "not answering"
+  report_down "not answering" "$API_PORT"
 elif [ -n "$(pids_on_port "$API_PORT")" ]; then
   bad "port held by $(port_holder "$API_PORT") and it is not the API"
 else
@@ -340,7 +354,7 @@ step "Console :$CONSOLE_PORT"
 if probe console "http://127.0.0.1:$CONSOLE_PORT/login" "<html"; then
   ok "serving"
 elif [ "$STATUS_ONLY" -eq 1 ]; then
-  bad "not serving"
+  report_down "not serving" "$CONSOLE_PORT"
 elif [ -n "$(pids_on_port "$CONSOLE_PORT")" ]; then
   bad "port held by $(port_holder "$CONSOLE_PORT") and it is not the console"
 elif [ -d "$ROOT/console/.next" ]; then
