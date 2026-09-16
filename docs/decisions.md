@@ -7873,3 +7873,53 @@ and the ventures directory's "no longer blocked at gate zero" both built the bri
 only. They now stand the adapters up through `dispatch_from_registry`, the fixture V32 has always
 needed - which is the honest statement of what those tests were previously asserting: that rows
 existed.
+
+---
+
+## 100. The smoke world's Forges answer, and the smoke script passes for the first time
+
+**Built 2026-09-15, immediately after entry 99 turned Gate 0 into a question.**
+
+### What entry 99 did to the smoke world
+
+The seeded world registers its Forges at `https://example.invalid` with credential refs pointing at
+environment variables a runner does not have. V2 used to read a stored `GREEN` and pass. Asked, it
+blocks - correctly - so every smoke run stopped at Gate 0 and the eleven checks below the ladder had
+nothing to render. **That is the rule working, and it demonstrates nothing.**
+
+### A stub server, for `stub-village.py`'s reason
+
+`scripts/stub-forge.py` serves `/{forge_id}/_modules` for the three seeded Forges, reading the module
+tuples from `tests/world.py` so the stub and the seeded world cannot drift. **A server rather than a
+monkeypatch:** the suite's `dispatch_from_registry` replaces a function in the calling process and
+the API runs in another - and the point of a smoke test is that the real path runs, credential
+resolve and HTTP call and manifest parse included.
+
+**It serves the manifest and nothing else.** A POST to a module is a 404 on purpose: a stub answering
+`{"ok": true}` would make a brokered call look like it worked against a Forge that did nothing, which
+is the failure `forge_module_exclusion` exists to name.
+
+### The script passes, and the eight FAILs were one cause
+
+**0 FAILs, 0 NOT EXERCISED, 433 lines.** The eight were all downstream of a ladder that never reached
+Gate 4: the review form, the artifacts summary above it, three lost detail-page lines, the raw
+evidence toggle, the review-and-advance control, and the unevaluable-rules count. The run now reaches
+Gate 4 awaiting review, and V11 reports PASS where it reported NOT_RUN.
+
+### What two clean runs found before the baseline could be recorded
+
+**A PASSING step has no "Process completed with exit code" line**, and that was the only anchor
+ending the compared region. On the first green run the region ran on into the runner's teardown, and
+two identical runs disagreed on about 150 lines of node deprecation warnings, a pip cache line, a
+temporary HOME path and Postgres container ids.
+
+The step had exited non-zero on every run since it was written - eight FAILs by design - **so the
+passing case had never been exercised, in the instrument the merge gate is built on.** That is the
+shape entry 91 recorded twice already: something that has reported for a long time without ever
+having discriminated.
+
+`##[endgroup]` was the obvious anchor and is the wrong one: it closes the command echo sixteen lines
+in, before the script prints anything, so the digest would have covered the environment block and
+none of the output - stably, run after run. The region now ends before the runner's own tail lines,
+listed explicitly. **Both earlier captures still reproduce their recorded digests, so no red baseline
+moved.**

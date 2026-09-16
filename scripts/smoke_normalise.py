@@ -164,10 +164,83 @@ import sys
 #:     job 104616139575   branch  232b4d2       run 35039237755 attempt 2
 #:
 #: byte-identical, 432 lines, the same eight FAILs.
-BASELINE = "b9e5233a7e7c22aae0100fb61b980800375a31515eab887046aeb86cb8825a64"
+#:
+#: **Re-recorded 2026-09-15 for PR #149, and this is the run where the script PASSES.**
+#: `scripts/stub-forge.py` answers the manifest Gate 0 now asks for, so the demo venture
+#: reaches Gate 4 instead of stopping at Gate 0 - and the eight FAILs, which were all
+#: downstream of a ladder that never got that far, are gone. **0 FAILs, 0 NOT EXERCISED,
+#: 433 lines.** Every changed line, against the immediately previous baseline:
+#:
+#:     + ==> Forges to ask at Gate 0, the stub's own two lines
+#:     - stopped at gate 0 (blocked) / bridge not operational: ... credential ref did
+#:       not resolve
+#:     + stopped at gate 4 (awaiting_human) / operator review required
+#:     - FAIL the Gate 4 review form did not render, and the four that followed it
+#:     + the form rendered, the brief is expanded, the preserved copy is verbatim, a
+#:       known downstream failure is stated before the human is asked to act
+#:     - NOT EXERCISED downstream blocker banner
+#:     - FAIL the raw evidence is gone entirely
+#:     + the raw evidence is still reachable behind a toggle, and the V13 message keeps
+#:       its utilisation-factor line
+#:     - FAIL recording a review and advancing are still two unrelated controls
+#:     + recording a review and advancing is one action
+#:     - FAIL unevaluable rules with no gate named: ['V11', 'V32']
+#:     + three states partition all 35 rules; every unevaluable rule names its gate
+#:     - instructions are real and V11 says NOT_RUN   ->   + V11 says PASS
+#:     - a failing Pack names the rules it fails      ->   + an unvalidated Pack says
+#:       which rules could not run
+#:     - has passed gate 0                            ->   + has passed gate 4
+#:     - 11 of 11 audit rows / 11 fixture entries     ->   + 16 of 16 / 16
+#:     - 1 check(s) could not run, 8 check(s) failed, ##[error]exit code 1
+#:     + all checks passed
+#:
+#: Two runs on the same commit:
+#:
+#:     job 104619575261   branch  10df3b9       run 35040668570 attempt 1
+#:     job 104620632483   branch  10df3b9       run 35040668570 attempt 2
+#:
+#: byte-identical after the region fix recorded above `_RUNNER_TAIL`, which those two
+#: runs are what found: a passing step has no "Process completed with exit code" line, so
+#: the old region ran on into the runner's teardown and two clean runs disagreed on 150
+#: lines of node warnings and container ids. Both previous captures still reproduce their
+#: recorded digests under the new anchors, so no red baseline moved.
+BASELINE = "b388ec34bdca4ab143a0bc403399a6e39dd84307dafca4070a47c5c51e1d54d8"
 
 _STEP_START = "##[group]Run ./scripts/console-smoke.sh"
+
+#: Where the compared region ends. TWO anchors, because the first only ever appeared on
+#: a run that failed.
+#:
+#: `Process completed with exit code` is written by the runner when a step exits
+#: non-zero. The smoke step had exited non-zero on every run since it was written - eight
+#: FAILs by design - so that line was always there, and nothing noticed that a PASSING
+#: step has no such line at all. When the Forges started answering and the script passed
+#: for the first time, the region ran to the end of the job log and swallowed the
+#: teardown: node deprecation warnings, a pip cache line, a temporary HOME path, the
+#: Postgres service container's id and its startup log. **Two runs of a passing job then
+#: disagreed on 150 lines of runner noise, none of it produced by the thing under test.**
+#:
+#: `Post job cleanup.` is the runner's first line after the step, pass or fail, so it is
+#: the anchor that does not depend on the verdict. It is NOT appended - the region ends
+#: with the script's own last line.
+#:
+#: **`##[endgroup]` is the anchor that looks right and is not.** The runner writes
+#: `##[group]Run ./scripts/console-smoke.sh`, echoes the command and its environment,
+#: and closes that group SIXTEEN LINES IN, before the script has printed anything. Ending
+#: there would have hashed the env block and none of the output, and it would have
+#: matched itself run after run - a stable digest of the wrong text.
 _STEP_END = "Process completed with exit code"
+
+#: Lines the RUNNER writes after the step's own output, none of them produced by the
+#: thing under test. The region ends before the first of them. A list rather than a
+#: pattern because each one earns its place by having appeared: the deprecation notices
+#: are GitHub's, they change when GitHub changes them, and a baseline that moves because
+#: a runner changed its wording is a gate nobody will trust.
+_RUNNER_TAIL = (
+    "Post job cleanup.",
+    "Node 20 is being deprecated",
+    "##[warning]Node.js 20",
+)
 
 _TIMESTAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T[\d:.]+Z ")
 _CHROMIUM = re.compile(r"^ {4}(DevTools listening|\[\d+:\d+:|$)")
@@ -194,6 +267,8 @@ def normalise(raw: str) -> str:
             inside = True
         if not inside:
             continue
+        if stripped.strip().startswith(_RUNNER_TAIL):
+            break
         lines.append(stripped)
         if _STEP_END in stripped:
             break
