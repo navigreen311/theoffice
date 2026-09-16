@@ -56,6 +56,9 @@ export function ComplianceEntryForm({ knownFlags }: { knownFlags: string[] }) {
   return (
     <form action={action} className="space-y-3">
       <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Venture" hint="Whose entry this is. Two ventures may hold the same ref.">
+          <input className={inputClass} name="venture_id" placeholder="greenstone" />
+        </Field>
         <Field label="Entry ref" hint="What a Pack's library_entry_ref resolves against.">
           <input className={inputClass} name="entry_ref" placeholder="compliance/ftc-tsr-v2" />
         </Field>

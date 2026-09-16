@@ -428,6 +428,13 @@
 #
 #   If it needs the citation to know what to do, the implication is not written yet.
 
+# Whose entries these are. Required since migration 0039: an entry belongs to a venture,
+# and the loader will not guess which - a wrong guess writes one venture's compliance
+# text under another's id, which is what the single-key table permitted and what this
+# loader warned about at length rather than prevented. Cross-checked against the file's
+# name; the two disagreeing stops the load.
+venture_id: burkham-wickmont
+
 entries:
 
   # =========================================================================

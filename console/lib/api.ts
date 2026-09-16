@@ -1011,6 +1011,8 @@ export type PlaybookResponse = {
 };
 
 export type ComplianceEntry = {
+  /** Whose entry this is. The key is (venture_id, entry_ref) since migration 0039. */
+  venture_id: string;
   entry_ref: string;
   framework: string;
   jurisdiction: string[];
@@ -1019,6 +1021,17 @@ export type ComplianceEntry = {
   escalation_trigger: string;
   citation: string;
   runtime_flag: string | null;
+  /**
+   * `draft` | `draft_pending_claim_library_approval` | `approved`. Carried so a draft
+   * reads as a draft here: the files held this and the table did not, so an entry
+   * written by hand and approved by nobody rendered exactly like one taken from a
+   * statute.
+   */
+  status: string;
+  /** Each claim tagged `sourced`, `reconstructed` or `proposed`, with its source. */
+  claim_provenance: { claim?: string; tag?: string; source?: string }[];
+  /** When a lawyer read it. `null` means none has. */
+  counsel_reviewed_at: string | null;
   authored_at: string;
   updated_at: string;
 };

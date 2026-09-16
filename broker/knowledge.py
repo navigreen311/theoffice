@@ -211,9 +211,15 @@ REQUIRED_ENTRY_FIELDS = (
 )
 
 
+#: What an entry may say about its own standing. `draft` is the default everywhere,
+#: including the column's, because an entry nobody approved must not read as settled.
+ENTRY_STATUSES = ("draft", "draft_pending_claim_library_approval", "approved")
+
+
 async def author_compliance_entry(
     conn: AsyncConnection,
     *,
+    venture_id: str,
     entry_ref: str,
     framework: str,
     jurisdiction: list[str],
@@ -223,12 +229,20 @@ async def author_compliance_entry(
     citation: str,
     authored_by: uuid.UUID,
     runtime_flag: str | None = None,
+    status: str = "draft",
+    claim_provenance: list[dict[str, Any]] | None = None,
 ) -> str:
     """Part 6.3's six fields, checked here as well as by the table.
 
     Checked twice on purpose: the constraint is the control and cannot be argued with,
     and this raises a message that names the missing field rather than surfacing a check
     constraint violation an operator has to decode.
+
+    **`venture_id` is required and has no default.** Until migration 0039 this wrote to a
+    portfolio-wide table keyed on `entry_ref` alone, so authoring Greenstone's NV entry
+    under a ref Burkham already used replaced Burkham's text and every check stayed green
+    - they ask whether a ref resolves, never whose entry answered. A default here would
+    reintroduce that by making the venture optional at the one site that decides it.
     """
     values = {
         "framework": framework,
@@ -250,16 +264,25 @@ async def author_compliance_entry(
         )
     if not entry_ref.strip():
         raise KnowledgeError("entry_ref is what a Pack resolves against; it is required")
+    if not venture_id.strip():
+        raise KnowledgeError(
+            "venture_id is whose entry this is; it is required. An entry with no owner "
+            "is the state that let one venture overwrite another's (migration 0039)."
+        )
+    if status not in ENTRY_STATUSES:
+        raise KnowledgeError(
+            f"status must be one of {', '.join(ENTRY_STATUSES)}; got {status!r}"
+        )
 
     async with conn.cursor() as cur:
         await cur.execute(
             """
             INSERT INTO compliance_library_entry
-              (entry_ref, framework, jurisdiction, applicability_rule,
+              (venture_id, entry_ref, framework, jurisdiction, applicability_rule,
                agent_behavior_implication, escalation_trigger, citation, runtime_flag,
-               authored_by)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (entry_ref) DO UPDATE
+               authored_by, status, claim_provenance)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (venture_id, entry_ref) DO UPDATE
             SET framework = EXCLUDED.framework,
                 jurisdiction = EXCLUDED.jurisdiction,
                 applicability_rule = EXCLUDED.applicability_rule,
@@ -267,52 +290,82 @@ async def author_compliance_entry(
                 escalation_trigger = EXCLUDED.escalation_trigger,
                 citation = EXCLUDED.citation,
                 runtime_flag = EXCLUDED.runtime_flag,
+                status = EXCLUDED.status,
+                claim_provenance = EXCLUDED.claim_provenance,
                 updated_at = now()
             """,
-            (entry_ref, framework, jurisdiction, applicability_rule,
+            (venture_id, entry_ref, framework, jurisdiction, applicability_rule,
              agent_behavior_implication, escalation_trigger, citation, runtime_flag,
-             authored_by),
+             authored_by, status, Jsonb(claim_provenance or [])),
         )
     await conn.commit()
     return entry_ref
 
 
-async def compliance_entries(conn: AsyncConnection) -> list[dict[str, Any]]:
+#: Every column a reader of an entry gets. `status` and `counsel_reviewed_at` travel with
+#: the text so a draft reads as a draft wherever it is shown - the files carried that and
+#: the database did not, so an entry written by hand and never reviewed looked exactly
+#: like one taken from a statute.
+_ENTRY_COLUMNS = (
+    "venture_id, entry_ref, framework, jurisdiction, applicability_rule, "
+    "agent_behavior_implication, escalation_trigger, citation, runtime_flag, "
+    "status, claim_provenance, counsel_reviewed_at, authored_at, updated_at"
+)
+
+
+async def compliance_entries(
+    conn: AsyncConnection, venture_id: str | None = None
+) -> list[dict[str, Any]]:
+    """Every entry, or one venture's. Ordered by venture then ref, because the key is."""
+    where = "WHERE venture_id = %s " if venture_id else ""
+    params = (venture_id,) if venture_id else ()
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
-            "SELECT entry_ref, framework, jurisdiction, applicability_rule, "
-            "       agent_behavior_implication, escalation_trigger, citation, "
-            "       runtime_flag, authored_at, updated_at "
-            "FROM compliance_library_entry ORDER BY entry_ref"
+            f"SELECT {_ENTRY_COLUMNS} FROM compliance_library_entry "
+            f"{where}ORDER BY venture_id, entry_ref",
+            params,
         )
         return [dict(r) for r in await cur.fetchall()]
 
 
 async def resolve_entry_refs(
-    conn: AsyncConnection, refs: list[str]
-) -> tuple[list[str], list[str]]:
-    """Which of these refs exist. Returns (resolved, unresolved).
+    conn: AsyncConnection, refs: list[str], *, venture_id: str
+) -> tuple[list[str], list[str], list[str]]:
+    """Which of these refs this venture has. Returns (resolved, elsewhere, unresolved).
 
-    Both halves, because "3 of 5 resolved" and "3 resolved" are different reports and
-    only one of them tells you to go and write something.
+    Three lists, not two. "Resolved" and "missing" were the whole answer while the table
+    was portfolio-wide; with a venture column there is a third case that reads like the
+    second and has a different remedy - **the ref exists, for somebody else.** Reporting
+    that as missing sends an author to write an entry, and the natural way to make the
+    message go away is to load the other venture's file under this venture's id, which is
+    the overwrite migration 0039 exists to prevent.
     """
     if not refs:
-        return [], []
+        return [], [], []
     async with conn.cursor() as cur:
         await cur.execute(
-            "SELECT entry_ref FROM compliance_library_entry WHERE entry_ref = ANY(%s)",
+            "SELECT entry_ref, venture_id FROM compliance_library_entry "
+            "WHERE entry_ref = ANY(%s)",
             (refs,),
         )
-        found = {r[0] for r in await cur.fetchall()}
-    return sorted(found), sorted(set(refs) - found)
+        rows = await cur.fetchall()
+
+    mine = {ref for ref, owner in rows if owner == venture_id}
+    others = {ref for ref, owner in rows if owner != venture_id} - mine
+    return sorted(mine), sorted(others), sorted(set(refs) - mine - others)
 
 
-async def flags_with_entries(conn: AsyncConnection) -> set[str]:
-    """Runtime flags the library can explain."""
+async def flags_with_entries(conn: AsyncConnection, venture_id: str) -> set[str]:
+    """Runtime flags THIS venture's library can explain.
+
+    Scoped since 0039. Unscoped, Greenstone's entry explained Burkham's flag and Gate 6
+    passed on it - which is not a gate reading a library, it is a gate reading a name.
+    """
     async with conn.cursor() as cur:
         await cur.execute(
             "SELECT DISTINCT runtime_flag FROM compliance_library_entry "
-            "WHERE runtime_flag IS NOT NULL"
+            "WHERE runtime_flag IS NOT NULL AND venture_id = %s",
+            (venture_id,),
         )
         return {r[0] for r in await cur.fetchall()}
 

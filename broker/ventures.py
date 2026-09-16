@@ -404,11 +404,19 @@ async def directory(conn: AsyncConnection) -> dict[str, Any]:
         )
         spend = {r["venture_id"]: float(r["spend"] or 0) for r in await cur.fetchall()}
 
-        await cur.execute("SELECT entry_ref, runtime_flag FROM compliance_library_entry")
+        await cur.execute(
+            "SELECT venture_id, entry_ref, runtime_flag FROM compliance_library_entry"
+        )
         library = [dict(r) for r in await cur.fetchall()]
 
-    entry_refs = {e["entry_ref"] for e in library}
-    library_flags = {e["runtime_flag"] for e in library if e["runtime_flag"]}
+    # Keyed on the pair since migration 0039. A flat set of refs said a framework was
+    # wired when ANY venture had written that entry, which is the same conflation V28
+    # and Gate 6 carried: it reports whether a name exists, not whether this venture
+    # has the text behind it.
+    entry_refs = {(e["venture_id"], e["entry_ref"]) for e in library}
+    library_flags = {
+        (e["venture_id"], e["runtime_flag"]) for e in library if e["runtime_flag"]
+    }
 
     # A gate result carries the reason a run stopped. Fetched per run rather than joined,
     # because there are a handful of ventures and the join is harder to read than the
@@ -446,7 +454,7 @@ async def directory(conn: AsyncConnection) -> dict[str, Any]:
                 frameworks.append({
                     "framework": surface.framework,
                     "wired": bool(flag) and (
-                        (ref in entry_refs) or (flag in library_flags)
+                        ((slug, ref) in entry_refs) or ((slug, flag) in library_flags)
                     ),
                 })
 

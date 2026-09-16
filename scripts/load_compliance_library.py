@@ -105,6 +105,35 @@ REQUIRED = (
 )
 
 
+def venture_of(path: Path) -> str:
+    """Whose entries these are, declared by the file and cross-checked against its name.
+
+    **A field, not the filename.** The field travels with the content, survives a rename
+    and is reviewable in a diff; a filename convention re-homes nineteen entries the
+    moment somebody moves a file. The filename is still checked against it, because two
+    statements that disagree are worth stopping on and cost nothing to compare.
+
+    **No `--venture` flag, deliberately.** That is the shape that makes the mistake easy:
+    one operator typing the wrong venture at a prompt is exactly how one library ends up
+    written under another's id, and the whole point of migration 0039 was to make that
+    unrepresentable rather than merely discouraged.
+    """
+    doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    declared = str(doc.get("venture_id") or "").strip()
+    if not declared:
+        raise SystemExit(
+            f"{path.name}: no top-level `venture_id`. Since migration 0039 an entry "
+            "belongs to a venture, and this loader will not guess which - a wrong guess "
+            "writes one venture's compliance text under another's id."
+        )
+    if declared != path.stem:
+        raise SystemExit(
+            f"{path.name}: declares venture_id {declared!r}, which does not match its "
+            f"filename ({path.stem!r}). One of the two is wrong and this will not pick."
+        )
+    return declared
+
+
 def entries_in(path: Path) -> list[dict[str, Any]]:
     """Every entry in a library file, in file order."""
     doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -128,11 +157,20 @@ def missing_fields(entry: dict[str, Any]) -> list[str]:
     return bad
 
 
-async def loaded_refs(conn: AsyncConnection) -> dict[str, str]:
-    """entry_ref -> framework, for everything already in the table."""
+async def loaded_refs(conn: AsyncConnection) -> dict[tuple[str, str], str]:
+    """(venture_id, entry_ref) -> framework, for everything already in the table.
+
+    Keyed on the pair since 0039, so "already loaded" means already loaded FOR THIS
+    VENTURE. On the single key, Greenstone's file meeting a Burkham ref of the same name
+    counted as a replacement - which is the overwrite, reported as routine.
+    """
     async with conn.cursor(row_factory=dict_row) as cur:
-        await cur.execute("SELECT entry_ref, framework FROM compliance_library_entry")
-        return {r["entry_ref"]: r["framework"] for r in await cur.fetchall()}
+        await cur.execute(
+            "SELECT venture_id, entry_ref, framework FROM compliance_library_entry"
+        )
+        return {
+            (r["venture_id"], r["entry_ref"]): r["framework"] for r in await cur.fetchall()
+        }
 
 
 async def run(paths: list[Path], check_only: bool) -> int:
@@ -158,19 +196,21 @@ async def run(paths: list[Path], check_only: bool) -> int:
         to_replace: list[tuple[Path, dict[str, Any]]] = []
         refused: list[tuple[str, list[str]]] = []
 
+        ventures: dict[Path, str] = {path: venture_of(path) for path in paths}
+
         for path in paths:
             for entry in entries_in(path):
                 bad = missing_fields(entry)
                 if bad:
                     refused.append((entry["entry_ref"], bad))
-                elif entry["entry_ref"] in existing:
+                elif (ventures[path], entry["entry_ref"]) in existing:
                     to_replace.append((path, entry))
                 else:
                     to_add.append((path, entry))
 
         print(f"{len(existing)} entr(ies) already in the table")
-        for ref, framework in sorted(existing.items()):
-            print(f"    {ref:52} {framework}")
+        for (venture, ref), framework in sorted(existing.items()):
+            print(f"    {venture:18} {ref:52} {framework}")
         print()
 
         if refused:
@@ -179,12 +219,13 @@ async def run(paths: list[Path], check_only: bool) -> int:
                 print(f"    {ref:52} missing {', '.join(bad)}")
             print()
 
-        # Replacing is called out separately because the table is shared. An entry
-        # another venture's Pack cites is overwritten for that venture too.
+        # Still called out, and it means something narrower now: since 0039 a replacement
+        # can only touch THIS venture's entry. The warning used to say "shared with
+        # whatever else cites them", which was true and was the defect.
         if to_replace:
-            print(f"WOULD REPLACE {len(to_replace)} - shared with whatever else cites them:")
-            for _, entry in to_replace:
-                print(f"    {entry['entry_ref']}")
+            print(f"WOULD REPLACE {len(to_replace)} of this venture's own entr(ies):")
+            for path, entry in to_replace:
+                print(f"    {ventures[path]:18} {entry['entry_ref']}")
             print()
 
         print(f"{'WOULD ADD' if check_only else 'ADDING'} {len(to_add)} entr(ies):")
@@ -196,9 +237,10 @@ async def run(paths: list[Path], check_only: bool) -> int:
             print("--check: nothing was written.")
             return 1 if refused else 0
 
-        for _, entry in to_add + to_replace:
+        for path, entry in to_add + to_replace:
             await knowledge.author_compliance_entry(
                 conn,
+                venture_id=ventures[path],
                 entry_ref=entry["entry_ref"],
                 framework=entry["framework"],
                 jurisdiction=list(entry["jurisdiction"]),
@@ -208,6 +250,14 @@ async def run(paths: list[Path], check_only: bool) -> int:
                 citation=entry["citation"],
                 authored_by=authored_by,
                 runtime_flag=entry.get("runtime_flag"),
+                # Loaded since 0039. These two were in the files all along and had no
+                # columns, so an entry tagged `draft_pending_claim_library_approval`,
+                # whose Nevada claim its own author recorded as a contradiction between
+                # two artifacts, read out of the database exactly like a statute.
+                # `status` defaults to `draft` rather than to the file's absence meaning
+                # "fine": the cautious direction is the ruling.
+                status=str(entry.get("status") or "draft"),
+                claim_provenance=list(entry.get("claim_provenance") or []),
             )
 
         after = await loaded_refs(conn)

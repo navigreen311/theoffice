@@ -400,9 +400,15 @@ async def _gate_6(ctx: _Context) -> GateOutcome:
         )
         authored = {r["module_id"] for r in await cur.fetchall()}
 
+        # Scoped to this venture since migration 0039, and this is a TIGHTENING. The
+        # query had no venture term while the table had no venture column, so any
+        # venture's entry explained any venture's flag: Greenstone's NV consent entry
+        # answered for Burkham's `recording_consent_required` and Gate 6 passed on it.
+        # That is a gate reading a name rather than a library.
         await cur.execute(
             "SELECT DISTINCT runtime_flag FROM compliance_library_entry "
-            "WHERE runtime_flag IS NOT NULL"
+            "WHERE runtime_flag IS NOT NULL AND venture_id = %s",
+            (ctx.venture_id,),
         )
         explained_flags = {r["runtime_flag"] for r in await cur.fetchall()}
 

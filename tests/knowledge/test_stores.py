@@ -172,30 +172,42 @@ async def test_an_entry_missing_any_of_the_six_fields_is_refused(_clean, omit):
     async with connection() as conn:
         with pytest.raises(knowledge.KnowledgeError) as exc:
             await knowledge.author_compliance_entry(
-                conn, entry_ref="test/incomplete", authored_by=AUTHOR, **fields
+                conn, venture_id="test-venture", entry_ref="test/incomplete",
+                authored_by=AUTHOR, **fields,
             )
     assert omit in str(exc.value)
 
 
-async def test_an_entry_resolves_by_ref_and_reports_both_halves(_clean):
-    """`resolve_entry_refs` returns found and missing.
+async def test_an_entry_resolves_by_ref_and_reports_all_three_halves(_clean):
+    """`resolve_entry_refs` returns mine, somebody else's, and nobody's.
 
-    Both, because "3 of 5 resolved" and "3 resolved" are different reports and only one
-    of them tells the reader to go and write something.
+    Three lists, not two. "Resolved" and "missing" were the whole answer while the table
+    was portfolio-wide; with a venture column there is a third case that reads like the
+    second and has a different remedy - the ref exists, for another venture.
     """
     async with connection() as conn:
         await knowledge.author_compliance_entry(
-            conn, entry_ref="test/ftc-tsr", authored_by=AUTHOR,
-            runtime_flag="tsr_disclosure_required", **ENTRY,
+            conn, venture_id="test-venture", entry_ref="test/ftc-tsr",
+            authored_by=AUTHOR, runtime_flag="tsr_disclosure_required", **ENTRY,
         )
-        found, missing = await knowledge.resolve_entry_refs(
-            conn, ["test/ftc-tsr", "test/does-not-exist"]
+        await knowledge.author_compliance_entry(
+            conn, venture_id="other-venture", entry_ref="test/theirs",
+            authored_by=AUTHOR, runtime_flag="their_flag", **ENTRY,
         )
-        flags = await knowledge.flags_with_entries(conn)
+        mine, elsewhere, unresolved = await knowledge.resolve_entry_refs(
+            conn,
+            ["test/ftc-tsr", "test/theirs", "test/does-not-exist"],
+            venture_id="test-venture",
+        )
+        flags = await knowledge.flags_with_entries(conn, "test-venture")
 
-    assert found == ["test/ftc-tsr"]
-    assert missing == ["test/does-not-exist"]
+    assert mine == ["test/ftc-tsr"]
+    assert elsewhere == ["test/theirs"], "another venture's entry is not mine"
+    assert unresolved == ["test/does-not-exist"]
     assert "tsr_disclosure_required" in flags
+    assert "their_flag" not in flags, (
+        "a flag only another venture's library explains is not explained here"
+    )
 
 
 async def test_the_database_refuses_a_blank_field_even_if_the_function_is_bypassed(
@@ -211,10 +223,10 @@ async def test_the_database_refuses_a_blank_field_even_if_the_function_is_bypass
         cur.execute(
             """
             INSERT INTO compliance_library_entry
-              (entry_ref, framework, jurisdiction, applicability_rule,
+              (venture_id, entry_ref, framework, jurisdiction, applicability_rule,
                agent_behavior_implication, escalation_trigger, citation, authored_by)
-            VALUES ('test/blank', 'X', ARRAY['FEDERAL'], 'when', '   ', 'trigger',
-                    'cite', %s)
+            VALUES ('test-venture', 'test/blank', 'X', ARRAY['FEDERAL'], 'when', '   ',
+                    'trigger', 'cite', %s)
             """,
             (str(AUTHOR),),
         )
