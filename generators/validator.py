@@ -369,6 +369,12 @@ RESERVED_RULE_IDS: dict[str, str] = {
            "before this table existed, so the number is already cited in writing.",
     "V36": "unallocated.",
     "V37": "unallocated.",
+    "V39": "the cross-venture hours rule - no person may be declared for more coverage "
+           "across every live Pack than a day holds. Sized in decisions entry 96 and "
+           "cited there by number, and it waits on the rename: Packs name people by "
+           "display name, and the first person it would refuse is spelled 'Ivan Green' "
+           "in Burkham's Pack and 'Ivan' in Greenstone's, so a name-keyed sum sees two "
+           "people. Reserved rather than taken by V40, because the number is in writing.",
 }
 
 _RULES: list[tuple[str, Severity, str, Callable[[BusinessPack], tuple[bool, str]]]] = []
@@ -799,6 +805,38 @@ def v27(pack: BusinessPack) -> tuple[bool, str]:
     gaps = [b.forge for b in pack.forge_dependencies.forge_bindings if b.module_gap]
     return (not gaps, f"[MODULE GAP] declared for: {_join(gaps)} - surfaced at Gate 4" if gaps
             else "no module gaps")
+
+
+@rule("V40", Severity.FAIL, "Every declared module reviewer is a role the Pack staffs")
+def v40(pack: BusinessPack) -> tuple[bool, str]:
+    """A declared reviewer must name a role somebody in `human_capacity` holds.
+
+    **Because the failure mode is a PASS that reads as a catastrophe.** V13 divides demand
+    by the role's review supply. A role nobody staffs has none, so the projected approvals
+    land in a bucket with zero minutes behind it and V13 reports "with no reviewer
+    review-time at all" - an overload message, on a typo. `_reviewer_for`'s step 4 already
+    falls back to a declared human for exactly this reason; step 1 cannot fall back, because
+    a declaration that quietly resolved to somebody else would not be a declaration.
+
+    Checked against the roles the Pack declares rather than against accounts. Whether a
+    person exists for the role is `human_name`'s question and the access overview answers
+    it; this one is about whether the Pack staffs the role at all.
+    """
+    staffed = {h.role for h in pack.human_capacity}
+    missing = sorted(
+        f"{position.position_title}/{module} -> {reviewer.role}"
+        for position in pack.positions_required
+        for module, reviewer in position.module_reviewer_roles.items()
+        if reviewer.role not in staffed
+    )
+    return (
+        not missing,
+        f"declared reviewer names a role this Pack does not staff: {_join(missing)}. "
+        f"It declares {_join(sorted(staffed))}. Demand routed to an unstaffed role has no "
+        "review minutes behind it, so V13 would report an overload rather than a typo."
+        if missing else
+        "every declared module reviewer names a staffed role",
+    )
 
 
 # ------------------------------------------------------------------- world-aware rules

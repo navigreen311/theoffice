@@ -187,6 +187,24 @@ positions_required:
     # is not contact. Its volume therefore reaches no reviewer and none is declared.
     module_trust_tiers:
       cre-forge/buyer_match: auto_execute
+    # WHO REVIEWS assign_contract, SAID RATHER THAN INHERITED.
+    #
+    # It routes to the compliance officer today only because this position happens to carry
+    # `recording_consent_required`. When that flag becomes founder-held and leaves the
+    # position, the approval lands on the venture operator - Ivan, who usually wrote the
+    # MAO - and nothing fails. Measured: {compliance_officer: 0.2} becomes
+    # {venture_operator: 0.2}.
+    #
+    # Declaring it holds the routing across that edit. Decisions entry 108, ruling 4.
+    module_reviewer_roles:
+      cre-forge/assign_contract:
+        role: compliance_officer
+        why: >
+          Separation of duties, not a compliance flag. Ivan Green usually writes the MAO
+          for a deal, and the author of an MAO may not approve that deal's assignment, so
+          the approval is Ira Green's as compliance officer. This routing must survive
+          `recording_consent_required` moving off this position, which is why it is stated
+          here rather than left to follow from the flags.
     # ONE CLOSED ASSIGNMENT A WEEK, WHICH IS IVAN'S FIGURE AND THE ONLY ONE HERE.
     #
     # `assign_contract` is the module that runs once per closing, so the venture's closing

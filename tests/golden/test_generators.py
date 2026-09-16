@@ -432,6 +432,24 @@ async def test_the_projection_counts_approvals_per_human_role(artifacts):
     assert set(approvals) <= {"venture_operator", "compliance_officer"}
 
 
+async def test_gate_4_5_routes_by_the_declared_reviewer_too(artifacts):
+    """The other gate, through the real pipeline rather than through the Pack alone.
+
+    Gate 2 resolves the reviewer from `Position`; this path resolves it from the generated
+    `DefinedPosition`, against declared UNION implied flags. **Two code paths, and the
+    declaration has to reach both** - it is the one input to routing that is identical at
+    the two gates, which is most of why it is worth declaring.
+    """
+    bnm = next(
+        p for p in artifacts.roles.positions
+        if p.position_title == "Buyer Network Manager"
+    )
+    assert bnm.module_reviewer_roles == {"cre-forge/assign_contract": "compliance_officer"}
+    assert artifacts.approval_projection.projected_daily_approvals == {
+        "compliance_officer": 0.2
+    }
+
+
 async def test_the_projection_carries_no_task_shaped_fields(artifacts):
     """The half that was deleted, asserted absent.
 

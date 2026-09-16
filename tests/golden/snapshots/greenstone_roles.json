@@ -23,6 +23,7 @@
         "Source",
         "Qualify"
       ],
+      "module_reviewer_roles": {},
       "module_stages": {
         "cre-forge/comp_analysis": "Qualify",
         "cre-forge/property_lookup": "Source"
@@ -60,6 +61,9 @@
         "Assign",
         "Close"
       ],
+      "module_reviewer_roles": {
+        "cre-forge/assign_contract": "compliance_officer"
+      },
       "module_stages": {
         "cre-forge/assign_contract": "Close",
         "cre-forge/buyer_match": "Assign"
@@ -93,6 +97,7 @@
         "Underwrite",
         "Contract"
       ],
+      "module_reviewer_roles": {},
       "module_stages": {
         "cre-forge/comp_analysis": "Underwrite",
         "cre-forge/underwrite_deal": "Underwrite"
