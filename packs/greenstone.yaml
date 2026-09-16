@@ -208,12 +208,29 @@ positions_required:
 capacity_demand:
   # The divisor that turns every expected_weekly_volume into a daily rate.
   #
-  # TRANSCRIBED FROM THIS PACK'S OWN `shift_pattern`, WHICH SAYS "5 shifts/week".
+  # DECLARED BY IVAN, 2026-09-16 (decisions entry 108). Greenstone operates Monday to
+  # Friday in Phase 1, on four reasons that are about the business and not about a Pack:
+  #
+  #   counterparties   sellers, brokers, buyers, escrow, title, comps and POF vendors all
+  #                    work business days
+  #   money            banks do not wire on weekends
+  #   founder time     budgeted for five-day weeks - Ivan 8h x 5, Ira Green 6h x 5
+  #   the SLAs         the specifications' SLAs are business-hour SLAs
+  #
+  # **This was transcribed from `shift_pattern` for one commit and that was the wrong
+  # source**, even though it gave the same number. `shift_pattern` describes how agent
+  # shifts are arranged; this says which days the venture trades. Two facts that happen to
+  # agree are still two facts, and a divisor sourced from the one that does not mean it
+  # would have gone on meaning nothing the day they diverged.
+  #
   # Nothing in the schema supplied a divisor before this field: `agent_days_per_week`
   # below is agent-days summed across the venture, not a calendar week, and Gate 2's V13
-  # divided it by a hardcoded 7.0. Reading the number out of the prose at runtime was
-  # refused - a divisor whose provenance is a regex - so it is written here once, where a
-  # reader can disagree with it.
+  # divided it by a hardcoded 7.0.
+  #
+  # WEEKEND WORK EXISTS AND IS NOT CAPACITY. Three declared exceptions - walker safety
+  # events, wire fraud indicators, and kill-state deal viability transitions - are handled
+  # when they happen and are never counted here. Everything else waits for Monday. A
+  # divisor of 7 would have bought reviewer capacity on days nobody is reviewing.
   operating_days_per_week: 5
   agent_days_per_week: 35
   peak_concurrent_positions: 7

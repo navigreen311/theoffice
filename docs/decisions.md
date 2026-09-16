@@ -8478,3 +8478,72 @@ every pair was refused, naming Acquisition Analyst, which is not pending. `jsonb
   section 7.2 capacity numbers now understate what is available.
 - **Greenstone's compliance officer receives 0.2 approvals a day and its venture operator none.**
   Ivan's declared Greenstone review hour has no demand against it at all.
+
+---
+
+## 108. Five operating days, declared for the business rather than read off a shift pattern - and a reviewer declaration that only narrows
+
+**Ruled 2026-09-16 by Ivan.** Rulings 1 and 4 are built on the two open PRs; rulings 2 and 3 are
+recorded only, and what exists behind them is surveyed at the end.
+
+### 1. Greenstone operates Monday to Friday, five days a week, in Phase 1
+
+    counterparties   sellers, brokers, buyers, escrow, title, comps and POF vendors all work
+                     business days
+    money            banks do not wire on weekends
+    founder time     budgeted for five-day weeks - Ivan 8h x 5, Ira Green 6h x 5
+    the SLAs         the specifications' SLAs are business-hour SLAs
+
+**This corrects a source, not a number.** Entry 107 recorded `operating_days_per_week: 5` as
+transcribed from the Pack's own `shift_pattern`, which says "5 shifts/week", and flagged it as the
+one figure in a Pack that Ivan had not stated. The value is unchanged and the basis is now the
+venture's trading calendar.
+
+**Why the distinction is worth an entry.** `shift_pattern` describes how agent shifts are arranged;
+`operating_days_per_week` says which days the venture trades. **Two facts that happen to agree are
+still two facts.** A divisor sourced from the one that does not mean it would have gone on meaning
+nothing the day the two diverged - a venture could move to four agent shifts a week without
+changing which days its escrow agent answers the phone, and the demand side would have silently
+followed the wrong one.
+
+### 2. Weekend exceptions are declared, not routine, and are never counted as capacity
+
+Three, and all other work waits for Monday:
+
+    walker safety events                  SiteForge emergency stops
+    wire fraud indicators                 a failed Shadow callback before a scheduled wire
+    kill-state deal viability transitions needing weekend action
+
+**Not capacity.** A divisor of 7 would have bought reviewer capacity on days nobody is reviewing,
+which is the same defect as reading `coverage_hours` as review time: supply asserted for hours that
+are committed elsewhere or do not exist. An exception handled when it happens is not a shift.
+
+### 3. Saturday walker dispatch is a walker-contractor scheduling matter
+
+It may extend the Walkthrough Inspector Agent's shift. **It does not change the founder operating
+calendar**, and therefore does not touch `operating_days_per_week`.
+
+### 4. A declared module reviewer only narrows
+
+It may send a module's approvals to the compliance officer. **It may never route a flagged module's
+approvals away from the compliance officer**, and a Pack that tries is refused, naming the module
+and the flag.
+
+This settles the question entry 107's design left open. The alternative - allow it, require a `why`,
+and rely on a person reading the reason - makes the declaration a way to move compliance work off the
+compliance officer with a sentence attached. Narrowing only means the declaration can add a reviewer
+where the flags see none and can never subtract one the flags require.
+
+### What ruling 4 is for, measured
+
+`cre-forge/assign_contract` routes to the compliance officer today **only** because Buyer Network
+Manager carries `recording_consent_required`. Item F turns that flag founder-held and removes it from
+the position. Measured against the Pack on PR #155:
+
+    today                          {compliance_officer: 0.2}
+    with the flag removed (item F) {venture_operator: 0.2}
+
+**Item F silently breaks entry 107's ruling 2.** The approval lands on Ivan, who usually wrote the
+MAO, which is the arrangement that ruling forbids - and nothing fails. The declared reviewer is what
+holds the routing in place across that edit, and the test that pins it is the point of the whole
+field.
