@@ -211,7 +211,22 @@ import sys
 #:
 #:     job 104635243838   branch  d7035bb       run 35045789682 attempt 1
 #:     job 104636111522   branch  d7035bb       run 35045789682 attempt 2
-BASELINE = "f8fb0011fc08b25bf953b509b5cbe88bc91ea6e5ecd8a52fe23676259ad90d80"
+#:
+#: **Re-recorded 2026-09-15 for PR #154 (decisions entry 106), by the same rule.** Five
+#: lines, one cause: `simforge/run_scenario_pack` left the test world, because SimForge
+#: does not dispatch it and the fixture was the last place it existed.
+#:
+#:     simforge (2 modules)            -> simforge (1 module)
+#:     9 instruction(s) seeded         -> 8
+#:     9 instruction sets assessed     -> 8, still 0 thin and 0 teaching nothing
+#:     1 of 13 rows are test data      -> 1 of 12
+#:     12 rows that are not fixtures   -> 11
+#:
+#: Two runs on the same commit:
+#:
+#:     job 104654251988   branch  d6bbae8       run 35051907452 attempt 1
+#:     job 104654762310   branch  d6bbae8       run 35051907452 attempt 2
+BASELINE = "55222979312af2df7ea7bb5de98fe2f3ad177229fcdc56653ab7ed28e16f8bec"
 
 _STEP_START = "##[group]Run ./scripts/console-smoke.sh"
 

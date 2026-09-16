@@ -8267,3 +8267,54 @@ changed. Nothing else in any of the four.
 `SimForge`, matching `ESTATE`. **`simforge/run_scenario_pack` deleted** - SimForge deliberately does
 not dispatch it, and nothing referenced it: zero grants, manifest rows, instructions, certifications,
 exclusions, proposals, ledger entries or curriculum submissions, and neither live Pack declares it.
+
+---
+
+## 106. The last place `run_scenario_pack` existed was a fixture, and a report of mine was wrong
+
+**Built 2026-09-15.**
+
+### The module no Forge serves
+
+`run_scenario_pack` is gone from `tests/world.py`. SimForge does not dispatch it and says why in its
+own adapter - nothing iterates a Pack's scenarios into runs, so the only handler writable today would
+run one scenario and report having run a pack. Both live Packs dropped it on 8 September (ruling
+Q-1), the verifier has reported DRIFT on it since, and the development row went on 15 September.
+
+**A fixture is a world a test believes.** Keeping a module no Forge serves meant every suite reasoned
+about a capability that does not exist - and after the dev row went, the fixture was the last place
+in the system where that module existed at all.
+
+**Two second copies went with it.** `scripts/stub-forge.py` wrote SimForge's module list out by hand
+and named `run_scenario_pack` - a stub serving what nothing serves makes the smoke world agree with a
+fixture instead of with a Forge. `tests/validator/test_world_rules.py` kept its own copy too. Both
+import `SIM_MODULES` now.
+
+**No snapshot moved and all 1599 tests pass.** Greenstone's Pack binds SimForge for `gate_result`
+alone, so nothing downstream ever saw the extra row.
+
+### A correction to my own report
+
+**The #153 report said the smoke demo venture stops at Gate 0. It does not, and has not since #149.**
+Main's Smoke log, at line 103 of the normalised text:
+
+    run <id> stopped at gate 4 (awaiting_human)
+
+The #149 report was right. The #153 sentence described the world as it was before the stub Forges
+existed, and it was offered as the reason the baseline had not moved - **a true conclusion with a
+false reason**, which this ledger has recorded twice before as the shape that survives review.
+
+**The true reason the baseline did not move:** the smoke output carries no approval counts and no
+flags. Its only reference to the capacity rule is a check named *"the V13 message keeps the line that
+rules out lowering the utilisation factor"* - the wording, never the numbers. So a change that moved
+Greenstone's projection from 128 to 64 + 64 is invisible to it by construction.
+
+### Greenstone's Gate 4.5 on the #144 Pack, after the flag correction
+
+    venture_operator     Ivan       6h -> 216 min   32 approvals x 4 min  = 128   fits
+    compliance_officer   Ira Green  2h ->  72 min   32 approvals x 10 min = 320   4x over
+
+**V13 FAILs on one role, and the other now has room.** Before the correction every approval routed to
+Ira: 64 x 10 = 640 against 72, nine times over. Splitting them by what the modules actually do halves
+her load and gives Ivan work the schema can count - **and the venture still cannot be provisioned on
+these hours**, which is the finding the arithmetic keeps returning.

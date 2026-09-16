@@ -29,7 +29,11 @@ from broker.db import connection
 from generators.pack import BusinessPack, load_pack
 from generators.validator import Verdict, _v30_department_has_seats, validate
 from tests.conftest import requires_db
-from tests.world import COMPLIANCE_ENTRIES
+
+# `SIM_MODULES` is imported rather than restated: this file's own copy named
+# `run_scenario_pack`, which the real SimForge does not dispatch, and a second list of a
+# Forge's modules kept in step by hand is the shape `tests/world.py` exists to prevent.
+from tests.world import COMPLIANCE_ENTRIES, SIM_MODULES
 
 pytestmark = [requires_db, pytest.mark.db]
 
@@ -39,7 +43,6 @@ CRE_MODULES = (
     "property_lookup", "comp_analysis", "underwrite_deal", "buyer_match",
     "assign_contract",
 )
-SIM_MODULES = ("run_scenario_pack", "gate_result")
 VOICE_MODULES = ("place_call", "transcribe_call")
 
 
