@@ -226,7 +226,7 @@ import sys
 #:
 #:     job 104654251988   branch  d6bbae8       run 35051907452 attempt 1
 #:     job 104654762310   branch  d6bbae8       run 35051907452 attempt 2
-BASELINE = "160603bb5309bbfa60ed7ee42e555317d9782ba245ab4fb2bc02f47607494f17"
+BASELINE = "10d140d5c9303eb1bf09f804078a0c0061019167ee885b05bcf79e669f265320"
 
 _STEP_START = "##[group]Run ./scripts/console-smoke.sh"
 

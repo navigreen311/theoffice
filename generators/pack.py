@@ -290,6 +290,30 @@ class EngagementModel(Strict):
     out_of_scope_at_launch: list[str]
 
 
+class ModuleReviewer(Strict):
+    """Which human role reviews one module's approvals, and why it is not the flags saying so.
+
+    **A dict rather than a bare role string, and the `why` is required.** The same shape as
+    `compliance_couplings.NoFramework(why=)`, `HumanHeld.why` and ADR-0049's declared
+    `not_applicable` - three fields that exist because a schema which could not express a
+    considered choice got a false value written into it instead. A bare role here would be
+    the fourth: a routing decision with nothing recording what it was for.
+
+    **It only narrows.** It may send a module's approvals to the compliance officer where
+    the flags would have sent them elsewhere. It may never send a FLAGGED module's
+    approvals away from the compliance officer - `Position` refuses that, naming the module
+    and the flag. Allowing it with a reason attached would make this field a way to move
+    compliance work off the compliance officer with a sentence. Decisions entry 108,
+    ruling 4.
+    """
+
+    role: str = Field(min_length=2)
+
+    #: Why this module routes here. Long enough to be a sentence rather than a label,
+    #: because the thing worth recording is the arrangement and not the destination.
+    why: str = Field(min_length=20)
+
+
 class Position(Strict):
     """A venture-specific role. The Office names these; it does not look them up."""
 
@@ -410,6 +434,25 @@ class Position(Strict):
     #: asserted once, inherited silently, never attributed. B20 and B21 are that failure for
     #: the numbers one field over.
     volume_provenance: CapacityProvenance | None = None
+
+    #: Which human role reviews this module's approvals, keyed `forge_id/module_id`.
+    #:
+    #: **Routing was a side effect of compliance flags and nothing could state it.**
+    #: `_reviewer_for` sent flagged work to the compliance officer and everything else to
+    #: the venture operator, per POSITION - so a module's reviewer was decided by the other
+    #: modules its position happened to operate.
+    #:
+    #: Greenstone's `assign_contract` is the case. It routes to the compliance officer
+    #: today only because Buyer Network Manager carries `recording_consent_required`. The
+    #: moment that flag becomes founder-held and leaves the position, the approval lands on
+    #: the venture operator - Ivan, who usually wrote the MAO, which is the arrangement the
+    #: ruling forbids. Measured: `{compliance_officer: 0.2}` becomes
+    #: `{venture_operator: 0.2}`, and nothing fails.
+    #:
+    #: **Both gates read it identically**, because it is declared rather than derived. Gate
+    #: 2 routes by declared flags and Gate 4.5 by declared UNION implied; a module that
+    #: declares its reviewer is not exposed to that difference at all.
+    module_reviewer_roles: dict[str, ModuleReviewer] = Field(default_factory=dict)
 
     #: Declared, unfilled, and not yet activated. `None` is an ordinary position.
     #:
@@ -590,6 +633,48 @@ class Position(Strict):
                     f"{self.position_title}: module_stages puts {'; '.join(wrong)}, but "
                     f"this position owns {', '.join(sorted(owned))}. A position cannot "
                     "run a module in a stage it does not own."
+                )
+
+        unqualified = sorted(k for k in self.module_reviewer_roles if k.count("/") != 1)
+        if unqualified:
+            raise ValueError(
+                f"{self.position_title}: module_reviewer_roles keys must be "
+                f"'forge_id/module_id'. Unqualified: {', '.join(unqualified)}."
+            )
+        unknown = sorted(k for k in self.module_reviewer_roles if k not in operated)
+        if unknown:
+            raise ValueError(
+                f"{self.position_title}: module_reviewer_roles names "
+                f"{', '.join(unknown)}, which this position does not operate. It operates "
+                f"{', '.join(sorted(operated))}."
+            )
+
+        # RULING 4: A DECLARATION ONLY NARROWS.
+        #
+        # A flagged module may be routed TO the compliance officer and never away from one.
+        # The alternative - allow it and rely on somebody reading the `why` - makes this
+        # field a way to move compliance work off the compliance officer with a sentence
+        # attached. Decisions entry 108.
+        #
+        # **Checked against DECLARED flags only, because that is all a Pack can see.**
+        # `forge_module_registry.compliance_flags_implied` is a live world read and does not
+        # exist at parse time, so a module flagged ONLY by the registry is not caught here.
+        # Measured when this landed and there is no such case: CRE Forge implies no flags
+        # since entry 105, and Burkham declares no reviewers. Recorded rather than left to
+        # be discovered, same shape as the Gate 2 / Gate 4.5 flag divergence in entry 107.
+        if self.compliance_flags_in_scope:
+            away = sorted(
+                (k, v.role) for k, v in self.module_reviewer_roles.items()
+                if v.role != "compliance_officer"
+            )
+            if away:
+                named = "; ".join(f"{k} -> {role}" for k, role in away)
+                raise ValueError(
+                    f"{self.position_title}: module_reviewer_roles routes {named}, but this "
+                    f"position carries {', '.join(sorted(self.compliance_flags_in_scope))}. "
+                    "A declared reviewer only narrows: it may send a module's approvals to "
+                    "the compliance officer and may never send a flagged module's approvals "
+                    "away from one."
                 )
 
         if self.expected_weekly_volume and self.volume_provenance is None:

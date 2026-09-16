@@ -83,6 +83,15 @@ MUST_FAIL: dict[str, Callable[[BusinessPack], None]] = {
             p.positions_required[2].volume_provenance,
         ),
     ),
+    # A role the Pack does not staff. Misspelled rather than invented, because the typo
+    # is the failure this rule is for: demand routed to an unstaffed role has no review
+    # minutes behind it, so V13 reports an overload instead of a spelling mistake.
+    "V40": lambda p: p.positions_required[2].module_reviewer_roles.__setitem__(
+        "cre-forge/assign_contract",
+        p.positions_required[2].module_reviewer_roles[
+            "cre-forge/assign_contract"
+        ].model_copy(update={"role": "complaince_officer"}),
+    ),
     "V14": lambda p: setattr(p.human_capacity[1], "backup_human", None),
     "V15": lambda p: (
         setattr(p.separation_of_duties, "gate_signoff_policy", "single_human_permitted"),
@@ -169,8 +178,8 @@ def test_every_rule_from_v1_is_implemented_with_no_gaps():
     assert everything == [f"V{i}" for i in range(1, len(everything) + 1)], (
         f"implemented {ids}, reserved {sorted(reserved)}"
     )
-    assert len(ids) == 35, "35 rules implemented"
-    assert len(everything) == 38, "V1..V38 all accounted for, implemented or reserved"
+    assert len(ids) == 36, "36 rules implemented"
+    assert len(everything) == 40, "V1..V40 all accounted for, implemented or reserved"
 
 
 @pytest.mark.parametrize("rule_id", DOCUMENT_RULES)

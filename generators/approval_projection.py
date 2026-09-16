@@ -168,11 +168,19 @@ def demand_from_the_pack(pack: BusinessPack) -> dict[str, float]:
         # its humans `compliance_officer`, so every route resolves to the same role whichever
         # flag set is used. It is a real divergence with no current instance, which is worth
         # more written down than discovered later.
-        reviewer = _reviewer_for(pack, list(position.compliance_flags_in_scope))
         for qualified in position.forge_modules_operated:
             tier = position.module_trust_tiers.get(qualified, position.trust_tier_ceiling)
             if tier == "auto_execute":
                 continue
+            # PER MODULE NOW, NOT PER POSITION. The reviewer used to be resolved once for
+            # the whole position, which is what made a module's routing depend on which
+            # flags its neighbours happened to carry.
+            declaration = position.module_reviewer_roles.get(qualified)
+            reviewer = _reviewer_for(
+                pack,
+                list(position.compliance_flags_in_scope),
+                declaration.role if declaration else None,
+            )
             by_role[reviewer] = by_role.get(reviewer, 0.0) + daily_rate_of(
                 pack, position, qualified
             )
@@ -261,7 +269,11 @@ def generate(
             ]
             if all(t == "auto_execute" for t in tiers):
                 continue  # acts on its own; asks nobody
-            reviewer = _reviewer_for(pack, list(position.effective_compliance_flags))
+            reviewer = _reviewer_for(
+                pack,
+                list(position.effective_compliance_flags),
+                position.module_reviewer_roles.get(qualified),
+            )
             approvals_by_role[reviewer] = approvals_by_role.get(
                 reviewer, 0.0
             ) + daily_rate_of(pack, position, qualified)
@@ -338,15 +350,37 @@ def _effective_tier(
     return declared
 
 
-def _reviewer_for(pack: BusinessPack, flags: list[str]) -> str:
-    """Which human role reviews this.
+def _reviewer_for(
+    pack: BusinessPack, flags: list[str], declared: str | None = None
+) -> str:
+    """Which human role reviews this, in four steps.
 
-    Compliance-flagged work routes to the compliance officer where one exists; everything
-    else to the venture operator. Falls back to the first declared human rather than
-    inventing a role that has no coverage hours behind it - a projection against a role
-    nobody staffs would divide by zero in V13 and read as infinite overload.
+        1. the module's DECLARED reviewer, where the Pack names one
+        2. the compliance officer, where the work carries a compliance flag
+        3. the venture operator
+        4. the first declared human
+
+    Steps 2 to 4 are unchanged and are what every module without a declaration still gets.
+
+    **Step 1 exists because routing used to be a side effect.** A module's reviewer was
+    decided by which flags the POSITION happened to carry, so it moved when a flag was
+    added or removed for reasons that had nothing to do with that module. Greenstone's
+    `assign_contract` routes to the compliance officer only because Buyer Network Manager
+    carries `recording_consent_required`; remove that flag and the approval silently lands
+    on the venture operator.
+
+    **A declaration only narrows** - `Position` refuses one that routes a flagged module
+    away from the compliance officer - so step 1 can add a reviewer the flags would not
+    have chosen and can never subtract one they require.
+
+    Step 4 falls back to the first declared human rather than inventing a role that has no
+    coverage hours behind it: a projection against a role nobody staffs would divide by
+    zero in V13 and read as infinite overload. **V40 is what stops step 1 doing the same**,
+    by refusing a declared role that appears in no `human_capacity` entry.
     """
     roles = {h.role for h in pack.human_capacity}
+    if declared:
+        return declared
     if flags and "compliance_officer" in roles:
         return "compliance_officer"
     if "venture_operator" in roles:

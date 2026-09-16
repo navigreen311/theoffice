@@ -132,6 +132,13 @@ class DefinedPosition:
     #: a number a reader has to go and find.
     expected_weekly_volume: dict[str, float] = field(default_factory=dict)
 
+    #: Which human role reviews each module's approvals, keyed `forge_id/module_id`.
+    #:
+    #: The ROLE only. The `why` stays in the Pack, which is stored verbatim as
+    #: `business_pack.yaml_source`, so the reason is preserved where it was written
+    #: rather than copied into an artifact that would then have two of it.
+    module_reviewer_roles: dict[str, str] = field(default_factory=dict)
+
     #: Declared, unfilled, pending activation.
     pending: bool = False
 

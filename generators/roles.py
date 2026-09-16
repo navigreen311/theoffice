@@ -69,6 +69,9 @@ async def generate(pack: BusinessPack, conn: AsyncConnection | None = None) -> R
                 # without anybody being told.
                 lifecycle_stages_owned=[s for s in all_stages if s in stages],
                 module_stages=dict(p.module_stages),
+                module_reviewer_roles={
+                    k: v.role for k, v in p.module_reviewer_roles.items()
+                },
                 expected_weekly_volume=dict(p.expected_weekly_volume),
                 pending=p.pending_activation is not None,
                 pending_deferred_to=(
