@@ -204,7 +204,7 @@ async def test_gate_0_passes_when_every_hard_forge_answers(
 
 
 async def test_gate_0_blocks_a_forge_that_cannot_be_reached(
-    greenstone, bridged_world, admin
+    greenstone, bridged_world, admin, monkeypatch
 ):
     """Ivan's ruling of 2026-09-15: could not ask is not a pass.
 
@@ -212,7 +212,15 @@ async def test_gate_0_blocks_a_forge_that_cannot_be_reached(
     passed before this rule sent a request. The endpoint refuses the connection, and
     that is the whole difference. Port 1 is reserved and refuses immediately, so this
     exercises the real HTTP path without waiting out a timeout.
+
+    **The token is set here rather than assumed.** The world's credential ref is
+    `env://CRE_FORGE_TOKEN`, which resolves on a developer machine that has an `.env`
+    and does not on a runner - so without this the refusal would be "credential
+    unavailable" in CI and "unreachable" locally, and the test would assert whichever
+    one the author happened to see. It failed in CI for exactly that reason.
     """
+    monkeypatch.setenv("CRE_FORGE_TOKEN", "not-a-secret-but-it-resolves")
+
     with admin.cursor() as cur:
         cur.execute(
             "UPDATE forge_registry SET base_url = 'http://127.0.0.1:1' "
