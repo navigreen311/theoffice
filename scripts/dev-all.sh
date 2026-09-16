@@ -48,7 +48,7 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT"
+cd "$ROOT" || { echo "error: cannot cd to $ROOT" >&2; exit 1; }
 
 API_PORT="${API_PORT:-8080}"
 CONSOLE_PORT="${CONSOLE_PORT:-3100}"
@@ -121,7 +121,9 @@ start_bg() {
 }
 
 stop_ours() {
-  local label="$1" pidfile="$RUN_DIR/$label.pid" pid winpid
+  local label="$1"
+  local pidfile="$RUN_DIR/$label.pid"
+  local pid winpid
   [ -f "$pidfile" ] || { say "$label: not started by this script; left alone"; return 0; }
   pid="$(cat "$pidfile")"
   if [ -r "/proc/$pid/winpid" ]; then
@@ -163,8 +165,9 @@ api_commit() {
 
 wait_for() {
   local seconds="$1"; shift
-  local i
-  for i in $(seq 1 "$seconds"); do
+  # The counter is deliberately discarded: this is a countdown, not an index.
+  local _tick
+  for _tick in $(seq 1 "$seconds"); do
     "$@" && return 0
     sleep 1
   done
@@ -208,8 +211,11 @@ else
     if [ -x "$DD" ]; then
       "$DD" >/dev/null 2>&1 &
       disown 2>/dev/null || true
-      wait_for 180 docker ps >/dev/null 2>&1 \
-        && ok "daemon responding" || bad "daemon did not come up in 180s"
+      if wait_for 180 docker ps >/dev/null 2>&1; then
+        ok "daemon responding"
+      else
+        bad "daemon did not come up in 180s"
+      fi
     else
       bad "Docker Desktop not found at $DD"
     fi
@@ -228,9 +234,12 @@ else
   say "docker start creforge-db creforge-redis creforge-backend"
   say "(started, never re-created: the override port map lives on the containers)"
   docker start creforge-db creforge-redis creforge-backend >/dev/null 2>&1
-  wait_for 60 probe cre "http://127.0.0.1:$CRE_FORGE_PORT/forge/_modules" \
-    '"forge":"cre-forge"' "${CRE_FORGE_TOKEN:-}" \
-    && ok "answering as cre-forge" || bad "did not answer as cre-forge in 60s"
+  if wait_for 60 probe cre "http://127.0.0.1:$CRE_FORGE_PORT/forge/_modules" \
+       '"forge":"cre-forge"' "${CRE_FORGE_TOKEN:-}"; then
+    ok "answering as cre-forge"
+  else
+    bad "did not answer as cre-forge in 60s"
+  fi
 fi
 
 # --------------------------------------------------------------------------- SimForge
@@ -247,9 +256,12 @@ elif [ -x "$SIMFORGE_DIR/.venv/Scripts/uvicorn.exe" ]; then
   # Its .env is at the simforge repo ROOT, not apps/api - env_file=(".env","../../.env")
   ( cd "$SIMFORGE_DIR" && start_bg simforge "./.venv/Scripts/uvicorn.exe" \
       src.main:app --host 127.0.0.1 --port "$SIMFORGE_PORT" )
-  wait_for 45 probe sim "http://127.0.0.1:$SIMFORGE_PORT/office/_modules" \
-    '"forge":"simforge"' "${SIMFORGE_TOKEN:-}" \
-    && ok "answering as simforge" || bad "did not answer as simforge in 45s"
+  if wait_for 45 probe sim "http://127.0.0.1:$SIMFORGE_PORT/office/_modules" \
+       '"forge":"simforge"' "${SIMFORGE_TOKEN:-}"; then
+    ok "answering as simforge"
+  else
+    bad "did not answer as simforge in 45s"
+  fi
 else
   bad "no venv at $SIMFORGE_DIR/.venv"
 fi
@@ -266,9 +278,12 @@ elif [ -n "$(pids_on_port "$CAPITALFORGE_PORT")" ]; then
   bad "port held by $(port_holder "$CAPITALFORGE_PORT") and it is not CapitalForge"
 elif [ -d "$CAPITALFORGE_DIR" ]; then
   ( cd "$CAPITALFORGE_DIR" && start_bg capitalforge npm run dev:backend )
-  wait_for 90 probe cf "http://127.0.0.1:$CAPITALFORGE_PORT/api/office/_modules" \
-    '"forge_id":"capitalforge"' "${CAPITALFORGE_TOKEN:-}" \
-    && ok "answering as capitalforge" || bad "did not answer as capitalforge in 90s"
+  if wait_for 90 probe cf "http://127.0.0.1:$CAPITALFORGE_PORT/api/office/_modules" \
+       '"forge_id":"capitalforge"' "${CAPITALFORGE_TOKEN:-}"; then
+    ok "answering as capitalforge"
+  else
+    bad "did not answer as capitalforge in 90s"
+  fi
 else
   bad "not found at $CAPITALFORGE_DIR"
 fi
@@ -286,9 +301,12 @@ elif [ -x "$VILLAGE_DIR/.venv/Scripts/python.exe" ]; then
   # Its OWN venv. A bare 3.11 has no `yaml` and the boot dies in a warning cascade.
   ( cd "$VILLAGE_DIR" && VILLAGE_PORT="$VILLAGE_PORT" \
       start_bg village "./.venv/Scripts/python.exe" app.py )
-  wait_for 120 probe village "http://127.0.0.1:$VILLAGE_PORT/api/org/departments" \
-    '"department_count"' \
-    && ok "answering as the Village" || bad "did not answer as the Village in 120s"
+  if wait_for 120 probe village \
+       "http://127.0.0.1:$VILLAGE_PORT/api/org/departments" '"department_count"'; then
+    ok "answering as the Village"
+  else
+    bad "did not answer as the Village in 120s"
+  fi
 else
   bad "no venv at $VILLAGE_DIR/.venv"
 fi
@@ -359,8 +377,11 @@ elif [ -n "$(pids_on_port "$CONSOLE_PORT")" ]; then
   bad "port held by $(port_holder "$CONSOLE_PORT") and it is not the console"
 elif [ -d "$ROOT/console/.next" ]; then
   ( cd "$ROOT/console" && start_bg console npx next start -p "$CONSOLE_PORT" )
-  wait_for 60 probe console "http://127.0.0.1:$CONSOLE_PORT/login" "<html" \
-    && ok "serving" || bad "did not serve in 60s"
+  if wait_for 60 probe console "http://127.0.0.1:$CONSOLE_PORT/login" "<html"; then
+    ok "serving"
+  else
+    bad "did not serve in 60s"
+  fi
 else
   bad "no build at console/.next - run: (cd console && npx next build)"
 fi
