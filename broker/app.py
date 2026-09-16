@@ -31,10 +31,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
@@ -194,6 +196,44 @@ async def _audit_human_action(
 # text, no schema revision. `/api/health` stays authenticated, because control freshness
 # is exactly what an attacker would like to know is stale.
 
+def _build_commit() -> str:
+    """Which commit this process is running, or "unknown".
+
+    **Read once, at import, because the answer cannot change while the process lives** -
+    and a value that could change under a caller would be worse than none.
+
+    `OFFICE_GIT_COMMIT` first, because an image has no `.git` and the build stamps it. A
+    working tree falls back to asking git, which is what makes this useful in development:
+    the case it exists for is a server left running across a merge, answering `/api/live`
+    with 200 while serving code from before the pull. That happened on 16 September and
+    cost a confused ten minutes - a route that was in the file, not in the process, and a
+    404 that looked like a routing bug.
+
+    Never raises. A version endpoint that can fail is a health check that reports the
+    health of itself.
+    """
+    stamped = os.environ.get("OFFICE_GIT_COMMIT", "").strip()
+    if stamped:
+        return stamped
+    try:
+        import subprocess
+
+        root = Path(__file__).resolve().parent.parent
+        if not (root / ".git").exists():
+            return "unknown"
+        out = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            capture_output=True, text=True, timeout=5, check=False,
+        )
+        return out.stdout.strip() or "unknown"
+    except Exception:
+        return "unknown"
+
+
+#: Read at import. See `_build_commit`.
+BUILD_COMMIT = _build_commit()
+
+
 @app.get("/api/live")
 async def live() -> dict[str, str]:
     """The process is up. No database, no auth, no information.
@@ -201,8 +241,34 @@ async def live() -> dict[str, str]:
     Deliberately does not touch the database. A liveness probe that fails when the
     database is unreachable makes the orchestrator restart a perfectly healthy process
     in a loop, which turns a database outage into an application outage as well.
+
+    **The build commit is NOT here.** It was, for one commit, and `test_live_answers_
+    without_a_token_and_says_nothing_else` refused it - correctly. D1 is a stated control:
+    *"A liveness endpoint is reachable by anyone who can reach the port. Everything it
+    returns is public, so it returns one word."* Telling an unauthenticated caller exactly
+    which build is running is the disclosure that pin exists to prevent. See
+    `/api/version`, which is the same question asked by somebody who has signed in.
     """
     return {"status": "live"}
+
+
+@app.get("/api/version")
+async def version(_me: ME) -> dict[str, str]:
+    """Which build this process is running. Authenticated, for the reason `/api/live` is not.
+
+    **A live process is not an up-to-date one, and nothing could tell them apart.** After a
+    merge on 16 September a stale API answered `/api/live` with 200 and 404ed a route that
+    had just landed - the route was in the file and not in the process, and the 404 read as
+    a routing bug for ten minutes.
+
+    `scripts/dev-all.sh` compares `commit` against what is checked out and refuses to call
+    the API healthy when they differ. Without a token it reports the build as UNVERIFIED
+    rather than healthy: a check that could not run is not a check that passed.
+
+    Any signed-in role. Knowing which build you are talking to is not a privileged act once
+    you are inside; it is only unsafe to hand to somebody who is not.
+    """
+    return {"commit": BUILD_COMMIT, "schema_expected": EXPECTED_SCHEMA_REVISION}
 
 
 @app.get("/api/ready")
