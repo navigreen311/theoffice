@@ -644,6 +644,17 @@ async def main():
     print(f"  gate 4.5 V13: {report.get('V13').verdict.value}")
     print(f"  gate 4.5 V24: {report.get('V24').verdict.value}")
 
+    # WHAT THIS WORLD WAS GRANTED, SAID OUT LOUD.
+    #
+    # `seed_dev_world.py` writes an NV discharge so the ladder reaches Gate 4 and the
+    # seven checks on that screen keep running. The real venture has no such review, V34
+    # FAILs on it, and Gate 2 blocks. A green ladder below this line is a green ladder
+    # somebody granted, and a reader who is not told that is being shown a false one.
+    print(
+        "  world assumption: NV obligation_discharge seeded. The real venture has none, "
+        "V34 FAILs on it, and Gate 2 blocks pending counsel."
+    )
+
 
 asyncio.run(main())
 PY

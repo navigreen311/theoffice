@@ -46,6 +46,7 @@ from tests.world import (  # noqa: E402
     assert_disposable,
     build_world,
     certify_for_positions,
+    seed_nv_discharge,
 )
 
 
@@ -104,6 +105,22 @@ def main() -> int:
             return 1
         build_world(conn)
         certify_for_positions(conn)
+        # THE NV DISCHARGE, AND WHAT IT IS AND IS NOT.
+        #
+        # Item F declared `recording_consent_required` human-held, which is correct: no
+        # agent of this venture can place or record a call. V34 then asks whether a named
+        # human has verified the obligation, and for the REAL venture the answer is no -
+        # V34 FAILs and Gate 2 blocks, pending counsel on Nevada.
+        #
+        # A development world that stops at Gate 2 renders no Gate 4 review form, and the
+        # console smoke check loses seven checks about a screen that has nothing to do with
+        # Nevada. So this world assumes counsel has signed, exactly as it assumes every
+        # agent is certified two lines above.
+        #
+        # **It is labelled rather than silent.** The smoke output prints the assumption
+        # beside the capacity figures, so a reader is never shown a green ladder without
+        # being told what was granted to produce it.
+        seed_nv_discharge(conn)
         venture = register_budget(conn)
         with conn.cursor() as cur:
             cur.execute("SELECT count(*) FROM forge_registry")
