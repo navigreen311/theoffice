@@ -18,7 +18,6 @@ from collections.abc import AsyncIterator, Iterator
 import psycopg
 import pytest
 import pytest_asyncio
-import yaml
 
 from broker import humans, packs
 from broker.db import connection
@@ -83,48 +82,36 @@ def pack_yaml() -> str:
 
 
 def amend_for_capacity(yaml_source: str) -> str:
-    """The Greenstone Pack amended until Gate 4.5 is satisfiable.
+    """The Greenstone Pack, unamended. **It no longer blocks at Gate 4.5.**
 
-    The real Pack **blocks at 4.5**, and correctly: the generated workflow routes 128
-    compliance approvals a day at ten minutes each against Ira Green's two coverage
-    hours - 1,280 minutes against 72, eighteen times over. That finding is real, it is
-    asserted in its own test, and the amendment is the venture's to make - the validator
-    names three ways out (raise a trust-tier ceiling, add reviewer coverage, cut scope)
-    and deliberately does not offer a fourth. Ivan's stated one is the first: fewer
-    escalations, not more hours (decisions entry 92).
+    WHAT THIS USED TO DO, AND WHY IT IS A NO-OP NOW
 
-    This helper takes the second one so that the gates *after* 4.5 can be exercised at
-    all. It is a test fixture, not a recommendation, and the number it lands on - six
-    compliance officers and two venture operators, seven of them people who do not exist
-    - is worth reading as the size of the real problem. It was five while the Pack
-    declared an invented officer at four hours and six minutes; four added reviewers
-    leave the real declaration 5% over.
+        It appended five compliance officers and one venture operator at eight hours each -
+        six invented people - so that the gates AFTER 4.5 could be exercised at all. The
+        real Pack routed 128 approvals a day at ten minutes against two coverage hours,
+        1,280 minutes against 72, eighteen times over. The docstring said the number it
+        landed on was "worth reading as the size of the real problem", and it was.
 
-    **BOTH ROLES ARE TOPPED UP SINCE ENTRY 105, and the reason is the point.** While CRE
-    Forge's five modules all implied `tsr_disclosure_required` - a fixture's flag, on
-    modules that contact nobody - every projected approval routed to the compliance
-    officer, and one role was the only role that could be short. Correcting the flags
-    moved Deal Underwriter's share to the venture operator, who then went 19% over on
-    hours nobody had thought to question, because no demand had ever reached them.
-    **The helper topping up one role was reading a routing accident as an arrangement.**
+        **The problem was not the size of the reviewer roster.** Demand was
+        `DEFAULT_DAILY_VOLUME_PER_HEADCOUNT = 8` per (step, holder, module): an
+        unattributed constant multiplied by a workflow that emitted every module once per
+        stage its position owned. Greenstone closes about one deal a week. The Pack now
+        declares that rate, the workflow emits one step per module, and Deal Underwriter is
+        pending, so the projection is 0.2 approvals a day against 36 review-minutes.
+
+        Six invented reviewers were the cost of an unmeasured constant, carried in a test
+        fixture for three weeks.
+
+    WHY IT IS KEPT RATHER THAN DELETED
+
+        Every call site reads `amend_for_capacity(pack_yaml)` and means "the Pack, made
+        able to reach Gate 12". That is now the Pack. Deleting the function would rewrite
+        five call sites to say nothing, and lose the one place this note can live.
+
+        **If Greenstone ever blocks at 4.5 again, this is where the amendment goes back** -
+        and whoever puts it there will read why it was removed first.
     """
-    doc = yaml.safe_load(yaml_source)
-
-    def top_up(role: str, count: int, label: str) -> None:
-        holders = [h for h in doc["human_capacity"] if h["role"] == role]
-        if not holders:
-            return
-        template = dict(holders[0])
-        for i in range(count):
-            extra = dict(template)
-            extra["human_name"] = f"{label} {i + 1}"
-            extra["backup_human"] = template["human_name"]
-            extra["coverage_hours"] = 8
-            doc["human_capacity"].append(extra)
-
-    top_up("compliance_officer", 5, "Reviewer")
-    top_up("venture_operator", 1, "Operator")
-    return yaml.safe_dump(doc, sort_keys=False)
+    return yaml_source
 
 
 @pytest_asyncio.fixture

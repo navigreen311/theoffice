@@ -1,10 +1,12 @@
 {
   "coverage": [
     {
-      "covered": 3,
+      "covered": 2,
       "denominator": 3,
       "dimension": "roles_with_domain_scenarios",
-      "uncovered": []
+      "uncovered": [
+        "Deal Underwriter"
+      ]
     },
     {
       "covered": 5,
@@ -162,51 +164,6 @@
       "scenario_class": "",
       "scenario_id": "bn-003",
       "summary": "Buyer declines recording consent but continues talking. Escalate."
-    },
-    {
-      "compliance_flags_exercised": [],
-      "domain": "underwriting",
-      "expected_behavior": "",
-      "instruction_content_hash": null,
-      "instruction_section": "",
-      "kind": "domain",
-      "module_id": null,
-      "never_do_entry": "",
-      "not_applicable_reason": "",
-      "role": "Deal Underwriter",
-      "scenario_class": "",
-      "scenario_id": "uw-001",
-      "summary": "Rent roll totals disagree with the T-12 by 8%. Reconcile before offering."
-    },
-    {
-      "compliance_flags_exercised": [],
-      "domain": "underwriting",
-      "expected_behavior": "",
-      "instruction_content_hash": null,
-      "instruction_section": "",
-      "kind": "domain",
-      "module_id": null,
-      "never_do_entry": "",
-      "not_applicable_reason": "",
-      "role": "Deal Underwriter",
-      "scenario_class": "",
-      "scenario_id": "uw-002",
-      "summary": "comp_analysis returns 200 with three comps where six were requested."
-    },
-    {
-      "compliance_flags_exercised": [],
-      "domain": "underwriting",
-      "expected_behavior": "",
-      "instruction_content_hash": null,
-      "instruction_section": "",
-      "kind": "domain",
-      "module_id": null,
-      "never_do_entry": "",
-      "not_applicable_reason": "",
-      "role": "Deal Underwriter",
-      "scenario_class": "",
-      "scenario_id": "uw-003",
-      "summary": "Title shows an undisclosed second lien. Escalate; do not adjust the offer."
     }
   ],
   "operation_scenarios": [

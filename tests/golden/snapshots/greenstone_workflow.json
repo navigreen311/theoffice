@@ -4,34 +4,14 @@
       "compliance_flag": "tsr_disclosure_required",
       "failure_and_escalation": "On failure signature: retry per the module's retry_vs_escalate rule, then raise an incident and halt this task. No silent partial.",
       "forge_modules": [
-        "comp_analysis"
-      ],
-      "inputs": [
-        "source_context",
-        "comp_analysis_request"
-      ],
-      "number": 1,
-      "outputs": [
-        "comp_analysis_result"
-      ],
-      "position": "Acquisition Analyst",
-      "stage": "Source",
-      "step": "Source: Acquisition Analyst operates comp_analysis",
-      "success_metric": "comp_analysis returns a complete result and the ledger row records manifest_match=required",
-      "supporting": [],
-      "trigger": "agent_initiated"
-    },
-    {
-      "compliance_flag": "tsr_disclosure_required",
-      "failure_and_escalation": "On failure signature: retry per the module's retry_vs_escalate rule, then raise an incident and halt this task. No silent partial.",
-      "forge_modules": [
         "property_lookup"
       ],
+      "human_held": false,
       "inputs": [
         "source_context",
         "property_lookup_request"
       ],
-      "number": 2,
+      "number": 1,
       "outputs": [
         "property_lookup_result"
       ],
@@ -48,11 +28,12 @@
       "forge_modules": [
         "comp_analysis"
       ],
+      "human_held": false,
       "inputs": [
         "qualify_context",
         "comp_analysis_request"
       ],
-      "number": 3,
+      "number": 2,
       "outputs": [
         "comp_analysis_result"
       ],
@@ -64,37 +45,17 @@
       "trigger": "agent_initiated"
     },
     {
-      "compliance_flag": "tsr_disclosure_required",
-      "failure_and_escalation": "On failure signature: retry per the module's retry_vs_escalate rule, then raise an incident and halt this task. No silent partial.",
-      "forge_modules": [
-        "property_lookup"
-      ],
-      "inputs": [
-        "qualify_context",
-        "property_lookup_request"
-      ],
-      "number": 4,
-      "outputs": [
-        "property_lookup_result"
-      ],
-      "position": "Acquisition Analyst",
-      "stage": "Qualify",
-      "step": "Qualify: Acquisition Analyst operates property_lookup",
-      "success_metric": "property_lookup returns a complete result and the ledger row records manifest_match=required",
-      "supporting": [],
-      "trigger": "agent_initiated"
-    },
-    {
       "compliance_flag": "NONE",
       "failure_and_escalation": "Proposal is rejected or times out: return to Deal Underwriter with the reviewer's reason. Repeated rejection escalates to the venture operator.",
       "forge_modules": [
         "comp_analysis"
       ],
+      "human_held": true,
       "inputs": [
         "underwrite_context",
         "comp_analysis_request"
       ],
-      "number": 5,
+      "number": 3,
       "outputs": [
         "comp_analysis_result"
       ],
@@ -111,11 +72,12 @@
       "forge_modules": [
         "underwrite_deal"
       ],
+      "human_held": true,
       "inputs": [
         "underwrite_context",
         "underwrite_deal_request"
       ],
-      "number": 6,
+      "number": 4,
       "outputs": [
         "underwrite_deal_result"
       ],
@@ -127,79 +89,17 @@
       "trigger": "agent_initiated"
     },
     {
-      "compliance_flag": "NONE",
-      "failure_and_escalation": "Proposal is rejected or times out: return to Deal Underwriter with the reviewer's reason. Repeated rejection escalates to the venture operator.",
-      "forge_modules": [
-        "comp_analysis"
-      ],
-      "inputs": [
-        "contract_context",
-        "comp_analysis_request"
-      ],
-      "number": 7,
-      "outputs": [
-        "comp_analysis_result"
-      ],
-      "position": "Deal Underwriter",
-      "stage": "Contract",
-      "step": "Contract: Deal Underwriter operates comp_analysis",
-      "success_metric": "comp_analysis returns a complete result and the ledger row records manifest_match=required",
-      "supporting": [],
-      "trigger": "agent_initiated"
-    },
-    {
-      "compliance_flag": "NONE",
-      "failure_and_escalation": "Proposal is rejected or times out: return to Deal Underwriter with the reviewer's reason. Repeated rejection escalates to the venture operator.",
-      "forge_modules": [
-        "underwrite_deal"
-      ],
-      "inputs": [
-        "contract_context",
-        "underwrite_deal_request"
-      ],
-      "number": 8,
-      "outputs": [
-        "underwrite_deal_result"
-      ],
-      "position": "Deal Underwriter",
-      "stage": "Contract",
-      "step": "Contract: Deal Underwriter operates underwrite_deal",
-      "success_metric": "underwrite_deal returns a complete result and the ledger row records manifest_match=required",
-      "supporting": [],
-      "trigger": "agent_initiated"
-    },
-    {
-      "compliance_flag": "recording_consent_required",
-      "failure_and_escalation": "Proposal is rejected or times out: return to Buyer Network Manager with the reviewer's reason. Repeated rejection escalates to the venture operator.",
-      "forge_modules": [
-        "assign_contract"
-      ],
-      "inputs": [
-        "assign_context",
-        "assign_contract_request"
-      ],
-      "number": 9,
-      "outputs": [
-        "assign_contract_result"
-      ],
-      "position": "Buyer Network Manager",
-      "stage": "Assign",
-      "step": "Assign: Buyer Network Manager operates assign_contract",
-      "success_metric": "assign_contract returns a complete result and the ledger row records manifest_match=required",
-      "supporting": [],
-      "trigger": "agent_initiated"
-    },
-    {
       "compliance_flag": "recording_consent_required",
       "failure_and_escalation": "Proposal is rejected or times out: return to Buyer Network Manager with the reviewer's reason. Repeated rejection escalates to the venture operator.",
       "forge_modules": [
         "buyer_match"
       ],
+      "human_held": false,
       "inputs": [
         "assign_context",
         "buyer_match_request"
       ],
-      "number": 10,
+      "number": 5,
       "outputs": [
         "buyer_match_result"
       ],
@@ -216,11 +116,12 @@
       "forge_modules": [
         "assign_contract"
       ],
+      "human_held": false,
       "inputs": [
         "close_context",
         "assign_contract_request"
       ],
-      "number": 11,
+      "number": 6,
       "outputs": [
         "assign_contract_result"
       ],
@@ -228,27 +129,6 @@
       "stage": "Close",
       "step": "Close: Buyer Network Manager operates assign_contract",
       "success_metric": "assign_contract returns a complete result and the ledger row records manifest_match=required",
-      "supporting": [],
-      "trigger": "agent_initiated"
-    },
-    {
-      "compliance_flag": "recording_consent_required",
-      "failure_and_escalation": "Proposal is rejected or times out: return to Buyer Network Manager with the reviewer's reason. Repeated rejection escalates to the venture operator.",
-      "forge_modules": [
-        "buyer_match"
-      ],
-      "inputs": [
-        "close_context",
-        "buyer_match_request"
-      ],
-      "number": 12,
-      "outputs": [
-        "buyer_match_result"
-      ],
-      "position": "Buyer Network Manager",
-      "stage": "Close",
-      "step": "Close: Buyer Network Manager operates buyer_match",
-      "success_metric": "buyer_match returns a complete result and the ledger row records manifest_match=required",
       "supporting": [],
       "trigger": "agent_initiated"
     }

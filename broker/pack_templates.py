@@ -149,9 +149,23 @@ def skeleton(
                 # Safe end: the lowest tier the schema allows. An agent appointed from
                 # an unedited template can execute nothing and propose nothing.
                 "trust_tier_ceiling": "suggest",
+                # EMPTY, AND THAT IS WHAT BLOCKS.
+                #
+                # `module_stages` and `expected_weekly_volume` are left out rather than
+                # filled with a plausible rate. A template that shipped "8 a week" would
+                # reinstate the constant it replaced, in the one file every new venture
+                # copies. V13 names the module on the first validation, which is what a
+                # placeholder should do - the same reason `median_review_minutes` is 0
+                # below rather than 5.
+                "module_stages": {},
+                "expected_weekly_volume": {},
             }
         ],
         "capacity_demand": {
+            # Absent, not zero. It is a divisor, and a zero divisor is refused by the
+            # schema (`gt=0`) rather than reported by a rule - which would be a stack
+            # trace where a named block belongs. Omitted, V13 says the venture has not
+            # declared how many days a week it operates.
             "agent_days_per_week": 0,
             "peak_concurrent_positions": 0,
             "shift_pattern": PLACEHOLDER,
@@ -182,7 +196,14 @@ def skeleton(
             {
                 "human_name": PLACEHOLDER,
                 "role": PLACEHOLDER,
+                # The total, and the three kinds it splits into. All zero, and all present:
+                # the split is all-or-nothing, so emitting the total alone would produce a
+                # template whose first V13 complained about the split rather than about the
+                # numbers being unfilled.
                 "coverage_hours": 0,
+                "review_hours": 0,
+                "countersign_hours": 0,
+                "other_hours": 0,
                 "timezone": PLACEHOLDER,
                 "advisory_daily_approval_ceiling": 0,
                 # Zero, and present. The field lost its `5.0` default on 13 September 2026, and

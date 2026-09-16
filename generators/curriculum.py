@@ -124,6 +124,18 @@ async def generate(
             instruction_content_hash=None,
         )
         for s in sorted(pack.scenarios, key=lambda s: s.scenario_id)
+        # A PENDING position's domain scenarios stay in the Pack and leave the curriculum.
+        #
+        # Ruling: uw-001 to uw-003 stay declared - they are what the position will be
+        # certified against when it activates, and deleting them would lose the work.
+        # Until then nobody is appointed to that role, so a scenario submitted for it
+        # certifies nobody.
+        #
+        # **Only the DOMAIN half is skipped, which is exactly what was ruled.** The
+        # operation scenarios for a module only a pending position operates are still
+        # generated. That is an open question, not a decision taken here: bootstrap now
+        # refuses to certify such a pair, so those scenarios currently reach nobody.
+        if s.role not in {p.position_title for p in roles.positions if p.pending}
     ]
 
     modules = sorted({m for p in roles.positions for m in p.module_ids})

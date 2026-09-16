@@ -68,6 +68,12 @@ async def generate(pack: BusinessPack, conn: AsyncConnection | None = None) -> R
                 # stage appears in no workflow step, and would vanish from the venture
                 # without anybody being told.
                 lifecycle_stages_owned=[s for s in all_stages if s in stages],
+                module_stages=dict(p.module_stages),
+                expected_weekly_volume=dict(p.expected_weekly_volume),
+                pending=p.pending_activation is not None,
+                pending_deferred_to=(
+                    p.pending_activation.deferred_to if p.pending_activation else ""
+                ),
             )
         )
 

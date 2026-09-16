@@ -209,7 +209,14 @@ async def test_the_round_trip_fails_against_a_row_from_an_earlier_build(
     findings, and both should arrive here rather than at a run.
     """
     old_source = as_written_before_provenance(pack_source)
-    assert "provenance" not in old_source, "the fixture must not still carry the field"
+    # ON THE PARSED DOCUMENT, NOT ON THE STRING. `Position.volume_provenance` arrived
+    # on 2026-09-16 and contains "provenance" as a substring, so a blanket `not in`
+    # over the YAML text started failing on a field this test is not about. The claim
+    # being made is about `human_capacity[].provenance` and nothing else.
+    assert all(
+        "provenance" not in entry
+        for entry in yaml.safe_load(old_source)["human_capacity"]
+    ), "the fixture must not still carry the field"
     assert "provenance" in pack_source, "and today's file must, or nothing was removed"
 
     insert_as_an_earlier_build(

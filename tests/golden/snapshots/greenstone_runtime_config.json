@@ -56,34 +56,6 @@
     },
     {
       "forge_id": "cre-forge",
-      "grant_id": "5313caa3-7bb8-56ce-8a88-908f60715973",
-      "module_id": "comp_analysis",
-      "office_agent_id": "44444444-4444-5444-8444-444444444444",
-      "trust_tier": "propose"
-    },
-    {
-      "forge_id": "cre-forge",
-      "grant_id": "402c7f31-bcbf-5be9-906e-8ca47ddd0795",
-      "module_id": "underwrite_deal",
-      "office_agent_id": "44444444-4444-5444-8444-444444444444",
-      "trust_tier": "propose"
-    },
-    {
-      "forge_id": "cre-forge",
-      "grant_id": "3eb1a41d-3b96-5598-81a7-026352821948",
-      "module_id": "comp_analysis",
-      "office_agent_id": "55555555-5555-5555-8555-555555555555",
-      "trust_tier": "propose"
-    },
-    {
-      "forge_id": "cre-forge",
-      "grant_id": "3fa12710-1c86-5be5-bfd4-fc9443669ab2",
-      "module_id": "underwrite_deal",
-      "office_agent_id": "55555555-5555-5555-8555-555555555555",
-      "trust_tier": "propose"
-    },
-    {
-      "forge_id": "cre-forge",
       "grant_id": "378362b2-a3f1-569e-81c2-79e8d711485e",
       "module_id": "assign_contract",
       "office_agent_id": "66666666-6666-5666-8666-666666666666",
@@ -94,7 +66,7 @@
       "grant_id": "fdb8bc79-f7e5-592d-a71b-0cb42b14c756",
       "module_id": "buyer_match",
       "office_agent_id": "66666666-6666-5666-8666-666666666666",
-      "trust_tier": "propose"
+      "trust_tier": "auto_execute"
     },
     {
       "forge_id": "cre-forge",
@@ -108,7 +80,7 @@
       "grant_id": "2dbdcf9a-79e9-555e-954a-710ef5b8d79f",
       "module_id": "buyer_match",
       "office_agent_id": "77777777-7777-5777-8777-777777777777",
-      "trust_tier": "propose"
+      "trust_tier": "auto_execute"
     }
   ],
   "manifest_rows": [
@@ -120,8 +92,7 @@
       "module_id": "assign_contract",
       "required": true,
       "required_by": [
-        "workflow step 11",
-        "workflow step 9"
+        "workflow step 6"
       ]
     },
     {
@@ -132,8 +103,7 @@
       "module_id": "buyer_match",
       "required": true,
       "required_by": [
-        "workflow step 10",
-        "workflow step 12"
+        "workflow step 5"
       ]
     },
     {
@@ -144,10 +114,8 @@
       "module_id": "comp_analysis",
       "required": true,
       "required_by": [
-        "workflow step 1",
-        "workflow step 3",
-        "workflow step 5",
-        "workflow step 7"
+        "workflow step 2",
+        "workflow step 3"
       ]
     },
     {
@@ -167,8 +135,7 @@
       "module_id": "property_lookup",
       "required": true,
       "required_by": [
-        "workflow step 2",
-        "workflow step 4"
+        "workflow step 1"
       ]
     },
     {
@@ -179,8 +146,7 @@
       "module_id": "underwrite_deal",
       "required": true,
       "required_by": [
-        "workflow step 6",
-        "workflow step 8"
+        "workflow step 4"
       ]
     }
   ],

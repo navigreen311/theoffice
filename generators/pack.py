@@ -357,6 +357,80 @@ class Position(Strict):
     #: certified below its declared tier operates at the certified one.
     module_trust_tiers: dict[str, TrustTier] = Field(default_factory=dict)
 
+    #: Which ONE lifecycle stage this module runs in, keyed `forge_id/module_id`.
+    #:
+    #: **The workflow generator emitted the cross product, and the projection billed for
+    #: it.** Steps are stage-major - every stage, then every position owning it, then every
+    #: module that position operates - so a position owning two stages emitted each of its
+    #: modules TWICE. Greenstone's Deal Underwriter owns Underwrite and Contract and
+    #: operates two modules: four steps, and the Contract stage contains no Deal Underwriter
+    #: module at all. Burkham's Compliance Reviewer owns Readiness and Placement and
+    #: operates three: six steps for three modules.
+    #:
+    #: The projection counts per (step, holder, module), so each duplicate was a second
+    #: approval a day for one piece of work. `module_trust_tiers` above already states the
+    #: principle this field completes: *"The same module reached from two steps is the same
+    #: authority, and declaring it twice invites the two to disagree."* The tier was
+    #: declared once per module. The step was not.
+    #:
+    #: Measured across this change: Greenstone 12 steps -> 6, Burkham 15 -> 10.
+    #:
+    #: **Undeclared blocks rather than defaulting.** Falling back to the first stage owned
+    #: would place the module by list order, and B24 is what happens when a gate verdict
+    #: turns on which line came first in the YAML.
+    module_stages: dict[str, str] = Field(default_factory=dict)
+
+    #: Expected invocations per WEEK, keyed `forge_id/module_id`.
+    #:
+    #: **This is what replaces `DEFAULT_DAILY_VOLUME_PER_HEADCOUNT = 8`** - an unattributed
+    #: constant (entry 46) that stood in for every module of every venture. Greenstone
+    #: projected 64 approvals a day against a venture closing one deal a week.
+    #:
+    #: **Per week, because that is the unit the basis is stated in.** The Greenstone basis
+    #: is "about one closed assignment a week, ramping to two by Month 12". Converting that
+    #: by hand before writing it down would put an arithmetic step between the ruling and
+    #: the Pack, in the one place nobody would check it.
+    #: `capacity_demand.operating_days_per_week` performs the conversion and is itself
+    #: declared, so no divisor is inferred anywhere.
+    #:
+    #: **Not multiplied by headcount.** A rate is a property of the business, not of the
+    #: roster: two Deal Underwriters do not make the venture close twice as many deals. The
+    #: old constant WAS per holder, which is why adding a headcount raised projected demand
+    #: without anything new happening in the world.
+    #:
+    #: A module at `auto_execute` needs no entry - it asks nobody, so no volume of it can
+    #: reach a reviewer. Every other operated module must carry one, or the projection
+    #: blocks and names it.
+    expected_weekly_volume: dict[str, float] = Field(default_factory=dict)
+
+    #: Where `expected_weekly_volume` came from. Required as soon as any volume is declared.
+    #:
+    #: Reuses `CapacityProvenance` deliberately rather than defining a parallel type: a
+    #: volume is the same kind of claim as a review time, and it fails the same way -
+    #: asserted once, inherited silently, never attributed. B20 and B21 are that failure for
+    #: the numbers one field over.
+    volume_provenance: CapacityProvenance | None = None
+
+    #: Declared, unfilled, and not yet activated. `None` is an ordinary position.
+    #:
+    #: **`headcount` stays `ge=1` and keeps its real number.** A pending position is not a
+    #: position of zero people - it is a position of two that no agent holds yet, and
+    #: writing 0 would lose the size of the thing being deferred. What changes is who counts
+    #: it: V24 skips it and names it, appointment emits it unfilled without calling that a
+    #: shortfall, the projection takes no agent demand from it, and bootstrap refuses to
+    #: certify a pair whose only operator is this.
+    #:
+    #: **`deferred_to` is where the humans holding the work are named, and it is prose.**
+    #: It is not checked against `office_human`, the way `human_name` and `backup_human`
+    #: are. If it should ever be checked, that comes after the rename - "Ivan Green" is not
+    #: yet what the account is called. Recorded so the next reader does not mistake a
+    #: sentence for a join.
+    #:
+    #: Reuses `PendingActivation` rather than defining a parallel type. The shape is the
+    #: same one Burkham's referral-fee obligation uses and the discipline is the same: a
+    #: trigger a reviewer can check, not "when it becomes relevant".
+    pending_activation: PendingActivation | None = None
+
     @property
     def module_ids(self) -> list[str]:
         """The bare `module_id` of each operated module, in declared order.
@@ -468,6 +542,63 @@ class Position(Strict):
                 f"this position does not operate. It operates {', '.join(sorted(operated))}."
             )
         return self
+
+    @model_validator(mode="after")
+    def _stage_and_volume_maps_are_well_formed(self) -> Position:
+        """`module_stages` and `expected_weekly_volume` name operated modules and owned stages.
+
+        The same two error kinds as the tier map above, for the same reason: an unqualified
+        key is a form error fixable without knowing the venture, an unoperated module is a
+        stale edit that needs the position's own list to diagnose.
+
+        **Absence is not checked here.** A Pack authored before these fields existed must
+        still LOAD - Burkham's does, and blocking it at parse time would replace a named
+        rule failure with a stack trace before any gate ran. What an undeclared volume must
+        do is block the projection, by name, which is `approval_projection`'s job and not
+        the parser's.
+
+        The stage half is checked against this position's own `lifecycle_stages_owned`
+        rather than the Pack's stage order: a position cannot run a module in a stage it
+        does not own, and that is the tighter of the two checks.
+        """
+        operated = set(self.forge_modules_operated)
+        for field_name, mapping in (
+            ("module_stages", self.module_stages),
+            ("expected_weekly_volume", self.expected_weekly_volume),
+        ):
+            unqualified = sorted(k for k in mapping if k.count("/") != 1)
+            if unqualified:
+                raise ValueError(
+                    f"{self.position_title}: {field_name} keys must be "
+                    f"'forge_id/module_id'. Unqualified: {', '.join(unqualified)}."
+                )
+            unknown = sorted(k for k in mapping if k not in operated)
+            if unknown:
+                raise ValueError(
+                    f"{self.position_title}: {field_name} names {', '.join(unknown)}, "
+                    f"which this position does not operate. It operates "
+                    f"{', '.join(sorted(operated))}."
+                )
+
+        if self.lifecycle_stages_owned:
+            owned = set(self.lifecycle_stages_owned)
+            wrong = sorted(
+                f"{k} -> {v}" for k, v in self.module_stages.items() if v not in owned
+            )
+            if wrong:
+                raise ValueError(
+                    f"{self.position_title}: module_stages puts {'; '.join(wrong)}, but "
+                    f"this position owns {', '.join(sorted(owned))}. A position cannot "
+                    "run a module in a stage it does not own."
+                )
+
+        if self.expected_weekly_volume and self.volume_provenance is None:
+            raise ValueError(
+                f"{self.position_title}: expected_weekly_volume is declared with no "
+                "volume_provenance. A rate nobody is named for is the defect B20 and B21 "
+                "record one field over."
+            )
+        return self
     lifecycle_stages_owned: list[str] = Field(default_factory=list)
     """Which lifecycle stages this position acts in. Empty means all of them.
 
@@ -482,6 +613,24 @@ class Position(Strict):
 
 class CapacityDemand(Strict):
     agent_days_per_week: float
+
+    #: How many days a week this venture operates. The divisor that turns a weekly
+    #: `expected_weekly_volume` into the daily rate both V13s compare against.
+    #:
+    #: **Declared, because nothing in a Pack supplied one.** Measured before this field
+    #: existed: `agent_days_per_week` is agent-days summed across the venture (35 for
+    #: Greenstone, 40 for Burkham), not a calendar week; `shift_pattern` says "5
+    #: shifts/week" in free prose in both Packs; `ramp_schedule` carries agent-days in the
+    #: same units as the first. Gate 2's V13 divided `agent_days_per_week` by a hardcoded
+    #: `7.0` and nothing said why.
+    #:
+    #: Reading "5 shifts/week" out of `shift_pattern` was the available shortcut and is
+    #: refused: a divisor parsed from prose is a number whose provenance is a regex.
+    #:
+    #: **Optional in the schema, required in practice.** A Pack authored before this field
+    #: must load; what it must not do is reach a verdict. `approval_projection` blocks and
+    #: names the venture when a weekly volume needs converting and this is absent.
+    operating_days_per_week: float | None = Field(default=None, gt=0)
     peak_concurrent_positions: int
     shift_pattern: str
     ramp_schedule: list[dict[str, Any]] = Field(default_factory=list)
@@ -613,10 +762,52 @@ class CapacityProvenance(Strict):
         return self
 
 
+# `Position.volume_provenance` is annotated `CapacityProvenance | None`, and Position is
+# defined above it. With `from __future__ import annotations` the annotation is a string,
+# so the model is left incomplete until the name resolves. Rebuilt here, explicitly, rather
+# than relying on `BusinessPack`'s construction to do it as a side effect.
+Position.model_rebuild()
+
+
 class HumanCapacity(Strict):
     human_name: str
     role: str
+
+    #: The person's TOTAL declared hours a day for this venture. Kept, and now documented
+    #: as the total rather than as review time, which is what it had silently been.
+    #:
+    #: `broker.proposals.queue` and the console's reviewer card display this, and a total
+    #: is the right thing to show there - "6h" is the commitment. What was wrong was V13
+    #: reading it as review supply.
     coverage_hours: float
+
+    #: Of `coverage_hours`, the part spent reviewing. **The only figure V13 counts as
+    #: supply, at either gate.**
+    #:
+    #: `coverage_hours` meant review coverage and nothing else, so there was nowhere to put
+    #: "4h writing, 1h countersigning" (entry 96 §5). Declaring those hours as coverage
+    #: asserts review capacity that is committed elsewhere; omitting them understates what
+    #: the person is doing. The schema had one kind of hour and the venture has three.
+    review_hours: float | None = Field(default=None, ge=0)
+
+    #: Of `coverage_hours`, the part spent countersigning.
+    #:
+    #: **Countersigns create demand, and nothing projects it yet - that gap is open, not
+    #: closed by this field.** V13's demand is keyed to (workflow step, holder, module):
+    #: agent-originated proposals. A countersign is keyed to an ARTIFACT - an MAO, an
+    #: assignment agreement - authored by a human, and `proposal.office_agent_id` is NOT
+    #: NULL, so The Office cannot raise a human-authored item at all (entry 96 §3).
+    #:
+    #: So this hour is declared and subtracted from review supply, which is honest, and its
+    #: demand is not projected, which is incomplete. Sizing it needs the human-authored-item
+    #: surface first. Recorded rather than approximated: a countersign demand invented here
+    #: would be the constant 8 again, one field over.
+    countersign_hours: float | None = Field(default=None, ge=0)
+
+    #: Of `coverage_hours`, everything that is neither review nor countersign - writing
+    #: MAOs, seller calls, dispositions. Declared so the total reconciles, and counted as
+    #: supply by nothing.
+    other_hours: float | None = Field(default=None, ge=0)
     timezone: str
     backup_human: str | None = None
 
@@ -648,6 +839,53 @@ class HumanCapacity(Strict):
     #: Required. See `CapacityProvenance` - no default, because a default is how the
     #: four numbers this field exists for became unattributed in the first place.
     provenance: CapacityProvenance
+
+    @property
+    def hours_are_split(self) -> bool:
+        """Whether this entry declares what its hours are spent on."""
+        return self.review_hours is not None
+
+    @model_validator(mode="after")
+    def _the_split_is_whole_or_absent(self) -> HumanCapacity:
+        """All three kinds, or none, and they add up to the total.
+
+        **All-or-nothing, because a half-declared split is worse than none.** With
+        `review_hours` given and `other_hours` omitted, the missing hours read as zero and
+        the entry asserts that the person does nothing but review and countersign - a
+        stronger claim than the Pack meant to make, arrived at by leaving a field out.
+
+        **The sum is checked because the total is what the console shows.** A split that
+        does not reconcile leaves the reviewer card and V13 describing two different people.
+        Tolerance is 0.01h so a declared 0.5 + 0.25 + 0.25 is not refused by float
+        representation.
+
+        A Pack that declares no split loads. It does not reach a V13 verdict - that is the
+        rule's refusal to make, with the role named, not the parser's.
+        """
+        kinds = {
+            "review_hours": self.review_hours,
+            "countersign_hours": self.countersign_hours,
+            "other_hours": self.other_hours,
+        }
+        declared = {k: v for k, v in kinds.items() if v is not None}
+        if not declared:
+            return self
+        if len(declared) != len(kinds):
+            missing = ", ".join(sorted(set(kinds) - set(declared)))
+            raise ValueError(
+                f"{self.human_name}: {missing} left undeclared beside "
+                f"{', '.join(sorted(declared))}. Declare all three or none - an omitted "
+                "kind reads as zero, which asserts more than leaving the split out does."
+            )
+        total = sum(kinds.values())  # type: ignore[arg-type]
+        if abs(total - self.coverage_hours) > 0.01:
+            raise ValueError(
+                f"{self.human_name}: review {self.review_hours:g} + countersign "
+                f"{self.countersign_hours:g} + other {self.other_hours:g} = {total:g}, "
+                f"against coverage_hours {self.coverage_hours:g}. The split must "
+                "reconcile with the total the console shows."
+            )
+        return self
 
 
 class SeparationOfDuties(Strict):

@@ -92,6 +92,14 @@ positions_required:
     headcount: 3
     trust_tier_ceiling: auto_execute
     lifecycle_stages_owned: [Source, Qualify]
+    # One step per module, in the stage it runs in. The generator used to emit the cross
+    # product - both modules in both stages - and the projection billed for each.
+    module_stages:
+      cre-forge/property_lookup: Source
+      cre-forge/comp_analysis: Qualify
+    # No expected_weekly_volume: every module here is auto_execute, so none of it reaches
+    # a reviewer and a rate would multiply by zero. Lowering either tier makes a volume
+    # newly required, and V13 names the module.
 
   - position_title: Deal Underwriter
     reports_to: venture_operator
@@ -107,6 +115,31 @@ positions_required:
     # is an assignment that does not close, and there is no automated check for it.
     trust_tier_ceiling: propose
     lifecycle_stages_owned: [Underwrite, Contract]
+    # Both modules are underwriting work, so both run in Underwrite.
+    #
+    # CONTRACT HAS NO MODULE STEP, AND THAT IS A GAP RATHER THAN AN ERROR.
+    # LOI and PSA work has no module on any Forge. In V1 Ivan Green and Ira Green do it by
+    # hand. The stage stays owned and declared so the absence is visible; a stage quietly
+    # dropped would read as work nobody does.
+    module_stages:
+      cre-forge/comp_analysis: Underwrite
+      cre-forge/underwrite_deal: Underwrite
+    # DECLARED, UNFILLED, PENDING ACTIVATION.
+    #
+    # No expected_weekly_volume, because a pending position adds no agent demand. The
+    # underwriting hours are real and they are Ivan's - they are declared as `other_hours`
+    # in human_capacity below, not as an approval queue.
+    pending_activation:
+      activates_when: >
+        Ivan Green and Ira Green have written 10-20 real MAOs and the pattern is
+        extractable into an operating instruction a Village agent can be certified
+        against.
+      deferred_to: >
+        Ivan Green and Ira Green underwrite V1 directly. Burkham underwrites capital
+        placement and Greenstone underwrites CRE - comps, cap rates, CapEx-adjusted MAO -
+        so this is not shared with Burkham, and it is specialist work rather than
+        management, so it is not staffed with managers. This text is prose and is checked
+        against no account; if it should ever be, that comes after the rename.
 
   - position_title: Buyer Network Manager
     reports_to: venture_operator
@@ -144,8 +177,44 @@ positions_required:
     headcount: 2
     trust_tier_ceiling: propose
     lifecycle_stages_owned: [Assign, Close]
+    module_stages:
+      cre-forge/buyer_match: Assign
+      cre-forge/assign_contract: Close
+    # RULED 2026-09-16 by Ivan: buyer_match runs at auto_execute.
+    #
+    # It is non-mutating and the specification requires no human on it. Read from the
+    # Forge: it ranks buyers with `save_matches=False`, and filtering a suppression list
+    # is not contact. Its volume therefore reaches no reviewer and none is declared.
+    module_trust_tiers:
+      cre-forge/buyer_match: auto_execute
+    # ONE CLOSED ASSIGNMENT A WEEK, WHICH IS IVAN'S FIGURE AND THE ONLY ONE HERE.
+    #
+    # `assign_contract` is the module that runs once per closing, so the venture's closing
+    # rate is its rate directly, with no funnel ratio in between. Every other figure that
+    # was offered for this Pack - buyer-match runs per deal, an MAO cycle time - was an
+    # assumption made while planning and was withdrawn. None of them is in this file.
+    expected_weekly_volume:
+      cre-forge/assign_contract: 1
+    volume_provenance:
+      basis: declared
+      established_by: Ivan Green
+      detail: >
+        About one closed assignment a week on average, ramping to two a week by Month 12,
+        with 5-10 active deals and 4-8 in-flight MAOs. The closing rate is declared here
+        because assign_contract runs once per closing. The Month 12 figure is 2 and is NOT
+        declared yet: this Pack states today's rate, and raising it is an edit somebody
+        makes deliberately rather than a ramp the validator applies on a date.
 
 capacity_demand:
+  # The divisor that turns every expected_weekly_volume into a daily rate.
+  #
+  # TRANSCRIBED FROM THIS PACK'S OWN `shift_pattern`, WHICH SAYS "5 shifts/week".
+  # Nothing in the schema supplied a divisor before this field: `agent_days_per_week`
+  # below is agent-days summed across the venture, not a calendar week, and Gate 2's V13
+  # divided it by a hardcoded 7.0. Reading the number out of the prose at runtime was
+  # refused - a divisor whose provenance is a regex - so it is written here once, where a
+  # reader can disagree with it.
+  operating_days_per_week: 5
   agent_days_per_week: 35
   peak_concurrent_positions: 7
   shift_pattern: One venture per agent per shift; 5 shifts/week, 1.5x Deputy cushion
@@ -302,7 +371,19 @@ budget:
 human_capacity:
   - human_name: Ivan
     role: venture_operator
-    coverage_hours: 6
+    # HOURS AS RULED, 2026-09-15: four for Greenstone, split three ways.
+    #
+    # Six was the unattributed original (B21). Four is the ruled figure, and the split is
+    # the point: only `review_hours` is V13 supply. Two hours of underwriting and one of
+    # seller calls and dispositions are real work and are not review, and declaring them as
+    # coverage asserted review capacity that was committed elsewhere.
+    #
+    # The two underwriting hours are what Deal Underwriter's deferral costs. They are here,
+    # as other_hours, rather than in the approval projection.
+    coverage_hours: 4
+    review_hours: 1
+    countersign_hours: 0
+    other_hours: 3
     timezone: America/Los_Angeles
     backup_human: Ira Green
     advisory_daily_approval_ceiling: 60
@@ -325,7 +406,19 @@ human_capacity:
   # overview matches a Pack's people against.
   - human_name: Ira Green
     role: compliance_officer
+    # HOURS AS RULED, 2026-09-15: two for Greenstone - one countersign, one review.
+    #
+    # COUNTERSIGN HOURS ARE SUBTRACTED FROM SUPPLY AND THEIR DEMAND IS NOT PROJECTED.
+    # That is a gap, stated rather than closed. V13's demand is keyed to (workflow step,
+    # module) - agent-originated proposals. A countersign is keyed to an artifact, an MAO or
+    # an assignment agreement, authored by a human, and `proposal.office_agent_id` is NOT
+    # NULL, so The Office cannot raise a human-authored item at all. Sizing this hour's
+    # demand needs that surface first. Inventing a figure for it here would be the constant
+    # 8 again, one field over.
     coverage_hours: 2
+    review_hours: 1
+    countersign_hours: 1
+    other_hours: 0
     timezone: America/Los_Angeles
     backup_human: Ivan
     advisory_daily_approval_ceiling: 12

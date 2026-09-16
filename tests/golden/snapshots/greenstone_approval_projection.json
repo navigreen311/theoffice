@@ -1,7 +1,6 @@
 {
   "projected_daily_approvals": {
-    "compliance_officer": 64,
-    "venture_operator": 64
+    "compliance_officer": 0.2
   },
   "venture_id": "greenstone"
 }

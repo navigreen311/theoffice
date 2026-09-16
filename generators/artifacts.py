@@ -123,6 +123,27 @@ class DefinedPosition:
     #: field inserted in the middle would be a signature change dressed as an addition.
     module_trust_tiers: dict[str, str] = field(default_factory=dict)
 
+    #: Which ONE stage each module runs in, carried through from the Pack. The workflow
+    #: generator reads it to emit one step per module instead of one per (stage, module).
+    module_stages: dict[str, str] = field(default_factory=dict)
+
+    #: Declared invocations per week, per module. Carried so the artifact records the rate
+    #: the projection was computed from - a projection whose inputs are only in the Pack is
+    #: a number a reader has to go and find.
+    expected_weekly_volume: dict[str, float] = field(default_factory=dict)
+
+    #: Declared, unfilled, pending activation.
+    pending: bool = False
+
+    #: Who holds the work until it activates. **Prose, and checked against no account** -
+    #: unlike `human_name` and `backup_human`, which resolve against `office_human`. If it
+    #: should ever be checked, that comes after the rename.
+    pending_deferred_to: str = ""
+
+    #: Appended, defaulted, and last - for the reason `module_trust_tiers` states above:
+    #: this class is frozen, slotted and hashed into `artifacts_hash`, so a field inserted
+    #: in the middle is a signature change dressed as an addition.
+
     @property
     def module_ids(self) -> list[str]:
         """The bare `module_id` of each operated module, in order.
@@ -205,6 +226,12 @@ class PositionAppointment:
     appointed: list[AppointedAgent]
     unfilled: int
     requires_certification: list[CandidateShortfall]
+
+    #: Declared, unfilled, pending activation. Emitted rather than omitted so V24 can NAME
+    #: it: a position that vanished from the appointment would be a position nobody could
+    #: report, which is the opposite of declaring it deferred. `unfilled` is 0 for such an
+    #: entry - the headcount is not a shortfall, it is a decision.
+    pending: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -298,6 +325,14 @@ class WorkflowStep:
     "no flag applies" and "nobody checked".
     """
 
+    human_held: bool = False
+    """This step's position is pending activation, so a human does the work.
+
+    The step stays in the workflow because the work happens. What changes is that no agent
+    is appointed to it and the approval projection takes no demand from it - the time is
+    non-review hours on a founder, not an approval queue.
+    """
+
 
 @dataclass(frozen=True, slots=True)
 class Workflow(Artifact):
@@ -322,7 +357,12 @@ class ApprovalProjection(Artifact):
     """
 
     venture_id: str
-    projected_daily_approvals: dict[str, int]
+
+    #: Approvals a day per role. **Float since declared volume replaced the constant 8.**
+    #: A venture closing one deal a week runs `assign_contract` 0.2 times a day, and
+    #: rounding that to zero or one is the difference between "no reviewer load" and "five
+    #: times the real load". The figure is a rate, and rates are not integers.
+    projected_daily_approvals: dict[str, float]
 
 
 # --------------------------------------------------------------------- 5.5 Curriculum

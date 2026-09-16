@@ -155,6 +155,22 @@ async def generate(
 
         # Deterministic: candidates arrive ordered by (agent_name, office_agent_id),
         # so two runs against the same roster appoint the same agents.
+        #
+        # A PENDING position appoints nobody and reports no shortfall. Its headcount is not
+        # a gap to fill - it is a number somebody deferred on purpose, and appointing into
+        # it would give an agent authority over work the ruling says two humans do.
+        if position.pending:
+            appointments.append(
+                PositionAppointment(
+                    position_title=position.position_title,
+                    headcount_required=position.headcount,
+                    appointed=[],
+                    unfilled=0,
+                    requires_certification=[],
+                    pending=True,
+                )
+            )
+            continue
         appointed = eligible[: position.headcount]
         certified_free += len(appointed)
         certified_allocated += max(0, len(eligible) - position.headcount)

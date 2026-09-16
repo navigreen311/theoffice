@@ -294,8 +294,19 @@ async def test_review_requires_a_note_and_a_venture_scoped_operator(
     assert ok.status_code == 200
 
 
-async def test_the_real_pack_blocks_at_gate_4_5_through_the_api(world, api, pack_yaml):
-    """The capacity finding reaches the console with its number intact."""
+async def test_the_real_pack_clears_gate_4_5_through_the_api(world, api, pack_yaml):
+    """The capacity verdict reaches the console, and it is a PASS now.
+
+    **This asserted a block at 4.5 with "64 approvals" in the reason.** That number was
+    the constant 8 times a count of (step, holder, module) units, against a venture that
+    closes about one deal a week. With the volume declared, the workflow emitting one step
+    per module, and Deal Underwriter pending, the projection is 0.2 a day - so the run
+    passes 4.5 and carries on to the deployment ceiling at 9.5.
+
+    What is asserted is the same thing it always was: that the capacity verdict reaches the
+    console rather than being computed and dropped. It is the verdict that moved, not the
+    reporting.
+    """
     token = await make_operator("Ops")
     await _publish(api, token, pack_yaml)
     run_id = await _start(api, token)
@@ -307,13 +318,17 @@ async def test_the_real_pack_blocks_at_gate_4_5_through_the_api(world, api, pack
     result = await _advance(api, token, run_id)
 
     assert result["status"] == "blocked"
-    assert result["current_gate"] == "4.5"
-    # 64 TO THIS ROLE since entry 105. The total is unchanged; the five CRE Forge
-    # modules stopped implying a flag the fixture had written onto all of them, so Deal
-    # Underwriter - which declares none of its own - routes to the venture operator now.
-    # See test_pipeline.py for the full arc of this figure.
-    assert "64 approvals" in result["outcomes"][-1]["reason"]
-    assert "compliance officer" in result["outcomes"][-1]["reason"]
+    assert result["current_gate"] == "9.5", (
+        "the run should reach the deployment ceiling; a stop before it means some gate "
+        "started refusing and this test would be reporting the wrong one"
+    )
+
+    gate_45 = next(o for o in result["outcomes"] if o["gate"] == "4.5")
+    assert gate_45["verdict"] == "passed"
+
+    # And the reason it stops is the ceiling's own, not a capacity one. See
+    # test_pipeline.py for the full arc of the figure that used to stop it here.
+    assert "held-out adversarial partition" in result["outcomes"][-1]["reason"]
 
 
 async def test_a_run_from_the_console_stops_at_gate_9_5(world, api, feasible_yaml):

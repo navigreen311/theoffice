@@ -48,20 +48,121 @@ from generators.pack import BusinessPack
 UTILISATION_FACTOR = 0.6
 
 
-def _v13_evidence_basis(pack: BusinessPack) -> dict[str, str]:
-    """Where each of V13's three inputs came from.
+def _humans_without_a_split(pack: BusinessPack) -> list[str]:
+    """Everyone whose hours are not broken into review / countersign / other.
 
-    **The demand side is derived and the multipliers are not, and a reader cannot see that from
-    the verdict.** 22 (workflow step, holder) pairs is real - positions, headcount, workflow and
-    tier, all from the Pack. It is then multiplied by 8, and compared against coverage multiplied
-    by 0.6, and neither multiplier is derived from anything.
-
-    Reported rather than fixed. Changing either would move a gate verdict, and a constant should
-    not move because a rule blocked - which is the argument V13's own message already makes about
-    the one it names. See decisions.md entry 46.
+    V13's supply is review hours and nothing else. An entry that has not said how much of
+    its coverage is review cannot supply a number, and `coverage_hours` is not it - that
+    field is the total, and reading it as review is exactly the defect entry 96 §5 names.
     """
-    from generators.approval_projection import DEFAULT_DAILY_VOLUME_PER_HEADCOUNT
+    return [h.human_name for h in pack.human_capacity if not h.hours_are_split]
 
+
+def _review_supply_by_role(pack: BusinessPack) -> dict[str, float]:
+    """Review minutes a day per role, after the utilisation factor.
+
+    **Review hours only.** Countersign and other hours are declared, reconciled against the
+    total, and deliberately not counted here: an hour committed to writing an MAO is not an
+    hour available to review one.
+    """
+    supply: dict[str, float] = {}
+    for human in pack.human_capacity:
+        hours = human.review_hours or 0.0
+        supply[human.role] = supply.get(human.role, 0.0) + hours * 60 * UTILISATION_FACTOR
+    return supply
+
+
+def _review_minutes_by_role(pack: BusinessPack) -> dict[str, float]:
+    """How long one review takes in this role, weighted by each person's share of it.
+
+    Weighted by REVIEW hours, not by total coverage. Before the split existed this weighted
+    by `coverage_hours`, which gave a person's total commitment a say in how long their
+    reviews take - so declaring two hours of non-review work quietly moved the weighted
+    average toward that person. See B24 for the version of this that turned on YAML order.
+    """
+    weighted: dict[str, float] = {}
+    weight: dict[str, float] = {}
+    for human in pack.human_capacity:
+        hours = human.review_hours or 0.0
+        weighted[human.role] = weighted.get(human.role, 0.0) + hours * human.median_review_minutes
+        weight[human.role] = weight.get(human.role, 0.0) + hours
+    out: dict[str, float] = {}
+    for role, w in weight.items():
+        if w > 0:
+            out[role] = weighted[role] / w
+        else:
+            # Nobody in the role declared any review hours, so there is no share to weight
+            # by. The plain mean of their declared review times, because the review times
+            # are declared and it is the hours that are missing - and zero review supply is
+            # what the rule fails on below anyway.
+            times = [h.median_review_minutes for h in pack.human_capacity if h.role == role]
+            out[role] = sum(times) / len(times)
+    return out
+
+
+def _capacity_sentences(
+    pack: BusinessPack, demand: dict[str, float]
+) -> list[str]:
+    """One sentence per overloaded role, in the shape both gates report.
+
+    Written as sentences rather than as a formula: the reviewer this is for is the person
+    whose day it describes, and "192 x 6 = 1152 against 144" asks them to do the arithmetic
+    before they can tell whether it matters.
+
+    **Shared by Gate 2 and Gate 4.5 so the two cannot drift.** They used to compute
+    different quantities from different inputs and say so at length in two docstrings; with
+    declared volume they compute the same one, and a single function is what keeps that
+    true rather than a comment claiming it.
+    """
+    each_by_role = _review_minutes_by_role(pack)
+    supply = _review_supply_by_role(pack)
+    sentences: list[str] = []
+    for role, approvals in sorted(demand.items()):
+        each = each_by_role.get(role, 5.0)
+        needed = approvals * each
+        available = supply.get(role, 0.0)
+        if needed <= available:
+            continue
+        over = needed / available if available else float("inf")
+        multiple = (
+            "with no reviewer review-time at all" if available == 0
+            else f"{over:.0f} times over" if over >= 2
+            else f"{(over - 1) * 100:.0f}% over"
+        )
+        sentences.append(
+            f"The {role.replace('_', ' ')} would receive {approvals:,.2f} "
+            f"approvals a day. At {each:g} minutes each that is "
+            f"{needed:,.1f} minutes of review against "
+            f"{available:,.0f} minutes available - {multiple}."
+        )
+    return sentences
+
+
+#: Verbatim, and last on every V13 message. It closes off the obvious wrong fix - the
+#: utilisation factor is the one number here somebody can change to make the rule pass
+#: without changing anything real.
+V13_CLOSING = (
+    "\n\nAbove this line trust tiers stop meaning anything: the reviewer "
+    "approves without reading, and the dashboard still shows green."
+    "\n\nFix by raising a trust-tier ceiling, adding reviewer coverage, "
+    "or cutting scope - not by lowering the utilisation factor."
+)
+
+
+def _v13_evidence_basis(pack: BusinessPack) -> dict[str, str]:
+    """Where each of V13's inputs came from.
+
+    **The demand side used to be derived and its multiplier was not, and a reader could not
+    see that from the verdict.** The (step, holder) pair count was real - positions,
+    headcount, workflow and tier, all from the Pack - and it was then multiplied by 8,
+    against coverage multiplied by 0.6, and neither multiplier derived from anything.
+
+    Half of that is closed. `DEFAULT_DAILY_VOLUME_PER_HEADCOUNT` is gone and the demand side
+    is a declared rate carrying its own provenance, reported per module below. The
+    utilisation factor is unchanged and still unattributed, and is reported as such - a
+    constant should not move because a rule blocked, which is the argument V13's own message
+    makes about the one it names. See decisions.md entry 46.
+    """
     basis: dict[str, str] = {}
     for human in pack.human_capacity:
         p = human.provenance
@@ -73,15 +174,46 @@ def _v13_evidence_basis(pack: BusinessPack) -> dict[str, str]:
             "`proposal.queue_to_decision_seconds` is wall-clock including queue rather than review "
             "effort, so it cannot be derived (B21)."
         )
+        if human.hours_are_split:
+            basis[f"review_hours[{human.human_name}]"] = (
+                f"{human.review_hours:g}h of {human.coverage_hours:g}h declared. "
+                f"countersign {human.countersign_hours:g}h and other "
+                f"{human.other_hours:g}h are declared and are NOT supply. "
+                "Countersign demand is not projected at all yet - The Office cannot raise a "
+                "human-authored item, so the hour is subtracted from supply and its demand "
+                "is missing from the other side. That gap is open."
+            )
+
+    days = pack.capacity_demand.operating_days_per_week
+    basis["operating_days_per_week"] = (
+        f"{days:g} - declared in capacity_demand. Converts every weekly volume to a daily "
+        "rate. Nothing in a Pack supplied a divisor before this field: agent_days_per_week "
+        "is agent-days across the venture, shift_pattern is prose, and Gate 2 divided by a "
+        "hardcoded 7.0."
+        if days is not None else
+        "NOT DECLARED - no weekly volume can be converted to a daily rate."
+    )
+    for position in pack.positions_required:
+        if not position.expected_weekly_volume:
+            continue
+        prov = position.volume_provenance
+        if prov is None:
+            # Unreachable through the Pack - `Position` refuses a declared volume with no
+            # provenance - but this function is also called on hand-built models in tests,
+            # and an evidence block that silently omitted the source would be the exact
+            # thing it exists to prevent.
+            continue
+        for qualified, weekly in sorted(position.expected_weekly_volume.items()):
+            daily = f"{weekly / days:g}/day" if days else "no divisor"
+            basis[f"expected_weekly_volume[{position.position_title}/{qualified}]"] = (
+                f"{weekly:g}/week = {daily} - {prov.basis} by {prov.established_by}. "
+                f"{prov.detail}"
+            )
+
     basis["UTILISATION_FACTOR"] = (
-        f"{UTILISATION_FACTOR} - unattributed constant at generators/validator.py:48. Scales the "
+        f"{UTILISATION_FACTOR} - unattributed constant at generators/validator.py. Scales the "
         "whole supply side. Its only justification is the comment above it; nothing in docs/ "
         "derives it."
-    )
-    basis["DEFAULT_DAILY_VOLUME_PER_HEADCOUNT"] = (
-        f"{DEFAULT_DAILY_VOLUME_PER_HEADCOUNT} - unattributed constant at "
-        "generators/approval_projection.py. Scales the whole demand side. The (step, holder) pair "
-        "count it multiplies IS derived from the Pack; this multiplier is not."
     )
     return basis
 
@@ -417,79 +549,76 @@ def v12(pack: BusinessPack) -> tuple[bool, str]:
             else "all instruction sets are hash-bound")
 
 
-@rule("V13", Severity.FAIL, "Projected daily approvals <= capacity x 0.6")
+@rule("V13", Severity.FAIL, "Projected daily approvals <= review capacity x 0.6")
 def v13(pack: BusinessPack) -> tuple[bool, str]:
-    """Gate 2's cheap capacity estimate. **It pools supply across roles, deliberately.**
+    """Gate 2's capacity check, against declared volume and declared review hours.
 
-    Both sides of the comparison below are pooled over every human in the Pack, with no
-    role split at all: one unweighted mean review time, one total of all coverage. Gate
-    4.5 re-checks this same rule and does the opposite - it splits by role, sums coverage
-    within the role, and weights review minutes by each person's coverage share of it.
+    **It used to pool supply across roles and estimate demand from headcount, and both
+    halves are gone.**
 
-    **The two gates do not compute the same quantity, and this is the note that says so.**
-    `validate_gate_4_5`'s docstring explains at length why the two see different *demand*
-    figures - Gate 2 estimates approvals from headcount, the Task Ledger computes them
-    from the real workflow, and the Gate 2 estimate is the optimistic one. It says nothing
-    about *supply*. That left a documented difference sitting next to an undocumented one,
-    which is worse than two undocumented ones because the first vouches for the second.
-    See blocking.md B25. **Pooling is the stated choice; the reason is below.**
+    WHAT IT USED TO DO, AND WHY IT COULD NOT DO BETTER
 
-    WHY POOLING RATHER THAN GATE 4.5's SPLIT
+        demand   `sum(headcount where tier != auto_execute) x max(1, agent_days_per_week/7)`,
+                 then multiplied by one unattributed constant. No role appeared in the
+                 expression and none could: nothing in the Pack attributed any part of it to
+                 a reviewer, because the thing that attributes is the workflow, which is
+                 generator output that does not exist until Gate 3.
+        supply   every human's coverage hours in one total, with one unweighted mean review
+                 time. Pooling across roles errs optimistic and only optimistic - a slack
+                 role's spare coverage absorbs a saturated one - which is why Greenstone
+                 passed here and failed at Gate 4.5.
 
-    Gate 2 has no per-role demand figure to split against. `approvals` below is a single
-    number off headcount and agent-days, and nothing in the Pack attributes any part of it
-    to a reviewer role - the thing that does the attributing is the workflow and the
-    compliance flags on each step, which are generator output that does not exist until
-    Gate 3. Split supply per role here and you get role buckets with nothing to set
-    against them. **The split is not skipped because it is expensive. It is skipped
-    because at this gate there is no other half of it.**
+        Both simplifications were documented at length, in two docstrings, and B25 is the
+        finding that a documented divergence sitting beside an undocumented one is worse
+        than two undocumented ones, because the first vouches for the second.
 
-    WHICH WAY THE SIMPLIFICATION ERRS - BOTH DIRECTIONS, NOT ONE
+    WHAT CHANGED
 
-    *Pooling across roles errs optimistic, and only optimistic.* A slack role's spare
-    coverage absorbs a saturated one, so pooling can hide a bottleneck and can never
-    invent one. That agrees with the direction `LATER_GATE_REASONS` already declares, and
-    it is why Greenstone passes here and fails at 4.5.
+        **A declared per-module volume is attributable at Gate 2.** It is on the position,
+        and the position carries the compliance flags that decide the reviewer, so demand
+        splits by role here with no workflow at all. The reason for pooling was that there
+        was no other half to split against. There is now.
 
-    *The unweighted mean errs either way, and is bounded.* It can land on either side of
-    Gate 4.5's coverage-weighted figure: for Greenstone the pooled mean is 5.0 against a
-    coverage-weighted 4.8, so here it is the **more** demanding of the two; for Burkham,
-    whose two officers declare equal coverage, the two agree exactly at 3.5. It always
-    lies between the smallest and largest declared `median_review_minutes`, so unlike the
-    role split it cannot run away from the truth in either direction.
+    WHAT IS STILL DIFFERENT AT GATE 4.5, AND IT IS ONE THING
 
-    Writing only the first of those would be the same failure B25 is about, one level
-    down. Both are here so neither vouches for the other.
+        Certification. Gate 4.5 caps each module's tier by what its appointed agents are
+        certified to; no appointment exists here. A module the Pack declares `propose` and
+        every holder is certified `auto_execute` for counts here and not there. That is a
+        real difference, it errs in the safe direction, and it is the only one left -
+        `GATE_45_RECHECKS` still carries V13 for exactly that.
 
-    **A PASS here is therefore not a capacity finding.** It is "no shortfall a pooled
-    estimate can see", which is the weaker claim, and `GATE_45_RECHECKS` carries that to
-    the editor so the screen does not imply otherwise.
+    **An undeclared volume fails rather than defaulting, and names every module.** The
+    constant it replaced is the reason: a number that stands in for a missing fact reports
+    a verdict about a venture nobody measured.
     """
-    # Every position below auto_execute produces approvals. One per headcount per
-    # agent-day is the deliberately conservative estimate: under-estimating here
-    # produces a green check on a reviewer who is already saturated.
-    #
-    # No role appears in this expression, and none can: see the docstring.
-    approvals = sum(
-        p.headcount for p in pack.positions_required if p.trust_tier_ceiling != "auto_execute"
-    ) * max(1.0, pack.capacity_demand.agent_days_per_week / 7.0)
+    from generators.approval_projection import VolumeNotDeclaredError, demand_from_the_pack
 
-    # Pooled and unweighted, by the choice stated above - not by oversight, and not the
-    # coverage-weighted per-role figure Gate 4.5 computes.
-    minutes_needed = sum(
-        h.median_review_minutes for h in pack.human_capacity
-    ) / max(len(pack.human_capacity), 1) * approvals
+    try:
+        demand = demand_from_the_pack(pack)
+    except VolumeNotDeclaredError as gap:
+        if gap.missing:
+            return (False,
+                    f"volume not declared: {_join(gap.missing)}. Every module below "
+                    "auto_execute needs an expected_weekly_volume, because demand is that "
+                    "rate and nothing stands in for it.")
+        return (False, f"volume not declared: {gap.reason}.")
 
-    # Every human's coverage, in one number, for the same reason.
-    minutes_available = sum(
-        h.coverage_hours * 60 * UTILISATION_FACTOR for h in pack.human_capacity
-    )
-    ok = minutes_needed <= minutes_available
-    return (ok, f"{approvals:.0f} projected approvals need {minutes_needed:.0f} review-minutes "
-                f"against {minutes_available:.0f} available "
-                f"({UTILISATION_FACTOR} x coverage). Trust tiers become decorative above this."
-            if not ok else
-            f"{minutes_needed:.0f} of {minutes_available:.0f} review-minutes used")
+    unsplit = _humans_without_a_split(pack)
+    if unsplit:
+        return (False,
+                f"hours not split: {_join(sorted(unsplit))}. V13's supply is review hours, "
+                "and coverage_hours is the total - reading one as the other asserts review "
+                "capacity that is committed elsewhere.")
+
+    sentences = _capacity_sentences(pack, demand)
+    if sentences:
+        return (False, " ".join(sentences) + V13_CLOSING)
+
+    total = sum(demand.values())
+    available = sum(_review_supply_by_role(pack).values())
+    return (True,
+            f"{total:,.2f} projected approvals a day fit within "
+            f"{available:,.0f} review-minutes")
 
 
 @rule("V14", Severity.FAIL, "Compliance and T&S roles have backup_human")
@@ -1932,103 +2061,61 @@ async def validate_gate_4_5(
     unfilled = [
         f"{a.position_title} ({a.unfilled} of {a.headcount_required})"
         for a in appointment.appointments
-        if a.unfilled
+        if a.unfilled and not a.pending
     ]
+    # NAMED, NOT SILENTLY SKIPPED.
+    #
+    # A pending position is not a shortfall - it is a decision - so it does not fail this
+    # rule. It is also not nothing, and a rule that passed without mentioning it would let
+    # a deferred position disappear from the one report whose job is to say which positions
+    # are filled. The message carries it either way.
+    pending = sorted(
+        f"{a.position_title} ({a.headcount_required})"
+        for a in appointment.appointments
+        if a.pending
+    )
+    deferred = (
+        f" Pending activation, not counted as unfilled: {_join(pending)}." if pending else ""
+    )
     report.results.append(
         RuleResult(
             "V24", Severity.FAIL,
             Verdict.FAIL if unfilled else Verdict.PASS,
-            f"unfilled positions: {_join(unfilled)}" if unfilled
-            else "every position is filled by a certified agent",
+            (f"unfilled positions: {_join(unfilled)}" if unfilled
+             else "every position is filled by a certified agent or declared pending")
+            + deferred,
         )
     )
 
-    coverage_by_role: dict[str, float] = {}
-    # Review minutes are weighted by each person's share of their role's coverage.
-    #
-    # This used to be a setdefault, which meant the FIRST entry of a role set the
-    # multiplier for everyone in it. Two compliance officers at six hours each, one at
-    # four minutes a review and one at three, gave 480 review-minutes or 360 against 432
-    # available depending purely on which line came first in the YAML - FAIL or PASS with
-    # nothing on the page saying the order was the reason. Whoever alphabetised that list,
-    # or moved a founder to the top out of courtesy, would have changed a gate outcome and
-    # had no way to know. See blocking.md B24.
-    #
-    # Weighted by coverage share is what "how long does a review take here" means when two
-    # people share the load, and unlike first-in-the-list it is the same answer in any
-    # order. A plain mean would also be defensible; taking the first was the one option
-    # nobody chose.
-    weighted_minutes_by_role: dict[str, float] = {}
-    coverage_weight_by_role: dict[str, float] = {}
-    for human in pack.human_capacity:
-        coverage_by_role[human.role] = (
-            coverage_by_role.get(human.role, 0.0)
-            + human.coverage_hours * 60 * UTILISATION_FACTOR
-        )
-        weighted_minutes_by_role[human.role] = (
-            weighted_minutes_by_role.get(human.role, 0.0)
-            + human.coverage_hours * human.median_review_minutes
-        )
-        coverage_weight_by_role[human.role] = (
-            coverage_weight_by_role.get(human.role, 0.0) + human.coverage_hours
-        )
+    # Supply, review times and the overload sentences all come from the same three helpers
+    # Gate 2 uses. They used to be written out here a second time, weighted by
+    # `coverage_hours` rather than by review hours, and the two gates' arithmetic could
+    # drift without either docstring becoming wrong. See B24 and B25.
+    demand = dict(approval_projection.projected_daily_approvals)
 
-    review_minutes_by_role: dict[str, float] = {}
-    for role, weight in coverage_weight_by_role.items():
-        if weight > 0:
-            review_minutes_by_role[role] = weighted_minutes_by_role[role] / weight
+    unsplit = _humans_without_a_split(pack)
+    if unsplit:
+        message = (
+            f"hours not split: {_join(sorted(unsplit))}. V13's supply is review hours, "
+            "and coverage_hours is the total."
+        )
+        verdict = Verdict.FAIL
+    else:
+        sentences = _capacity_sentences(pack, demand)
+        if sentences:
+            message = " ".join(sentences) + V13_CLOSING
+            verdict = Verdict.FAIL
         else:
-            # Nobody in the role declared any coverage hours, so there is no share to
-            # weight by. Fall back to the plain mean of their declared review times rather
-            # than to a default: the review times are declared, it is the coverage that is
-            # missing, and zero coverage is what the rule fails on below anyway.
-            times = [
-                h.median_review_minutes for h in pack.human_capacity if h.role == role
-            ]
-            review_minutes_by_role[role] = sum(times) / len(times)
-
-    # Written as sentences rather than as a formula. The reviewer this message is for is
-    # the person whose day it describes, and "192 x 6 = 1152 against 144" asks them to
-    # do the arithmetic before they can tell whether it matters. The numbers all survive;
-    # what changes is that they arrive inside a sentence that says what they mean.
-    overloaded = []
-    for role, approvals in sorted(approval_projection.projected_daily_approvals.items()):
-        each = review_minutes_by_role.get(role, 5.0)
-        needed = approvals * each
-        available = coverage_by_role.get(role, 0.0)
-        if needed > available:
-            over = needed / available if available else float("inf")
-            multiple = (
-                "with no reviewer coverage at all" if available == 0
-                else f"{over:.0f} times over" if over >= 2
-                else f"{(over - 1) * 100:.0f}% over"
-            )
-            overloaded.append(
-                f"The {role.replace('_', ' ')} would receive {approvals:,.0f} "
-                f"approvals a day. At {each:g} minutes each that is "
-                f"{needed:,.0f} minutes of review against "
-                f"{available:,.0f} minutes available - {multiple}."
-            )
+            message = "projected approvals fit within reviewer review-time"
+            verdict = Verdict.PASS
 
     report.results.append(
         RuleResult(
-            "V13", Severity.FAIL,
-            Verdict.FAIL if overloaded else Verdict.PASS,
-            (
-                " ".join(overloaded)
-                + "\n\nAbove this line trust tiers stop meaning anything: the reviewer "
-                "approves without reading, and the dashboard still shows green."
-                # Verbatim, and last. It closes off the obvious wrong fix - the
-                # utilisation factor is the one number here somebody can change to make
-                # the rule pass without changing anything real.
-                + "\n\nFix by raising a trust-tier ceiling, adding reviewer coverage, "
-                "or cutting scope - not by lowering the utilisation factor."
-            )
-            if overloaded
-            else "projected approvals fit within reviewer capacity",
-            # Attached whether it passed or failed. A PASS computed from an unmeasured duration
-            # is the same claim as a FAIL computed from one, and the twelve-minute margin this
-            # Pack carried for five days was the case that mattered: it read as capacity.
+            "V13", Severity.FAIL, verdict, message,
+            # Attached whether it passed or failed. A PASS computed from an unmeasured
+            # duration is the same claim as a FAIL computed from one, and the twelve-minute
+            # margin this Pack carried for five days was the case that mattered: it read as
+            # capacity.
             _v13_evidence_basis(pack),
         )
     )

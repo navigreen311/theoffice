@@ -8,8 +8,7 @@
       "module_id": "assign_contract",
       "required": true,
       "required_by": [
-        "workflow step 11",
-        "workflow step 9"
+        "workflow step 6"
       ]
     },
     {
@@ -20,8 +19,7 @@
       "module_id": "buyer_match",
       "required": true,
       "required_by": [
-        "workflow step 10",
-        "workflow step 12"
+        "workflow step 5"
       ]
     },
     {
@@ -32,10 +30,8 @@
       "module_id": "comp_analysis",
       "required": true,
       "required_by": [
-        "workflow step 1",
-        "workflow step 3",
-        "workflow step 5",
-        "workflow step 7"
+        "workflow step 2",
+        "workflow step 3"
       ]
     },
     {
@@ -55,8 +51,7 @@
       "module_id": "property_lookup",
       "required": true,
       "required_by": [
-        "workflow step 2",
-        "workflow step 4"
+        "workflow step 1"
       ]
     },
     {
@@ -67,8 +62,7 @@
       "module_id": "underwrite_deal",
       "required": true,
       "required_by": [
-        "workflow step 6",
-        "workflow step 8"
+        "workflow step 4"
       ]
     }
   ],
