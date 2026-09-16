@@ -580,6 +580,7 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
         # Archiving revokes nothing, deliberately. Grants and the ledger outlive the
         # decision to stop operating a venture, and collapsing the two would make
         # archiving a quiet way to pull authority with no revocation record.
+        "/api/ventures/{venture_id}/discharges",
         "/api/ventures/{slug}/lifecycle",
         # Pack drafting. A draft cannot provision - `packs.live` does not return one, so
         # Gate 1 cannot find it and nothing downstream can generate from it. Publishing

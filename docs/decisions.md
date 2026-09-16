@@ -8877,3 +8877,109 @@ accounts - `human_name` and `backup_human` - are the ones that moved.
 
 **Burkham's Pack needed no edit.** It has said `Ivan Green` in both fields since 8
 September, which is the disagreement that made the rename necessary rather than optional.
+
+---
+
+## 112. A founder-policy discharge passes and is never silent - and a report of mine had the overage backwards
+
+**Ruled 2026-09-16 by Ivan Green. Built on an open PR; nothing published.**
+
+### 1. A founder-policy discharge satisfies V34, but never silently
+
+The obligation IS discharged - a founder is entitled to decide - so V34 passes and Gate 2
+is not blocked. **What must not happen is that it passes quietly**, because a clean Gate 2
+would then mean two different things and a reader could not tell which.
+
+    founder_policy     V34 PASSES and names the authority in its message.
+                       V41 WARNS at Gate 2 for as long as it stands.
+    counsel_reviewed   V34 passes clean. V41 is quiet. `counsel_reviewed_at` says when.
+
+**Setting `counsel_reviewed_at` clears the warning**, which is the whole mechanism: the
+warning is not a complaint about the policy, it is the outstanding question about the
+policy, and it goes when the question is answered.
+
+**V41 is a separate rule rather than a longer V34 message**, for the reason V34 is separate
+from V22: V34 answers *is it discharged*, V41 answers *on whose authority*, and they have
+different verdicts. A rule whose message carried both would have one.
+
+**V41 is silent when there is no discharge at all.** Reporting "no founder policy" for an
+obligation nobody has discharged would be agreeing with a failure - V34's finding, arriving
+in the wrong rule's sentence.
+
+### 2. A founder's own declaration is a source for that founder's hours
+
+V39 flags only declarations with **no ruling and no measurement** behind them.
+
+Greenstone's two capacity entries now carry a `source` citing the ruling entries - entry 111
+ruling 3 for the hours, entry 107 for their split into review, countersign and other, entry
+108 for the five-day week they sit in. They stop being flagged.
+
+**Burkham's six-hour figures stay flagged, and that is the point.** They are the block
+copied wholesale from Greenstone's (B20, B21), labelled INVENTED in Burkham's own YAML
+comment, and no ruling stands behind them. This is what "unsourced" was always meant to
+mean; until now it meant "declared", which caught the honest and the inherited alike.
+
+### 3. The ruled daily plan, and the correction it forces
+
+    Ivan Green  8h   Burkham 1.5 + Greenstone 4 + MedLink Pro 1 + Argus 1 + Collingswood 0.5
+    Ira Green   6h   Burkham 2   + Greenstone 2 + MedLink Pro 1 + Argus 0.5 + Collingswood 0.5
+
+**Both sum exactly to the declared total.** Computed rather than asserted:
+
+    Ivan Green   1.5 + 4 + 1 + 1 + 0.5 = 8.0 against 8    exact
+    Ira Green    2 + 2 + 1 + 0.5 + 0.5 = 6.0 against 6    exact
+
+**THE CORRECTION.** The report accompanying entry 111 said the real overage was *larger*
+than V39 shows, because the three Pack-less ventures add 2.5h for Ivan Green and 2h for Ira
+Green that V39 cannot see. **That is wrong, and it is wrong in the direction that matters -
+it made an accounted-for plan look like an unaccounted-for one.**
+
+The arithmetic, which nobody did before writing that sentence:
+
+    Ivan Green   V39 sees burkham 6 + greenstone 4 = 10 against 8      +2h
+                 at the RULED burkham 1.5: 1.5 + 4 = 5.5 against 8     -2.5h
+                 and 2.5h is exactly what it cannot see. It reconciles.
+
+    Ira Green    V39 sees burkham 6 + greenstone 2 = 8 against 6       +2h
+                 at the RULED burkham 2: 2 + 2 = 4 against 6           -2h
+                 and 2h is exactly what it cannot see. It reconciles.
+
+**The entire overage is Burkham's stale Pack**, declaring six hours where the ruling says
+1.5 and 2. The invisible hours are not an additional problem; they are the remainder the
+plan already allocates, and the sum closes to the hour.
+
+**This is the failure class the ledger keeps recording** - a true-sounding sentence whose
+arithmetic nobody ran. The conclusion "V39 is under-reporting" was plausible and false, and
+it took four multiplications to find out. See entries 91 and 105 for the same shape.
+
+### What was built
+
+    migration 0042      `status` (founder_policy | counsel_reviewed) and
+                        `counsel_reviewed_at`, with a constraint making the two agree.
+                        GRANT INSERT and UPDATE (superseded_at) to office_app - and
+                        nothing else, so a basis or a review date cannot be rewritten.
+    broker/discharges   `file_discharge`, superseding the previous row rather than editing
+                        it, with six named refusals.
+    the route           POST /api/ventures/{id}/discharges, `ivan` only, filer taken from
+                        the caller rather than the body, writing
+                        `console_obligation_discharged`.
+    V41                 the Gate 2 warning.
+    the Pack            Greenstone's two provenance blocks cite their rulings.
+
+**The backfill is `founder_policy`, which is the safe direction.** Any row written before
+0042 was written without anybody recording whether counsel had read it; calling those
+`counsel_reviewed` would assert a review nobody performed.
+
+**The seeded world's fixture discharge is `founder_policy` too**, deliberately - it is what
+the real venture will carry, so the smoke ladder shows the warning a reader would actually
+see rather than a cleaner one the fixture invented.
+
+### Entry 110's two blockers, both closed
+
+    no operator surface        the route exists, `ivan` only, with an audit event. The
+                               remaining path - hand SQL over the admin DSN - is what
+                               entry 103 refused for the rename, and is no longer needed.
+    could not say "not         `status` makes it two distinguishable states rather than
+    counsel-reviewed"          one row with a sentence in it. V34 reads it, V41 reports
+                               it, and `test_the_application_role_cannot_edit_a_discharge`
+                               pins that neither can be changed without a new row.

@@ -147,8 +147,12 @@ async def test_over_the_total_warns_and_names_each_ventures_share(admin, clean_p
     assert "greenstone 4h" in v39.message
     assert "daily total of 8h" in v39.message
     assert "4h over" in v39.message
-    # Both declarations are `basis: declared` with no source, which is the B20/B21 shape.
-    assert "Unsourced declarations: burkham-wickmont, greenstone" in v39.message
+    # ONLY BURKHAM. Ruled 2026-09-16: a founder's own declaration IS a source for that
+    # founder's hours, and Greenstone's provenance cites the ruling entries behind its
+    # figures. What stays flagged is a number with no ruling and no measurement behind it -
+    # which is Burkham's six-hour block, copied wholesale from Greenstone's (B20, B21).
+    assert "Unsourced declarations: burkham-wickmont." in v39.message
+    assert "greenstone" not in v39.message.split("Unsourced declarations:")[1]
     # And it says what it could not see.
     assert "Ventures with no live Pack are not counted" in v39.message
 
@@ -218,8 +222,16 @@ async def test_a_person_with_no_declared_total_is_named_not_assumed(admin, clean
     assert "daily-total route" in v39.message
 
 
-async def test_a_measured_declaration_is_not_flagged_as_unsourced(admin, clean_packs):
-    """`unsourced` means asserted with nothing named behind it, not merely over."""
+async def test_a_sourced_declaration_is_not_flagged_even_when_it_is_over(
+    admin, clean_packs
+):
+    """`unsourced` means nothing named behind the number, not merely over the total.
+
+    Both sides carry a source here - Burkham a measurement, Greenstone the ruling entries
+    its real Pack cites - so the overage is reported and nothing is flagged. **The warning
+    about hours and the flag about provenance are two findings, and this is the case that
+    separates them.**
+    """
     _account(admin, "Sourced Person", 8.0)
     _live_pack(
         admin, OTHER,
@@ -232,9 +244,27 @@ async def test_a_measured_declaration_is_not_flagged_as_unsourced(admin, clean_p
     v39 = report.get("V39")
 
     assert v39.verdict.value == "WARN"
-    # Greenstone's own entry is still `declared`, so it is named and Burkham's is not.
-    assert "Unsourced declarations: greenstone." in v39.message
-    assert "burkham-wickmont," not in v39.message.split("Unsourced declarations:")[1]
+    assert "4h over" in v39.message
+    assert "Every declaration behind that names a source." in v39.message
+    assert "Unsourced declarations" not in v39.message
+
+
+async def test_greenstones_ruling_citation_counts_as_a_source(admin, clean_packs):
+    """Ruling 2, on the real Pack rather than a constructed one.
+
+    Greenstone's two capacity entries are `basis: declared` and cite decisions entries for
+    the hours. A founder's own ruling is a source for that founder's hours, so neither is
+    flagged - while Burkham's six-hour block, which cites nothing, still is.
+    """
+    from generators.pack import load_pack as _load
+
+    real = _load(PACK_PATH)
+    assert [h.human_name for h in real.human_capacity] == ["Ivan Green", "Ira Green"]
+    for entry in real.human_capacity:
+        assert entry.provenance.basis == "declared"
+        assert "decisions.md entry" in (entry.provenance.source or ""), (
+            f"{entry.human_name}'s hours cite no ruling, so V39 will flag them"
+        )
 
 
 def test_v39_is_a_warning_and_the_trigger_for_making_it_block_is_recorded():

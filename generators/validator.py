@@ -334,7 +334,7 @@ class ValidationReport:
 # fixtures for rules that cannot be evaluated without the Village. A literal is needed
 # here rather than `set(_WORLD_RULES)` only because the registry is defined further down.
 NEEDS_WORLD = {"V2", "V6", "V11", "V28", "V29", "V30", "V31", "V32", "V33", "V34",
-               "V39",
+               "V39", "V41",
                "V38"}
 
 # V24 is evaluated at Gate 4.5 against appointment output, which does not exist at
@@ -1710,11 +1710,14 @@ async def _v34_human_held_discharged(
 
     geographies = {g.strip() for g in pack.market.target_geographies if g.strip()}
     problems: list[str] = []
+    #: runtime_flag -> the status of the discharge that answered for it
+    authority: dict[str, str] = {}
     async with conn.cursor(row_factory=dict_row) as cur:
         for entry in live:
             await cur.execute(
                 """
-                SELECT jurisdiction_scope, expires_at, discharged_by, verified_at
+                SELECT jurisdiction_scope, expires_at, discharged_by, verified_at,
+                       status
                   FROM obligation_discharge
                  WHERE venture_id = %s AND runtime_flag = %s AND superseded_at IS NULL
                  ORDER BY verified_at DESC
@@ -1729,6 +1732,7 @@ async def _v34_human_held_discharged(
                     f"declared human-held ({entry.framework}) and nobody has verified it"
                 )
                 continue
+            authority[entry.runtime_flag] = row["status"]
             if row["expires_at"] <= datetime.now(UTC):
                 problems.append(
                     f"{entry.runtime_flag}: discharge expired {row['expires_at']:%Y-%m-%d}; "
@@ -1760,9 +1764,16 @@ async def _v34_human_held_discharged(
     # one level up.
     parts = []
     if live:
+        # Which authority, not just that there is one. **V34 passes on a founder policy -
+        # the obligation IS discharged, by somebody entitled to decide - and saying so here
+        # is what stops a reader taking the PASS for a legal opinion.** V41 carries the
+        # warning; this carries the fact.
+        founder = sorted(f for f, st in authority.items() if st == "founder_policy")
         parts.append(
             f"{len(live)} live obligation(s) carry a current discharge covering the "
             "venture's jurisdictions"
+            + (f" ({_join(founder)} on founder policy, not counsel-reviewed)"
+               if founder else "")
         )
     for entry, pa in pending:
         assert pa is not None
@@ -1771,6 +1782,63 @@ async def _v34_human_held_discharged(
             f"{pa.activates_when} (deferred to {pa.deferred_to})"
         )
     return True, "; ".join(parts)
+
+
+async def _v41_founder_policy_is_named(
+    conn: AsyncConnection, pack: BusinessPack
+) -> tuple[bool | None, str]:
+    """A discharge resting on founder policy is named at Gate 2, every time.
+
+    **Ruled 2026-09-16: a founder-policy discharge satisfies V34, but never silently.**
+    The obligation is discharged - somebody entitled to decide, decided - so V34 passes and
+    the venture provisions. What must not happen is that it passes *quietly*, because a
+    clean Gate 2 would then mean two different things and a reader could not tell which.
+
+    **Setting `counsel_reviewed_at` clears this warning**, which is the whole mechanism:
+    the warning is not a complaint about the policy, it is the outstanding question about
+    the policy, and it goes away when the question is answered.
+
+    This is a separate rule rather than a longer V34 message for the reason V34 is separate
+    from V22: *"a missing discharge must never arrive as 'a flag no scenario exercises' -
+    that is V22's sentence and it names the wrong problem."* V34 answers "is it
+    discharged". This answers "on whose authority", and they have different verdicts.
+    """
+    held = [
+        c for c in pack.market.compliance_surface
+        if c.runtime_flag.strip()
+        and c.human_held is not None
+        and c.human_held.pending_activation is None
+    ]
+    if not held:
+        return True, "no live human-held obligation in this Pack - nothing resting on anybody"
+
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            """
+            SELECT runtime_flag, status, basis
+              FROM obligation_discharge
+             WHERE venture_id = %s AND superseded_at IS NULL
+               AND runtime_flag = ANY(%s)
+            """,
+            (pack.venture_id, [c.runtime_flag for c in held]),
+        )
+        rows = {r["runtime_flag"]: r for r in await cur.fetchall()}
+
+    on_policy = sorted(
+        flag for flag, row in rows.items() if row["status"] == "founder_policy"
+    )
+    if not on_policy:
+        # Either every discharge is counsel-reviewed, or there is none at all - and the
+        # second is V34's finding, not this one. A rule that reported "no founder policy"
+        # for an undischarged obligation would be agreeing with a failure.
+        return True, "no discharge here rests on founder policy alone"
+
+    return False, (
+        f"{_join(on_policy)}: discharged on FOUNDER POLICY, not counsel-reviewed. "
+        "The obligation is discharged and Gate 2 is not blocked by this - a founder is "
+        "entitled to decide - but no lawyer has read it. Setting counsel_reviewed_at "
+        "through the discharge route clears this warning."
+    )
 
 
 async def _v39_cross_venture_hours(
@@ -2050,6 +2118,9 @@ _WORLD_RULES = {
     "V39": (Severity.WARN,
             "No person exceeds their daily total across every live Pack",
             _v39_cross_venture_hours),
+    "V41": (Severity.WARN,
+            "A discharge resting on founder policy is named, not silent",
+            _v41_founder_policy_is_named),
 }
 
 #: Gate 2 skips the deferred sets; `all_rule_ids` and the reports still name them, so a

@@ -63,6 +63,14 @@ EVENTS: tuple[Event, ...] = (
           "so raising it is what makes somebody else's Pack stop warning - which is why "
           "it is a portfolio act with an event rather than a field somebody edits.",
           "broker.app", CONSOLE),
+    Event("console_obligation_discharged", "Obligation discharged",
+          "A named human recorded that a human-held compliance obligation was "
+          "verified - for which venture, which flag, which jurisdictions, and on "
+          "whose authority. `founder_policy` means a founder decided and no lawyer "
+          "has read it, which V41 warns about at Gate 2 until `counsel_reviewed_at` "
+          "is set. Carries the discharges this one superseded, because a discharge "
+          "is replaced rather than edited.",
+          "broker.app", CONSOLE),
     Event("console_role_granted", "Role granted",
           "Somebody was given a role by somebody holding a stronger one.",
           "broker.app", CONSOLE),

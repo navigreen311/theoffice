@@ -474,6 +474,15 @@ human_capacity:
     provenance:
       basis: declared
       established_by: Ivan
+      # RULED 2026-09-16 (entry 112, ruling 2): a founder's own declaration is a source for
+      # that founder's hours. What V39 flags is a figure with no ruling or measurement
+      # behind it - and these four hours have one, named here rather than left implicit.
+      source: >
+        decisions.md entry 111 ruling 3, the ruled daily plan: Ivan Green 8h across all
+        ventures - Burkham 1.5, Greenstone 4, MedLink Pro 1, Argus 1, Collingswood 0.5 -
+        and entry 108 ruling 1 for the five-day operating week these hours sit in. The
+        four here are that plan's Greenstone share, and entry 107 splits them: 1 review,
+        2 underwriting, 1 seller calls and dispositions.
       detail: >
         Asserted when this Pack was authored and never attributed until now. Nothing
         measured these hours or this review time; no decision entry, validator doc or
@@ -509,6 +518,14 @@ human_capacity:
     provenance:
       basis: declared
       established_by: Ivan
+      # Same ruling. Two hours is Ira Green's Greenstone share of a 6h daily plan, and the
+      # figure is a decision somebody made rather than an assertion nobody stands behind.
+      source: >
+        decisions.md entry 111 ruling 3, the ruled daily plan: Ira Green 6h across all
+        ventures - Burkham 2, Greenstone 2, MedLink Pro 1, Argus 0.5, Collingswood 0.5 -
+        and entry 107 splits the two here into 1 countersign and 1 review. The ten
+        minutes a review is entry 92's ruling and remains unmeasured; this source is for
+        the hours.
       detail: >
         Declared by Ivan on 2026-09-15 and not measured. Two hours a day because Ira is
         shared across Greenstone, Burkham, MedLink Pro, Argus and Collingswood, and
