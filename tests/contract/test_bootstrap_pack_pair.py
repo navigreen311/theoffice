@@ -52,15 +52,37 @@ async def test_a_pair_the_pack_operates_is_accepted_and_returns_its_tier(greenst
     assert tier == "auto_execute"
 
 
-async def test_a_module_two_positions_share_takes_the_weakest_ceiling(greenstone_live):
-    """comp_analysis is operated by Acquisition Analyst (auto_execute) and Deal Underwriter
-    (propose). With no department named, both are relevant and the weaker wins."""
+async def test_a_pending_position_does_not_pin_a_shared_modules_ceiling(greenstone_live):
+    """comp_analysis is Acquisition Analyst at auto_execute and Deal Underwriter at propose.
+
+    **The weakest-wins rule still holds; what changed is who is in the running.** Deal
+    Underwriter is pending activation, so no agent will be appointed to it, and letting it
+    set the ceiling would hand every agent `propose` on a shared module on the strength of
+    a position nobody holds. It is excluded, and the tier is Acquisition Analyst's.
+
+    This asserted `propose` until 2026-09-16. The weakest-wins behaviour itself is
+    unchanged and is exercised by the pair below, where both operators are live.
+    """
     async with connection() as conn:
         tier = await bootstrap_phase0._assert_pair_in_pack(
             conn, venture_id=VENTURE, forge_id="cre-forge", module_id="comp_analysis",
             department=None,
         )
-    assert tier == "propose"
+    assert tier == "auto_execute"
+
+
+async def test_a_pair_whose_only_operator_is_pending_is_refused(greenstone_live):
+    """underwrite_deal is operated by Deal Underwriter and by nothing else.
+
+    A certification written for it would be a row no appointed agent can hold and no gate
+    will ever read - the position is deferred, and so is the certification.
+    """
+    async with connection() as conn:
+        with pytest.raises(bootstrap_phase0.BootstrapError, match="pending activation"):
+            await bootstrap_phase0._assert_pair_in_pack(
+                conn, venture_id=VENTURE, forge_id="cre-forge",
+                module_id="underwrite_deal", department=None,
+            )
 
 
 async def test_the_refusals_still_refuse(greenstone_live):

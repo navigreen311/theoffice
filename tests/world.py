@@ -579,7 +579,19 @@ def certify_for_positions(conn: psycopg.Connection) -> None:
     # both, and an agent certified for only half its position's modules leaves the
     # position unfillable - which shows up at Gate 4.5 as a capacity shortfall rather
     # than as a missing certification.
-    certify(conn, success, ["buyer_match", "assign_contract"], tier="propose",
+    #
+    # SPLIT 2026-09-16: the two are certified at different tiers, because the Pack now
+    # declares them at different tiers. `buyer_match` is auto_execute per Ivan's ruling -
+    # non-mutating, and the spec requires no human on it.
+    #
+    # **Certifying both at `propose` would have made that declaration inert, silently.**
+    # `_effective_tier` takes the LOWER of declared and certified, so a module declared
+    # auto_execute and certified propose runs at propose - entry 52's finding, and the
+    # reason a per-module tier needs a per-module certification behind it. The fixture
+    # would have reported buyer_match as reviewed work and V13 would have demanded a
+    # volume for it, on the strength of a test fixture disagreeing with the Pack.
+    certify(conn, success, ["buyer_match"], unit_b_departments=["operations"])
+    certify(conn, success, ["assign_contract"], tier="propose",
             unit_b_departments=["operations"])
     certify(conn, success, ["place_call", "transcribe_call"], forge="voiceforge",
             tier="propose", unit_b_departments=["operations"])

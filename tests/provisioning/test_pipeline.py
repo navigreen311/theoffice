@@ -92,10 +92,13 @@ async def test_a_run_stops_at_the_first_blocking_gate_and_names_it(
 ):
     """P3 - a state machine, not a script.
 
-    This is the real Greenstone Pack, and it blocks at 4.5 on a real finding: the
-    generated workflow routes 128 compliance approvals a day against one officer's four
-    coverage hours. The gate stops there and says the number, rather than continuing to
-    Gate 5 and issuing grants for a venture nobody can supervise.
+    This is the real Greenstone Pack. **It used to block at 4.5 and no longer does**, so
+    the first blocking gate is now 9.5, the deployment ceiling - the run gets there because
+    nothing before it refuses, which is the state this venture has never been in.
+
+    The capacity finding that used to stop it was real and is not being waved away; it was
+    computed from a constant. The comment below is that number's whole history and the last
+    line of it is where it went.
     """
     async with connection() as conn:
         run_id = await provisioning.start_run(
@@ -111,7 +114,7 @@ async def test_a_run_stops_at_the_first_blocking_gate_and_names_it(
         state = await provisioning.get_run(conn, run_id)
 
         blocking = outcomes[-1]
-        assert blocking.gate == "4.5"
+        assert blocking.gate == "9.5"
         assert blocking.verdict == provisioning.BLOCKED
         # 192, and it has been here before. It was 192 until 2026-09-02, when cutting
         # `generate_loi` removed the workflow step that operated it - one fewer step
@@ -143,13 +146,40 @@ async def test_a_run_stops_at_the_first_blocking_gate_and_names_it(
         # Deal Underwriter, which declares no flag of its own, stopped routing to the
         # compliance officer. Its 64 went to the venture operator. **Nothing about the
         # work changed; what changed is that the routing now follows what the modules
-        # do.** Both roles are over, which is why the fixture that makes the later gates
-        # reachable now tops up both.
-        assert "64 approvals" in blocking.reason
-        assert "compliance officer" in blocking.reason
+        # do.** Both roles were over, which is why the fixture that made the later gates
+        # reachable topped up both.
+        #
+        # 0.2 A DAY FROM 2026-09-16, AND GATE 4.5 STOPPED BLOCKING. Three changes, and
+        # none of them cut scope:
+        #
+        #   the volume is declared    `expected_weekly_volume` replaced the constant 8.
+        #                             Greenstone closes about one deal a week, so
+        #                             `assign_contract` runs once a week - 0.2 a day over
+        #                             five operating days - and that is the only module
+        #                             below auto_execute left.
+        #   one step per module       the workflow emitted every module once per stage its
+        #                             position owned. Twelve steps became six.
+        #   two positions left        `buyer_match` is auto_execute (non-mutating, no human
+        #                             required) and Deal Underwriter is pending activation,
+        #                             so its share is founder hours rather than an approval
+        #                             queue.
+        #
+        # **Every figure above was a multiple of 8 and none of them was measured.** The
+        # sequence 192, 160, 128, 64 tracked steps being added and removed; it never
+        # tracked the venture. 0.2 is the first of these numbers that came from the
+        # business rather than from a count of rows times a constant.
+        #
+        # The run now reaches 9.5, the deployment ceiling, which is where a run stops
+        # because the deployment says so rather than because the venture is unready.
+        # And 9.5 blocks for its own reason, which is not a capacity one: the held-out
+        # adversarial partition does not exist. SimForge owns it outright and The Office
+        # has no read path to it by construction, so no run started here can pass this
+        # gate today - which is the deployment ceiling the console already names.
+        assert blocking.evidence["blocked_by"] == "held_out_partition_not_created"
+        assert "held-out adversarial partition" in blocking.reason
         assert state is not None
         assert state.status == "blocked"
-        assert state.current_gate == "4.5"
+        assert state.current_gate == "9.5"
 
         async with conn.cursor() as cur:
             await cur.execute(
@@ -157,9 +187,26 @@ async def test_a_run_stops_at_the_first_blocking_gate_and_names_it(
                 (VENTURE,),
             )
             row = await cur.fetchone()
-    assert row is not None and row[0] == 0, (
-        "Gate 5 must not have run. A blocked gate that lets the next one issue grants "
-        "is a gate in name only."
+    # GATE 5 DOES RUN NOW, AND ISSUING GRANTS HERE IS NOT A HOLE.
+    #
+    # This asserted zero grants while the run stopped at 4.5, and the reason given was that
+    # a blocked gate must not let the next one issue grants. That is still true and it is
+    # still enforced - by `test_gate_5_issues_grants_inactive` and by Gate 11, which
+    # activates nothing without a valid signature. What changed is that 4.5 no longer
+    # blocks, so Gate 5 is reached legitimately and the grants it writes are INACTIVE.
+    #
+    # Asserting they exist and are all inactive is the stronger claim: zero grants would
+    # also be satisfied by a Gate 5 that silently did nothing.
+    assert row is not None and row[0] > 0, "Gate 5 was reached and must have issued grants"
+    async with connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            "SELECT count(*) FROM agent_forge_grant "
+            "WHERE venture_id = %s AND activated_at IS NOT NULL",
+            (VENTURE,),
+        )
+        active = await cur.fetchone()
+    assert active is not None and active[0] == 0, (
+        "a grant was activated before Gate 11 signed for it"
     )
 
 

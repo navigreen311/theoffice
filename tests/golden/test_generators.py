@@ -88,6 +88,43 @@ async def artifacts(greenstone_world, admin):
         return await pipeline.run_all(pack, conn)
 
 
+@pytest.fixture
+async def overloaded_artifacts(greenstone_world, admin):
+    """Greenstone with one volume raised until its compliance officer cannot keep up.
+
+    **Needed because Greenstone stopped being overloaded, and that is the correct state.**
+    Two tests below assert what a capacity FAILURE looks like - that it is a failure and
+    not a warning, that it names where the run halts, that its message closes off lowering
+    the utilisation factor. They used to get that failure for free, because the Pack asked
+    for 64 approvals a day against two hours of review on the strength of an unattributed
+    constant.
+
+    Declared volume removed the overload. Keeping these tests pointed at the real Pack
+    would have meant either deleting them or keeping the Pack broken so they had something
+    to find - so the overload is constructed here, explicitly, where a reader can see the
+    number that causes it.
+
+    500 a week over five operating days is 100 a day; at Ira's ten minutes that is 1,000
+    minutes of review against the 36 her one review-hour supplies.
+    """
+    certify_for_positions(admin)
+    pack = load_pack(PACK_PATH)
+    pack = pack.model_copy(
+        update={
+            "positions_required": [
+                p.model_copy(
+                    update={"expected_weekly_volume": {"cre-forge/assign_contract": 500.0}}
+                )
+                if p.position_title == "Buyer Network Manager"
+                else p
+                for p in pack.positions_required
+            ]
+        }
+    )
+    async with connection() as conn:
+        return await pipeline.run_all(pack, conn)
+
+
 # ------------------------------------------------------------------- determinism
 
 async def test_every_generator_is_byte_identical_across_runs(greenstone_world, admin):
@@ -211,12 +248,34 @@ async def test_appointment_never_fills_a_position_with_an_uncertified_agent(
 
     for position in result.appointment.appointments:
         assert position.appointed == [], f"{position.position_title} was filled uncertified"
+        if position.pending:
+            # A PENDING POSITION IS NOT AN UNCERTIFIED ONE, AND THE DIFFERENCE IS THE TEST.
+            #
+            # Both appoint nobody. What separates them is whether that is a gap: an
+            # uncertified position reports its whole headcount unfilled and names the
+            # candidates who fell short, because somebody should go and certify them. A
+            # pending position reports nothing unfilled and no candidates, because nobody
+            # is meant to be appointed to it yet.
+            #
+            # Asserting this inside the same loop is deliberate. If `pending` ever stopped
+            # being set, this branch would go unvisited and the assertions below would run
+            # against Deal Underwriter and fail - so the loop cannot silently skip it.
+            assert position.unfilled == 0, "a deferred position is not a shortfall"
+            assert position.requires_certification == [], (
+                "a pending position must not ask anybody to go and get certified"
+            )
+            continue
         assert position.unfilled == position.headcount_required
         assert position.requires_certification, "candidates must be reported, not hidden"
         assert all(
             c.reason in ("never_certified", "in_training", "missing_unit_b")
             for c in position.requires_certification
         )
+
+    assert any(p.pending for p in result.appointment.appointments), (
+        "Deal Underwriter is declared pending in the Pack; if no appointment reports it "
+        "pending, the branch above never ran and this test asserted less than it reads as"
+    )
 
 
 async def test_shortfall_reports_all_three_capacity_numbers(greenstone_world, admin):
@@ -359,7 +418,15 @@ async def test_the_projection_counts_approvals_per_human_role(artifacts):
     approvals = artifacts.approval_projection.projected_daily_approvals
 
     assert approvals, "no role is projected to receive any approval"
-    assert all(isinstance(count, int) and count > 0 for count in approvals.values())
+    # FLOAT, NOT INT, SINCE THE RATE BECAME DECLARED.
+    #
+    # It was `isinstance(count, int)` while demand was a count of (step, holder, module)
+    # units times 8. A venture closing one deal a week runs `assign_contract` 0.2 times a
+    # day, and an int would have to round that to 0 or 1 - "no reviewer load at all" or
+    # "five times the real load". Neither is the answer, so the type changed.
+    assert all(
+        isinstance(count, float) and count > 0 for count in approvals.values()
+    ), approvals
     # Every role named must be one the Pack actually staffs; a projection against a role
     # with no coverage hours divides by zero in V13 and reads as infinite overload.
     assert set(approvals) <= {"venture_operator", "compliance_officer"}
@@ -489,29 +556,59 @@ async def test_domain_and_operation_scenarios_are_never_merged(artifacts):
 
 # ------------------------------------------------------------------ Gate 4.5
 
-async def test_gate_4_5_catches_what_gate_2_could_not(artifacts, greenstone_world):
-    """The Gate 2 estimate is the optimistic one, and Gate 4.5 is where that shows.
+async def test_both_gates_now_agree_and_certification_is_the_only_thing_left(
+    artifacts, greenstone_world
+):
+    """What replaced "Gate 2 is the optimistic one". They compute the same quantity now.
 
-    V13 at Gate 2 estimates approvals from Pack headcount. The Task Ledger computes
-    them from the real workflow, and for Greenstone as authored the two disagree by
-    an order of magnitude. Neither is buggy: Gate 2 cannot see a workflow that does
-    not exist yet, which is exactly why the blueprint puts a second capacity check
-    after the generators run.
+    **This test used to assert the opposite and was right to.** V13 at Gate 2 estimated
+    approvals from Pack headcount times an unattributed constant; the Task Ledger computed
+    them from the real workflow; for Greenstone as authored the two disagreed by an order
+    of magnitude, and neither was buggy - Gate 2 could not see a workflow that did not
+    exist yet. That is B25, and it is what put a second capacity check after the
+    generators.
+
+    A declared per-module volume sits on the POSITION, and the position carries the flags
+    that pick the reviewer, so Gate 2 can attribute demand by role with no workflow at all.
+    Both gates read the same rates through the same helpers.
+
+    **One difference survives and it is named rather than removed:** Gate 4.5 caps each
+    module's tier by what its appointed agents are certified to, and no appointment exists
+    at Gate 2. `GATE_45_RECHECKS` still carries V13 for exactly that, which is why this
+    asserts the recheck list rather than only the two verdicts.
     """
-    from generators.validator import validate, validate_gate_4_5
+    from generators.validator import GATE_45_RECHECKS, validate, validate_gate_4_5
 
     pack = load_pack(PACK_PATH)
     gate_2 = await validate(pack)
-    assert gate_2.get("V13").verdict.value == "PASS", "Gate 2 estimate is optimistic"
-
-    gate_45 = await validate_gate_4_5(pack, artifacts.approval_projection, artifacts.appointment)
-    v13 = gate_45.get("V13")
-    assert v13.verdict.value == "FAIL", (
-        "Greenstone as authored routes more approvals to its compliance officer than "
-        "the coverage hours can absorb; Gate 4.5 must catch it"
+    gate_45 = await validate_gate_4_5(
+        pack, artifacts.approval_projection, artifacts.appointment
     )
+
+    assert gate_2.get("V13").verdict.value == "PASS"
+    assert gate_45.get("V13").verdict.value == "PASS"
+    assert "V13" in GATE_45_RECHECKS, (
+        "the recheck exists for the certification cap; dropping it would make Gate 2's "
+        "answer final on a question it cannot see the whole of"
+    )
+
+
+async def test_a_capacity_failure_still_says_what_goes_wrong_above_the_line(
+    overloaded_artifacts, greenstone_world
+):
+    """The message, pinned on a constructed overload rather than on a broken Pack."""
+    from generators.validator import validate_gate_4_5
+
+    pack = load_pack(PACK_PATH)
+    gate_45 = await validate_gate_4_5(
+        pack,
+        overloaded_artifacts.approval_projection,
+        overloaded_artifacts.appointment,
+    )
+    v13 = gate_45.get("V13")
+
+    assert v13.verdict.value == "FAIL"
     assert "compliance officer" in v13.message
-    # The message has to say what goes wrong above the line, not just report numbers.
     assert "trust tiers stop meaning anything" in v13.message
 
     # Verbatim, and it earns the pin. The utilisation factor is the one number here
@@ -533,7 +630,7 @@ async def test_gate_4_5_resolves_v24(artifacts, greenstone_world):
     assert gate_45.get("V24").verdict.value == "PASS", "all positions were filled"
 
 
-async def test_gate_4_5_failure_surfaces_as_a_failure_not_a_warning(artifacts):
+async def test_gate_4_5_failure_surfaces_as_a_failure_not_a_warning(overloaded_artifacts):
     """Gate 4 is a human reading artifacts. A finding that only exists in a log line
     is a finding that review will miss - and a finding filed under `warnings` is one
     the reviewer discounts.
@@ -543,10 +640,11 @@ async def test_gate_4_5_failure_surfaces_as_a_failure_not_a_warning(artifacts):
     to render "Generator warnings (2)" over one blocking failure and one advisory.
     """
     v13 = next(
-        (a for a in artifacts.advisories if a.rule_id == "V13"), None
+        (a for a in overloaded_artifacts.advisories if a.rule_id == "V13"), None
     )
     assert v13 is not None, (
-        f"capacity failure not surfaced for human review: {artifacts.advisories}"
+        "capacity failure not surfaced for human review: "
+        f"{overloaded_artifacts.advisories}"
     )
     assert v13.severity == "fail", "a Gate 4.5 FAIL is presented as a warning"
     assert v13.blocks_at == "4.5", (
@@ -557,7 +655,9 @@ async def test_gate_4_5_failure_surfaces_as_a_failure_not_a_warning(artifacts):
 
     # And the genuine advisory is still an advisory. The two must not share a severity
     # any more than they share a container.
-    v25 = next((a for a in artifacts.advisories if a.rule_id == "V25"), None)
+    v25 = next(
+        (a for a in overloaded_artifacts.advisories if a.rule_id == "V25"), None
+    )
     if v25 is not None:
         assert v25.severity == "warn"
         assert v25.blocks_at is None
@@ -810,7 +910,20 @@ async def test_hard_dependency_on_a_module_gap_cannot_provision(artifacts):
 # people in a different order give the same answer.
 
 def _officers(pack, *entries):
-    """Replace human_capacity with compliance officers at (hours, minutes) each."""
+    """Replace human_capacity with compliance officers at (hours, minutes) each.
+
+    **Every hour is a review hour here, stated rather than inherited.** These cases are
+    about how V13 aggregates review time across people, so the split that arrived with
+    `review_hours` has to be filled in or the rule refuses before it aggregates anything -
+    and a test that stopped exercising B24's arithmetic while still being named for it is
+    the failure mode entry 103 records twice.
+
+    Putting the whole of `coverage_hours` into `review_hours` keeps every number in these
+    tests meaning what it meant: the weighted average that used to be taken over coverage
+    is taken over review hours, and where the two are equal the arithmetic is unchanged.
+    The real Packs are where they differ, and `test_v13_declared_volume.py` is where that
+    difference is asserted.
+    """
     base = next(h for h in pack.human_capacity if h.role == "compliance_officer")
     return pack.model_copy(
         update={
@@ -819,6 +932,9 @@ def _officers(pack, *entries):
                     update={
                         "human_name": f"Officer {n}",
                         "coverage_hours": hours,
+                        "review_hours": hours,
+                        "countersign_hours": 0.0,
+                        "other_hours": 0.0,
                         "median_review_minutes": minutes,
                     }
                 )
@@ -921,7 +1037,10 @@ async def test_v13_states_the_answer_when_a_role_has_no_coverage_at_all():
 
     v13 = report.get("V13")
     assert v13.verdict.value == "FAIL"
-    assert "with no reviewer coverage at all" in v13.message
+    # "coverage" became the TOTAL when the hours split, so the message names what is
+    # actually zero. A role can now hold six coverage-hours and no review time at all,
+    # and the old wording would have called that "no coverage".
+    assert "with no reviewer review-time at all" in v13.message
     assert "At 3.5 minutes each" in v13.message
 
 

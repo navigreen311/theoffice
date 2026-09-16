@@ -675,12 +675,29 @@ PHRASES
 
   # The gap this rebuild closed. The page knew V13 fails at gate 4.5 and filed it under
   # "Generator warnings", then asked a human to write a review and advance into the halt.
+  #
+  # THE THIRD BRANCH IS AN ASSERTION NOW, NOT A SKIP.
+  #
+  # It was `notrun`, and it never fired, because Greenstone always had a failing
+  # downstream rule: V13 at gate 4.5, on a constant. The venture passes V13 now, so the
+  # branch became reachable and the run ended "1 check(s) could not run" - correctly, by
+  # this script's own rule that an unexercised check is not a passed one.
+  #
+  # But "no blocker exists" is a fact about the venture, not a missing precondition, and
+  # there IS something to check in that state: the banner must be ABSENT. A page that
+  # warned "Advancing will stop at gate" on a run with nothing ahead of it would send a
+  # reviewer looking for a halt that is not there, which is the same defect as the silence
+  # this check was built for, pointing the other way.
   if grep -qF "Advancing will stop at gate" "$WORK"/ladder-text.html; then
-    say "a known downstream failure is stated before the human is asked to act"
+    if grep -qF "Blocking failures (" "$WORK"/ladder-text.html; then
+      say "a known downstream failure is stated before the human is asked to act"
+    else
+      fail "the page warns of a downstream halt with no blocking failure to justify it"
+    fi
   elif grep -qF "Blocking failures (" "$WORK"/ladder-text.html; then
     fail "a blocking failure is listed but the page does not warn before the review form"
   else
-    notrun "downstream blocker banner - this run has no failing downstream rule"
+    say "no downstream blocker, and the page does not invent one"
   fi
 
   # FAIL never inside a container labelled warnings, and never sharing its count.
@@ -703,12 +720,25 @@ PHRASES
   fi
 
   # The line that closes off the obvious wrong fix.
-  if grep -qF "V13" "$WORK"/ladder-text.html; then
+  #
+  # CONDITIONAL ON V13 REPORTING AN OVERLOAD, NOT ON V13 RENDERING AT ALL.
+  #
+  # This asked for the sentence whenever "V13" appeared anywhere on the ladder, which held
+  # while Greenstone always failed the rule. It passes now - the Pack declares a per-module
+  # volume instead of inheriting a constant - and a PASS message has nothing to close off,
+  # so the check failed on a venture that had just become healthy.
+  #
+  # "minutes of review against" is emitted only by the overload sentence, so it is the
+  # marker for "V13 is reporting a shortfall". The pinned line is still required wherever
+  # one is reported, which is the whole of what this check was ever for.
+  if grep -qF "minutes of review against" "$WORK"/ladder-text.html; then
     if grep -qF "not by lowering the utilisation factor" "$WORK"/ladder-text.html; then
       say "the V13 message keeps the line that rules out lowering the utilisation factor"
     else
-      fail "V13 renders without the sentence ruling out the wrong fix"
+      fail "V13 reports a shortfall without the sentence ruling out the wrong fix"
     fi
+  elif grep -qF "V13" "$WORK"/ladder-text.html; then
+    say "V13 renders and reports no shortfall"
   fi
 
   # Validation errors belong on submit, not on load.

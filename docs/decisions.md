@@ -8318,3 +8318,232 @@ Greenstone's projection from 128 to 64 + 64 is invisible to it by construction.
 Ira: 64 x 10 = 640 against 72, nine times over. Splitting them by what the modules actually do halves
 her load and gives Ivan work the schema can count - **and the venture still cannot be provisioned on
 these hours**, which is the finding the arithmetic keeps returning.
+
+---
+
+## 107. Volume is declared, hours have kinds, a module runs in one stage - and Greenstone clears Gate 4.5 for the first time
+
+**Ruled 2026-09-16 by Ivan. Built the same day, on `ai-feature/declared-volume-and-kinds-of-hours`.
+Nothing is published and no run is restarted.** Premises measured per entry 91; the ones that did
+not hold are said.
+
+### The rulings
+
+    pending Deal Underwriter   its demand is DROPPED from the agent projection. Ivan Green and
+                               Ira Green underwrite V1, and that time is non-review hours.
+    assign_contract            approvals route to the compliance officer, Ira Green. Ivan usually
+                               writes the MAO, and the author may not approve the assignment.
+    buyer_match                runs at auto_execute. Non-mutating, and the spec requires no human.
+    an undeclared volume       BLOCKS. No module falls back to the constant 8. Burkham blocks at
+                               Gate 2 with "volume not declared" until Ivan supplies its basis,
+                               and that is accepted.
+    the batch splits           Burkham's Pack is not edited or republished and its run is not
+                               restarted until its volume is supplied.
+
+**Hours for ventures with no Pack, declared by Ivan on 15 September. Recorded only, and nothing
+reads them:** Ivan MedLink Pro 1h, Argus 1h, Collingswood 0.5h; Ira Green MedLink Pro 1h, Argus
+0.5h, Collingswood 0.5h. **Argus is not a registered venture** - `broker/ventures.py` carries
+greenstone, burkham-wickmont, medlink-pro, collingswood and `cyber`, and nothing says whether
+`cyber` is Argus (entry 92 asked the same question and it is still open).
+
+**Withdrawn, and in no Pack:** "1-3 buyer-match runs per deal", a two-week MAO cycle, and any
+days-per-week divisor. All three were assumptions made while planning this batch and none is
+Ivan's. The only volume figure in any Pack is the closing rate.
+
+### Deal Underwriter, pending - six rulings, and two things they did not cover
+
+    V24                skips a pending position AND NAMES IT. Not a shortfall, not silence.
+    demand             a pending position adds none.
+    its steps          held by Ivan Green and Ira Green.
+    uw-001 to uw-003   stay in the Pack; the curriculum skips them until activation.
+    appointment        skips pending positions; bootstrap refuses a pair whose ONLY operator
+                       is pending, and a pending position does not pin a shared module's
+                       ceiling.
+
+**GAP 1: the Contract stage has no module step, and that is a gap rather than an error.** Deal
+Underwriter owns Underwrite and Contract and operates `comp_analysis` and `underwrite_deal` - both
+underwriting work. With one step per module, both land in Underwrite and Contract holds nothing.
+**LOI and PSA work has no module on any Forge.** In V1 Ivan Green and Ira Green do it by hand. The
+stage stays owned and declared so the absence is visible.
+
+**GAP 2: `pending_activation.deferred_to` is prose and is checked against no account.** It is where
+the two founders holding the work are named. `human_name` and `backup_human` resolve against
+`office_human.display_name`; this does not. **If it should ever be checked, that comes after the
+rename** - "Ivan Green" is not yet what the account is called.
+
+### The divisor: a declared field, because nothing in a Pack supplied one
+
+`expected_weekly_volume` is per week, because that is the unit the basis is stated in. Converting it
+needs a divisor, and the three candidates were measured:
+
+    capacity_demand.agent_days_per_week   agent-days summed across the venture (35, 40), not a
+                                          calendar week. Gate 2's V13 divided it by a hardcoded 7.0
+    capacity_demand.shift_pattern         free prose - "5 shifts/week" - in both Packs
+    ramp_schedule                         agent-days, same units as the first
+
+**None is a divisor, so one is declared:** `capacity_demand.operating_days_per_week`, and an
+undeclared one blocks the same way an undeclared volume does. Reading the number out of
+`shift_pattern` at runtime was refused: a divisor whose provenance is a regex.
+
+**Greenstone's value is 5, transcribed from that Pack's own `shift_pattern`, and it is the one
+number in a Pack here that Ivan did not state.** Written where a reader can disagree with it.
+
+### What the correction moved, measured
+
+    Greenstone, packs/greenstone.yaml (NOT published)
+      workflow steps   12 -> 6. Every module once, in its stage. Contract holds none.
+      projection       {compliance_officer: 64, venture_operator: 64} -> {compliance_officer: 0.2}
+      Gate 2 V13       PASS, 0.20 approvals a day against 72 review-minutes
+      Gate 4.5 V13     PASS - for the first time
+      the run          reaches gate 9.5, the deployment ceiling, and blocks there on the
+                       held-out adversarial partition. Not a capacity stop.
+      grants           14 -> 10. Deal Underwriter's four are gone: a pending position grants
+                       no authority. buyer_match moves propose -> auto_execute on both holders.
+      curriculum       domain scenarios 9 -> 6. uw-001 to uw-003 deferred; the 15 operation
+                       scenarios are untouched.
+      artifacts hash   MOVED. roles, appointment, workflow, approval_projection, curriculum,
+                       forge_manifest and runtime_config all changed. NO SIGNATURE WAS VOIDED -
+                       `signoff_record` is empty for both ventures.
+
+    Burkham, packs/burkham-wickmont.draft.yaml - UNTOUCHED, and it blocks
+      Gate 2 V13       FAIL: "volume not declared: Compliance Reviewer/capitalforge/
+                       regulator_dossier_export, Compliance Reviewer/capitalforge/
+                       scan_communication, Intake Concierge/capitalforge/record_consent,
+                       Placement Strategist/capitalforge/submit_application."
+                       Four modules, named. The six at auto_execute are not asked for.
+
+### The premises that did not hold
+
+**1. "Ivan's hours change no verdict" was already dead before this batch.** Entry 96 section 4 said
+all 64 Greenstone approvals route to the compliance officer. Entry 105 emptied CRE Forge's implied
+flags the same day - measured in the dev DB, all five rows empty - so Deal Underwriter routed to the
+venture operator, and the golden snapshot read `{compliance_officer: 64, venture_operator: 64}`.
+Entry 92's "1,280 against 72, 18 times over" was superseded within hours of being written.
+
+**2. The direction's own framing missed that there are two V13s.** Gate 4.5's reads the projection;
+**Gate 2's did not** - it computed demand as `sum(headcount where tier != auto_execute) x max(1,
+agent_days_per_week/7)` and pooled supply across every role. Declaring review-only hours without
+touching it would have failed BOTH ventures at Gate 2, before Gate 4.5 was ever reached: Greenstone
+140 minutes needed against 72, Burkham 160 against 126. Gate 2's V13 was rewritten onto the same
+declared volume, which is why the batch reaches its own verdict.
+
+**3. B25 is closed by construction.** Gate 2 pooled because it had no per-role demand to split
+against - the thing that attributes demand to a reviewer was the workflow, which does not exist
+until Gate 3. A declared volume sits on the POSITION, and the position carries the flags that pick
+the reviewer, so the split is available at Gate 2 now. Both gates read the same rates through the
+same three helpers. **One difference survives and is named rather than removed:** Gate 4.5 caps each
+module's tier by what its appointed agents are certified to. `GATE_45_RECHECKS` still carries V13
+for exactly that.
+
+**4. A second divergence, found while building, with no current instance.** Gate 2 routes by
+DECLARED flags; Gate 4.5 routes by declared UNION implied, and implied is a live registry read that
+does not exist at Gate 2. Measured on both ventures and it changes nothing today: CRE Forge implies
+no flags since entry 105, and Burkham declares both humans `compliance_officer` so every route
+resolves the same. Written down rather than discovered later.
+
+### Three things that were resting on the constant, each of which broke
+
+**`amend_for_capacity` is now a no-op.** The fixture appended five compliance officers and one
+venture operator at eight hours each - six invented people - so the gates after 4.5 could be
+exercised at all. Its own docstring called that number "the size of the real problem". **The problem
+was the constant.** Six invented reviewers were the cost of an unmeasured number, carried in a test
+fixture for three weeks.
+
+**The V13 mutation in `test_rules.py` stopped overloading anybody.** It set `headcount` to 400. Since
+a rate is no longer multiplied by headcount, that mutation broke nothing and the rule it exists to
+exercise would have passed - a test that stops testing rather than fails. It now raises a declared
+volume.
+
+**A jsonb null trap, caught by the bootstrap contract tests on the first run.** The pending check
+read `(p->'pending_activation') IS NOT NULL`. The Pack is stored from a pydantic dump, so the key is
+always present and `->` returns JSONB null, not SQL NULL - so every position read as pending and
+every pair was refused, naming Acquisition Analyst, which is not pending. `jsonb_typeof(...) =
+'object'` is the only form that tells the two nulls apart.
+
+### Left open, deliberately
+
+- **Countersign hours are subtracted from supply and their demand is not projected.** Ira's
+  Greenstone countersign hour is declared and buys no review capacity; nothing bills for the work.
+  V13's demand is keyed to a workflow step - an agent-originated proposal - and a countersign is
+  keyed to an artifact authored by a human, which `proposal.office_agent_id` being NOT NULL makes
+  unrepresentable. Sizing it needs that surface first.
+- **Operation scenarios for a pending position's modules are still generated.** The ruling covered
+  the domain half only. `underwrite_deal` has operation scenarios and bootstrap now refuses to
+  certify the pair, so they reach nobody.
+- **The curriculum advisory now reports "roles_with_domain_scenarios: 2/3 - missing Deal
+  Underwriter".** The role is not missing scenarios, it is deferred, and the advisory does not
+  distinguish the two.
+- **`certified_and_free` fell 7 to 5.** The two banking agents certified for Deal Underwriter are
+  counted nowhere once the position goes pending. They are certified and unallocated, and the
+  section 7.2 capacity numbers now understate what is available.
+- **Greenstone's compliance officer receives 0.2 approvals a day and its venture operator none.**
+  Ivan's declared Greenstone review hour has no demand against it at all.
+
+---
+
+## 108. Five operating days, declared for the business rather than read off a shift pattern - and a reviewer declaration that only narrows
+
+**Ruled 2026-09-16 by Ivan.** Rulings 1 and 4 are built on the two open PRs; rulings 2 and 3 are
+recorded only, and what exists behind them is surveyed at the end.
+
+### 1. Greenstone operates Monday to Friday, five days a week, in Phase 1
+
+    counterparties   sellers, brokers, buyers, escrow, title, comps and POF vendors all work
+                     business days
+    money            banks do not wire on weekends
+    founder time     budgeted for five-day weeks - Ivan 8h x 5, Ira Green 6h x 5
+    the SLAs         the specifications' SLAs are business-hour SLAs
+
+**This corrects a source, not a number.** Entry 107 recorded `operating_days_per_week: 5` as
+transcribed from the Pack's own `shift_pattern`, which says "5 shifts/week", and flagged it as the
+one figure in a Pack that Ivan had not stated. The value is unchanged and the basis is now the
+venture's trading calendar.
+
+**Why the distinction is worth an entry.** `shift_pattern` describes how agent shifts are arranged;
+`operating_days_per_week` says which days the venture trades. **Two facts that happen to agree are
+still two facts.** A divisor sourced from the one that does not mean it would have gone on meaning
+nothing the day the two diverged - a venture could move to four agent shifts a week without
+changing which days its escrow agent answers the phone, and the demand side would have silently
+followed the wrong one.
+
+### 2. Weekend exceptions are declared, not routine, and are never counted as capacity
+
+Three, and all other work waits for Monday:
+
+    walker safety events                  SiteForge emergency stops
+    wire fraud indicators                 a failed Shadow callback before a scheduled wire
+    kill-state deal viability transitions needing weekend action
+
+**Not capacity.** A divisor of 7 would have bought reviewer capacity on days nobody is reviewing,
+which is the same defect as reading `coverage_hours` as review time: supply asserted for hours that
+are committed elsewhere or do not exist. An exception handled when it happens is not a shift.
+
+### 3. Saturday walker dispatch is a walker-contractor scheduling matter
+
+It may extend the Walkthrough Inspector Agent's shift. **It does not change the founder operating
+calendar**, and therefore does not touch `operating_days_per_week`.
+
+### 4. A declared module reviewer only narrows
+
+It may send a module's approvals to the compliance officer. **It may never route a flagged module's
+approvals away from the compliance officer**, and a Pack that tries is refused, naming the module
+and the flag.
+
+This settles the question entry 107's design left open. The alternative - allow it, require a `why`,
+and rely on a person reading the reason - makes the declaration a way to move compliance work off the
+compliance officer with a sentence attached. Narrowing only means the declaration can add a reviewer
+where the flags see none and can never subtract one the flags require.
+
+### What ruling 4 is for, measured
+
+`cre-forge/assign_contract` routes to the compliance officer today **only** because Buyer Network
+Manager carries `recording_consent_required`. Item F turns that flag founder-held and removes it from
+the position. Measured against the Pack on PR #155:
+
+    today                          {compliance_officer: 0.2}
+    with the flag removed (item F) {venture_operator: 0.2}
+
+**Item F silently breaks entry 107's ruling 2.** The approval lands on Ivan, who usually wrote the
+MAO, which is the arrangement that ruling forbids - and nothing fails. The declared reviewer is what
+holds the routing in place across that edit, and the test that pins it is the point of the whole
+field.

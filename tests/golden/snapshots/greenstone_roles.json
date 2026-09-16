@@ -12,6 +12,7 @@
       "effective_compliance_flags": [
         "tsr_disclosure_required"
       ],
+      "expected_weekly_volume": {},
       "forge_modules_operated": [
         "cre-forge/comp_analysis",
         "cre-forge/property_lookup"
@@ -22,7 +23,13 @@
         "Source",
         "Qualify"
       ],
+      "module_stages": {
+        "cre-forge/comp_analysis": "Qualify",
+        "cre-forge/property_lookup": "Source"
+      },
       "module_trust_tiers": {},
+      "pending": false,
+      "pending_deferred_to": "",
       "position_title": "Acquisition Analyst",
       "reports_to": "venture_operator",
       "source_department": "research",
@@ -40,6 +47,9 @@
       "effective_compliance_flags": [
         "recording_consent_required"
       ],
+      "expected_weekly_volume": {
+        "cre-forge/assign_contract": 1.0
+      },
       "forge_modules_operated": [
         "cre-forge/assign_contract",
         "cre-forge/buyer_match"
@@ -50,7 +60,15 @@
         "Assign",
         "Close"
       ],
-      "module_trust_tiers": {},
+      "module_stages": {
+        "cre-forge/assign_contract": "Close",
+        "cre-forge/buyer_match": "Assign"
+      },
+      "module_trust_tiers": {
+        "cre-forge/buyer_match": "auto_execute"
+      },
+      "pending": false,
+      "pending_deferred_to": "",
       "position_title": "Buyer Network Manager",
       "reports_to": "venture_operator",
       "source_department": "operations",
@@ -64,6 +82,7 @@
         "Flag title and zoning risk"
       ],
       "effective_compliance_flags": [],
+      "expected_weekly_volume": {},
       "forge_modules_operated": [
         "cre-forge/comp_analysis",
         "cre-forge/underwrite_deal"
@@ -74,7 +93,13 @@
         "Underwrite",
         "Contract"
       ],
+      "module_stages": {
+        "cre-forge/comp_analysis": "Underwrite",
+        "cre-forge/underwrite_deal": "Underwrite"
+      },
       "module_trust_tiers": {},
+      "pending": true,
+      "pending_deferred_to": "Ivan Green and Ira Green underwrite V1 directly. Burkham underwrites capital placement and Greenstone underwrites CRE - comps, cap rates, CapEx-adjusted MAO - so this is not shared with Burkham, and it is specialist work rather than management, so it is not staffed with managers. This text is prose and is checked against no account; if it should ever be, that comes after the rename.\n",
       "position_title": "Deal Underwriter",
       "reports_to": "venture_operator",
       "source_department": "banking",

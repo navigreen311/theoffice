@@ -60,10 +60,28 @@ MUST_FAIL: dict[str, Callable[[BusinessPack], None]] = {
     ),
     "V10": lambda p: p.positions_required[0].forge_modules_operated.clear(),
     "V12": lambda p: setattr(p.forge_operating_instructions[0], "content_hash", None),
-    # 400 agent-days of propose-tier work against 10 hours of coverage.
+    # A DECLARED VOLUME, RAISED. Not a headcount.
+    #
+    # This used to set `headcount` to 400 and the ceiling to `propose`, because demand was
+    # a count of (step, holder, module) units times a constant - so growing the roster grew
+    # the review load. It no longer does, deliberately: a rate is a property of the
+    # business, not of how many agents hold the module. The mutation that overloads a
+    # reviewer now is the one that says the venture does far more work.
+    #
+    # 2,000 a week over five operating days is 400 a day, against Ira's one review hour.
     "V13": lambda p: (
         setattr(p.positions_required[0], "trust_tier_ceiling", "propose"),
-        setattr(p.positions_required[0], "headcount", 400),
+        setattr(p.positions_required[0], "module_trust_tiers", {}),
+        setattr(
+            p.positions_required[0],
+            "expected_weekly_volume",
+            {m: 2000.0 for m in p.positions_required[0].forge_modules_operated},
+        ),
+        setattr(
+            p.positions_required[0],
+            "volume_provenance",
+            p.positions_required[2].volume_provenance,
+        ),
     ),
     "V14": lambda p: setattr(p.human_capacity[1], "backup_human", None),
     "V15": lambda p: (
@@ -236,7 +254,10 @@ async def test_render_names_the_offending_value(greenstone):
     report = await validate(broken)
     text = report.render()
     assert "V13 FAIL" in text
-    assert "review-minutes" in text
+    # The FAIL path reports in sentences - "N minutes of review against M available" -
+    # and the PASS path reports "review-minutes". Both gates share the sentence builder
+    # since 2026-09-16, so this asserts the one a failure actually prints.
+    assert "minutes of review against" in text
     assert "V7 FAIL" not in text, "passing rules must not appear in the summary"
 
 

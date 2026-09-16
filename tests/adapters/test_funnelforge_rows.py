@@ -189,6 +189,29 @@ def deferred_binding() -> ForgeBinding:
     )
 
 
+def _with_stages(position: Position) -> Position:
+    """Give every module a stage, so 5.3 will emit a step for it.
+
+    **Test scaffolding, and it is standing in for a declaration Burkham has not made.**
+    `module_stages` arrived on 2026-09-16 and the workflow generator refuses a module
+    without one, rather than placing it by list order. Burkham's Pack is deliberately
+    untouched until its per-module volume is supplied, so it declares no stages either -
+    which means these tests, which are about manifest rows reaching the generator from a
+    Forge binding, could not run at all.
+
+    Each module is put in the position's first owned stage. That is a plausible mapping and
+    it is not Burkham's - it is not written to the Pack, and nothing here asserts anything
+    about which stage a module belongs in. When Burkham declares its own, this helper
+    should stop being needed, and the diff that removes it is the one to check.
+    """
+    if position.module_stages or not position.lifecycle_stages_owned:
+        return position
+    stage = position.lifecycle_stages_owned[0]
+    return position.model_copy(
+        update={"module_stages": {m: stage for m in position.forge_modules_operated}}
+    )
+
+
 @pytest.fixture(scope="module")
 def bound_pack() -> BusinessPack:
     """The real Burkham Pack with the deferred binding and position applied in memory.
@@ -202,7 +225,10 @@ def bound_pack() -> BusinessPack:
     pack = load_pack(PACK_PATH)
     return pack.model_copy(
         update={
-            "positions_required": [*pack.positions_required, deferred_position()],
+            "positions_required": [
+                _with_stages(p)
+                for p in (*pack.positions_required, deferred_position())
+            ],
             "forge_dependencies": pack.forge_dependencies.model_copy(
                 update={
                     "forge_bindings": [

@@ -189,7 +189,14 @@ async def _assert_pair_in_pack(
         await cur.execute(
             "SELECT p->>'position_title' AS title, p->>'source_department' AS department, "
             "       p->>'trust_tier_ceiling' AS ceiling, "
-            "       p->'module_trust_tiers' AS module_tiers "
+            "       p->'module_trust_tiers' AS module_tiers, "
+            # `->` returns JSONB 'null' for a declared-null key, not SQL NULL, so
+            # `IS NOT NULL` is TRUE for every position that declares no pending state.
+            # The Pack is stored from a pydantic dump, so the key is always present.
+            # `jsonb_typeof` is the only form that tells the two nulls apart, and the
+            # bootstrap contract tests caught this on the first run: every pair was
+            # refused as pending, naming Acquisition Analyst, which is not.
+            "       jsonb_typeof(p->'pending_activation') = 'object' AS pending "
             "FROM business_pack b, jsonb_array_elements(b.parsed->'positions_required') p "
             "WHERE b.venture_id = %s AND b.status = 'live' "
             "  AND p->'forge_modules_operated' ? %s",
@@ -225,6 +232,33 @@ async def _assert_pair_in_pack(
         )
 
     relevant = [p for p in positions if department is None or p["department"] == department]
+
+    # A PENDING POSITION CANNOT BE WHY A PAIR IS CERTIFIED, AND CANNOT SET ITS TIER.
+    #
+    # Two rulings in one place, because they are halves of one idea: a position no agent
+    # holds has no say in what an agent may do.
+    #
+    #   refuse   if every position operating this pair is pending, no agent can be
+    #            certified for it. Greenstone's `underwrite_deal` is operated by Deal
+    #            Underwriter and by nothing else, so while that position is pending the
+    #            pair is unreachable - and a certification written anyway is a row no
+    #            gate will ever read.
+    #
+    #   ignore   where a pair is shared, a pending position does not pin the ceiling.
+    #            `comp_analysis` is Acquisition Analyst at `auto_execute` and Deal
+    #            Underwriter at `propose`; the weakest-wins rule below would have handed
+    #            every agent `propose` on the strength of a position nobody holds.
+    live = [p for p in relevant if not p["pending"]]
+    if relevant and not live:
+        pending_titles = ", ".join(sorted(p["title"] for p in relevant))
+        raise BootstrapError(
+            f"every position operating {module_id!r} is pending activation "
+            f"({pending_titles}). Nothing was written. A certification for a pair no "
+            "appointed agent can hold is a row Gate 4.5 will never read - the position "
+            "is deferred, and so is this."
+        )
+    relevant = live
+
 
     # The PER-MODULE tier where the Pack declares one, and the position ceiling otherwise.
     #
