@@ -40,6 +40,24 @@ CRE_MODULES = (
 )
 VOICE_MODULES = ("place_call", "transcribe_call")
 
+#: SimForge's agent-facing modules. **`run_scenario_pack` is not one, and the fixture used
+#: to say it was.**
+#:
+#: SimForge does not dispatch it and says why in its own adapter: nothing iterates a
+#: Pack's scenarios into runs, so the only handler writable today would run one scenario
+#: and report having run a pack. Both live Packs dropped it on 8 September (ruling Q-1),
+#: `verify_forge_modules.py` has reported it as DRIFT since, and the development row was
+#: deleted on 15 September with nothing referencing it.
+#:
+#: A fixture is a world a test believes. Keeping a module here that no Forge serves means
+#: every suite reasons about a capability that does not exist - and it was the last place
+#: in the system where that module still existed.
+#:
+#: `run_start` and `submit_curriculum` ARE dispatched and are deliberately absent too:
+#: `broker/forge_modules.NOT_AGENT_FACING` records that a registry row exists so a grant
+#: can be issued, and a module no agent calls has nothing to gain from one.
+SIM_MODULES = ("gate_result",)
+
 #: `compliance_flags_implied`, PER MODULE - entry 105.
 #:
 #: **This was one list per FORGE, looped over every module**, and that is how five CRE
@@ -63,8 +81,7 @@ VOICE_MODULES = ("place_call", "transcribe_call")
 #: `compliance_coupling` disagree.
 MODULE_FLAGS: dict[tuple[str, str], list[str]] = {
     **{(FORGE_ID, module): [] for module in CRE_MODULES},
-    ("simforge", "run_scenario_pack"): [],
-    ("simforge", "gate_result"): [],
+    **{("simforge", module): [] for module in SIM_MODULES},
     **{("voiceforge", module): ["recording_consent_required"] for module in VOICE_MODULES},
 }
 
@@ -377,7 +394,7 @@ def build_world(admin: psycopg.Connection) -> None:
     with admin.cursor() as cur:
         for forge_id, api, modules in (
             (FORGE_ID, "1.4.0", CRE_MODULES),
-            ("simforge", "3.2.0", ("run_scenario_pack", "gate_result")),
+            ("simforge", "3.2.0", SIM_MODULES),
             ("voiceforge", "2.0.0", VOICE_MODULES),
         ):
             cur.execute(

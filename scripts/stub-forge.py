@@ -56,13 +56,19 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from tests.world import CRE_MODULES, FORGE_ID, VOICE_MODULES  # noqa: E402
+from tests.world import CRE_MODULES, FORGE_ID, SIM_MODULES, VOICE_MODULES  # noqa: E402
 
 #: What each Forge answers with. One source: the same tuples `build_world` registers, so
 #: a module added to the seeded world is served here without a second edit.
+#:
+#: SimForge's list was written out here rather than imported, and it named
+#: `run_scenario_pack` - a module the real SimForge does not dispatch. **A stub that
+#: serves what nothing serves makes the smoke world agree with a fixture instead of with
+#: a Forge**, which is the one thing a stub must not do. It comes from `SIM_MODULES` now,
+#: like the other two.
 SERVED: dict[str, tuple[str, ...]] = {
     FORGE_ID: CRE_MODULES,
-    "simforge": ("run_scenario_pack", "gate_result"),
+    "simforge": SIM_MODULES,
     "voiceforge": VOICE_MODULES,
 }
 
