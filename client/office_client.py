@@ -348,13 +348,20 @@ class OfficeClient:
         call_id: uuid.UUID,
         idem_key: str,
     ) -> None:
-        """Write the pre-call entry, failing closed when compliance flags apply.
+        """Write the pre-call entry, failing closed on a MUTATING call.
 
-        Master prompt Part 13: fail closed on compliance-flagged actions,
-        durable-queue otherwise. An unflagged action degrades rather than halting,
-        because halting every call on an audit outage converts a logging problem
-        into a total outage. A flagged action halts, because proceeding without a
-        record is the thing the flag exists to prevent.
+        Master prompt Part 13 wrote this as "fail closed on compliance-flagged actions,
+        durable-queue otherwise", and it keyed on the flags until 15 September. **Ivan's
+        ruling moved it to `is_mutating`:** a mutating call fails if its audit write
+        fails, flagged or not.
+
+        The reason is in entry 105. The flags it keyed on were a development fixture's -
+        one list per Forge, looped over every module - so `assign_contract`'s fail-closed
+        property came from a row nobody had read, and correcting the flags would have
+        removed it without anybody deciding to.
+
+        A read still degrades. An unrecorded read is a gap in the log; an unrecorded
+        write is a change to the world nobody can find.
         """
         try:
             await audit.write_event(
@@ -376,14 +383,16 @@ class OfficeClient:
                 },
             )
         except Exception as exc:
-            if grant.is_compliance_flagged:
+            if grant.must_fail_closed:
                 raise AuditUnavailable(
-                    "pre-call audit write failed on a compliance-flagged action",
+                    "pre-call audit write failed on a mutating call; it does not happen "
+                    "unrecorded",
                     forge_id=grant.forge_id,
                     module_id=grant.module_id,
+                    is_mutating=grant.is_mutating,
                     compliance_flags=list(grant.compliance_flags),
                 ) from exc
-            # Unflagged: proceed. Phase 1 replaces this with a durable queue;
+            # Read-only: proceed. Phase 1 replaces this with a durable queue;
             # until then the failure is visible only in broker logs, which is a
             # known gap rather than a design.
 

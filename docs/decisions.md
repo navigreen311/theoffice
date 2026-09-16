@@ -8173,3 +8173,97 @@ They are the fixture's forge_id-as-name, and the canonical spellings are in `EST
 neither is Ivan's** - that rename runs in the Pack batch with the Packs, per entry 103. **Not
 changed here**, because a report that named the wrong kind of object should not then act on it
 unasked.
+
+---
+
+## 105. A flag nobody read, on five modules that contact nobody - and the rule that rested on it
+
+**Ruled and built 2026-09-15.** Three rulings by Ivan, the first two of which are the same finding
+from opposite ends.
+
+### 1. CRE Forge's five modules carry no implied compliance flags
+
+**None contacts, calls or records a person.** Read from the Forge's own code: `property_lookup` is a
+paginated search over this tenant's properties and never loads the owner rows one join away;
+`comp_analysis` sends an address to a comps vendor; `underwrite_deal` computes ARV and MAO and writes
+one analysis row; `buyer_match` ranks buyers with `save_matches=False`, and filtering a suppression
+list is not contact; `assign_contract` creates a DRAFT and answers `sent: False`.
+
+All five implied `tsr_disclosure_required` - **a telemarketing-disclosure duty**.
+
+**Nobody read five modules and got five wrong answers. Nobody read a module.** `tests/world.py`
+wrote ONE flag list per FORGE and looped it over every module of that Forge. It is the third error
+class `compliance_couplings.py` records - a flag that is true somewhere and asserted here - and the
+same shape that put Greenstone's flag on two SimForge modules.
+
+**The artefact that disagreed was the manual.** All five authored CRE Forge instructions say
+`compliance_coupling: ["no_framework_applies"]`, and nothing compared them to the row. Every check
+passed for a good reason of its own: the verifier confirms a row resolves and never writes this
+column, V6 and V32 compare module ids, V28 resolves the ref.
+
+`tests/world.py` now carries `MODULE_FLAGS`, keyed `(forge_id, module_id)`, and
+`test_fixture_flags_match_the_instructions` fails when a fixture flag contradicts the module's real
+manual - read out of `scripts/author_cre_forge_instructions.py`, so it cannot pass by a fixture
+agreeing with itself.
+
+### 2. The audit fail-closed rule stands on its own terms
+
+**It keyed on the flags, and the flags were a fixture's.** `is_compliance_flagged` decided whether a
+failed pre-call audit write halted the call - so `assign_contract`, which writes a contract, failed
+closed **because of a row nobody had read**, and correcting the flags would have removed that
+silently.
+
+It now keys on `is_mutating`: **any mutating call fails if its audit write fails, flagged or not.**
+That is the adapter's own declaration at its binding site, verified against the live manifest. A read
+still degrades - an unrecorded read is a gap in the log, an unrecorded write is a change to the world
+nobody can find, and halting every call on an audit outage turns a logging problem into an outage.
+
+### 3. Credential rotation and real break-glass holders are queued before production
+
+Recorded with what was measured: **both tenant tokens already work** - 401 without, 401 with a wrong
+one, 200 with the value in `.env`, on every Forge. What is not real is the governance half.
+`rotation_due` is `CURRENT_DATE + 90` from the seed date, `break_glass_holders` are four uuid4s
+resolving to no account, `last_rotated` has never been written - **and no code reads any of the
+three.** There is no rotation path at all: changing a credential is editing two `.env` files and
+restarting both processes.
+
+### What the correction moved, measured
+
+    Greenstone, live run 60ff7ef5 on Pack 1.7.0
+      projection    {compliance_officer: 64}  ->  {compliance_officer: 32, venture_operator: 32}
+      V13 at 4.5    18x over, one role        ->  33% over, one role (32 x 6 = 192 against 144)
+      artifacts     a337b93b                  ->  60676432     MOVED
+    Burkham, live run 8ed2f39a on Pack 0.10.0
+      everything    unchanged. Its flags are CapitalForge's, audited module by module in
+                    compliance_couplings.py, and this touched none of them. Hash e210fdc8, SAME.
+
+**Deal Underwriter is the position that moved.** It declares no flag of its own, so its approvals had
+been routing to the compliance officer entirely on the strength of the fixture's. They go to the
+venture operator now. Greenstone's live run shows 32 and 32 because no position is filled and an
+unfilled position counts as one holder; in the fully-staffed test world the same split reads 64 and
+64.
+
+### Three things the correction broke, each of which was resting on it
+
+**The capacity fixture topped up one role.** `amend_for_capacity` added compliance officers, because
+while every flag routed there the compliance officer was the only role that could be short. With the
+routing corrected the venture operator went 19% over on hours nobody had questioned - **no demand had
+ever reached them.** It now tops up both.
+
+**A golden test was anchored on the defect.** `test_role_definition_derives_implied_compliance_flags`
+asserted that Buyer Network Manager picks up an implied flag it did not declare - a real mechanism,
+read through the false value. It would have failed the correction rather than confirming it. It now
+writes the registry row it tests, so the anchor is independent of what any Forge happens to imply.
+
+**Four golden snapshots moved, and each diff was read.** `roles`: implied flags empty on all three
+positions. `workflow`: the four Deal Underwriter steps go to `NONE` and the four Buyer Network
+Manager steps keep `recording_consent_required` alone. `approval_projection`: 128 becomes 64 + 64.
+`curriculum`: fifteen `instruction_content_hash` values, because the fixture manual's coupling
+changed. Nothing else in any of the four.
+
+### The dev rows
+
+`compliance_flags_implied` emptied on CRE Forge's five. `display_name` corrected to `CRE Forge` and
+`SimForge`, matching `ESTATE`. **`simforge/run_scenario_pack` deleted** - SimForge deliberately does
+not dispatch it, and nothing referenced it: zero grants, manifest rows, instructions, certifications,
+exclusions, proposals, ledger entries or curriculum submissions, and neither live Pack declares it.

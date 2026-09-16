@@ -79,8 +79,36 @@ class ResolvedGrant:
 
     @property
     def is_compliance_flagged(self) -> bool:
-        """Whether a failed audit write must fail closed rather than degrade."""
+        """Whether this call carries a declared compliance framework.
+
+        **No longer what decides fail-closed** - see `must_fail_closed`. Kept because the
+        flags travel in the audit subject and a reader asking "was this a flagged call"
+        is asking a real question; it is just not the question the audit branch asks.
+        """
         return bool(self.compliance_flags)
+
+    @property
+    def must_fail_closed(self) -> bool:
+        """Whether a failed audit write must halt the call rather than degrade.
+
+        **Mutation, not flags. Ivan's ruling of 15 September:** any mutating module call
+        fails if its audit write fails, whether or not a compliance flag is present.
+
+        It used to be `bool(compliance_flags)`, and that rested on the flags being true.
+        They were not: every CRE Forge module carried `tsr_disclosure_required` because
+        the development fixture wrote one flag list per FORGE and looped it over every
+        module (entry 105). So the fail-closed property of five modules - including
+        `assign_contract`, which writes a contract - was an accident of a test fixture,
+        and correcting the flags would have removed it silently.
+
+        **`is_mutating` is the honest key.** It is the adapter's own declaration at its
+        binding site, verified against the live manifest by `verify_forge_modules.py`,
+        and it answers the question the rule is about: an unrecorded READ is a gap in the
+        log, while an unrecorded WRITE is a change to the world nobody can find. A read
+        still degrades, because halting every call on an audit outage turns a logging
+        problem into a total outage.
+        """
+        return self.is_mutating
 
 
 _RESOLVE_SQL = """

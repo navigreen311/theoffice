@@ -308,10 +308,12 @@ async def test_the_real_pack_blocks_at_gate_4_5_through_the_api(world, api, pack
 
     assert result["status"] == "blocked"
     assert result["current_gate"] == "4.5"
-    # 128 since the VoiceForge binding left the Pack on 2026-09-15 (decisions entries 83
-    # and 87): place_call was forbidden and transcribe_call was served by nothing. See
-    # test_pipeline.py for the full arc of this figure.
-    assert "128 approvals" in result["outcomes"][-1]["reason"]
+    # 64 TO THIS ROLE since entry 105. The total is unchanged; the five CRE Forge
+    # modules stopped implying a flag the fixture had written onto all of them, so Deal
+    # Underwriter - which declares none of its own - routes to the venture operator now.
+    # See test_pipeline.py for the full arc of this figure.
+    assert "64 approvals" in result["outcomes"][-1]["reason"]
+    assert "compliance officer" in result["outcomes"][-1]["reason"]
 
 
 async def test_a_run_from_the_console_stops_at_gate_9_5(world, api, feasible_yaml):
