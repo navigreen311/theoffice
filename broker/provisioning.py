@@ -386,7 +386,27 @@ async def _gate_6(ctx: _Context) -> GateOutcome:
     """
     artifacts = ctx.require_artifacts()
     modules = {m for p in artifacts.roles.positions for m in p.module_ids}
+    # EVERY FLAG THE VENTURE IS UNDER, NOT ONLY THE ONES AN AGENT CARRIES.
+    #
+    # This read `roles.positions` alone until 2026-09-16, and item F is what showed the
+    # gap: declaring an obligation human-held takes its flag off every position, and the
+    # whole of Gate 6's compliance-library check went quiet with it. Greenstone's TSR
+    # entry had no library row, this gate blocked on exactly that, and after the edit it
+    # passed - with the library still missing and the obligation still real.
+    #
+    # **A human-held obligation needs its library entry MORE, not less.** The flag means a
+    # person performs the duty, and the library entry is what they read to perform it. An
+    # agent at least has an operating instruction; a founder has this.
+    #
+    # `market.compliance_surface` is where the venture declares what it is under, and it
+    # is the same set V22 and V34 reason about. Gate 6 now reads it too, so the three
+    # rules and this gate cannot disagree about which flags exist.
     flags = {f for p in artifacts.roles.positions for f in p.effective_compliance_flags}
+    flags |= {
+        entry.runtime_flag
+        for entry in ctx.pack.pack.market.compliance_surface
+        if entry.runtime_flag.strip()
+    }
     stages = {
         stage
         for line in ctx.pack.pack.engagement_model.service_lines

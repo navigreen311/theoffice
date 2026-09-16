@@ -21,8 +21,8 @@
       "uncovered": []
     },
     {
-      "covered": 2,
-      "denominator": 2,
+      "covered": 0,
+      "denominator": 0,
       "dimension": "compliance_flags_exercised",
       "uncovered": []
     },

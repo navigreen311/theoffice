@@ -8547,3 +8547,136 @@ the position. Measured against the Pack on PR #155:
 MAO, which is the arrangement that ruling forbids - and nothing fails. The declared reviewer is what
 holds the routing in place across that edit, and the test that pins it is the point of the whole
 field.
+
+---
+
+## 109. Weekend-paging exceptions, a name corrected before it spread - and item F takes Greenstone off the provisioning ladder
+
+**Ruled 2026-09-16 by Ivan.** The first two are recorded only; the rest is built on an open PR and
+nothing is published.
+
+### 1. They are weekend-paging exceptions, and they are not "Level 4"
+
+Entry 108 §2 named three states that justify weekend work. **It did not call them Level 4, and this
+entry is here so that nobody later does.** They are **weekend-paging exceptions**: the conditions
+under which somebody is paged on a Saturday.
+
+**"Level 4" is taken, and it means the opposite of an escalation.** Measured in the Greenstone
+console, `packages/agents/src/village.ts:108`:
+
+    **Three, not four.** Specs §7.1 defines Level 4 as "Never allowed" with the success criterion
+    "zero Level 4 actions succeed", so an actor configured at 4 is one whose every action the
+    perimeter blocks.
+
+`MAX_AGENT_LEVEL = 3`, and the registry refuses a higher one. Level 4 is an **agent authority
+level** meaning *never allowed* - the ceiling the perimeter enforces, not a rung above the top of
+an escalation ladder. Calling a weekend page "Level 4" would attach the word for *forbidden* to the
+one class of work that must happen at once.
+
+The cost of a wrong number is a document citing a rule that does not mean what it says - the same
+reason V38 did not take the next free slot.
+
+### 2. Walker safety paging is a known gap, and it blocks walkers entering buildings
+
+**SiteForge's emergency stop is real and the Greenstone console cannot see it.**
+
+    SiteForge          SF-021, exercised end to end in apps/walker-mobile/e2e/emergency-stop.e2e.ts
+    the console        declares `siteforge_emergency_stop`, tier RED, packages/risk/src/tiers.ts:221
+
+And the console says in its own words that nothing observes it -
+`packages/risk/src/tiers.ts`, `UNOBSERVABLE_REFUSAL`:
+
+    Six of §6.1's thirteen signals are behind a vendor gate and nothing detects them. Five are
+    SiteForge/Atlas - a minor finding, a quality score below 60, a contradiction of a prior
+    version, an emergency stop, and a walker safety concern, which is a person in a building this
+    Console cannot see... They are declared and raiseable by hand, and nothing observes them.
+
+**So the walker-safety weekend exception has nothing behind it.** It names a signal that reaches
+Greenstone only if a person raises it by hand, and the case it exists for is the one where the
+person who would raise it is the one in trouble.
+
+**It must be closed before walkers enter buildings.** The work is in SiteForge and the Greenstone
+console, not here, and not in this PR.
+
+**The other two exceptions do have machinery.** A failed Shadow callback feeds
+`wire_fraud_indicator` (`packages/firewall/src/rules.ts:125`, from `packages/wire`, module 6.5), and
+`viability_kill` is a Firewall rule raised by `packages/deals/src/store.ts:310`.
+
+### 3. Item F: both Greenstone flags become founder-held
+
+    recording_consent_required   human_held. No agent of this venture can place or record a call:
+                                 voiceforge/place_call is forbidden behind a live trigger, the
+                                 VoiceForge binding left the Pack on 09-15, and neither buyer_match
+                                 nor assign_contract calls anybody. Off Buyer Network Manager.
+    tsr_disclosure_required      human_held + pending_activation, activating when a Seller Outreach
+                                 position is declared. Off Acquisition Analyst: property_lookup is a
+                                 paginated search over this tenant's own properties and never loads
+                                 the owner rows one join away.
+
+**`assign_contract` still routes to the compliance officer, and now on nothing but the declaration.**
+Buyer Network Manager carries no flag at all. This is the collision PR #156 was built for, and it
+arrived one PR later exactly as predicted.
+
+### 4. V34 FAILS, and it blocks GATE 2
+
+V34 is a FAIL-severity world rule, and `_gate_2` blocks on any failure. Verbatim:
+
+    recording_consent_required: no discharge record exists. The obligation is declared human-held
+    (TWO_PARTY_CONSENT_RECORDING) and nobody has verified it
+
+**The TSR obligation is absent from that message**, and the absence is the point: `pending_activation`
+means no verification is due until a Seller Outreach position exists. Two human-held flags, one due.
+
+**Counsel closes this, not code.** Until then the Greenstone Pack cannot provision, which is correct
+and is the state the venture is actually in.
+
+### 5. What item F broke, and none of it was a check being weakened
+
+**Gate 6 went quiet, and that is the sharpest one.** Its compliance-library check read
+`roles.positions` alone. Declaring an obligation human-held takes the flag off every position, so
+Greenstone's TSR library gap - which Gate 6 blocked on the day before - **passed**, with the library
+still missing and the obligation still real. Gate 6 now reads `market.compliance_surface` as well.
+**A human-held obligation needs its library entry more, not less:** the flag means a person performs
+the duty, and the entry is what they read to perform it.
+
+**Four tests were anchored on flags the positions no longer carry**, and each was re-anchored rather
+than propped up:
+
+    V22's must-fail mutation      emptying every scenario stopped violating anything, because a
+                                  human-held flag is accounted for. It now removes the human_held
+                                  declaration too.
+    the implied-flags golden      asserted the position DECLARES a flag. Re-anchored a third time;
+                                  the mechanism under test - a flag reaching a position from a module
+                                  its author never thought about - is untouched.
+    V34's "nothing to discharge"  Greenstone stopped being the example. It constructs one.
+    the curriculum denominator    `compliance_flags_exercised` is honestly 0 of 0 now. Named as the
+                                  one dimension that may be empty, rather than relaxing the rule.
+
+**And a fixture-scoping finding worth more than it looks.** `seed_nv_discharge` supplies the
+discharge so the suites that drive a run can still reach gates 3 to 12 - the same class of fixture as
+`certify_for_positions`. Putting it in `build_world` produced **414 errors across suites that touch
+neither compliance nor discharges**: the row references an `office_human`, and twenty-four contract
+suites delete every human wholesale. The real cause was older than this change -
+**`obligation_discharge` had never been in `VENTURE_DEPENDENTS`**, so nothing ever wiped it; only
+Burkham declared a human-held obligation and its tests cleaned up by hand. It is in the list now.
+
+`test_v34_fails_for_greenstone_without_a_discharge` deletes the fixture row and asserts the FAIL, so
+the real-world answer is exercised by name rather than inferred from the absence of a test.
+
+### 6. Item I: the smoke world prints capacity
+
+Gate 2's and Gate 4.5's V13 are evaluated directly against the published Pack and printed per role:
+approvals a day, review-minutes needed, review-minutes available, verdict.
+
+**Computed from the Pack, not read off the run.** Gate 4.5's figures need generator output, which
+only exists for a run that cleared Gate 2 - so reading them off the run would print nothing exactly
+when a Pack is in trouble, which is when a capacity figure is most worth having.
+
+**Formatting is pinned** because an unstable digit is a baseline that moves on its own: roles sorted,
+approvals to two decimals (0.2 a day rounds to 0 as an integer), demand to one decimal and supply
+whole, matching V13's own message, and no id, hash or timestamp anywhere.
+
+**Why it is worth the baseline churn.** Greenstone went from 64 approvals a day to 0.2, from twelve
+workflow steps to six, gained a pending position and had a module's reviewer become a declaration
+rather than a side effect - and **the smoke baseline did not move by one line for any of it**. The
+one artifact a merge is gated on could not see the thing most likely to be wrong.

@@ -99,9 +99,14 @@ def bridged_world(admin: psycopg.Connection):
     # The department list is part of a prepared world too: V29 and V30 ask the Village,
     # and a world that has not answered leaves them NOT_RUN - which is correct, and is
     # not the state this fixture exists to build.
-    from tests.world import seed_departments
+    from tests.world import clear_nv_discharge, seed_departments, seed_nv_discharge
 
     seed_departments()
+    # "Fully prepared" gained a fifth thing with item F: `recording_consent_required` is
+    # declared human-held, and V34 asks whether a named human verified it. A world that
+    # has not is a world where the Pack blocks at Gate 2 - which is the REAL venture's
+    # state, asserted by name in test_human_held_discharge.py rather than here.
+    seed_nv_discharge(admin)
 
     forges = {
         "cre-forge": ("1.4.0", CRE_MODULES),
@@ -143,6 +148,7 @@ def bridged_world(admin: psycopg.Connection):
     admin.commit()
     yield admin
     _wipe(admin, forges)
+    clear_nv_discharge(admin)
 
 
 def _wipe(conn: psycopg.Connection, forges: dict[str, object]) -> None:

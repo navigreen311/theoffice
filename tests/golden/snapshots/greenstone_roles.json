@@ -1,17 +1,13 @@
 {
   "positions": [
     {
-      "declared_compliance_flags": [
-        "tsr_disclosure_required"
-      ],
+      "declared_compliance_flags": [],
       "duties": [
         "Source off-market candidates from public records and owner outreach",
         "Pull comparable sales and rent rolls",
         "Produce a first-pass value estimate"
       ],
-      "effective_compliance_flags": [
-        "tsr_disclosure_required"
-      ],
+      "effective_compliance_flags": [],
       "expected_weekly_volume": {},
       "forge_modules_operated": [
         "cre-forge/comp_analysis",
@@ -37,17 +33,13 @@
       "trust_tier_ceiling": "auto_execute"
     },
     {
-      "declared_compliance_flags": [
-        "recording_consent_required"
-      ],
+      "declared_compliance_flags": [],
       "duties": [
         "Maintain the vetted buyer list and their stated criteria",
         "Match a contracted deal to buyers by fit",
         "Circulate the assignment package"
       ],
-      "effective_compliance_flags": [
-        "recording_consent_required"
-      ],
+      "effective_compliance_flags": [],
       "expected_weekly_volume": {
         "cre-forge/assign_contract": 1.0
       },

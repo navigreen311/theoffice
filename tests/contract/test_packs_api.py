@@ -41,7 +41,7 @@ from broker.app import app
 from broker.db import connection
 from generators.validator import all_rule_ids
 from tests.conftest import requires_db, wipe_venture
-from tests.world import PACK_PATH, build_world, dispatch_from_registry
+from tests.world import PACK_PATH, build_world, dispatch_from_registry, seed_nv_discharge
 
 pytestmark = [requires_db, pytest.mark.db]
 
@@ -93,6 +93,11 @@ class World:
 async def world(admin: psycopg.Connection, monkeypatch: pytest.MonkeyPatch):
     _wipe(admin)
     build_world(admin)
+    # Item F declared `recording_consent_required` human-held, so V34 asks whether a
+    # named human verified it - and a run that has not cannot clear Gate 2. Seeded here
+    # rather than in `build_world` because only the suites that drive a run need it, and
+    # the row references an office_human that twenty-four contract suites delete.
+    seed_nv_discharge(admin)
     dispatch_from_registry(admin, monkeypatch)
 
     async with connection() as conn:

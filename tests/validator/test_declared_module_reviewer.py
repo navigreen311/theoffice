@@ -50,9 +50,20 @@ def _with_position(pack, title, **update):
     )
 
 
-def _unflag_buyer_network_manager(pack):
-    """Item F: `recording_consent_required` becomes founder-held and leaves the position."""
-    return _with_position(pack, "Buyer Network Manager", compliance_flags_in_scope=[])
+def _reflag_buyer_network_manager(pack):
+    """Put the flag back, to exercise the route it used to take.
+
+    **Item F shipped, so the Pack no longer carries it.** This file was written while the
+    flag was still on the position and the collision was ahead of us; it is behind us now.
+    Rather than delete the tests that read the pre-F state, they construct it - the flag is
+    what makes step 2 and ruling 4 reachable at all, and a fixture that supplies it says so
+    in one place.
+    """
+    return _with_position(
+        pack,
+        "Buyer Network Manager",
+        compliance_flags_in_scope=["recording_consent_required"],
+    )
 
 
 # ------------------------------------------------------- the declaration does something
@@ -70,27 +81,31 @@ def test_the_declared_reviewer_is_what_gate_2_routes_by():
 
 
 def test_item_f_cannot_move_assign_contract_off_the_compliance_officer():
-    """**The test this field exists for.** Remove the flag; the routing must not move.
+    """**The test this field exists for, and item F has now happened.**
 
-    Measured on the Pack as it stood before the declaration landed:
+    Buyer Network Manager carries no compliance flag any more - item F moved
+    `recording_consent_required` to `market.compliance_surface` as human-held. So the
+    routing rests on the declaration alone, which is the state this field was added for:
 
-        today                          {compliance_officer: 0.2}
-        with the flag removed          {venture_operator: 0.2}
+        Pack as it stands            {compliance_officer: 0.2}
+        with the declaration removed {venture_operator: 0.2}
 
     Ivan usually writes the MAO, so that second line is the author approving his own deal's
-    assignment - arrived at by editing an unrelated compliance flag, with nothing anywhere
-    reporting it.
+    assignment - and before the declaration existed, item F produced it silently.
+
+    The second assertion is what stops this passing for the wrong reason. Without it, a
+    change that made `assign_contract` route to the compliance officer by some other route
+    would read as this field working.
     """
     pack = load_pack(GREENSTONE)
-    after_item_f = _unflag_buyer_network_manager(pack)
-
-    assert demand_from_the_pack(after_item_f) == {"compliance_officer": pytest.approx(0.2)}
-
-    # And the same Pack WITHOUT the declaration is where it would have gone, so this test
-    # cannot pass because the flag removal silently stopped working.
-    undeclared = _with_position(
-        after_item_f, "Buyer Network Manager", module_reviewer_roles={}
+    bnm = next(
+        p for p in pack.positions_required if p.position_title == "Buyer Network Manager"
     )
+    assert bnm.compliance_flags_in_scope == [], "item F has not landed; this test is stale"
+
+    assert demand_from_the_pack(pack) == {"compliance_officer": pytest.approx(0.2)}
+
+    undeclared = _with_position(pack, "Buyer Network Manager", module_reviewer_roles={})
     assert demand_from_the_pack(undeclared) == {"venture_operator": pytest.approx(0.2)}
 
 
@@ -106,19 +121,24 @@ def test_a_module_with_no_declaration_routes_exactly_as_it_did():
     undeclared = _with_position(
         pack, "Buyer Network Manager", module_reviewer_roles={}
     )
-    # The flag is still on the position, so step 2 answers - as it always has.
-    assert demand_from_the_pack(undeclared) == {"compliance_officer": pytest.approx(0.2)}
+    # Step 3: no declaration and no flag, which is what the Pack is after item F.
+    assert demand_from_the_pack(undeclared) == {"venture_operator": pytest.approx(0.2)}
 
-    # And with no flag and no declaration, step 3.
-    both_gone = _unflag_buyer_network_manager(undeclared)
-    assert demand_from_the_pack(both_gone) == {"venture_operator": pytest.approx(0.2)}
+    # Step 2: no declaration, flag restored. This is how every module in every other
+    # venture still routes, and the path item F took `assign_contract` off.
+    flagged = _with_position(
+        _reflag_buyer_network_manager(pack),
+        "Buyer Network Manager",
+        module_reviewer_roles={},
+    )
+    assert demand_from_the_pack(flagged) == {"compliance_officer": pytest.approx(0.2)}
 
 
 # ------------------------------------------------------------------------- the refusals
 
 def test_ruling_4_refuses_routing_a_flagged_module_away_from_the_compliance_officer():
     """Naming the module and the flag, because both are needed to fix it."""
-    pack = load_pack(GREENSTONE)
+    pack = _reflag_buyer_network_manager(load_pack(GREENSTONE))
     bnm = next(
         p for p in pack.positions_required if p.position_title == "Buyer Network Manager"
     )

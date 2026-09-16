@@ -551,6 +551,119 @@ for path in /packs/definitely-not-a-venture /provisioning/definitely-not-a-ventu
   if [ "$code" = "404" ]; then say "$path -> 404"; else fail "$path returned $code"; fi
 done
 
+step "Reviewer capacity, at both gates, in numbers"
+# WHAT THIS PRINTS AND WHY THE SMOKE OUTPUT DID NOT HAVE IT.
+#
+# Every capacity figure in this venture moved this week - 64 approvals a day became 0.2,
+# the workflow went from 12 steps to 6, a position went pending, and a module's reviewer
+# became a declaration rather than a side effect of a flag. **The smoke baseline did not
+# move by one line for any of it.** The output carried check NAMES and no figures, so the
+# one artifact a merge is gated on could not see the thing most likely to be wrong.
+#
+# So the numbers are printed. A change in approval counts, review minutes or routing now
+# moves the baseline, which is the point: re-recording it is a ruling somebody makes
+# deliberately (PR #142), and a routing change that nobody has to rule on is a routing
+# change nobody reads.
+#
+# COMPUTED FROM THE PACK, NOT FROM THE RUN, AND THAT IS DELIBERATE.
+#
+# Gate 4.5's V13 needs generator output, which only exists for a run that cleared Gate 2.
+# Reading it off the run would mean this check reports nothing exactly when a Pack is in
+# trouble - the state where a capacity figure is most worth having. Both gates are
+# evaluated directly against the published Pack instead, so the figures are printed
+# whether or not the run reaches them.
+#
+# FORMATTING IS PINNED, BECAUSE AN UNSTABLE DIGIT IS A BASELINE THAT MOVES ON ITS OWN.
+#
+#   roles         sorted alphabetically, never dict order
+#   approvals     two decimals - 0.2 a day is real and rounds to 0 as an integer
+#   minutes       one decimal for demand, whole numbers for supply, matching V13's own
+#                 message so the two cannot disagree about the same quantity
+#   no ids        no run id, no timestamp, no hash - nothing per-run appears
+pycheck - "$API_PORT" <<'PY'
+import asyncio, sys
+from pathlib import Path
+
+sys.path.insert(0, ".")
+from broker.db import connection                      # noqa: E402
+from generators import pipeline                       # noqa: E402
+from generators.approval_projection import (          # noqa: E402
+    VolumeNotDeclaredError,
+    demand_from_the_pack,
+)
+from generators.pack import load_pack                 # noqa: E402
+from generators.validator import (                    # noqa: E402
+    _review_minutes_by_role,
+    _review_supply_by_role,
+    v13,
+    validate_gate_4_5,
+)
+
+PACK = Path("packs/greenstone.yaml")
+
+
+def lines(title, demand, pack):
+    each = _review_minutes_by_role(pack)
+    supply = _review_supply_by_role(pack)
+    out = [f"{title}"]
+    for role in sorted(set(demand) | set(supply)):
+        approvals = demand.get(role, 0.0)
+        needed = approvals * each.get(role, 0.0)
+        available = supply.get(role, 0.0)
+        verdict = "within capacity" if needed <= available else "OVER"
+        out.append(
+            f"  {role}: {approvals:.2f} approvals/day, "
+            f"{needed:.1f} review-minutes needed, "
+            f"{available:.0f} available - {verdict}"
+        )
+    return out
+
+
+async def main():
+    pack = load_pack(PACK)
+
+    try:
+        demand = demand_from_the_pack(pack)
+    except VolumeNotDeclaredError as gap:
+        print(f"FAIL gate 2 cannot compute demand: {gap.reason}")
+        return
+
+    for line in lines("gate 2, from the Pack:", demand, pack):
+        print(line)
+    ok, _ = v13(pack)
+    print(f"  gate 2 V13: {'PASS' if ok else 'FAIL'}")
+
+    # Gate 4.5's own arithmetic, over the real generator output. Run directly rather than
+    # read off the provisioning run, so a Pack blocked earlier still reports its capacity.
+    async with connection() as conn:
+        artifacts = await pipeline.run_all(pack, conn)
+    projection = artifacts.approval_projection.projected_daily_approvals
+    for line in lines("gate 4.5, from the generated workflow:", dict(projection), pack):
+        print(line)
+    report = await validate_gate_4_5(pack, artifacts.approval_projection, artifacts.appointment)
+    print(f"  gate 4.5 V13: {report.get('V13').verdict.value}")
+    print(f"  gate 4.5 V24: {report.get('V24').verdict.value}")
+
+    # WHAT THIS WORLD WAS GRANTED, SAID OUT LOUD.
+    #
+    # `seed_dev_world.py` writes an NV discharge so the ladder reaches Gate 4 and the
+    # seven checks on that screen keep running. The real venture has no such review, V34
+    # refuses it, and Gate 2 blocks. A green ladder below this line is a green ladder
+    # somebody granted, and a reader who is not told that is being shown a false one.
+    #
+    # **The wording avoids the token this script counts.** `pycheck` increments FAILURES on
+    # any output matching `*FAIL*`, so the first version of this line - which said "V34
+    # FAILs on it" - reported a failed check by describing one. The guard was right and the
+    # sentence was wrong; a note that trips the counter is a note that cannot be printed.
+    print(
+        "  world assumption: NV obligation_discharge seeded. The real venture has none, "
+        "V34 refuses it, and Gate 2 blocks pending counsel."
+    )
+
+
+asyncio.run(main())
+PY
+
 step "The gate ladder renders with a real run"
 # The page above rendered its empty state. That proves nothing about the ladder or the
 # four action forms, which is precisely the gap that shipped a React 19 hook into a

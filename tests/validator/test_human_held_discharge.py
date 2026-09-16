@@ -203,21 +203,67 @@ async def test_v34_fails_when_the_discharge_does_not_reach_the_venture(
 
 
 async def test_v34_says_nothing_to_discharge_rather_than_passing_silently():
-    """Greenstone declares no human-held obligation.
+    """A pass with nothing to check, distinguished from a pass that checked something.
 
-    A pass with nothing to check must be distinguishable from a pass that checked
-    something — the distinction P-09 drew when its own V33 passed against an empty
-    table. The verdict is the same; the message is not, and the message is the part a
-    reader acts on.
+    **Greenstone stopped being the example on 2026-09-16.** Item F declared both of its
+    flags human-held, so it now has two obligations to say something about and this test
+    would have gone on passing against a Pack that no longer demonstrates the case.
+
+    The distinction is P-09's, from when its own V33 passed against an empty table: the
+    verdict is the same and the message is not, and the message is the part a reader acts
+    on. It is asserted here on a Pack that genuinely declares nothing.
     """
     greenstone = load_pack(GREENSTONE)
+    nothing_held = greenstone.model_copy(
+        update={
+            "market": greenstone.market.model_copy(
+                update={
+                    "compliance_surface": [
+                        entry.model_copy(update={"human_held": None})
+                        for entry in greenstone.market.compliance_surface
+                    ]
+                }
+            )
+        }
+    )
+
+    async with connection() as conn:
+        report = await validate(nothing_held, conn)
+
+    result = report.get("V34")
+    assert result.verdict is Verdict.PASS
+    assert "nothing to discharge" in result.message
+
+
+async def test_v34_fails_for_greenstone_without_a_discharge(admin):
+    """**The real venture's answer, asserted by name.**
+
+    `seed_nv_discharge` puts a discharge in every prepared world so the suites that drive a
+    run past Gate 2 can keep working. That fixture must not be the only thing standing
+    between this rule and a silent pass, so this deletes the row and checks what Greenstone
+    actually validates to today: V34 FAILs, and it blocks Gate 2.
+
+    Counsel closes this, not code. Until then the Pack cannot provision, which is correct.
+    """
+    greenstone = load_pack(GREENSTONE)
+    with admin.cursor() as cur:
+        cur.execute("DELETE FROM obligation_discharge WHERE venture_id = 'greenstone'")
+    admin.commit()
 
     async with connection() as conn:
         report = await validate(greenstone, conn)
 
     result = report.get("V34")
-    assert result.verdict is Verdict.PASS
-    assert "nothing to discharge" in result.message
+    assert result.verdict is Verdict.FAIL
+    assert "recording_consent_required" in result.message
+    assert "no discharge record exists" in result.message
+    # V34 is a FAIL-severity rule, and Gate 2 blocks on any failure.
+    assert "V34" in [r.rule_id for r in report.failures]
+
+    # The TSR obligation is ABSENT from the failure, and that absence is the assertion:
+    # `pending_activation` means no verification is due until a Seller Outreach position
+    # exists. Two human-held flags, one of them due, and only the due one is named.
+    assert "tsr_disclosure_required" not in result.message
 
 
 async def test_a_blank_basis_is_refused_by_the_schema(admin, no_discharges):

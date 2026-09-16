@@ -109,7 +109,22 @@ MUST_FAIL: dict[str, Callable[[BusinessPack], None]] = {
         slice(None),
         [b for b in p.forge_dependencies.forge_bindings if b.forge.lower() != "simforge"],
     ),
-    "V22": lambda p: [s.compliance_flags_exercised.clear() for s in p.scenarios],
+    # CLEARING THE SCENARIOS IS NO LONGER ENOUGH.
+    #
+    # It was, while Greenstone declared two flags on its positions. Item F moved both to
+    # `market.compliance_surface` as human_held, and V22 counts a human-held flag as
+    # accounted for - correctly, because no agent holds the duty. With no flag left for a
+    # scenario to exercise, emptying every scenario violates nothing.
+    #
+    # So the mutation takes the human_held declaration off as well: a flag that IS an
+    # agent's duty, exercised by no scenario, which is the condition V22 exists to catch.
+    "V22": lambda p: (
+        [s.compliance_flags_exercised.clear() for s in p.scenarios],
+        [
+            setattr(entry, "human_held", None)
+            for entry in p.market.compliance_surface
+        ],
+    ),
     "V23": lambda p: p.scenarios.__setitem__(slice(None), p.scenarios[:1]),
     # WARN rules
     "V25": lambda p: p.forge_dependencies.forge_bindings[0].modules_expected.clear(),

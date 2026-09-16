@@ -1,7 +1,7 @@
 {
   "steps": [
     {
-      "compliance_flag": "tsr_disclosure_required",
+      "compliance_flag": "NONE",
       "failure_and_escalation": "On failure signature: retry per the module's retry_vs_escalate rule, then raise an incident and halt this task. No silent partial.",
       "forge_modules": [
         "property_lookup"
@@ -23,7 +23,7 @@
       "trigger": "agent_initiated"
     },
     {
-      "compliance_flag": "tsr_disclosure_required",
+      "compliance_flag": "NONE",
       "failure_and_escalation": "On failure signature: retry per the module's retry_vs_escalate rule, then raise an incident and halt this task. No silent partial.",
       "forge_modules": [
         "comp_analysis"
@@ -89,7 +89,7 @@
       "trigger": "agent_initiated"
     },
     {
-      "compliance_flag": "recording_consent_required",
+      "compliance_flag": "NONE",
       "failure_and_escalation": "Proposal is rejected or times out: return to Buyer Network Manager with the reviewer's reason. Repeated rejection escalates to the venture operator.",
       "forge_modules": [
         "buyer_match"
@@ -111,7 +111,7 @@
       "trigger": "agent_initiated"
     },
     {
-      "compliance_flag": "recording_consent_required",
+      "compliance_flag": "NONE",
       "failure_and_escalation": "Proposal is rejected or times out: return to Buyer Network Manager with the reviewer's reason. Repeated rejection escalates to the venture operator.",
       "forge_modules": [
         "assign_contract"
