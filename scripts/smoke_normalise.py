@@ -144,7 +144,27 @@ import sys
 #:     job 104581275555   branch  0a0a41e       run 35028138055 attempt 2
 #:
 #: byte-identical, 432 lines, the same eight FAILs.
-BASELINE = "614d79e8eaacb830ed36f88e309acb5eeff5a8f1350b2607101bb6e5674a66ed"
+#:
+#: **Re-recorded 2026-09-15 for PR #148 (decisions entry 99), by the same rule.** V2 now
+#: asks each hard-bound Forge instead of reading a stored `health_status`, and the smoke
+#: world's Forges are seeded at `example.invalid` with credential refs no runner can
+#: resolve - so the demo venture now stops at Gate 0 with that reason rather than reaching
+#: Gate 2. Five intended lines, all of them that one consequence:
+#:
+#:     stopped at gate 2 (blocked)      -> stopped at gate 0 (blocked), with the reason
+#:     an unvalidated Pack says which   -> a failing Pack names the rules it fails
+#:       rules could not run
+#:     has passed gate 2                -> has passed gate 0
+#:     13 of 13 audit rows              -> 11 of 11 - the run records fewer gate results
+#:     13 fixture entries               -> 11
+#:
+#: Two runs on the same commit:
+#:
+#:     job 104615144821   branch  232b4d2       run 35039237755 attempt 1
+#:     job 104616139575   branch  232b4d2       run 35039237755 attempt 2
+#:
+#: byte-identical, 432 lines, the same eight FAILs.
+BASELINE = "b9e5233a7e7c22aae0100fb61b980800375a31515eab887046aeb86cb8825a64"
 
 _STEP_START = "##[group]Run ./scripts/console-smoke.sh"
 _STEP_END = "Process completed with exit code"
