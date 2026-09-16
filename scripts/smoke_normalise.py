@@ -204,7 +204,14 @@ import sys
 #: the old region ran on into the runner's teardown and two clean runs disagreed on 150
 #: lines of node warnings and container ids. Both previous captures still reproduce their
 #: recorded digests under the new anchors, so no red baseline moved.
-BASELINE = "b388ec34bdca4ab143a0bc403399a6e39dd84307dafca4070a47c5c51e1d54d8"
+#:
+#: **Re-recorded 2026-09-15 for PR #151 (decisions entry 103), by the same rule.** The one
+#: intended line: `all 49 event types` -> `all 50`, from `console_human_renamed` joining
+#: the glossary. Still 433 lines, still passing. Two runs on the same commit:
+#:
+#:     job 104635243838   branch  d7035bb       run 35045789682 attempt 1
+#:     job 104636111522   branch  d7035bb       run 35045789682 attempt 2
+BASELINE = "f8fb0011fc08b25bf953b509b5cbe88bc91ea6e5ecd8a52fe23676259ad90d80"
 
 _STEP_START = "##[group]Run ./scripts/console-smoke.sh"
 

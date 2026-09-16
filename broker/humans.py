@@ -401,6 +401,64 @@ async def reissue_token(conn: AsyncConnection, *, human_id: uuid.UUID) -> str:
     return plaintext
 
 
+async def rename(
+    conn: AsyncConnection, *, human_id: uuid.UUID, display_name: str
+) -> tuple[str, str]:
+    """Change an account's display name. Returns (old, new).
+
+    **A display name is a key in practice, and this is the only path that may change
+    one.** Two Packs name their reviewers by display name, and two joins read those names
+    against this column: the access overview's missing-people list, and the approvals page
+    attaching a reviewer's decisions. Renaming moves what both resolve to, so it is an act
+    with consequences elsewhere rather than a cosmetic edit - which is why it returns the
+    old name for the caller to audit rather than quietly succeeding.
+
+    **It does not rewrite history, deliberately.** `provisioning_gate_result.reason` holds
+    "reviewed by <name>: ..." frozen at signing, evidence blobs hold the name a Pack
+    declared, `audit_log` is hash-chained, and published Pack versions are immutable. An
+    attestation records what was true when it was made; a rename that edited those would
+    be changing what somebody attested to. The account will disagree with its own trail,
+    and that is the correct outcome rather than a defect to paper over.
+
+    A name another account already uses is refused here with a message naming the holder,
+    and refused again by `ux_human_display_name` (migration 0040) if this check is ever
+    bypassed. Comparison is strip+lower, matching how the access overview compares.
+    """
+    new_name = display_name.strip()
+    if not new_name:
+        raise NotAuthorized("a display name cannot be blank", human_id=str(human_id))
+
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT display_name FROM office_human WHERE human_id = %s", (human_id,)
+        )
+        row = await cur.fetchone()
+        if row is None:
+            raise NotAuthorized("no such human", human_id=str(human_id))
+        old_name = row["display_name"]
+
+        await cur.execute(
+            "SELECT human_id, display_name FROM office_human "
+            "WHERE lower(trim(display_name)) = lower(%s) AND human_id <> %s",
+            (new_name, human_id),
+        )
+        clash = await cur.fetchone()
+        if clash is not None:
+            raise NotAuthorized(
+                f"{clash['display_name']!r} is already another account's display name "
+                f"({str(clash['human_id'])[:8]}). Two accounts with one name are two "
+                "accounts the Packs' name matching cannot tell apart.",
+                human_id=str(human_id),
+            )
+
+        await cur.execute(
+            "UPDATE office_human SET display_name = %s WHERE human_id = %s",
+            (new_name, human_id),
+        )
+    await conn.commit()
+    return old_name, new_name
+
+
 async def get_human(conn: AsyncConnection, human_id: uuid.UUID) -> Human | None:
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(

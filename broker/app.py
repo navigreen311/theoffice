@@ -86,7 +86,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0039"
+EXPECTED_SCHEMA_REVISION = "0040"
 
 # `live_grants` means "a grant no live revocation covers". The four-scope rule that
 # decides that has exactly one copy - `revocation._covers`, the same text
@@ -2770,6 +2770,45 @@ async def reissue_human_token(
     return {
         "token": token,
         "note": "Shown once. The previous token stopped working when this was issued.",
+    }
+
+
+class RenameHumanRequest(BaseModel):
+    display_name: str = Field(min_length=1)
+
+
+@app.post("/api/humans/{human_id}/name")
+async def rename_human(
+    human_id: uuid.UUID, body: RenameHumanRequest, conn: DB, me: ME
+) -> dict[str, str]:
+    """Change an account's display name. `ivan` only, including your own.
+
+    **Not "your own, or anyone's with `ivan`", which is how token reissue is scoped.** A
+    token rotation affects only the person holding it. A display name is what two Packs
+    call their reviewer and what two joins match on, so renaming yourself moves what
+    somebody else's Pack resolves to - which makes it a portfolio act rather than a
+    personal one.
+
+    The old name is in the audit event, because an event saying only what a name became
+    cannot answer "who was Ivan in September".
+    """
+    humans.authorize(me, required_role="ivan")
+
+    old_name, new_name = await humans.rename(
+        conn, human_id=human_id, display_name=body.display_name
+    )
+    await _audit_human_action(
+        me, "console_human_renamed",
+        {"human_id": str(human_id), "from": old_name, "to": new_name},
+    )
+    return {
+        "human_id": str(human_id),
+        "from": old_name,
+        "to": new_name,
+        "note": (
+            "Earlier gate reasons, evidence and published Packs keep the old name. They "
+            "record what was true when they were written."
+        ),
     }
 
 

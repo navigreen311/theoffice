@@ -23,7 +23,11 @@ cd "$ROOT"
 API_PORT="${API_PORT:-8080}"
 CONSOLE_PORT="${CONSOLE_PORT:-3100}"
 OPERATOR_EMAIL="${OPERATOR_EMAIL:-ivannextlevel@yahoo.com}"
-OPERATOR_NAME="${OPERATOR_NAME:-Ivan}"
+# The name a NEW account is created with, and nothing else - this script never renames
+# an account that exists. It defaulted to "Ivan", so a wiped database would have
+# recreated the operator under the old spelling and silently undone a rename nobody
+# would have thought to re-check. See decisions entry 103.
+OPERATOR_NAME="${OPERATOR_NAME:-Ivan Green}"
 
 BUILD=1
 STOP=0
@@ -236,6 +240,10 @@ async def main() -> None:
                 subject={"email": email, "role": "ivan", "via": "dev-up"},
             )
         else:
+            # `name` is deliberately not applied here. An account that exists keeps the
+            # name it has: renaming is `humans.rename`, which refuses a name another
+            # account holds and writes an audit event naming both - and a dev script
+            # quietly restating a default would be a rename with neither.
             human_id = row[0]
             token = await humans.reissue_token(conn, human_id=human_id)
             await audit.write_event(
