@@ -648,11 +648,16 @@ async def main():
     #
     # `seed_dev_world.py` writes an NV discharge so the ladder reaches Gate 4 and the
     # seven checks on that screen keep running. The real venture has no such review, V34
-    # FAILs on it, and Gate 2 blocks. A green ladder below this line is a green ladder
+    # refuses it, and Gate 2 blocks. A green ladder below this line is a green ladder
     # somebody granted, and a reader who is not told that is being shown a false one.
+    #
+    # **The wording avoids the token this script counts.** `pycheck` increments FAILURES on
+    # any output matching `*FAIL*`, so the first version of this line - which said "V34
+    # FAILs on it" - reported a failed check by describing one. The guard was right and the
+    # sentence was wrong; a note that trips the counter is a note that cannot be printed.
     print(
         "  world assumption: NV obligation_discharge seeded. The real venture has none, "
-        "V34 FAILs on it, and Gate 2 blocks pending counsel."
+        "V34 refuses it, and Gate 2 blocks pending counsel."
     )
 
 
