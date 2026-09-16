@@ -677,42 +677,72 @@ def v27(pack: BusinessPack) -> tuple[bool, str]:
 async def _v2_bridge_operational(
     conn: AsyncConnection, pack: BusinessPack
 ) -> tuple[bool, str]:
-    """Gate 0. A Pack that declares a Forge is bridged proves nothing.
+    """Gate 0. A Pack that declares a Forge is bridged proves nothing - **and neither did
+    this rule, until it asked.**
 
-    Operational means: registered, health not RED, and a tenant credential exists.
-    All three, because a Forge with no credential is a Forge the broker cannot
-    authenticate to however healthy it looks.
+    **It used to read `forge_registry.health_status` and return.** No request was sent.
+    Nothing in the repository has ever WRITTEN that column outside a migration and test
+    fixtures, so every row held whatever created it, forever: entry 37 recorded it as *"a
+    row written once stays GREEN forever; `last_health_check` records when somebody looked
+    and nothing consults it."* Measured on 15 September 2026, three of the four registered
+    Forges were genuinely reachable and the fourth - VoiceForge, at `https://example.invalid`
+    with no credential at all - also read GREEN. The stored value agreed with the world by
+    luck, and had disagreed with it two days earlier when CapitalForge's port was refusing.
+
+    **Now it asks.** `forge_modules.read` is the same authenticated manifest call V32 and
+    `verify_forge_modules.py` make: it resolves the registration, resolves the tenant
+    credential, and does `GET {base_url}/_modules` under the Forge's own auth model. A
+    Forge that answers is operational. There is no new per-Forge call and no new
+    credential path.
+
+    **"Could not ask" is not a pass, and here it is not a NOT_RUN either.** Ivan's ruling
+    of 15 September: Gate 0 blocks when a Forge cannot be checked. V32 answers the same
+    unreachability with NOT_RUN and is right to - it asks whether declared modules are
+    dispatched, and an unasked Forge leaves that unknown. Gate 0 asks whether the bridge
+    reaches the Forge at all, and unreachable IS the answer to that question rather than
+    the absence of one. So this returns FAIL with the reason, per Forge, named.
+
+    Three reasons are distinguished because they are three different jobs: a missing
+    registration is a row somebody has to write, a missing credential is a secret somebody
+    has to provision, and an unreachable endpoint is a service somebody has to start.
+    `health_status = 'RED'` still blocks: nothing writes it today, but a human writing it
+    deliberately is a human taking a Forge out of service, and that must not need a
+    restart of this reasoning to be honoured.
     """
+    from broker import forge_modules
+
     hard = [b.forge for b in pack.forge_dependencies.forge_bindings if b.criticality == "hard"]
     if not hard:
         return True, "no hard bindings"
 
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
-            """
-            SELECT r.forge_id, r.health_status, c.credential_ref
-            FROM forge_registry r
-            LEFT JOIN forge_tenant_credential c ON c.forge_id = r.forge_id
-            WHERE lower(r.forge_id) = ANY(%s)
-            """,
+            "SELECT forge_id, health_status FROM forge_registry "
+            "WHERE lower(forge_id) = ANY(%s)",
             ([f.lower() for f in hard],),
         )
-        rows = {r["forge_id"].lower(): r for r in await cur.fetchall()}
+        health = {r["forge_id"].lower(): r["health_status"] for r in await cur.fetchall()}
 
-    unreached = []
+    unreached: list[str] = []
+    answered: list[str] = []
     for forge in hard:
-        row = rows.get(forge.lower())
-        if row is None:
-            unreached.append(f"{forge}: not in forge_registry")
-        elif row["health_status"] == "RED":
-            unreached.append(f"{forge}: health RED")
-        elif row["credential_ref"] is None:
-            unreached.append(f"{forge}: no tenant credential")
+        if health.get(forge.lower()) == "RED":
+            # Deliberate: somebody marked it out of service. Not probed, because a
+            # service answering does not overrule a human withdrawing it.
+            unreached.append(f"{forge}: health RED in forge_registry")
+            continue
+
+        answer = await forge_modules.read(conn, forge)
+        if isinstance(answer, forge_modules.Unread):
+            unreached.append(f"{forge}: {answer.reason}")
+        else:
+            answered.append(f"{forge} answered via {answer.method}")
 
     return (not unreached,
             f"bridge not operational: {_join(unreached)}. Gate 0 blocks provisioning "
-            "against a Forge the bridge does not reach." if unreached
-            else f"bridge operational for {_join(hard)}")
+            "against a Forge the bridge does not reach; a Forge that cannot be asked is "
+            "not a Forge that passed." if unreached
+            else f"bridge operational: {_join(answered)}")
 
 
 async def _v6_modules_resolve(conn: AsyncConnection, pack: BusinessPack) -> tuple[bool, str]:

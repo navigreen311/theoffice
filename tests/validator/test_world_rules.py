@@ -182,10 +182,61 @@ def author_instructions(conn: psycopg.Connection, modules: tuple[str, ...]) -> N
 
 # --------------------------------------------------------------------------- V2
 
-async def test_gate_0_passes_when_every_hard_forge_is_bridged(greenstone, bridged_world):
+async def test_gate_0_passes_when_every_hard_forge_answers(
+    greenstone, bridged_world, admin, monkeypatch
+):
+    """V2 asks the Forge now, so a registered row is no longer enough to pass.
+
+    `dispatch_from_registry` is what stands the adapters up - the same fixture V32 uses,
+    for the same reason. A world built only in the database leaves both rules unable to
+    ask, which is now a Gate 0 block rather than a stored GREEN.
+    """
+    from tests.world import dispatch_from_registry
+
+    dispatch_from_registry(admin, monkeypatch)
+
     async with connection() as conn:
         report = await validate(greenstone, conn)
-    assert report.get("V2").verdict is Verdict.PASS
+
+    v2 = report.get("V2")
+    assert v2.verdict is Verdict.PASS
+    assert "answered via" in v2.message, "a pass must say it asked, and how"
+
+
+async def test_gate_0_blocks_a_forge_that_cannot_be_reached(
+    greenstone, bridged_world, admin, monkeypatch
+):
+    """Ivan's ruling of 2026-09-15: could not ask is not a pass.
+
+    The registry row is present, healthy and credentialed - exactly the state that
+    passed before this rule sent a request. The endpoint refuses the connection, and
+    that is the whole difference. Port 1 is reserved and refuses immediately, so this
+    exercises the real HTTP path without waiting out a timeout.
+
+    **The token is set here rather than assumed.** The world's credential ref is
+    `env://CRE_FORGE_TOKEN`, which resolves on a developer machine that has an `.env`
+    and does not on a runner - so without this the refusal would be "credential
+    unavailable" in CI and "unreachable" locally, and the test would assert whichever
+    one the author happened to see. It failed in CI for exactly that reason.
+    """
+    monkeypatch.setenv("CRE_FORGE_TOKEN", "not-a-secret-but-it-resolves")
+
+    with admin.cursor() as cur:
+        cur.execute(
+            "UPDATE forge_registry SET base_url = 'http://127.0.0.1:1' "
+            "WHERE forge_id = 'cre-forge'"
+        )
+    admin.commit()
+
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+
+    v2 = report.get("V2")
+    assert v2.verdict is Verdict.FAIL
+    assert "cre-forge" in v2.message
+    assert "unreachable" in v2.message, "the reason has to name what went wrong"
+    assert "not a Forge that passed" in v2.message
+    assert not report.passed, "Gate 0 must block on a Forge nobody could ask"
 
 
 async def test_gate_0_blocks_an_unregistered_forge(greenstone, bridged_world, admin):
@@ -205,7 +256,10 @@ async def test_gate_0_blocks_a_forge_with_no_tenant_credential(
     greenstone, bridged_world, admin
 ):
     """Healthy is not the same as reachable. A Forge with no credential is one the
-    broker cannot authenticate to, however green its health looks."""
+    broker cannot authenticate to, however green its health looks.
+
+    Since V2 probes, this is also the case that must not reach the network: there is
+    nothing to authenticate with, so the refusal comes before any request."""
     with admin.cursor() as cur:
         cur.execute("DELETE FROM forge_tenant_credential WHERE forge_id = 'cre-forge'")
     admin.commit()
@@ -229,12 +283,15 @@ async def test_gate_0_blocks_a_red_forge(greenstone, bridged_world, admin):
     assert "RED" in report.get("V2").message
 
 
-async def test_gate_0_ignores_a_soft_forge(greenstone, bridged_world, admin):
+async def test_gate_0_ignores_a_soft_forge(greenstone, bridged_world, admin, monkeypatch):
     """VoiceForge is `soft`. Losing it degrades outreach; it does not block
     provisioning, and Gate 0 says 'hard binding' for exactly this reason."""
+    from tests.world import dispatch_from_registry
+
     with admin.cursor() as cur:
         cur.execute("DELETE FROM forge_tenant_credential WHERE forge_id = 'voiceforge'")
     admin.commit()
+    dispatch_from_registry(admin, monkeypatch)
 
     async with connection() as conn:
         report = await validate(greenstone, conn)

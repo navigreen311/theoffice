@@ -35,6 +35,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `scripts/console-smoke.sh` all check it; `bootstrap.sh` and CI set it on the databases they
   create. Five tests, including one that refuses the real development DSN.
 
+### Changed
+- **Gate 0's V2 asks each hard-bound Forge instead of reading a stored health value**
+  (decisions entry 99). It now calls `forge_modules.read` - the authenticated
+  `GET /_modules` that V32 and `verify_forge_modules.py` already use - and a Forge that
+  answers passes. Nothing in the repository ever wrote `health_status` outside a migration
+  and test fixtures, so the column held whatever created it: on 15 September three of four
+  Forges were genuinely reachable and VoiceForge, at `example.invalid` with no credential,
+  also read GREEN. **A Forge that cannot be reached, has no credential or is not registered
+  now blocks, and V2 names which and why** - per Ivan's ruling, "could not ask" is not a
+  pass at Gate 0. A deliberate `health_status = 'RED'` still blocks without being probed.
+
 ### Fixed
 - **`scripts/bootstrap.sh` can create a test database again.** Its name extraction held a
   literal control byte where `\1` belonged, so the name came out empty and `CREATE DATABASE ""`

@@ -234,8 +234,19 @@ async def test_blocked_names_the_gate_and_the_specific_blocker(
     assert all(p["state"] == "todo" for p in venture["phases"][1:])
 
 
-async def test_a_bridged_venture_is_no_longer_blocked_at_gate_zero(world, api):
-    """The other direction. A rule that only ever fails is an outage."""
+async def test_a_bridged_venture_is_no_longer_blocked_at_gate_zero(
+    world, api, monkeypatch
+):
+    """The other direction. A rule that only ever fails is an outage.
+
+    `world` builds the bridge in the database; since V2 probes, that is no longer
+    enough to clear Gate 0 - the adapters have to answer. `dispatch_from_registry`
+    is what stands them up, the same fixture the validator and provisioning suites
+    use.
+    """
+    from tests.world import dispatch_from_registry
+
+    dispatch_from_registry(world, monkeypatch)
     token = await make("Officer", "compliance_officer")
     await publish_greenstone()
 
