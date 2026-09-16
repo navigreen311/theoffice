@@ -7587,3 +7587,152 @@ against today's development database it would delete all 18 certifications, all 
 instructions and both Greenstone grants, then re-register cre-forge and simforge at
 `https://example.invalid` and rewrite every module row to `is_mutating = TRUE` - re-introducing the
 exact `property_lookup` error the verifier was built to catch.
+
+---
+
+## 96. Five more Greenstone rulings, measured: the consent move rests on a call nobody can place
+
+**Ruled 2026-09-15 by Ivan. Recorded, not built.** Premises measured per entry 91.
+
+### 1. `recording_consent_required` moves off Buyer Network Manager to a founder-held obligation
+
+**The move is expressible. Its stated destination is not, and its stated subject does not exist.**
+
+    the human_held move        EXPRESSIBLE today. `market.compliance_surface[].human_held`
+                               with `why`, optionally `pending_activation`. V22 then counts
+                               the flag accounted for; V34 fails until a named human files an
+                               `obligation_discharge` covering NV.
+    "recorded in the console's  DOES NOT HOLD. Module 1.5 is Consent & Authorization Center
+    consent module"            and owns buyer PACKET authorisation only. Contact permission
+                               is 4.4: `ConsentKind = opt_in | opt_out`, `ConsentMethod`
+                               including `verbal_recorded` - which is how a consent was
+                               obtained, not consent to be recorded. No field anywhere
+                               records consent to record: 4.3's `CallRecord` has
+                               `contactPermitted` and no recording-consent field.
+    "captured at buyer         DOES NOT HOLD. There is no buyer onboarding flow: `onboard`
+    onboarding"                appears in no TypeScript file in the console's packages.
+    "the position dials"       DOES NOT HOLD, and this is the sharper one. **No agent of any
+                               venture can place or record a call today.**
+                               `voiceforge/place_call` is `forbidden` in
+                               `forge_module_exclusion` behind a live BEFORE INSERT trigger,
+                               no Pack declares a call module, there are zero call grants, and
+                               VoiceForge has no Office adapter and no credential. Buyer
+                               Network Manager operates `cre-forge/buyer_match` and
+                               `cre-forge/assign_contract`, neither of which calls anybody.
+
+**A seam worth naming:** `voiceforge/transcribe_call` is still a registry row, is NOT excluded, and
+has no grant. A future grant would insert cleanly and fail at dispatch rather than at authorisation.
+
+**The console module numbers are the blueprint's, and the code agrees.** 5.3 Deal Underwriting
+Workspace, 2.4 Human Approval Console, 1.5 Consent & Authorization Center, each carried as a
+`MODULE` constant in its package. **The spec numbers none of them** - its own 5.3 is "Workflow
+Engine architecture", an unrelated section, and it has no 1.5 or 2.4 at all.
+
+### 2. Assignment approval may be waived, and the Board reviews waived events
+
+**The Compliance Review Board is WEEKLY.** Three sources say so and none says monthly:
+
+    specifications-v1 §7.1   "...on a weekly cadence"
+    specifications-v1 §7.2   "Compliance Review Board -- weekly review of high-signal issues"
+    blueprint-v1             "Weekly Compliance Review Board updates"
+
+The quarterly figure belongs to a different body, the §5.4 Deal Product Governance Board - and that
+one is the only cadence any code enforces (a 90-day sweep). **The Board exists in code as a record,
+not a cycle:** a `BoardReview` model whose open/activate/close functions have no API route, and the
+module doc says the weekly cadence is "a practice this module records rather than one it enforces".
+So "the Board reviews waived events" is a practice to be performed, with somewhere to write it down.
+
+### 3. The Office is the approval authority; the console's queue becomes a view onto it
+
+**Both halves need building, and neither surface can express the other's items today.**
+The Office's proposals are agent-originated - `proposal.office_agent_id` is not nullable, `decide`
+requires `venture_operator` or stronger, and there is no route by which a console raises a
+human-authored item. The console's own `ApprovalKind` has four kinds and deliberately excludes LOI,
+PSA and Assignment Agreement as "things that cannot yet be created".
+
+### 4. Real daily hours, and what Gate 4.5 does with them
+
+**Burkham today PASSES: 80 approvals x 3.5 weighted minutes = 280 against 432 available.**
+
+**At the ruled hours (Ivan 1.5h, Ira 2h) Burkham FAILS:** supply 54 + 72 = 126 minutes, demand
+80 x 3.43 = 274, **2.2 times over**.
+
+**The volume that would pass: 36.75 approvals a day, which is 4 of today's 10 (step, holder, module)
+units - 40% of the workflow.** Demand only moves in multiples of 8, so 4 units pass and 5 fail.
+
+**Greenstone fails in every configuration, and Ivan's hours do not enter it at all:**
+
+    Pack as declared (Ivan 6h/4min, Ira 2h/10min)   640 needed against 72      9x over
+    all ruled hours (Ivan 4h, Ira 2h, 10 min)       640 against 72             9x over
+    review hours only (Ivan 1h, Ira 1h, 10 min)     640 against 36            18x over
+
+Every one of the 64 projected approvals routes to `compliance_officer`; `venture_operator` receives
+none, so **Ivan's declared hours change no verdict**. At 10 minutes an item, Greenstone passes only
+at zero units.
+
+**The schema can count 2 of the 6 ruled Greenstone hours, and only 1 of them matters.**
+`coverage_hours` is review coverage and there is no field for anything else, so Ivan's 2h
+underwriting and 1h of calls, and Ira's 1h countersign, have nowhere to go: declaring them asserts
+review supply that is not review. A three-way split needs fields on `HumanCapacity` (which forbids
+extra keys), both V13s rewritten - Gate 2's sums coverage, Gate 4.5's weights by it - a decision on
+whether countersigns generate demand at all (today nothing projects them), then the Pack template,
+three Pack files, the validator docs and the golden tests.
+
+**A cross-venture hours rule is buildable and is not sound yet.** It would be a world rule (V39 -
+V35 to V37 are reserved), reading live Packs through a new `broker.packs` accessor, plus a declared
+daily total on `HumanCapacity`; no migration if the total lives on the Pack. **The obstacle is
+identity:** Packs name people by display-name string, and the first person such a rule would refuse
+is spelled "Ivan Green" in Burkham's Pack and "Ivan" in Greenstone's. A name-keyed sum sees two
+people. `office_human.display_name` carries no unique index, so the sound key is `human_id`, which
+the Pack has no way to name.
+
+### 5. Order of work
+
+Foundation (seed guard, real Gate 0 health, real library files), then Ira's access everywhere, then
+the Pack batch. **The seed guard is built and is entry 97.** The other two are sized in the report
+that accompanies this entry: V2's live probe needs no new per-Forge call - `broker/forge_modules.py`
+already does authenticated manifest reads with an "unread" result - and the two Greenstone library
+entries need one new file, `packs/compliance-library/greenstone.yaml`, and a loader run.
+
+---
+
+## 97. The dev seed refuses any database that is not marked disposable
+
+**Built 2026-09-15, first item of the foundation ordered in entry 96.** Entry 95 measured what
+`build_world` would do to the development database. This is the refusal.
+
+### What is refused, and why
+
+`build_world` calls `teardown_world` first, and those deletes are not scoped to the fixture's own
+rows: **every** row of `certification`, **every** row of `forge_operating_instruction`, every
+proposal belonging to any agent identity, and three Forges' registry, credential and module rows.
+Its callers guarded it on what the database CONTAINS - `dev-up.sh` seeds when `forge_registry` is
+empty, `console-smoke.sh` when `/api/forges` returns `[]` - and **never on which database it is**.
+
+### The marker is in the database, not in the environment
+
+    ALTER DATABASE theoffice_test SET office.disposable_world = 'theoffice_test';
+
+**The value must equal the database's own name.** A name rule (`*_test`) was the obvious check and
+is wrong twice: CI runs the suite against a database called `theoffice`, and a rule about spelling
+is passed by anything spelled that way. An environment variable is worse - the caller sets it, and
+the caller is what is already wrong when this fires. A marked database restored under another name
+is not marked; a marker copied between environments names the wrong database and refuses.
+
+Both `build_world` and `teardown_world` check it, because fixtures call the second directly.
+`seed_dev_world.py` checks it again before anything is printed, so the refusal names the script the
+operator ran. `console-smoke.sh` checks it over `OFFICE_ADMIN_DSN` - the DSN the seed actually
+writes through, which is not the one its emptiness check reads.
+
+Five tests: an unmarked database is refused, a marker naming another database is refused, both entry
+points refuse, the refusal names the database and the statement that fixes it, and - the one that
+would have caught this - **the real development DSN out of `.env` is refused**, read from the file
+because `conftest` overwrites the environment variable with the test DSN.
+
+### A defect found on the way
+
+`bootstrap.sh`'s test-database branch could never have run to completion. Its database-name
+extraction had a **literal control byte where `\1` belonged**, so the name came out empty, the
+existence check matched nothing, and `CREATE DATABASE ""` failed the script under `set -e`. An
+escaping artefact, the same class as the one that hit `dev-up.sh` in entry 91, found because this is
+the branch that now has to write the marker. Fixed, and it marks the database it creates.

@@ -19,6 +19,11 @@ It is idempotent by deletion: it clears the world it owns before rebuilding it, 
 running it twice leaves the same state. That clearing includes **all** certifications
 and instructions, which is safe in a scratch database and is not safe anywhere else.
 
+**So it refuses every database that does not carry the disposable marker** - the
+database-level setting `office.disposable_world`, whose value must be the database's own
+name. `tests.world.assert_disposable` holds the reasoning; decisions entry 95 holds what
+this script would have done to the development database before the marker existed.
+
     .venv/Scripts/python scripts/seed_dev_world.py
 """
 
@@ -37,6 +42,8 @@ from generators.pack import load_pack  # noqa: E402
 from tests.world import (  # noqa: E402
     PACK_PATH,
     ROSTER,
+    NotADisposableDatabaseError,
+    assert_disposable,
     build_world,
     certify_for_positions,
 )
@@ -87,6 +94,14 @@ def main() -> int:
         return 1
 
     with psycopg.connect(dsn) as conn:
+        # Refused here as well as inside `build_world`, so the message arrives before
+        # anything else is printed and names the script the operator actually ran. The
+        # check itself has one definition (decisions entry 95).
+        try:
+            assert_disposable(conn)
+        except NotADisposableDatabaseError as refusal:
+            print(f"refusing to seed: {refusal}", file=sys.stderr)
+            return 1
         build_world(conn)
         certify_for_positions(conn)
         venture = register_budget(conn)

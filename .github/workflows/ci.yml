@@ -121,6 +121,27 @@ jobs:
       - name: Migrations
         run: python -m alembic upgrade head
 
+      # `tests/world.py` refuses a database that does not carry this marker, because
+      # building the world deletes every certification and every operating instruction in
+      # it (decisions entry 95). A runner's database is disposable by construction; it is
+      # marked here rather than assumed, because "is this a throwaway database" is not a
+      # question a name or an environment variable can answer.
+      - name: Mark the database disposable
+        run: |
+          python - <<'PY'
+          import os
+          import psycopg
+          from psycopg import sql
+          with psycopg.connect(os.environ["OFFICE_ADMIN_DSN"], autocommit=True) as conn:
+              name = conn.execute("SELECT current_database()").fetchone()[0]
+              conn.execute(
+                  sql.SQL("ALTER DATABASE {} SET office.disposable_world = {}").format(
+                      sql.Identifier(name), sql.Literal(name)
+                  )
+              )
+              print(f"marked {name} disposable")
+          PY
+
       - name: Ledger partitions
         # bootstrap.sh does this for local development. A DEFAULT partition exists, so
         # nothing breaks without them — which is exactly why CI should create them too:
@@ -365,6 +386,25 @@ jobs:
 
       - name: Migrations
         run: python -m alembic upgrade head
+
+      # The smoke script seeds a development world when the registry is empty, and the
+      # seed refuses a database that is not marked disposable. Same reasoning as the
+      # Tests job: marked, not assumed.
+      - name: Mark the database disposable
+        run: |
+          python - <<'PY'
+          import os
+          import psycopg
+          from psycopg import sql
+          with psycopg.connect(os.environ["OFFICE_ADMIN_DSN"], autocommit=True) as conn:
+              name = conn.execute("SELECT current_database()").fetchone()[0]
+              conn.execute(
+                  sql.SQL("ALTER DATABASE {} SET office.disposable_world = {}").format(
+                      sql.Identifier(name), sql.Literal(name)
+                  )
+              )
+              print(f"marked {name} disposable")
+          PY
 
       # No .env on a runner. The script reads one when it exists and falls back to the
       # environment when it does not, which is why these are the workflow-level values
