@@ -24,6 +24,7 @@ cd "$ROOT"
 API_PORT="${API_PORT:-8091}"
 CONSOLE_PORT="${CONSOLE_PORT:-3001}"
 VILLAGE_PORT="${VILLAGE_PORT:-8099}"
+FORGE_PORT="${FORGE_PORT:-8098}"
 BUILD=1
 [ "${1:-}" = "--no-build" ] && BUILD=0
 
@@ -157,6 +158,7 @@ cleanup() {
   kill_port "$API_PORT"
   kill_port "$CONSOLE_PORT"
   kill_port "$VILLAGE_PORT"
+  kill_port "$FORGE_PORT"
   rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -205,6 +207,25 @@ if ! wait_for "http://127.0.0.1:$VILLAGE_PORT/api/org/departments" "the stub Vil
 fi
 say "$(head -1 "$WORK/village.log")"
 export VILLAGE_BASE_URL="http://127.0.0.1:$VILLAGE_PORT"
+
+step "Forges to ask at Gate 0"
+# Since entry 99, V2 asks each hard-bound Forge rather than reading a stored health
+# value, and a Forge that cannot be asked blocks Gate 0. The seeded world points at
+# example.invalid with credential refs a runner does not have, so every run stopped
+# at Gate 0 and eleven checks below the ladder had nothing to render - the same shape
+# that made the stub Village necessary.
+#
+# These tokens are fake and are meant to be: what they have to do is RESOLVE, which
+# is the half the smoke world was missing. The stub reads them and does nothing with
+# them.
+export CRE_FORGE_TOKEN="${CRE_FORGE_TOKEN:-stub-forge-not-a-secret}"
+export SIMFORGE_TOKEN="${SIMFORGE_TOKEN:-stub-forge-not-a-secret}"
+export VOICEFORGE_TOKEN="${VOICEFORGE_TOKEN:-stub-forge-not-a-secret}"
+("$VPY" scripts/stub-forge.py "$FORGE_PORT" >"$WORK/forge.log" 2>&1 &)
+if ! wait_for "http://127.0.0.1:$FORGE_PORT/cre-forge/_modules" "the stub Forges" "$WORK/forge.log" 30; then
+  die "the stub Forges did not start"
+fi
+say "$(head -1 "$WORK/forge.log")"
 
 "$VPY" -m broker serve --port "$API_PORT" >"$WORK/api.log" 2>&1 &
 # /api/health requires a bearer token, so it answers 401 before a token exists. `curl
@@ -425,6 +446,28 @@ PY
 else
   say "the Forge registry is not empty"
 fi
+
+# The seed registers every Forge at https://example.invalid, which is correct for a
+# world with no Forges in it and is not something Gate 0 can ask. Point the rows at the
+# stub started above. Done here rather than in the seed because the seed describes the
+# world; which address answers for it is this script's business, and `dev-up.sh` has
+# real Forges on real ports.
+"$VPY" - "$OFFICE_ADMIN_DSN" "$FORGE_PORT" <<'PY' | sed 's/^/  /'
+import sys
+import psycopg
+
+dsn, port = sys.argv[1], sys.argv[2]
+with psycopg.connect(dsn) as conn, conn.cursor() as cur:
+    cur.execute(
+        "UPDATE forge_registry SET base_url = 'http://127.0.0.1:' || %s || '/' || forge_id "
+        "WHERE base_url LIKE '%%example.invalid%%'",
+        (port,),
+    )
+    moved = cur.rowcount
+    conn.commit()
+print(f"{moved} Forge(s) now answer on 127.0.0.1:{port}" if moved
+      else "the Forge rows already point somewhere real")
+PY
 
 step "Seed a Pack if there is none"
 # Without this the two new screens are skipped, and a check that quietly skips reports
