@@ -109,7 +109,10 @@ def main() -> int:
     server = HTTPServer(("127.0.0.1", port), Handler)
     print(
         f"stub Forge on {port}: "
-        + ", ".join(f"{f} ({len(m)} modules)" for f, m in sorted(SERVED.items())),
+        + ", ".join(
+            f"{f} ({len(m)} module{'' if len(m) == 1 else 's'})"
+            for f, m in sorted(SERVED.items())
+        ),
         flush=True,
     )
     server.serve_forever()
