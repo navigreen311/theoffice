@@ -334,6 +334,7 @@ class ValidationReport:
 # fixtures for rules that cannot be evaluated without the Village. A literal is needed
 # here rather than `set(_WORLD_RULES)` only because the registry is defined further down.
 NEEDS_WORLD = {"V2", "V6", "V11", "V28", "V29", "V30", "V31", "V32", "V33", "V34",
+               "V39",
                "V38"}
 
 # V24 is evaluated at Gate 4.5 against appointment output, which does not exist at
@@ -369,12 +370,6 @@ RESERVED_RULE_IDS: dict[str, str] = {
            "before this table existed, so the number is already cited in writing.",
     "V36": "unallocated.",
     "V37": "unallocated.",
-    "V39": "the cross-venture hours rule - no person may be declared for more coverage "
-           "across every live Pack than a day holds. Sized in decisions entry 96 and "
-           "cited there by number, and it waits on the rename: Packs name people by "
-           "display name, and the first person it would refuse is spelled 'Ivan Green' "
-           "in Burkham's Pack and 'Ivan' in Greenstone's, so a name-keyed sum sees two "
-           "people. Reserved rather than taken by V40, because the number is in writing.",
 }
 
 _RULES: list[tuple[str, Severity, str, Callable[[BusinessPack], tuple[bool, str]]]] = []
@@ -1778,6 +1773,143 @@ async def _v34_human_held_discharged(
     return True, "; ".join(parts)
 
 
+async def _v39_cross_venture_hours(
+    conn: AsyncConnection, pack: BusinessPack
+) -> tuple[bool | None, str]:
+    """No person is declared for more hours across every live Pack than their day holds.
+
+    **The rule every hours figure in this system has been missing.** Coverage is declared
+    inside one venture's Pack and no Pack can see another, so decisions entry 94 section 5
+    could record sixteen hours a day for one person and note that nothing refuses it. This
+    is what reaches across.
+
+    KEYED BY DISPLAY NAME, WHICH IS WHY IT WAITED FOR THE RENAME
+
+        Packs name people by `human_name`, and the only thing that resolves a name to an
+        account is `office_human.display_name`, compared strip+lower - the same comparison
+        the access overview makes. Before migration 0040 two accounts could hold one name;
+        before the rename, one person held two - "Ivan Green" in Burkham's Pack and "Ivan"
+        in Greenstone's - and **a name-keyed sum saw two people, each comfortably under.**
+        Entry 96 named that as the obstacle, and it is why this rule is V39 rather than
+        something earlier.
+
+        A Pack name that resolves to no account is reported rather than silently dropped.
+        It is the access overview's `missing_people` seen from the other side: a person
+        this rule cannot find is a person whose hours it is not adding up.
+
+    A WARNING, NOT A FAILURE - AND THE TRIGGER IS RECORDED
+
+        Ruled 2026-09-16: it warns. **It becomes blocking when Burkham's Pack publishes
+        its real hours.** Burkham's live 0.10.0 carries the six-hour block copied wholesale
+        from Greenstone (B20, B21), so the numbers this rule would refuse are known to be
+        inherited rather than declared - and failing on them would block a venture on a
+        figure nobody stands behind.
+
+    WHAT IT CANNOT SEE, AND SAYS SO
+
+        A venture with no live Pack contributes nothing, because there is nowhere for its
+        hours to be declared. Entry 108 records hours for three such ventures and this rule
+        counts none of them - not because they are small, but because they are written
+        nowhere it can read.
+    """
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT venture_id, parsed FROM business_pack WHERE status = 'live'"
+        )
+        live = {r["venture_id"]: r["parsed"] for r in await cur.fetchall()}
+
+        await cur.execute(
+            "SELECT lower(trim(display_name)) AS key, display_name, daily_total_hours "
+            "FROM office_human"
+        )
+        accounts = {r["key"]: r for r in await cur.fetchall()}
+
+        await cur.execute("SELECT slug FROM venture WHERE archived_at IS NULL")
+        registered = {r["slug"] for r in await cur.fetchall()}
+
+    # The Pack in hand wins for its own venture. Validating a proposed edit should show the
+    # portfolio that edit would produce, not the one its predecessor already did.
+    per_venture: dict[str, list[dict[str, Any]]] = {
+        vid: list(parsed.get("human_capacity") or []) for vid, parsed in live.items()
+    }
+    per_venture[pack.venture_id] = [h.model_dump() for h in pack.human_capacity]
+
+    hours: dict[str, dict[str, float]] = {}
+    unsourced: dict[str, list[str]] = {}
+    for venture_id, entries in sorted(per_venture.items()):
+        for entry in entries:
+            name = (entry.get("human_name") or "").strip()
+            if not name:
+                continue
+            key = name.lower()
+            by_venture = hours.setdefault(key, {})
+            by_venture[venture_id] = by_venture.get(venture_id, 0.0) + float(
+                entry.get("coverage_hours") or 0.0
+            )
+            provenance = entry.get("provenance") or {}
+            # "Unsourced" is the B20/B21 shape: a number asserted with nothing named behind
+            # it. `basis: declared` with no `source` is exactly that. The schema permits it
+            # because an honest assertion is a real state, and this rule is where somebody
+            # is told which of the numbers it just added up are assertions.
+            source = (provenance.get("source") or "").strip()
+            if provenance.get("basis") == "declared" and not source:
+                unsourced.setdefault(key, []).append(venture_id)
+
+    # Only people this Pack names. A Greenstone report warning about somebody who appears
+    # only in Burkham would be a true statement in the wrong place.
+    named_here = {h.human_name.strip().lower() for h in pack.human_capacity}
+
+    no_pack = sorted(registered - set(live) - {pack.venture_id})
+    tail = (
+        " Ventures with no live Pack are not counted - there is nowhere for their hours "
+        "to be declared"
+        + (f"; registered without one: {_join(no_pack)}." if no_pack else ".")
+    )
+
+    problems: list[str] = []
+    for key in sorted(named_here):
+        account = accounts.get(key)
+        share = hours.get(key, {})
+        total = sum(share.values())
+        breakdown = ", ".join(f"{v} {h:g}h" for v, h in sorted(share.items()))
+
+        if account is None:
+            problems.append(
+                f"{key!r} is declared for {total:g}h across {len(share)} venture(s) "
+                f"({breakdown}) and matches no account, so nothing can say whether that "
+                "fits their day."
+            )
+            continue
+
+        who = account["display_name"]
+        declared_total = account["daily_total_hours"]
+        if declared_total is None:
+            problems.append(
+                f"{who} is declared for {total:g}h across {len(share)} venture(s) "
+                f"({breakdown}) and has declared no daily total, so this cannot be "
+                "checked. Set one through the daily-total route."
+            )
+            continue
+
+        ceiling = float(declared_total)
+        if total > ceiling:
+            flagged = sorted(unsourced.get(key, []))
+            problems.append(
+                f"{who} is declared for {total:g}h across {len(share)} venture(s) "
+                f"({breakdown}) against a declared daily total of {ceiling:g}h - "
+                f"{total - ceiling:g}h over."
+                + (
+                    f" Unsourced declarations: {_join(flagged)}."
+                    if flagged
+                    else " Every declaration behind that names a source."
+                )
+            )
+
+    if problems:
+        return False, " ".join(problems) + tail
+    return True, f"every person this Pack names fits their declared daily total.{tail}"
+
+
 async def _v38_grants_are_selectable(
     conn: AsyncConnection, pack: BusinessPack
 ) -> tuple[bool | None, str]:
@@ -1915,6 +2047,9 @@ _WORLD_RULES = {
     # reason. The gap is declared so that a DROPPED rule still shows up as one.
     "V38": (Severity.WARN, "Every grant this venture holds can be selected",
             _v38_grants_are_selectable),
+    "V39": (Severity.WARN,
+            "No person exceeds their daily total across every live Pack",
+            _v39_cross_venture_hours),
 }
 
 #: Gate 2 skips the deferred sets; `all_rule_ids` and the reports still name them, so a

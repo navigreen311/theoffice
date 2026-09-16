@@ -86,7 +86,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0040"
+EXPECTED_SCHEMA_REVISION = "0041"
 
 # `live_grants` means "a grant no live revocation covers". The four-scope rule that
 # decides that has exactly one copy - `revocation._covers`, the same text
@@ -2810,6 +2810,34 @@ async def rename_human(
             "record what was true when they were written."
         ),
     }
+
+
+class DailyTotalRequest(BaseModel):
+    hours: float = Field(gt=0, le=24)
+
+
+@app.post("/api/humans/{human_id}/daily-total")
+async def set_human_daily_total(
+    human_id: uuid.UUID, body: DailyTotalRequest, conn: DB, me: ME
+) -> dict[str, Any]:
+    """Declare a person's daily total across every venture. `ivan` only, including your own.
+
+    **Scoped like the rename beside it, and for the same reason.** This number is what V39
+    measures every venture's declared hours against, so raising your own moves whether
+    somebody else's Pack warns. That makes it a portfolio act rather than a personal one -
+    unlike a token rotation, which affects only its holder.
+
+    The previous value is in the audit event. A number that decides a warning is a number
+    somebody should be able to ask "what was it before" about.
+    """
+    humans.authorize(me, required_role="ivan")
+
+    old, new = await humans.set_daily_total(conn, human_id=human_id, hours=body.hours)
+    await _audit_human_action(
+        me, "console_human_daily_total_set",
+        {"human_id": str(human_id), "from": old, "to": new},
+    )
+    return {"human_id": str(human_id), "from": old, "to": new}
 
 
 class ResolveIncidentRequest(BaseModel):

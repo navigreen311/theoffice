@@ -445,7 +445,13 @@ budget:
   cost_alert_recipients: [ivan@greencompanies.example]
 
 human_capacity:
-  - human_name: Ivan
+  # RENAMED 2026-09-16. The account's display_name became "Ivan Green" through
+  # POST /api/humans/{id}/name, and the two move together: `human_name` and
+  # `backup_human` are the only Pack fields resolved against `office_human`, by the
+  # access overview's missing-people list and by the Approvals page attaching a
+  # reviewer's decisions. Renaming only the account would have detached this
+  # reviewer; renaming only the Pack would leave it naming nobody.
+  - human_name: Ivan Green
     role: venture_operator
     # HOURS AS RULED, 2026-09-15: four for Greenstone, split three ways.
     #
@@ -496,7 +502,7 @@ human_capacity:
     countersign_hours: 1
     other_hours: 0
     timezone: America/Los_Angeles
-    backup_human: Ivan
+    backup_human: Ivan Green
     advisory_daily_approval_ceiling: 12
     median_review_minutes: 10
     auth_method: sso_mfa

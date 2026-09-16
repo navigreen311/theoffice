@@ -57,6 +57,12 @@ EVENTS: tuple[Event, ...] = (
           "match on it - so a rename moves what those resolve to, and the name frozen "
           "into earlier gate reasons and evidence is deliberately left as it was.",
           "broker.app", CONSOLE),
+    Event("console_human_daily_total_set", "Daily total declared",
+          "How many hours a day this person has, across every venture, changed from what "
+          "to what. V39 measures every live Pack's declared coverage against this number, "
+          "so raising it is what makes somebody else's Pack stop warning - which is why "
+          "it is a portfolio act with an event rather than a field somebody edits.",
+          "broker.app", CONSOLE),
     Event("console_role_granted", "Role granted",
           "Somebody was given a role by somebody holding a stronger one.",
           "broker.app", CONSOLE),
