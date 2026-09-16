@@ -555,6 +555,7 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
         # deliberately. Rotating your own token affects only you; a display name is what
         # two Packs call their reviewer and what two joins match on, so renaming yourself
         # moves what somebody else's Pack resolves to. Entry 103.
+        "/api/humans/{human_id}/daily-total",
         "/api/humans/{human_id}/name",
         "/api/humans/{human_id}/roles",
         "/api/humans/{human_id}/status",

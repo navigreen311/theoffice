@@ -193,7 +193,7 @@ def test_every_rule_from_v1_is_implemented_with_no_gaps():
     assert everything == [f"V{i}" for i in range(1, len(everything) + 1)], (
         f"implemented {ids}, reserved {sorted(reserved)}"
     )
-    assert len(ids) == 36, "36 rules implemented"
+    assert len(ids) == 37, "37 rules implemented"
     assert len(everything) == 40, "V1..V40 all accounted for, implemented or reserved"
 
 

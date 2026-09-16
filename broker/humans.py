@@ -459,6 +459,50 @@ async def rename(
     return old_name, new_name
 
 
+async def set_daily_total(
+    conn: AsyncConnection, *, human_id: uuid.UUID, hours: float
+) -> tuple[float | None, float]:
+    """Declare how many hours a day this person has, across every venture. Returns (old, new).
+
+    **The one number a Pack cannot supply, and the reason V39 can exist.** Every hours
+    figure in this system is declared inside one venture's Pack, and no Pack can see
+    another - so Ivan Green was declared for six hours in Greenstone and six in Burkham
+    and nothing added them up. Decisions entry 94 §5 recorded sixteen a day for one person
+    and noted that no rule refuses it.
+
+    **On the account rather than in a Pack, deliberately.** A total is a fact about a
+    person. In a Pack it would be declared once per venture, and a venture could raise its
+    own founder's total to make its own check pass - which is the one thing a cross-venture
+    rule exists to stop.
+
+    Returns the old value so the caller can audit the change rather than only its result,
+    the same reason `rename` returns the old name: an event saying what a number became
+    cannot answer what it was.
+    """
+    if hours <= 0 or hours > 24:
+        raise NotAuthorized(
+            f"{hours} is not a daily total. A day holds 24 hours, and zero is an empty "
+            "field with a number in it rather than a declaration of no capacity.",
+            human_id=str(human_id),
+        )
+
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT daily_total_hours FROM office_human WHERE human_id = %s", (human_id,)
+        )
+        row = await cur.fetchone()
+        if row is None:
+            raise NotAuthorized("no such human", human_id=str(human_id))
+        old = float(row["daily_total_hours"]) if row["daily_total_hours"] is not None else None
+
+        await cur.execute(
+            "UPDATE office_human SET daily_total_hours = %s WHERE human_id = %s",
+            (hours, human_id),
+        )
+    await conn.commit()
+    return old, float(hours)
+
+
 async def get_human(conn: AsyncConnection, human_id: uuid.UUID) -> Human | None:
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(

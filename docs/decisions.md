@@ -8785,3 +8785,95 @@ Ivan's to rule on; neither is built:
 Until then **Greenstone's Gate 2 verdict is unchanged**: V34 FAILs on
 `recording_consent_required` and the Pack cannot provision. The smoke world's seeded
 discharge is a labelled fixture and is not this.
+
+---
+
+## 111. A total belongs to the person, and V39 finally has a number to compare against
+
+**Ruled 2026-09-16 by Ivan Green. Built on an open PR; nothing published, and the rename
+has not been performed on the account yet.**
+
+### 1. Daily totals across all ventures
+
+    Ivan Green   8 hours
+    Ira Green    6 hours
+
+**A total belongs to the person, not to a venture's Pack.** Put in a Pack it would be
+declared once per venture, and the rule would believe whichever it read first - the shape
+B24 is about, where a gate verdict turned on YAML order. Worse: a venture could raise its
+own founder's total to make its own check pass, which is the one thing a cross-venture rule
+exists to stop.
+
+So it lives on `office_human`, migration 0041, nullable - **NULL means "not declared" and
+V39 says so by name.** A default would be the constant 8 one table over: a number nobody
+chose, deciding a verdict. Set only through `POST /api/humans/{id}/daily-total`, `ivan`
+only, writing `console_human_daily_total_set` with the old value and the new.
+
+### 2. V39 starts as a warning, and the trigger is recorded
+
+It names each venture's share and flags unsourced declarations. **It becomes blocking when
+Burkham's Pack publishes its real hours.**
+
+The reason is measurable: Burkham's live 0.10.0 carries the six-hour block copied wholesale
+from Greenstone's - B20 and B21, and Burkham's own YAML comment labels it INVENTED while
+Greenstone's original carries no comment at all. **Failing on those numbers would block a
+venture on a figure nobody stands behind.** The trigger is asserted in a test, not left in
+prose, because "it will become blocking" is the kind of sentence that survives the thing it
+was waiting for.
+
+### What V39 does
+
+Sums each person's declared `coverage_hours` across every **live** Pack, keyed to the
+account by `lower(trim(display_name))` - the same comparison the access overview makes -
+and compares the sum against that person's declared daily total. The Pack in hand wins for
+its own venture, so validating a proposed edit shows the portfolio that edit would produce.
+
+**Unsourced means `basis: declared` with no `source`.** That is the B20/B21 shape exactly: a
+number asserted with nothing named behind it. The schema permits it, because an honest
+assertion is a real state; V39 is where somebody is told which of the figures it just added
+up are assertions.
+
+**A Pack name matching no account is reported, not dropped.** It is the access overview's
+`missing_people` seen from the other side: a person the rule cannot find is a person whose
+hours it is not adding up - and that silence is precisely what the two spellings of Ivan
+produced.
+
+### Why this waited for the rename, and what it would have said before
+
+Entry 96 named identity as the obstacle. Measured, pinned in
+`test_two_spellings_of_one_name_are_not_two_people`:
+
+    one spelling    16h across 2 ventures against a total of 8   -> WARN
+    two spellings   8h under one name, 8h under another          -> each half under,
+                                                                    nothing reported
+
+That second line is how the two live Packs read until today: **"Ivan Green" in Burkham's,
+"Ivan" in Greenstone's.** A name-keyed sum saw two people, each comfortably within their
+day. The rename is not cosmetic; it is what makes the sum possible.
+
+### What it cannot see, and says in the message
+
+**Ventures with no live Pack are not counted - there is nowhere for their hours to be
+declared.** Entry 108 records three: MedLink Pro, Argus and Collingswood, for Ivan Green
+1h + 1h + 0.5h and Ira Green 1h + 0.5h + 0.5h.
+
+**The message names the category and the registered-without-a-Pack instances it can read,
+and does not hard-code those three names.** A validator carrying a list of venture names
+in its source is a list that goes stale silently - and Argus is not even registered
+(entry 92: `broker/ventures.py` holds greenstone, burkham-wickmont, medlink-pro,
+collingswood and `cyber`, and nothing says whether `cyber` is Argus). The instances belong
+in this entry, where they can be read with their date on them.
+
+**So the declared portfolio is 2.5h larger than anything V39 can measure for Ivan Green,
+and 2h for Ira Green.** Recorded here rather than approximated there.
+
+### Left as it was, deliberately
+
+`provenance.established_by` still reads `Ivan` in Greenstone's two capacity blocks, and
+`Ivan Green` in the volume block written today. **That is not an oversight.** It records who
+asserted a number on the day they asserted it, and entry 103 already ruled on this shape:
+*"An attestation records what was true when it was made."* The two fields resolved against
+accounts - `human_name` and `backup_human` - are the ones that moved.
+
+**Burkham's Pack needed no edit.** It has said `Ivan Green` in both fields since 8
+September, which is the disagreement that made the rename necessary rather than optional.
