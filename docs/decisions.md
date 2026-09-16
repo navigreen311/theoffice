@@ -8116,3 +8116,60 @@ database would have recreated the account under the old spelling, silently, and 
 thought to re-check. **It now defaults to "Ivan Green", and the script never renames an account that
 exists** - that is `humans.rename`'s job, which refuses a clash and writes an event, neither of which
 a default restated by a dev script would do.
+
+---
+
+## 104. One file, two answers: a missing status read as approved in one place and draft in the other
+
+**Built 2026-09-15. Two quick foundation items and one correction.**
+
+### The status default disagreed with itself
+
+`scripts/check_compliance_library.py` defaulted a missing `status` to **approved**;
+`scripts/load_compliance_library.py` and `broker/knowledge.py` default it to **draft**, and migration
+0039's column does too. **So an author who omitted the field got a green line from the checker and a
+draft row in the database**, and whichever they looked at last was the answer.
+
+The checker now defaults to `draft`. Ivan's ruling is the tie-breaker: an entry no lawyer has
+reviewed must never read as settled - **silence is not approval.**
+
+**Two stale claims went with it.** `APPROVED_STATUS`'s comment argued at length that *"the fix is not
+a status column"*; 0039 added one. `AUTHORING_ONLY_FIELDS` listed four fields that never reach the
+database, and two of them now do. It is `("notes", "depends_on")`.
+
+The test asserts the checker's default and the row a file with no status actually produces. Both
+fail if either default moves.
+
+### VoiceForge's registry rows are gone
+
+    forge_registry          voiceforge, https://example.invalid, GREEN, never health-checked
+    forge_module_registry   place_call, transcribe_call - both is_mutating, both `hand`
+
+Deleted from the development database. Nothing referenced them: **zero** grants, manifest rows,
+instructions, certifications, credentials, proposals and ledger entries. The Pack binding went on
+15 September (entry 87), the credential was removed the same day, and `example.invalid` cannot
+resolve.
+
+**The founder's exclusion survives, and that was checked before the delete.**
+`forge_module_exclusion` has no foreign key to the registry, so the row forbidding
+`voiceforge/place_call` - *"no agent may initiate an outbound phone call as principal"* - is
+untouched and still refuses a grant. **That is the right way round:** the ban is a decision about
+what an agent may do, not a fact about which rows exist, and it must outlive them.
+
+This also closes a seam recorded in entry 94: `transcribe_call` was registered, **not** excluded and
+ungranted, so a future grant would have inserted cleanly and failed at dispatch rather than at
+authorisation. With no row, the foreign key refuses it first.
+
+### A correction: the "two display names" are Forge rows, not accounts
+
+Recorded because the earlier report said "fix two display names" without saying whose, and the
+natural reading was human accounts.
+
+    forge_registry.display_name      cre-forge  -> should be "CRE Forge"
+                                     simforge   -> should be "SimForge"
+
+They are the fixture's forge_id-as-name, and the canonical spellings are in `ESTATE`
+(`broker/forge_map.py:78-81`), which `capitalforge` already matches. **Neither is an account, and
+neither is Ivan's** - that rename runs in the Pack batch with the Packs, per entry 103. **Not
+changed here**, because a report that named the wrong kind of object should not then act on it
+unasked.

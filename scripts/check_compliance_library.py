@@ -44,21 +44,34 @@ from broker.compliance_quality import (
 
 TODO_MARKERS = ("todo", "tbd", "fixme", "xxx")
 
-#: The only status that may reach the database.
+#: The only status that may reach the database as ready.
 #:
-#: `status` and `notes` are AUTHORING-FILE fields. `ComplianceEntryRequest` does not
-#: declare them and Pydantic ignores unknown keys, so POSTing an entry silently drops
-#: both — which for a draft entry loses the open question that made it a draft.
-#:
-#: The fix is not a status column. A `draft` row in the live library is a row a Pack can
-#: resolve against and V28 will pass on, which is the same defect one layer over. The
-#: file is the right home: it is version-controlled, reviewable, and the open question
-#: sits next to the text it qualifies. This checker is what makes that binding — an
-#: entry whose status is not `approved` is reported not-ready and must not be loaded.
+#: **The paragraph that stood here argued the fix was not a status column, and migration
+#: 0039 added one.** `status` and `claim_provenance` are columns now, loaded from the
+#: file; V28 names an entry that resolves but is not approved, and the console renders
+#: DRAFT beside it. What survives from that argument is this checker's job: an entry whose
+#: status is not `approved` is reported not-ready.
 APPROVED_STATUS = "approved"
 
+#: What an entry with no `status` is taken to be.
+#:
+#: **It was `approved`, and the loader's default was `draft` - the same file read two
+#: ways.** An author who omitted the field got a green line here and a draft row in the
+#: database, and whichever they looked at last was the answer. The cautious direction is
+#: the ruling (entry 101): an entry nobody has approved must not read as settled, and
+#: silence is not approval. `broker/knowledge.py::author_compliance_entry` and the column
+#: default in migration 0039 both say `draft`; this is the third place, and now they
+#: agree.
+DEFAULT_STATUS = "draft"
+
 #: Fields that live in the file and never travel to the database.
-AUTHORING_ONLY_FIELDS = ("status", "notes", "depends_on", "claim_provenance")
+#:
+#: **Two of the four left.** `status` and `claim_provenance` became columns in migration
+#: 0039. `notes` and `depends_on` remain authoring-only: `notes` is prose for whoever
+#: edits the file next, and `depends_on` is checked here rather than stored, because an
+#: unmet dependency is a reason not to load an entry rather than a property of a loaded
+#: one.
+AUTHORING_ONLY_FIELDS = ("notes", "depends_on")
 
 
 def _unmet_dependencies(entry: dict[str, Any]) -> list[str]:
@@ -254,7 +267,7 @@ def check_file(path: Path) -> tuple[int, int]:
 
         result = assess(entry)
         prov = assess_provenance(entry)
-        status = str(entry.get("status", APPROVED_STATUS)).strip().lower()
+        status = str(entry.get("status", DEFAULT_STATUS)).strip().lower()
         notes = " ".join(str(entry.get("notes", "")).split())
         unmet = _unmet_dependencies(entry)
 
