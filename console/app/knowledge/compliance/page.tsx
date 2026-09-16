@@ -18,6 +18,7 @@ export const dynamic = "force-dynamic";
  */
 
 type Entry = {
+  venture_id: string;
   entry_ref: string;
   framework: string;
   jurisdiction: string;
@@ -26,7 +27,28 @@ type Entry = {
   agent_behavior_implication: string;
   escalation_trigger: string;
   citation: string;
+  status: string;
+  counsel_reviewed_at: string | null;
 };
+
+/**
+ * What an entry's own standing is, said in the list rather than left to be assumed.
+ *
+ * Until migration 0039 the table had no `status` column at all, so an entry tagged
+ * `draft_pending_claim_library_approval` in its file - written by hand, its central
+ * claim recorded by its own author as a contradiction between two artifacts, counsel
+ * review deferred - rendered here exactly like one taken from a statute. An entry no
+ * lawyer has reviewed must never read as settled.
+ */
+function standing(entry: Entry): { label: string; tone: string } | null {
+  if (entry.status !== "approved") {
+    return { label: "DRAFT", tone: "border-warn text-warn" };
+  }
+  if (!entry.counsel_reviewed_at) {
+    return { label: "NO COUNSEL REVIEW", tone: "border-line text-ink-muted" };
+  }
+  return null;
+}
 
 export default async function CompliancePage({
   searchParams,
@@ -114,9 +136,24 @@ export default async function CompliancePage({
 
         <ul className="mt-4">
           {visible.map((entry) => (
-            <li key={entry.entry_ref} className="border-t border-line py-2.5">
+            <li
+              key={`${entry.venture_id}/${entry.entry_ref}`}
+              className="border-t border-line py-2.5"
+            >
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <code className="text-ident text-ink">{entry.entry_ref}</code>
+                <span className="font-mono text-meta text-ink-muted">
+                  {entry.venture_id}
+                </span>
+                {standing(entry) && (
+                  <span
+                    className={`rounded-lg border px-2 py-0.5 font-mono text-meta ${
+                      standing(entry)!.tone
+                    }`}
+                  >
+                    {standing(entry)!.label}
+                  </span>
+                )}
                 <span className="rounded-lg border border-line bg-surface-muted px-2 py-0.5 font-mono text-meta text-ink-secondary">
                   {entry.framework}
                 </span>

@@ -7873,3 +7873,128 @@ and the ventures directory's "no longer blocked at gate zero" both built the bri
 only. They now stand the adapters up through `dispatch_from_registry`, the fixture V32 has always
 needed - which is the honest statement of what those tests were previously asserting: that rows
 existed.
+
+---
+
+## 101. Four rulings: the founder's name, a draft that says so, MFA queued, and Nevada
+
+**Ruled 2026-09-15 by Ivan.** Entry 100 is the smoke world and lands separately; this is the rest.
+
+### 1. Ivan's account display name becomes "Ivan Green", and every Pack names both founders in full
+
+**Recorded, not done.** The audit that precedes it is in the report accompanying this entry, and it
+turned up three things worth having here:
+
+- **The account and the Packs must move together.** Two joins read `human_name` against
+  `display_name`: the access overview's `missing_people`, and the Approvals page, which attaches a
+  reviewer's decisions by name. Renaming only the account detaches Greenstone's reviewer; renaming
+  only the Packs leaves the account disagreeing.
+- **There is no rename path.** `broker/humans.py` has create, grant, revoke, suspend, reinstate and
+  reissue - and no `UPDATE office_human SET display_name`. The rename is hand-run SQL on one row,
+  and therefore **writes no audit event**: the hash chain will hold no record that it happened.
+- **Eight columns keep the old spelling** and should: four Gate 4 reasons reading *"reviewed by
+  Ivan: ..."*, eighteen evidence blobs, the revocation prose, `audit_log.subject`, and 21 frozen
+  Pack versions. An attestation records what was true when it was signed.
+
+**And entry 62 is wrong where it matters.** It recorded, as a measured fact, that nothing joins
+`human_capacity.human_name` to `office_human.display_name`. That join has existed since 25 August,
+three weeks before the entry was written; the live overview reports "Ivan Green" missing for exactly
+that reason. Entry 62's conclusion - that renaming connects nothing - rests on a premise the system
+contradicts. **Recorded here rather than edited there:** the ledger is append-only and a correction
+that quietly rewrites the original loses the fact that it was believed.
+
+### 2. A library entry keeps its draft and counsel status in the database - BUILT, entry 102
+
+### 3. MFA for The Office is queued after the Pack batch
+
+Measured: **The Office has MFA in no sense.** `mfa_enrolled_at` is written by nothing - the column
+has DDL, five reads and a test asserting it stays NULL - and it is NULL in every row. Sign-in is one
+bearer token with **no expiry**, SHA-256 in `office_human.token_hash`; the console cookie is that
+same token with an 8-hour browser lifetime and there is no session table. **Nothing branches on
+`auth_method`**, so a Pack declaring `sso_mfa` for a Gate 10 signer declares an aspiration. The
+console says so in place: *"MFA not enrolled - sso_mfa is a claim, not evidence."*
+
+Enforcing it means the console cookie and the API token stop being the same thing - a session table,
+a factor table, recovery codes, enrolment routes and screens - and a decision about machine callers,
+which cannot present a second factor and should be an explicitly exempt credential class rather than
+a pretence.
+
+### 4. Nevada is all-party in The Office's library; the console's classification is a separate fix
+
+The Office's entry already says all-party, and **it is a test fixture**: seeded from `tests/world.py`
+under an author uuid matching no account, deleted by teardown, present in no file on disk.
+
+**The artifact a machine obeys is in another repo.** Burkham's console holds
+`CONFIRMED_ONE_PARTY_STATES = ['NV', 'NY', 'TX', 'AZ', 'UT']`, and its `mayRecord` matches NV,
+returns "no client consent required" and **short-circuits without reading the consent ledger**.
+Three things blunt that today and none is the rule: no route or UI calls it, capture is unbuilt, and
+Greenstone's console has no recording-consent code at all.
+
+**Burkham's library entry does not classify Nevada either way.** Its jurisdiction list is eleven
+all-party states and NV is not among them; its escalation trigger 8 names the contradiction and
+defers it. That entry is `draft_pending_claim_library_approval`, written by Ivan, never counsel
+reviewed - **which is exactly what entry 102 makes visible.**
+
+---
+
+## 102. The compliance library belongs to a venture, and a draft reads as a draft
+
+**Built 2026-09-15 on entry 101's second ruling, sized in entry 96's report.**
+
+### One venture could overwrite another's entry, and every check stayed green
+
+`compliance_library_entry` was keyed on `entry_ref` alone. Two files already recorded what that
+meant - `compliance_couplings.py` (*"a ref that resolves tells you nothing about whose it is"*) and
+the loader (*"NOTHING STRUCTURAL PREVENTS THIS. IT IS A KNOWN PROPERTY, NOT AN OVERSIGHT"*).
+
+**The key is now `(venture_id, entry_ref)`**, and three readers were scoped with it:
+
+    Gate 6      its flag query had no venture term, so ANY venture's entry explained ANY
+                venture's flag. **This is a tightening**: a gate that passed on another
+                venture's text now blocks.
+    V28         resolves per venture, and gained a THIRD verdict - REGISTERED TO ANOTHER
+                VENTURE, distinct from unloaded and unwritten because the remedy differs.
+                Reported as missing, the fastest fix is to load the other venture's file
+                under this venture's id, which is the overwrite itself.
+    the pages   the compliance overview and the venture directory keyed `has_entry` and
+                `wired` on bare refs and flags, so a framework read as covered here while
+                that venture's Gate 6 blocked on it.
+
+`_refs_on_disk` is scoped by the file's own `venture_id` for the same reason: a flat set made a
+Burkham ref answer for a Greenstone one, and the message it produced told the reader to run the
+loader.
+
+### The backfill is literal, and the first draft of it was wrong
+
+Nothing in a row says whose it is, so the two Greenstone refs are named and the other nineteen are
+Burkham's. **The first version of that list was written from memory and nine of the nineteen refs did
+not exist** - plausible names, the exact defect entry 91 is about. The list is now read out of the
+file and checked against the table, and a row the migration cannot place **stops the migration** and
+names itself rather than being assigned to Burkham by a fallback.
+
+### A draft no longer reads as settled
+
+`status`, `claim_provenance` and `counsel_reviewed_at` are columns. The files carried the first two
+all along and the table had none of them, so an entry written by hand, tagged
+`draft_pending_claim_library_approval`, read out exactly like one taken from a statute.
+
+**`status` defaults to `draft`** - in the column, the function and the loader. A default of
+`approved` would assert a review that did not happen every time somebody omitted the field.
+`counsel_reviewed_at` is the one fact no file and no loader can supply, so it is NULL until a person
+sets it, and the console renders DRAFT or NO COUNSEL REVIEW beside the entry.
+
+### The loader learns whose file it is from the file
+
+A required top-level `venture_id`, cross-checked against the filename. **Not a `--venture` flag:**
+that is the shape that makes the mistake easy, and one operator typing the wrong venture is how one
+library ends up under another's id.
+
+### The downgrade refuses rather than choosing
+
+Restoring a single key is impossible once two ventures hold one ref. **CI round-trips migrations on
+an empty database and will never meet that case**, so the downgrade raises and names the shared refs
+instead of silently dropping a venture's entry. That case has its own test, since the CI job cannot
+reach it.
+
+**Greenstone's own library entries are deliberately not added here.** The two rows it has are
+fixtures, and writing real ones is a separate change with counsel questions in it.

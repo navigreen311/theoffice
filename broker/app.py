@@ -86,7 +86,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0038"
+EXPECTED_SCHEMA_REVISION = "0039"
 
 # `live_grants` means "a grant no live revocation covers". The four-scope rule that
 # decides that has exactly one copy - `revocation._covers`, the same text
@@ -2120,8 +2120,12 @@ async def list_playbooks(
 
 
 @app.get("/api/knowledge/compliance")
-async def list_compliance_entries(conn: DB, _me: ME) -> list[dict[str, Any]]:
-    return await knowledge.compliance_entries(conn)
+async def list_compliance_entries(
+    conn: DB, _me: ME, venture_id: str | None = Query(default=None)
+) -> list[dict[str, Any]]:
+    """Every entry, or one venture's. Each carries its own `status`, so a draft an author
+    wrote by hand does not read like a statute in whatever renders this."""
+    return await knowledge.compliance_entries(conn, venture_id)
 
 
 @app.get("/api/knowledge/personas")
@@ -2310,6 +2314,7 @@ async def share_playbook_route(body: ShareRequest, conn: DB, me: ME) -> dict[str
 
 
 class ComplianceEntryRequest(BaseModel):
+    venture_id: str = Field(min_length=1)
     entry_ref: str = Field(min_length=1)
     framework: str = Field(min_length=1)
     jurisdiction: list[str] = Field(min_length=1)
@@ -2324,15 +2329,21 @@ class ComplianceEntryRequest(BaseModel):
 async def author_compliance_entry_route(
     body: ComplianceEntryRequest, conn: DB, me: ME
 ) -> dict[str, Any]:
-    """Part 6.3's six fields. The library is portfolio-wide, so authority is too.
+    """Part 6.3's six fields, for one venture's library.
 
-    Writing an entry changes what every Pack's `library_entry_ref` resolves against and
-    what Gate 6 considers explained, which is not a per-venture decision.
+    **This docstring used to read "the library is portfolio-wide, so authority is too",
+    and the first half stopped being true at migration 0039.** An entry now belongs to a
+    venture and changes what THAT venture's `library_entry_ref` resolves against and what
+    its Gate 6 considers explained. The authority is unchanged and still not per-venture:
+    a compliance officer for any venture may write any venture's entry, which is a
+    separate question from whose text is being overwritten, and the one this change was
+    not asked to settle.
     """
     humans.authorize(me, required_role="compliance_officer")
     try:
         await knowledge.author_compliance_entry(
-            conn, entry_ref=body.entry_ref, framework=body.framework,
+            conn, venture_id=body.venture_id,
+            entry_ref=body.entry_ref, framework=body.framework,
             jurisdiction=body.jurisdiction,
             applicability_rule=body.applicability_rule,
             agent_behavior_implication=body.agent_behavior_implication,
@@ -2344,7 +2355,8 @@ async def author_compliance_entry_route(
 
     await _audit_human_action(
         me, "console_compliance_entry_authored",
-        {"entry_ref": body.entry_ref, "runtime_flag": body.runtime_flag},
+        {"venture_id": body.venture_id, "entry_ref": body.entry_ref,
+         "runtime_flag": body.runtime_flag},
     )
     return {
         "entry_ref": body.entry_ref,
@@ -3052,13 +3064,19 @@ async def compliance_overview(conn: DB, _me: ME) -> dict[str, Any]:
         packs_rows = [dict(r) for r in await cur.fetchall()]
 
         await cur.execute(
-            "SELECT entry_ref, runtime_flag FROM compliance_library_entry"
+            "SELECT venture_id, entry_ref, runtime_flag FROM compliance_library_entry"
         )
         library = [dict(r) for r in await cur.fetchall()]
 
     assert counts is not None
-    entry_refs = {e["entry_ref"] for e in library}
-    library_flags = {e["runtime_flag"] for e in library if e["runtime_flag"]}
+    # Pairs since migration 0039: this page reports per venture, so its lookup has to be
+    # per venture too. Flat sets showed a framework as covered here while that venture's
+    # Gate 6 blocked on the same flag - the page and the gate disagreeing about the same
+    # library.
+    entry_refs = {(e["venture_id"], e["entry_ref"]) for e in library}
+    library_flags = {
+        (e["venture_id"], e["runtime_flag"]) for e in library if e["runtime_flag"]
+    }
 
     # ------------------------------------------------- framework coverage per venture
     #
@@ -3092,8 +3110,8 @@ async def compliance_overview(conn: DB, _me: ME) -> dict[str, Any]:
                     "library_entry_ref": ref,
                     "declared_gap": bool(surface.get("library_gap")),
                     "has_flag": bool(flag),
-                    "has_entry": bool(ref and ref in entry_refs)
-                                 or bool(flag and flag in library_flags),
+                    "has_entry": bool(ref and (venture_id, ref) in entry_refs)
+                                 or bool(flag and (venture_id, flag) in library_flags),
                 })
 
         resolved = [f for f in frameworks if f["has_flag"] and f["has_entry"]]

@@ -48,11 +48,18 @@ export async function authorEntryAction(
   if (!text("entry_ref")) {
     return { error: "entry_ref is what a Pack's library_entry_ref resolves against." };
   }
+  if (!text("venture_id")) {
+    return {
+      error:
+        "venture_id is whose entry this is. Since migration 0039 the library is keyed on (venture, ref), and an entry with no owner is the state that let one venture overwrite another's text.",
+    };
+  }
 
   try {
     const result = await api.post<{ entry_ref: string; note: string }>(
       "/api/knowledge/compliance",
       {
+        venture_id: text("venture_id"),
         entry_ref: text("entry_ref"),
         framework: text("framework"),
         jurisdiction: text("jurisdiction")

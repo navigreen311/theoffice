@@ -127,6 +127,65 @@ async def test_gate_6_blocks_a_compliance_flag_with_no_library_entry(
     assert "7" not in {o.gate for o in outcomes}, "a blocked gate stops the run"
 
 
+async def test_gate_6_does_not_accept_another_ventures_entry_as_an_explanation(
+    feasible_pack, operator, admin: psycopg.Connection
+):
+    """The tightening migration 0039 brings, stated as its own case.
+
+    The flag query had no venture term while the table had no venture column, so ANY
+    venture's entry explained ANY venture's flag - Greenstone's NV consent entry answered
+    for Burkham's `recording_consent_required` and this gate passed on it. That is a gate
+    reading a name rather than a library.
+
+    The flag is moved rather than deleted, which is the difference from the test above:
+    an entry explaining it still exists and is still complete - for somebody else.
+
+    **The Pack's own ref stays where it is.** Moving the cited entry to another venture
+    would fail V28 and block at Gate 2, and the run would never reach this gate - which
+    is correct, and would test the wrong rule. So the venture's own entry keeps the ref
+    and loses the flag, and a second venture's entry carries the flag.
+    """
+    with admin.cursor() as cur:
+        cur.execute(
+            "UPDATE compliance_library_entry SET runtime_flag = NULL "
+            "WHERE runtime_flag = 'tsr_disclosure_required'"
+        )
+        cur.execute(
+            """
+            INSERT INTO compliance_library_entry
+              (venture_id, entry_ref, framework, jurisdiction, applicability_rule,
+               agent_behavior_implication, escalation_trigger, citation, runtime_flag,
+               authored_by)
+            VALUES ('some-other-venture', 'test/their-tsr', 'FTC_TSR', ARRAY['FEDERAL'],
+                    'Outbound cold calls.', 'State identity and purpose first.',
+                    'A do-not-call assertion.', '16 CFR 310',
+                    'tsr_disclosure_required',
+                    '00000000-0000-5000-8000-00000000aaaa')
+            """
+        )
+    admin.commit()
+
+    async with connection() as conn:
+        _run_id, outcomes = await _to_gate_6(conn, operator, held_out=HeldOutPasses())
+
+    gate_6 = next((o for o in outcomes if o.gate == "6"), None)
+    assert gate_6 is not None, (
+        "the run stopped before Gate 6: "
+        + "; ".join(f"{o.gate} {o.verdict}" for o in outcomes)
+    )
+    assert gate_6.verdict == provisioning.BLOCKED
+    assert "tsr_disclosure_required" in gate_6.reason
+    assert gate_6.evidence["compliance_library"]["uncovered"] == [
+        "tsr_disclosure_required"
+    ]
+
+    with admin.cursor() as cur:
+        cur.execute(
+            "DELETE FROM compliance_library_entry WHERE venture_id = 'some-other-venture'"
+        )
+    admin.commit()
+
+
 async def test_gate_6_blocking_conditions_are_named_in_its_evidence(
     feasible_pack, operator
 ):

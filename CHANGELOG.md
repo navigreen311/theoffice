@@ -36,6 +36,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   create. Five tests, including one that refuses the real development DSN.
 
 ### Changed
+- **The compliance library belongs to a venture** (migration 0039, decisions entry 102). The
+  key is `(venture_id, entry_ref)`: one venture could overwrite another's entry under the same
+  ref and every check stayed green, because they ask whether a ref resolves and never whose
+  entry answered. Gate 6's flag query and V28 are scoped with it - **both get stricter** - and
+  V28 gained a third verdict, *registered to another venture*, whose remedy differs from a
+  missing entry's. The loader requires a top-level `venture_id`, cross-checked against the
+  filename.
+- **A library entry carries its own standing**: `status`, `claim_provenance` and
+  `counsel_reviewed_at` are columns, loaded from the files that always had the first two.
+  `status` defaults to `draft` everywhere - an entry nobody approved must not read as settled -
+  and the console shows DRAFT or NO COUNSEL REVIEW beside it.
 - **Gate 0's V2 asks each hard-bound Forge instead of reading a stored health value**
   (decisions entry 99). It now calls `forge_modules.read` - the authenticated
   `GET /_modules` that V32 and `verify_forge_modules.py` already use - and a Forge that

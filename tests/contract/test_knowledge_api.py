@@ -32,6 +32,9 @@ THEIRS = "burkham-wickmont"
 AUTHOR = uuid.UUID("00000000-0000-5000-8000-00000000aaaa")
 
 ENTRY = {
+    # Required since migration 0039: an entry belongs to a venture, and the route has no
+    # default - a default is what made one venture able to overwrite another's text.
+    "venture_id": "test-venture",
     "entry_ref": "test/api-tsr",
     "framework": "FTC_TSR",
     "jurisdiction": ["FEDERAL"],

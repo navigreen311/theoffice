@@ -395,14 +395,14 @@ def build_world(admin: psycopg.Connection) -> None:
             cur.execute(
                 """
                 INSERT INTO compliance_library_entry
-                  (entry_ref, framework, jurisdiction, applicability_rule,
+                  (venture_id, entry_ref, framework, jurisdiction, applicability_rule,
                    agent_behavior_implication, escalation_trigger, citation,
                    runtime_flag, authored_by)
-                VALUES (%(entry_ref)s, %(framework)s, %(jurisdiction)s,
+                VALUES ('greenstone', %(entry_ref)s, %(framework)s, %(jurisdiction)s,
                         %(applicability_rule)s, %(agent_behavior_implication)s,
                         %(escalation_trigger)s, %(citation)s, %(runtime_flag)s,
                         '00000000-0000-5000-8000-00000000aaaa')
-                ON CONFLICT (entry_ref) DO NOTHING
+                ON CONFLICT (venture_id, entry_ref) DO NOTHING
                 """,
                 entry,
             )

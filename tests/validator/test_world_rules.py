@@ -61,10 +61,10 @@ def stocked_library(admin: psycopg.Connection):
             cur.execute(
                 """
                 INSERT INTO compliance_library_entry
-                  (entry_ref, framework, jurisdiction, applicability_rule,
+                  (venture_id, entry_ref, framework, jurisdiction, applicability_rule,
                    agent_behavior_implication, escalation_trigger, citation,
                    runtime_flag, authored_by)
-                VALUES (%(entry_ref)s, %(framework)s, %(jurisdiction)s,
+                VALUES ('greenstone', %(entry_ref)s, %(framework)s, %(jurisdiction)s,
                         %(applicability_rule)s, %(agent_behavior_implication)s,
                         %(escalation_trigger)s, %(citation)s, %(runtime_flag)s,
                         '00000000-0000-5000-8000-00000000aaaa')
@@ -396,6 +396,65 @@ async def test_v28_passes_once_the_entries_exist(
     result = report.get("V28")
     assert result.verdict is Verdict.PASS, result.message
     assert "2 of 2" in result.message
+
+
+async def test_v28_says_when_a_ref_belongs_to_another_venture(
+    greenstone, bridged_world, stocked_library, admin
+):
+    """The third verdict, added with the venture column (migration 0039).
+
+    A ref that exists for somebody else is not a missing entry, and reporting it as one
+    is actively harmful: the remedy for "missing" is to write an entry, and the fastest
+    way to make that message disappear is to load the other venture's file under this
+    venture's id - which is the overwrite the column exists to prevent.
+    """
+    with admin.cursor() as cur:
+        cur.execute(
+            "UPDATE compliance_library_entry SET venture_id = 'burkham-wickmont' "
+            "WHERE entry_ref = 'compliance/ftc-tsr-v2'"
+        )
+    admin.commit()
+
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+
+    v28 = report.get("V28")
+    assert v28.verdict is Verdict.FAIL
+    assert "REGISTERED TO ANOTHER VENTURE" in v28.message
+    assert "burkham-wickmont" in v28.message, "name who holds it"
+    assert "do NOT load the other venture's file" in v28.message
+    assert "NOT WRITTEN ANYWHERE" not in v28.message, (
+        "an entry that exists elsewhere has been written; saying otherwise sends the "
+        "reader to write a second copy"
+    )
+
+
+async def test_v28_says_a_resolved_entry_is_still_a_draft(
+    greenstone, bridged_world, stocked_library, admin
+):
+    """Passing, and saying what it passed on.
+
+    The table held no status at all until 0039, so an entry approved by nobody read
+    exactly like one taken from a statute - and this rule was where that impression was
+    formed, because it is the one that says the refs resolve.
+    """
+    with admin.cursor() as cur:
+        cur.execute(
+            "UPDATE compliance_library_entry SET status = 'approved', "
+            "counsel_reviewed_at = now() WHERE entry_ref = 'compliance/ftc-tsr-v2'"
+        )
+    admin.commit()
+
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+
+    v28 = report.get("V28")
+    assert v28.verdict is Verdict.PASS
+    assert "not approved or not counsel-reviewed" in v28.message
+    assert "compliance/nv-two-party-consent-v1" in v28.message
+    assert "compliance/ftc-tsr-v2" not in v28.message, (
+        "the reviewed one is not named among the drafts"
+    )
 
 
 async def test_v28_accepts_an_explicit_library_gap(greenstone, bridged_world, admin):

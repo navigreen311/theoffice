@@ -961,25 +961,58 @@ async def _v28_library_refs_resolve(
 
     async with conn.cursor() as cur:
         await cur.execute(
-            "SELECT entry_ref FROM compliance_library_entry WHERE entry_ref = ANY(%s)",
+            "SELECT entry_ref, venture_id, status, counsel_reviewed_at "
+            "FROM compliance_library_entry WHERE entry_ref = ANY(%s)",
             (refs,),
         )
-        found = {r[0] for r in await cur.fetchall()}
+        rows = await cur.fetchall()
 
-    missing = sorted(set(refs) - found)
-    if not missing:
-        return True, f"{len(found)} of {len(refs)} library ref(s) resolve"
+    found = {ref for ref, owner, _s, _c in rows if owner == pack.venture_id}
+    # THE THIRD CASE, ADDED WITH THE VENTURE COLUMN (migration 0039). A ref that exists
+    # for somebody else is not a missing entry and must not be reported as one: the
+    # remedy for "missing" is to write an entry, and the quickest way to make that
+    # message disappear is to load the other venture's file under this venture's id -
+    # which is the overwrite the column exists to prevent.
+    elsewhere = sorted(
+        {f"{ref} (registered to {owner})" for ref, owner, _s, _c in rows
+         if owner != pack.venture_id and ref not in found}
+    )
+    drafts = sorted(
+        ref for ref, owner, status, reviewed in rows
+        if owner == pack.venture_id and (status != "approved" or reviewed is None)
+    )
+
+    missing = sorted(set(refs) - found - {e.split(" ")[0] for e in elsewhere})
+    if not missing and not elsewhere:
+        # A draft does not fail: the Pack cites an entry that exists and is this
+        # venture's. It is said out loud because the database used to hold no status at
+        # all, so an entry written by hand and approved by nobody read exactly like one
+        # taken from a statute - and this rule was where that impression was formed.
+        note = (
+            f" {len(drafts)} of them {'is' if len(drafts) == 1 else 'are'} not approved "
+            f"or not counsel-reviewed: {_join(drafts)}. Cited, not settled."
+            if drafts else ""
+        )
+        return True, f"{len(found)} of {len(refs)} library ref(s) resolve.{note}"
 
     # UNWRITTEN AND UNLOADED ARE DIFFERENT FACTS, and saying "resolve to nothing" for
     # both is what let nineteen fully-written entries sit behind this rule reading as
     # a documentation gap. They were complete on disk the whole time; nothing had
     # ingested them, and "write the entry" is the wrong instruction for an entry
     # somebody had already written.
-    on_disk = _refs_on_disk()
+    on_disk = _refs_on_disk(pack.venture_id)
     unloaded = [r for r in missing if r in on_disk]
     unwritten = [r for r in missing if r not in on_disk]
 
     parts: list[str] = []
+    if elsewhere:
+        parts.append(
+            f"{len(elsewhere)} REGISTERED TO ANOTHER VENTURE: {_join(elsewhere)}. A ref "
+            f"that resolves somewhere is not coverage here. Write {pack.venture_id}'s own "
+            "entry under that ref, or cite one of this venture's - do NOT load the other "
+            "venture's file under this venture's id, which is the overwrite the venture "
+            "column exists to prevent."
+        )
     if unloaded:
         parts.append(
             f"{len(unloaded)} WRITTEN BUT NOT LOADED - present in "
@@ -994,17 +1027,24 @@ async def _v28_library_refs_resolve(
             "or set library_gap so the Pack stops claiming coverage it does not have."
         )
     return False, (
-        f"[COMPLIANCE LIBRARY GAP] {len(missing)} of {len(refs)} ref(s) do not "
-        f"resolve. " + " ".join(parts)
+        f"[COMPLIANCE LIBRARY GAP] {len(missing) + len(elsewhere)} of {len(refs)} ref(s) "
+        f"do not resolve for {pack.venture_id}. " + " ".join(parts)
     )
 
 
-def _refs_on_disk() -> set[str]:
-    """Every `entry_ref` written in packs/compliance-library/, loaded or not.
+def _refs_on_disk(venture_id: str) -> set[str]:
+    """Every `entry_ref` THIS venture has written in packs/compliance-library/.
 
     Read from the files rather than from the database on purpose: the whole point of
     this call is to tell an entry nobody wrote from one nobody ingested, and the
     database cannot answer that question about itself.
+
+    **Scoped by the file's own `venture_id`, not by filename.** A flat set across every
+    file answered the wrong question once the table gained a venture: a ref written in
+    Burkham's file would make a Greenstone ref read as WRITTEN BUT NOT LOADED, and that
+    message's instruction - run the loader - is exactly how one venture's entries end up
+    under another's id. A file with no `venture_id` contributes nothing here, and the
+    loader refuses it outright.
     """
     library = Path(__file__).resolve().parents[1] / "packs" / "compliance-library"
     if not library.is_dir():
@@ -1014,6 +1054,13 @@ def _refs_on_disk() -> set[str]:
         try:
             text = path.read_text(encoding="utf-8")
         except OSError:
+            continue
+        # The file's own declaration, read the same way the loader reads it. A regex
+        # rather than a YAML parse for the same reason the refs below are: this runs
+        # inside a validator that must not fail because a library file it does not
+        # otherwise care about is mid-edit.
+        declared = re.search(r"^venture_id:\s*(\S+)", text, re.M)
+        if declared is None or declared.group(1).strip("\"'") != venture_id:
             continue
         refs.update(re.findall(r"^\s*-?\s*entry_ref:\s*(\S+)", text, re.M))
     return refs
