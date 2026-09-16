@@ -510,10 +510,16 @@ def seed_nv_discharge(admin: psycopg.Connection) -> None:
     real venture the answer is no, and **V34 is a FAIL that blocks Gate 2 until
     counsel reviews Nevada**. That is the true state and it is recorded as such.
 
-    This row says "assume counsel has signed" for a disposable world, so the twenty
-    or so suites that drive a run past Gate 2 can keep exercising gates 3 to 12. It
-    is the same class of fixture as `certify_for_positions`: a precondition supplied,
-    not a rule relaxed.
+    This row says "assume the founders have filed one" for a disposable world, so the
+    twenty or so suites that drive a run past Gate 2 can keep exercising gates 3 to 12. It
+    is the same class of fixture as `certify_for_positions`: a precondition supplied, not a
+    rule relaxed.
+
+    **`founder_policy`, not `counsel_reviewed`, and that is the point of the choice.** It
+    is what the real venture will carry: a founder decided, no lawyer has read it. V34
+    passes on it and V41 warns at Gate 2 for as long as it stands - so the seeded world
+    shows the ladder a reader would actually see, warning and all, rather than a cleaner
+    one this fixture invented.
 
     **V34 is not weakened and this fixture does not hide it.**
     `test_v34_fails_for_greenstone_without_a_discharge` deletes this row and asserts the
@@ -536,13 +542,14 @@ def seed_nv_discharge(admin: psycopg.Connection) -> None:
             INSERT INTO obligation_discharge
               (discharge_id, venture_id, runtime_flag, jurisdiction_scope,
                library_entry_ref, citation, discharged_by, role_discharged_as,
-               artifact_kind, artifact_hash, basis, verified_at, expires_at)
+               artifact_kind, artifact_hash, basis, verified_at, expires_at, status)
             VALUES (%s, 'greenstone', 'recording_consent_required', %s,
                     'compliance/nv-two-party-consent-v1', 'NRS 200.620', %s,
                     'venture operator', 'counsel_memo', 'sha256:0000',
                     'FIXTURE. A disposable world assuming counsel has reviewed NV '
                     'two-party consent. The real venture has no such review.',
-                    now() - interval '1 day', now() + interval '365 days')
+                    now() - interval '1 day', now() + interval '365 days',
+                    'founder_policy')
             """,
             (uuid.uuid4(), ["NV"], DISCHARGE_HUMAN_ID),
         )

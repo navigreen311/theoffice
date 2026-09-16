@@ -35,7 +35,7 @@ import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
@@ -52,6 +52,7 @@ from broker import (
     certification,
     curriculum_quality,
     departments,
+    discharges,
     forge_map,
     humans,
     incidents,
@@ -86,7 +87,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0041"
+EXPECTED_SCHEMA_REVISION = "0042"
 
 # `live_grants` means "a grant no live revocation covers". The four-scope rule that
 # decides that has exactly one copy - `revocation._covers`, the same text
@@ -2810,6 +2811,73 @@ async def rename_human(
             "record what was true when they were written."
         ),
     }
+
+
+class FileDischargeRequest(BaseModel):
+    runtime_flag: str = Field(min_length=1)
+    jurisdiction_scope: list[str] = Field(min_length=1)
+    library_entry_ref: str = Field(min_length=1)
+    citation: str = Field(min_length=1)
+    role_discharged_as: str = Field(min_length=1)
+    artifact_kind: str = Field(min_length=1)
+    artifact_hash: str = Field(min_length=1)
+    basis: str = Field(min_length=1)
+    status: Literal["founder_policy", "counsel_reviewed"]
+    counsel_reviewed_at: datetime | None = None
+
+
+@app.post("/api/ventures/{venture_id}/discharges", status_code=201)
+async def file_discharge(
+    venture_id: str, body: FileDischargeRequest, conn: DB, me: ME
+) -> dict[str, Any]:
+    """File a discharge for a human-held obligation. `ivan` only.
+
+    **The surface migration 0032 named and nobody built.** Its comment said a discharge is
+    filed by a named human through an operator surface and never by a broker call, and gave
+    `office_app` SELECT on that reasoning - so for two weeks the only way to file one was
+    hand SQL over the admin DSN, which writes no audit event. Entry 110 stopped a filing
+    rather than take that path.
+
+    **The filer is `me`, not a field.** A discharge records who verified an obligation, and
+    a body that could name somebody else would make it a form rather than an act. This is
+    the same reason the Gate 10 signoff route has no approver field.
+
+    `ivan` only, for the reason the rename is: a discharge decides whether a venture may
+    provision, so it reaches past the person filing it.
+    """
+    humans.authorize(me, required_role="ivan")
+
+    try:
+        filed = await discharges.file_discharge(
+            conn,
+            venture_id=venture_id,
+            runtime_flag=body.runtime_flag,
+            jurisdiction_scope=body.jurisdiction_scope,
+            library_entry_ref=body.library_entry_ref,
+            citation=body.citation,
+            discharged_by=me.human_id,
+            role_discharged_as=body.role_discharged_as,
+            artifact_kind=body.artifact_kind,
+            artifact_hash=body.artifact_hash,
+            basis=body.basis,
+            status=body.status,
+            counsel_reviewed_at=body.counsel_reviewed_at,
+        )
+    except discharges.DischargeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    await _audit_human_action(
+        me, "console_obligation_discharged",
+        {
+            "venture_id": venture_id,
+            "runtime_flag": body.runtime_flag,
+            "status": body.status,
+            "jurisdiction_scope": filed["jurisdiction_scope"],
+            "discharge_id": filed["discharge_id"],
+            "superseded": filed["superseded"],
+        },
+    )
+    return filed
 
 
 class DailyTotalRequest(BaseModel):

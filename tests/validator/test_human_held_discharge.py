@@ -106,10 +106,11 @@ def _file_discharge(
             INSERT INTO obligation_discharge
               (discharge_id, venture_id, runtime_flag, jurisdiction_scope,
                library_entry_ref, citation, discharged_by, role_discharged_as,
-               artifact_kind, artifact_hash, basis, verified_at, expires_at)
+               artifact_kind, artifact_hash, basis, verified_at, expires_at,
+               status, counsel_reviewed_at)
             VALUES (%s, 'burkham-wickmont', %s, %s, 'compliance/referral-fee-v1',
                     'NV Rev. Stat. 645F', %s, 'venture operator', 'counsel_memo',
-                    'sha256:0000', %s, %s, %s)
+                    'sha256:0000', %s, %s, %s, 'counsel_reviewed', now())
             """,
             (uuid.uuid4(), FLAG, scope, HUMAN, basis,
              verified, now + timedelta(days=expires_in_days)),
