@@ -19,7 +19,7 @@ import pytest
 from broker import bootstrap_phase0, packs
 from broker.db import connection
 from tests.conftest import requires_db, wipe_venture
-from tests.world import PACK_PATH, build_world, teardown_world
+from tests.world import PACK_PATH, build_world, seed_nv_discharge, teardown_world
 
 pytestmark = [requires_db, pytest.mark.db]
 
@@ -31,6 +31,11 @@ AUTHOR = uuid.UUID("00000000-0000-5000-8000-00000000aaaa")
 async def greenstone_live(admin: psycopg.Connection):
     wipe_venture(admin, VENTURE)
     build_world(admin)
+    # Item F declared `recording_consent_required` human-held, so V34 asks whether a
+    # named human verified it - and a run that has not cannot clear Gate 2. Seeded here
+    # rather than in `build_world` because only the suites that drive a run need it, and
+    # the row references an office_human that twenty-four contract suites delete.
+    seed_nv_discharge(admin)
     async with connection() as conn:
         await packs.store(
             conn, yaml_source=PACK_PATH.read_text(encoding="utf-8"),

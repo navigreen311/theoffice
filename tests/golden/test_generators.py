@@ -39,6 +39,7 @@ from tests.world import (
     build_world,
     certify,
     certify_for_positions,
+    seed_nv_discharge,
     teardown_world,
 )
 
@@ -51,6 +52,11 @@ SNAPSHOT_DIR = Path(__file__).parent / "snapshots"
 def greenstone_world(admin: psycopg.Connection):
     """Bridged Forges, authored instructions, roster present, nobody certified yet."""
     build_world(admin)
+    # Item F declared `recording_consent_required` human-held, so V34 asks whether a
+    # named human verified it - and a run that has not cannot clear Gate 2. Seeded here
+    # rather than in `build_world` because only the suites that drive a run need it, and
+    # the row references an office_human that twenty-four contract suites delete.
+    seed_nv_discharge(admin)
     yield admin
     teardown_world(admin)
 
@@ -216,14 +222,25 @@ async def test_role_definition_derives_implied_compliance_flags(greenstone_world
     manager = next(
         p for p in roles.positions if p.position_title == "Buyer Network Manager"
     )
-    assert "recording_consent_required" in manager.declared_compliance_flags
+    # RE-ANCHORED A THIRD TIME, 16 September 2026, and the declared half moved out.
+    #
+    # Item F took `recording_consent_required` off this position - the duty belongs to
+    # whoever is on the call, and no agent of this venture can place one. So the position
+    # declares nothing, and the assertion that it declares something had to go rather than
+    # be propped up by putting the flag back.
+    #
+    # **The mechanism under test is untouched and is the whole of the claim:** a flag the
+    # author never wrote reaches the position from the module it operates. That is what the
+    # next three lines say, and it is why this test survives an edit that removed the thing
+    # it used to read alongside.
+    assert manager.declared_compliance_flags == [], (
+        "item F moved this position's only declared flag to market.compliance_surface"
+    )
     assert "privacy_request_handling" in manager.implied_compliance_flags, (
         "a flag on a module the position operates reaches the position"
     )
     assert "privacy_request_handling" not in manager.declared_compliance_flags
-    assert set(manager.effective_compliance_flags) == {
-        "privacy_request_handling", "recording_consent_required"
-    }
+    assert set(manager.effective_compliance_flags) == {"privacy_request_handling"}
 
     underwriter = next(
         p for p in roles.positions if p.position_title == "Deal Underwriter"
@@ -475,10 +492,33 @@ async def test_the_projection_carries_no_task_shaped_fields(artifacts):
 
 
 async def test_curriculum_states_a_denominator_for_every_dimension(artifacts):
-    """G9 — 'report the denominator; no green check without a coverage count'."""
+    """G9 — 'report the denominator; no green check without a coverage count'.
+
+    **A ZERO DENOMINATOR IS AN ANSWER NOW, AND ONLY FOR ONE DIMENSION.**
+
+    `compliance_flags_exercised` counts the flags a scenario must exercise. Item F declared
+    both of Greenstone's human-held, so no agent holds either duty and there is nothing for
+    a scenario to exercise - 0 of 0, which is true. The rule G9 is about is "no green check
+    without a coverage count", and 0/0 reported as 0/0 is a count.
+
+    Every OTHER dimension still has to have something to count, which is why this is a
+    named exception rather than a relaxed `>= 0`. A modules dimension that fell to zero
+    would mean the venture operates no modules, and that is a defect rather than a state.
+    """
     assert artifacts.curriculum.coverage
+
+    # Dimensions whose subject can legitimately be empty, and why.
+    may_be_empty = {"compliance_flags_exercised"}
+
     for coverage in artifacts.curriculum.coverage:
-        assert coverage.denominator > 0, f"{coverage.dimension} has no denominator"
+        if coverage.denominator == 0:
+            assert coverage.dimension in may_be_empty, (
+                f"{coverage.dimension} has no denominator. Only a dimension whose subject "
+                f"can honestly be empty may report 0/0; {sorted(may_be_empty)} is that list."
+            )
+            assert coverage.covered == 0
+            assert coverage.uncovered == []
+            continue
         assert coverage.covered <= coverage.denominator
         if not coverage.complete:
             assert coverage.uncovered, "an incomplete dimension must name what it missed"

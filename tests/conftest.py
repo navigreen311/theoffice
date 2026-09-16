@@ -115,6 +115,12 @@ VENTURE_DEPENDENTS = (
     "venture_budget",
     "proposal",
     "revocation",
+    # Venture-scoped, and never wiped until 2026-09-16 because only Burkham declared a
+    # human-held obligation and its tests cleared the rows by hand. Item F gave
+    # Greenstone one, and a discharge left behind references an `office_human` that
+    # twenty-four contract suites delete wholesale - so the leak surfaced as a foreign
+    # key error in suites that touch neither table.
+    "obligation_discharge",
     "persona",
     "business_playbook",
     "business_pack",

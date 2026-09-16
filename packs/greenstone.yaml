@@ -41,11 +41,42 @@ market:
       applies_when: Any recorded call with an owner or broker
       runtime_flag: recording_consent_required
       library_entry_ref: compliance/nv-two-party-consent-v1
+      # FOUNDER-HELD. No agent of this venture can place or record a call.
+      human_held:
+        why: >
+          No position here holds a duty that touches a recorded call, and no agent could.
+          `voiceforge/place_call` is forbidden in forge_module_exclusion behind a live
+          BEFORE INSERT trigger, under a founder decision binding every venture: no agent
+          may initiate an outbound phone call as principal. The VoiceForge binding left
+          this Pack entirely on 2026-09-15, there are zero call grants, and Buyer Network
+          Manager operates buyer_match and assign_contract - neither of which calls
+          anybody. If a call with an owner or broker is recorded, a human makes it, and
+          the duty to capture consent belongs to whoever is on the call. Writing a
+          scenario would mean teaching an agent to perform an act no position authorizes.
     - framework: FTC_TSR
       jurisdiction: FEDERAL
       applies_when: Outbound cold calls to property owners
       runtime_flag: tsr_disclosure_required
       library_entry_ref: compliance/ftc-tsr-v2
+      # FOUNDER-HELD, AND NOT YET DUE.
+      human_held:
+        why: >
+          A telemarketing-disclosure duty attaches to outbound cold calls, and this
+          venture has no position that makes one. Acquisition Analyst sources from public
+          records and pulls comps; it operates property_lookup and comp_analysis, and CRE
+          Forge's own code confirms neither contacts an owner - property_lookup is a
+          paginated search over this tenant's properties and never loads the owner rows one
+          join away. The flag sat on that position because a test fixture wrote one flag
+          list per Forge onto every module of it (entry 105), not because anybody read a
+          module.
+        pending_activation:
+          activates_when: >
+            A Seller Outreach position is declared in this Pack - a position whose duties
+            include contacting property owners directly. Until one exists, no agent of this
+            venture places an outbound cold call, so the TSR has nothing to attach to.
+          deferred_to: >
+            The founders, at the point the Seller Outreach position is declared. Whoever
+            declares it owns the disclosure script and the discharge that covers it.
 
 engagement_model:
   service_lines:
@@ -88,7 +119,10 @@ positions_required:
     # no agent may ever call.
     forge_modules_operated: [cre-forge/property_lookup, cre-forge/comp_analysis]
     source_department: research
-    compliance_flags_in_scope: [tsr_disclosure_required]
+    # `tsr_disclosure_required` moved to market.compliance_surface as human_held with a
+    # pending_activation on 2026-09-16 (item F, decisions entry 109). It was never this
+    # position's: neither property_lookup nor comp_analysis contacts an owner.
+    compliance_flags_in_scope: []
     headcount: 3
     trust_tier_ceiling: auto_execute
     lifecycle_stages_owned: [Source, Qualify]
@@ -173,7 +207,14 @@ positions_required:
     # on the call, and it does not leave with the Forge.
     forge_modules_operated: [cre-forge/buyer_match, cre-forge/assign_contract]
     source_department: operations
-    compliance_flags_in_scope: [recording_consent_required]
+    # `recording_consent_required` moved to market.compliance_surface as human_held on
+    # 2026-09-16 (item F). Neither buyer_match nor assign_contract calls anybody, and no
+    # agent of this venture can place or record a call at all.
+    #
+    # THIS POSITION NOW CARRIES NO FLAG, AND assign_contract STILL ROUTES TO THE
+    # COMPLIANCE OFFICER - because module_reviewer_roles below says so. Before that
+    # declaration existed, this edit moved the approval to the venture operator silently.
+    compliance_flags_in_scope: []
     headcount: 2
     trust_tier_ceiling: propose
     lifecycle_stages_owned: [Assign, Close]

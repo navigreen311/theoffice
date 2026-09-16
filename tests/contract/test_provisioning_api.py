@@ -30,6 +30,7 @@ from tests.world import (
     build_world,
     certify_for_positions,
     dispatch_from_registry,
+    seed_nv_discharge,
     teardown_world,
 )
 
@@ -58,6 +59,11 @@ def world(admin: psycopg.Connection, monkeypatch: pytest.MonkeyPatch):
     """
     _wipe(admin)
     build_world(admin)
+    # Item F declared `recording_consent_required` human-held, so V34 asks whether a
+    # named human verified it - and a run that has not cannot clear Gate 2. Seeded here
+    # rather than in `build_world` because only the suites that drive a run need it, and
+    # the row references an office_human that twenty-four contract suites delete.
+    seed_nv_discharge(admin)
     certify_for_positions(admin)
     dispatch_from_registry(admin, monkeypatch)
     yield admin

@@ -25,6 +25,10 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 PACK_PATH = ROOT / "packs" / "greenstone.yaml"
 
+#: Who the fixture NV discharge is attributed to. A real uuid rather than a generated one,
+#: so the row is identifiable and `teardown_world` can be checked to have removed it.
+DISCHARGE_HUMAN_ID = uuid.UUID("00000000-0000-5000-8000-00000000d15c")
+
 FORGE_ID = "cre-forge"
 # `generate_loi` was removed 2026-09-02 along with the Pack declaration. CRE Forge
 # has no letter-of-intent service, route or contract template, so a world that
@@ -469,6 +473,79 @@ def build_world(admin: psycopg.Connection) -> None:
                 """,
                 (agent_id, f"village::{name}", name, dept),
             )
+
+
+def clear_nv_discharge(admin: psycopg.Connection) -> None:
+    """Remove what `seed_nv_discharge` wrote, including the human it is attributed to.
+
+    **A seeder without this leaks into the next suite and into the next RUN.** The row
+    references an `office_human`, twenty-four contract suites delete every human wholesale,
+    and a leftover discharge turns that into a foreign-key error in a suite that never
+    touched either table. Measured at 98 errors across four files, none of them about
+    compliance.
+    """
+    with admin.cursor() as cur:
+        cur.execute("DELETE FROM obligation_discharge WHERE venture_id = 'greenstone'")
+        cur.execute("DELETE FROM office_human WHERE human_id = %s", (DISCHARGE_HUMAN_ID,))
+    admin.commit()
+
+
+def seed_nv_discharge(admin: psycopg.Connection) -> None:
+    """The NV discharge a prepared world has, and the real venture does not.
+
+    **Called explicitly, not from `build_world`, for the reason `certify_for_positions` is
+    not in it either.** `build_world` builds the Forge world - registry rows, adapters,
+    instructions, roster. A discharge is a Pack-compliance precondition, and only the suites
+    that drive a run past Gate 2 need one.
+
+    It also could not live there in practice: the row references an `office_human`, and
+    twenty-four contract suites delete every human wholesale between tests. Seeding it for
+    all of them puts a foreign key under suites that never asked for one - measured, at 414
+    errors on the first full run.
+
+
+    Item F declared `recording_consent_required` human-held, which is correct - no
+    agent of this venture can place or record a call. V34 then asks the question the
+    declaration invites: has a named human actually verified the obligation? For the
+    real venture the answer is no, and **V34 is a FAIL that blocks Gate 2 until
+    counsel reviews Nevada**. That is the true state and it is recorded as such.
+
+    This row says "assume counsel has signed" for a disposable world, so the twenty
+    or so suites that drive a run past Gate 2 can keep exercising gates 3 to 12. It
+    is the same class of fixture as `certify_for_positions`: a precondition supplied,
+    not a rule relaxed.
+
+    **V34 is not weakened and this fixture does not hide it.**
+    `test_v34_fails_for_greenstone_without_a_discharge` deletes this row and asserts the
+    FAIL, so the real-world answer is exercised by name rather than left to be inferred
+    from the absence of a test.
+    """
+    with admin.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO office_human
+              (human_id, display_name, email, auth_method, status, created_at, origin)
+            VALUES (%s, 'World Fixture Operator', 'world-fixture@example.invalid',
+                    'mfa_only', 'active', now(), 'test_fixture')
+            ON CONFLICT (human_id) DO NOTHING
+            """,
+            (DISCHARGE_HUMAN_ID,),
+        )
+        cur.execute(
+            """
+            INSERT INTO obligation_discharge
+              (discharge_id, venture_id, runtime_flag, jurisdiction_scope,
+               library_entry_ref, citation, discharged_by, role_discharged_as,
+               artifact_kind, artifact_hash, basis, verified_at, expires_at)
+            VALUES (%s, 'greenstone', 'recording_consent_required', %s,
+                    'compliance/nv-two-party-consent-v1', 'NRS 200.620', %s,
+                    'venture operator', 'counsel_memo', 'sha256:0000',
+                    'FIXTURE. A disposable world assuming counsel has reviewed NV '
+                    'two-party consent. The real venture has no such review.',
+                    now() - interval '1 day', now() + interval '365 days')
+            """,
+            (uuid.uuid4(), ["NV"], DISCHARGE_HUMAN_ID),
+        )
     admin.commit()
 
 
@@ -528,6 +605,8 @@ def teardown_world(conn: psycopg.Connection) -> None:
     """
     assert_disposable(conn)
     with conn.cursor() as cur:
+        cur.execute("DELETE FROM obligation_discharge")
+        cur.execute("DELETE FROM office_human WHERE human_id = %s", (DISCHARGE_HUMAN_ID,))
         cur.execute("DELETE FROM venture_forge_manifest WHERE venture_id = 'greenstone'")
         cur.execute("DELETE FROM venture_budget WHERE venture_id = 'greenstone'")
         cur.execute("DELETE FROM agent_forge_grant WHERE venture_id = 'greenstone'")
