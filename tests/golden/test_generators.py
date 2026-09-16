@@ -135,7 +135,7 @@ async def test_golden_snapshot(artifacts, name):
 
 # --------------------------------------------------------------- generator rules
 
-async def test_role_definition_derives_implied_compliance_flags(artifacts):
+async def test_role_definition_derives_implied_compliance_flags(greenstone_world, admin):
     """G3 — 5.1 does real work.
 
     The Pack author gave the Buyer Network Manager `recording_consent_required`. It also
@@ -152,17 +152,49 @@ async def test_role_definition_derives_implied_compliance_flags(artifacts):
     exercises it in the same shape - one declared flag, one implied by a Forge the author
     did not think about - and it does so both before and after the Pack edit, which is
     why this lands first.
+
+    RE-ANCHORED AGAIN 15 September 2026, and this time on a flag the test writes itself.
+    The implied flag it had been reading was `tsr_disclosure_required` on
+    `cre-forge/buyer_match` - which the development fixture wrote onto every CRE Forge
+    module in one list, and which entry 105 removed because none of those modules
+    contacts a person. **So this test was anchored on the defect**: it asserted a real
+    mechanism through a value that was not true, and it would have failed the correction
+    rather than confirming it.
+
+    Setting the registry row here makes the anchor independent of what any Forge happens
+    to imply. The mechanism is the claim - an author who omits a flag has not escaped it
+    - and a test of a mechanism should supply its own input.
     """
+    with admin.cursor() as cur:
+        cur.execute(
+            "UPDATE forge_module_registry SET compliance_flags_implied = %s "
+            "WHERE forge_id = 'cre-forge' AND module_id = 'buyer_match'",
+            (["privacy_request_handling"],),
+        )
+    admin.commit()
+
+    async with connection() as conn:
+        roles = await roles_gen.generate(load_pack(PACK_PATH), conn)
+
     manager = next(
-        p for p in artifacts.roles.positions
-        if p.position_title == "Buyer Network Manager"
+        p for p in roles.positions if p.position_title == "Buyer Network Manager"
     )
     assert "recording_consent_required" in manager.declared_compliance_flags
-    assert "tsr_disclosure_required" in manager.implied_compliance_flags
-    assert "tsr_disclosure_required" not in manager.declared_compliance_flags
+    assert "privacy_request_handling" in manager.implied_compliance_flags, (
+        "a flag on a module the position operates reaches the position"
+    )
+    assert "privacy_request_handling" not in manager.declared_compliance_flags
     assert set(manager.effective_compliance_flags) == {
-        "tsr_disclosure_required", "recording_consent_required"
+        "privacy_request_handling", "recording_consent_required"
     }
+
+    underwriter = next(
+        p for p in roles.positions if p.position_title == "Deal Underwriter"
+    )
+    assert underwriter.effective_compliance_flags == [], (
+        "a position whose modules imply nothing and which declares nothing carries "
+        "nothing - the state entry 105 restored"
+    )
 
 
 async def test_appointment_never_fills_a_position_with_an_uncertified_agent(

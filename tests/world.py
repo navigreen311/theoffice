@@ -40,6 +40,34 @@ CRE_MODULES = (
 )
 VOICE_MODULES = ("place_call", "transcribe_call")
 
+#: `compliance_flags_implied`, PER MODULE - entry 105.
+#:
+#: **This was one list per FORGE, looped over every module**, and that is how five CRE
+#: Forge modules came to carry `tsr_disclosure_required`: a telemarketing-disclosure flag
+#: on a property search, a comps pull, an underwriting calculation, a buyer ranking and a
+#: contract draft. **Nobody read five modules and got five wrong answers - nobody read a
+#: module.** The same shape put Greenstone's flag on two SimForge modules, which
+#: `broker/compliance_couplings.py` records as its third error class: a flag that is true
+#: somewhere and asserted here.
+#:
+#: A flag belongs on a module when the module's own behaviour implies the framework. None
+#: of CRE Forge's five contacts a person, places a call or records one - `property_lookup`
+#: and `comp_analysis` read, `underwrite_deal` computes, `buyer_match` ranks without
+#: saving, and `assign_contract` creates a DRAFT and returns `sent: False`. The five live
+#: operating instructions say so themselves: `compliance_coupling: ["no_framework_applies"]`.
+#:
+#: VoiceForge keeps `recording_consent_required` on both modules, and that one is earned:
+#: `place_call` dials and `transcribe_call` processes a recording.
+#:
+#: `test_fixture_flags_match_the_instructions` fails if this map and an instruction's
+#: `compliance_coupling` disagree.
+MODULE_FLAGS: dict[tuple[str, str], list[str]] = {
+    **{(FORGE_ID, module): [] for module in CRE_MODULES},
+    ("simforge", "run_scenario_pack"): [],
+    ("simforge", "gate_result"): [],
+    **{("voiceforge", module): ["recording_consent_required"] for module in VOICE_MODULES},
+}
+
 # Fixed agent ids so snapshots are stable across runs and machines. Real agents arrive
 # with the Village roster (Phase 0.2); these stand in for them and are deliberately
 # named so a snapshot diff shows who moved.
@@ -182,6 +210,14 @@ def instruction_for(module_id: str) -> dict:
     """
     content = json.loads(json.dumps(INSTRUCTION_CONTENT))
     content["what_it_does"] = f"{module_id}: " + content["what_it_does"]
+    # The coupling follows the module's flags rather than the shared constant's, which
+    # named `tsr_disclosure_required` for everything. An instruction is what an agent is
+    # examined on, so a fixture teaching a telemarketing duty for a comps pull is a
+    # fixture certifying against the wrong text. `no_framework_applies` is the phrase the
+    # real CRE Forge manuals use for a module no framework reaches.
+    flags = sorted({f for (_forge, module), fs in MODULE_FLAGS.items()
+                    if module == module_id for f in fs})
+    content["compliance_coupling"] = flags or ["no_framework_applies"]
     return content
 
 
@@ -339,10 +375,10 @@ def build_world(admin: psycopg.Connection) -> None:
     seed_departments()
     teardown_world(admin)
     with admin.cursor() as cur:
-        for forge_id, api, modules, flags in (
-            (FORGE_ID, "1.4.0", CRE_MODULES, ["tsr_disclosure_required"]),
-            ("simforge", "3.2.0", ("run_scenario_pack", "gate_result"), []),
-            ("voiceforge", "2.0.0", VOICE_MODULES, ["recording_consent_required"]),
+        for forge_id, api, modules in (
+            (FORGE_ID, "1.4.0", CRE_MODULES),
+            ("simforge", "3.2.0", ("run_scenario_pack", "gate_result")),
+            ("voiceforge", "2.0.0", VOICE_MODULES),
         ):
             cur.execute(
                 """
@@ -373,7 +409,7 @@ def build_world(admin: psycopg.Connection) -> None:
                             now(), 'test world', 'adapter_manifest')
                     """,
                     (forge_id, module_id, module_id.replace("_", " ").title(),
-                     "key", flags),
+                     "key", MODULE_FLAGS[(forge_id, module_id)]),
                 )
                 content = instruction_for(module_id)
                 cur.execute(

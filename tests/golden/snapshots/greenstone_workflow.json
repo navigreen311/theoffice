@@ -85,7 +85,7 @@
       "trigger": "agent_initiated"
     },
     {
-      "compliance_flag": "tsr_disclosure_required",
+      "compliance_flag": "NONE",
       "failure_and_escalation": "Proposal is rejected or times out: return to Deal Underwriter with the reviewer's reason. Repeated rejection escalates to the venture operator.",
       "forge_modules": [
         "comp_analysis"
@@ -106,7 +106,7 @@
       "trigger": "agent_initiated"
     },
     {
-      "compliance_flag": "tsr_disclosure_required",
+      "compliance_flag": "NONE",
       "failure_and_escalation": "Proposal is rejected or times out: return to Deal Underwriter with the reviewer's reason. Repeated rejection escalates to the venture operator.",
       "forge_modules": [
         "underwrite_deal"
@@ -127,7 +127,7 @@
       "trigger": "agent_initiated"
     },
     {
-      "compliance_flag": "tsr_disclosure_required",
+      "compliance_flag": "NONE",
       "failure_and_escalation": "Proposal is rejected or times out: return to Deal Underwriter with the reviewer's reason. Repeated rejection escalates to the venture operator.",
       "forge_modules": [
         "comp_analysis"
@@ -148,7 +148,7 @@
       "trigger": "agent_initiated"
     },
     {
-      "compliance_flag": "tsr_disclosure_required",
+      "compliance_flag": "NONE",
       "failure_and_escalation": "Proposal is rejected or times out: return to Deal Underwriter with the reviewer's reason. Repeated rejection escalates to the venture operator.",
       "forge_modules": [
         "underwrite_deal"
@@ -169,7 +169,7 @@
       "trigger": "agent_initiated"
     },
     {
-      "compliance_flag": "recording_consent_required, tsr_disclosure_required",
+      "compliance_flag": "recording_consent_required",
       "failure_and_escalation": "Proposal is rejected or times out: return to Buyer Network Manager with the reviewer's reason. Repeated rejection escalates to the venture operator.",
       "forge_modules": [
         "assign_contract"
@@ -190,7 +190,7 @@
       "trigger": "agent_initiated"
     },
     {
-      "compliance_flag": "recording_consent_required, tsr_disclosure_required",
+      "compliance_flag": "recording_consent_required",
       "failure_and_escalation": "Proposal is rejected or times out: return to Buyer Network Manager with the reviewer's reason. Repeated rejection escalates to the venture operator.",
       "forge_modules": [
         "buyer_match"
@@ -211,7 +211,7 @@
       "trigger": "agent_initiated"
     },
     {
-      "compliance_flag": "recording_consent_required, tsr_disclosure_required",
+      "compliance_flag": "recording_consent_required",
       "failure_and_escalation": "Proposal is rejected or times out: return to Buyer Network Manager with the reviewer's reason. Repeated rejection escalates to the venture operator.",
       "forge_modules": [
         "assign_contract"
@@ -232,7 +232,7 @@
       "trigger": "agent_initiated"
     },
     {
-      "compliance_flag": "recording_consent_required, tsr_disclosure_required",
+      "compliance_flag": "recording_consent_required",
       "failure_and_escalation": "Proposal is rejected or times out: return to Buyer Network Manager with the reviewer's reason. Repeated rejection escalates to the venture operator.",
       "forge_modules": [
         "buyer_match"

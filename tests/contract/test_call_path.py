@@ -420,15 +420,61 @@ async def test_audit_failure_on_compliance_flagged_action_fails_closed(
     assert stub_forge.call_count == 0, "the Forge must never be reached"
 
 
-async def test_audit_failure_without_compliance_flags_degrades_rather_than_halts(
-    office, stub_forge, agent_ctx, granted_agent, monkeypatch
+async def test_audit_failure_on_a_mutating_call_with_no_flags_still_fails_closed(
+    office, stub_forge, agent_ctx, granted_agent, admin, monkeypatch
 ):
-    """B8 — durable-queue otherwise.
+    """Ivan's ruling of 2026-09-15, and the case the old rule got wrong.
 
-    Halting every call on an audit outage turns a logging problem into a total
-    outage. Unflagged actions proceed; only flagged ones stop.
+    The fixture module is `is_mutating` and carries NO flags - which until now meant it
+    degraded. The flags it would have needed were a fixture's anyway: every CRE Forge
+    module carried `tsr_disclosure_required` because `tests/world.py` wrote one list per
+    Forge (entry 105), so `assign_contract`'s fail-closed property was an accident, and
+    correcting the flags would have removed it silently.
+
+    An unrecorded write is a change to the world nobody can find.
     """
     _, forge_id, module_id = granted_agent
+    with admin.cursor() as cur:
+        cur.execute(
+            "SELECT is_mutating, compliance_flags_implied FROM forge_module_registry "
+            "WHERE forge_id = %s AND module_id = %s",
+            (forge_id, module_id),
+        )
+        is_mutating, flags = cur.fetchone()
+    assert is_mutating and not flags, "this test needs a mutating, unflagged module"
+
+    async def broken_write(**_kwargs):
+        raise RuntimeError("audit store unavailable")
+
+    monkeypatch.setattr("broker.audit.write_event", broken_write)
+
+    with pytest.raises(AuditUnavailable) as exc:
+        await office.call(forge_id, module_id, {"n": 1}, agent_ctx=agent_ctx)
+
+    assert exc.value.context.get("is_mutating") is True
+    assert exc.value.context.get("compliance_flags") == [], (
+        "no flag was needed: mutation is the reason"
+    )
+    assert stub_forge.call_count == 0, "the Forge must never be reached"
+
+
+async def test_audit_failure_on_a_read_only_call_degrades_rather_than_halts(
+    office, stub_forge, agent_ctx, granted_agent, admin, monkeypatch
+):
+    """B8 — durable-queue otherwise, now scoped to reads.
+
+    Halting every call on an audit outage turns a logging problem into a total
+    outage. A read proceeds; its failure is a gap in the log, not a change nobody
+    can find.
+    """
+    _, forge_id, module_id = granted_agent
+    with admin.cursor() as cur:
+        cur.execute(
+            "UPDATE forge_module_registry SET is_mutating = FALSE "
+            "WHERE forge_id = %s AND module_id = %s",
+            (forge_id, module_id),
+        )
+    admin.commit()
 
     async def broken_write(**_kwargs):
         raise RuntimeError("audit store unavailable")

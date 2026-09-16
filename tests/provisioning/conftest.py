@@ -95,20 +95,35 @@ def amend_for_capacity(yaml_source: str) -> str:
 
     This helper takes the second one so that the gates *after* 4.5 can be exercised at
     all. It is a test fixture, not a recommendation, and the number it lands on - six
-    compliance officers, five of them eight-hour reviewers who do not exist - is worth
-    reading as the size of the real problem. It was five while the Pack declared an
-    invented officer at four hours and six minutes; four added reviewers leave the real
-    declaration 5% over.
+    compliance officers and two venture operators, seven of them people who do not exist
+    - is worth reading as the size of the real problem. It was five while the Pack
+    declared an invented officer at four hours and six minutes; four added reviewers
+    leave the real declaration 5% over.
+
+    **BOTH ROLES ARE TOPPED UP SINCE ENTRY 105, and the reason is the point.** While CRE
+    Forge's five modules all implied `tsr_disclosure_required` - a fixture's flag, on
+    modules that contact nobody - every projected approval routed to the compliance
+    officer, and one role was the only role that could be short. Correcting the flags
+    moved Deal Underwriter's share to the venture operator, who then went 19% over on
+    hours nobody had thought to question, because no demand had ever reached them.
+    **The helper topping up one role was reading a routing accident as an arrangement.**
     """
     doc = yaml.safe_load(yaml_source)
-    officers = [h for h in doc["human_capacity"] if h["role"] == "compliance_officer"]
-    template = dict(officers[0])
-    for i in range(5):
-        extra = dict(template)
-        extra["human_name"] = f"Reviewer {i + 1}"
-        extra["backup_human"] = template["human_name"]
-        extra["coverage_hours"] = 8
-        doc["human_capacity"].append(extra)
+
+    def top_up(role: str, count: int, label: str) -> None:
+        holders = [h for h in doc["human_capacity"] if h["role"] == role]
+        if not holders:
+            return
+        template = dict(holders[0])
+        for i in range(count):
+            extra = dict(template)
+            extra["human_name"] = f"{label} {i + 1}"
+            extra["backup_human"] = template["human_name"]
+            extra["coverage_hours"] = 8
+            doc["human_capacity"].append(extra)
+
+    top_up("compliance_officer", 5, "Reviewer")
+    top_up("venture_operator", 1, "Operator")
     return yaml.safe_dump(doc, sort_keys=False)
 
 

@@ -17,9 +17,7 @@
         "cre-forge/property_lookup"
       ],
       "headcount": 3,
-      "implied_compliance_flags": [
-        "tsr_disclosure_required"
-      ],
+      "implied_compliance_flags": [],
       "lifecycle_stages_owned": [
         "Source",
         "Qualify"
@@ -40,17 +38,14 @@
         "Circulate the assignment package"
       ],
       "effective_compliance_flags": [
-        "recording_consent_required",
-        "tsr_disclosure_required"
+        "recording_consent_required"
       ],
       "forge_modules_operated": [
         "cre-forge/assign_contract",
         "cre-forge/buyer_match"
       ],
       "headcount": 2,
-      "implied_compliance_flags": [
-        "tsr_disclosure_required"
-      ],
+      "implied_compliance_flags": [],
       "lifecycle_stages_owned": [
         "Assign",
         "Close"
@@ -68,17 +63,13 @@
         "Set the maximum allowable offer",
         "Flag title and zoning risk"
       ],
-      "effective_compliance_flags": [
-        "tsr_disclosure_required"
-      ],
+      "effective_compliance_flags": [],
       "forge_modules_operated": [
         "cre-forge/comp_analysis",
         "cre-forge/underwrite_deal"
       ],
       "headcount": 2,
-      "implied_compliance_flags": [
-        "tsr_disclosure_required"
-      ],
+      "implied_compliance_flags": [],
       "lifecycle_stages_owned": [
         "Underwrite",
         "Contract"

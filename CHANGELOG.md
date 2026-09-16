@@ -35,6 +35,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `scripts/console-smoke.sh` all check it; `bootstrap.sh` and CI set it on the databases they
   create. Five tests, including one that refuses the real development DSN.
 
+### Changed
+- **A failed pre-call audit write fails closed on a MUTATING call, not a flagged one**
+  (decisions entry 105). It keyed on `compliance_flags`, and those flags were a development
+  fixture's: `assign_contract` failed closed because of a row nobody had read. `is_mutating`
+  is the adapter's own declaration, verified against the live manifest. A read still degrades.
+- **`tests/world.py` gives flags per module, not one list per Forge.** That is how five CRE
+  Forge modules came to imply a telemarketing-disclosure duty while their own manuals said
+  `no_framework_applies`. `test_fixture_flags_match_the_instructions` now fails on that
+  disagreement. Four golden snapshots moved with it, each diff read: implied flags empty,
+  four workflow steps to `NONE`, the projection 128 → 64 + 64, and fifteen instruction hashes.
+
 ### Added
 - **`POST /api/humans/{id}/name`: an audited display-name change** (migration 0040, decisions
   entry 103). `ivan` only, including your own - tighter than the token route beside it, because

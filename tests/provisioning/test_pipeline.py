@@ -136,7 +136,16 @@ async def test_a_run_stops_at_the_first_blocking_gate_and_names_it(
         # 128 later the same day (entry 87): the VoiceForge binding went, and with it
         # `transcribe_call`'s steps. Nothing served that module either, so again no
         # capability left - only demand for one. Still blocks.
-        assert "128 approvals" in blocking.reason
+        #
+        # 64 TO THIS REVIEWER from entry 105, and the total did not move. The five CRE
+        # Forge modules stopped implying `tsr_disclosure_required` - a flag the
+        # development fixture wrote one-per-Forge onto modules that contact nobody - so
+        # Deal Underwriter, which declares no flag of its own, stopped routing to the
+        # compliance officer. Its 64 went to the venture operator. **Nothing about the
+        # work changed; what changed is that the routing now follows what the modules
+        # do.** Both roles are over, which is why the fixture that makes the later gates
+        # reachable now tops up both.
+        assert "64 approvals" in blocking.reason
         assert "compliance officer" in blocking.reason
         assert state is not None
         assert state.status == "blocked"
