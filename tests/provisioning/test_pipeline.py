@@ -17,6 +17,7 @@ import uuid
 
 import psycopg
 import pytest
+import yaml
 
 from broker import humans, packs, provisioning, revocation
 from broker.db import connection
@@ -186,7 +187,22 @@ async def test_a_pack_with_a_validator_failure_never_reaches_the_generators(
     Removing the compliance officer breaks V14 (critical roles need a backup human).
     The point is not which rule fires; it is that the run stops with the rule named.
     """
-    broken = pack_yaml.replace("    backup_human: Ivan\n", "")
+    # Remove the COMPLIANCE OFFICER's backup, found by role rather than by name. This was
+    # `replace("    backup_human: Ivan\n", "")`, which breaks the Pack only while that
+    # entry happens to name Ivan - and the founder rename (entry 103) changes the
+    # spelling. A no-op replace leaves the Pack VALID, V14 never fires, and the failure
+    # lands on the assertion below saying nothing about why: the mutation would have
+    # stopped working, not the rule.
+    #
+    # Rewritten through YAML rather than by line, because the first line-based attempt
+    # removed the venture operator's backup - V14 only checks CRITICAL roles, so the Pack
+    # stayed valid and Gate 2 passed. Which entry loses its backup is the whole mutation.
+    doc = yaml.safe_load(pack_yaml)
+    officer = next(
+        h for h in doc["human_capacity"] if h["role"] == "compliance_officer"
+    )
+    assert officer.pop("backup_human", None), "the officer had no backup to remove"
+    broken = yaml.safe_dump(doc, sort_keys=False)
     async with connection() as conn:
         await packs.store(
             conn, yaml_source=broken, pack_version="0.9.0",

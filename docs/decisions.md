@@ -8048,3 +8048,71 @@ reach it.
 
 **Greenstone's own library entries are deliberately not added here.** The two rows it has are
 fixtures, and writing real ones is a separate change with counsel questions in it.
+
+---
+
+## 103. Renaming an account is an act, so it is audited - and a display name is a key
+
+**Built 2026-09-15 on Ivan's ruling that his account becomes "Ivan Green". Nobody is renamed here:
+the rename runs in the Pack batch, with the Packs, because the two have to move together.**
+
+### Why it needed building at all
+
+**A display name is a key in practice and nothing said so.** Two Packs name their reviewers by
+display name, and two joins read those names against `office_human.display_name`: the access
+overview's missing-people list, and the approvals page, which attaches a reviewer's decisions.
+
+**And nothing could change one.** `broker/humans.py` had create, grant, revoke, suspend, reinstate
+and reissue - no rename. The only way was hand-run SQL, which writes no audit event, so the
+hash-chained log would hold no record that it happened.
+
+### What was built
+
+    humans.rename          returns (old, new). Refuses a blank name, and a name another
+                           account holds - naming the holder - comparing strip+lower,
+                           which is how the access overview compares.
+    POST /api/humans/      `ivan` ONLY, including your own. Tighter than the token route
+      {id}/name            beside it, deliberately: rotating your own token affects only
+                           you, while renaming yourself moves what somebody else's Pack
+                           resolves to. That makes it a portfolio act.
+    console_human_renamed  an audit event carrying FROM, TO and who did it. An event that
+                           said only what a name became could not answer "who was Ivan in
+                           September".
+    ux_human_display_name  UNIQUE on lower(trim(display_name)), migration 0040.
+
+**The index is case-insensitive because the code already compares that way.** A plain unique index
+would admit `Ivan` and `ivan` as two accounts those joins cannot tell apart - the ambiguity it
+exists to prevent, through the door it left open. Measured before adding it: **233 rows, no
+duplicates under either rule**, and the full suite raised no collision.
+
+### What it deliberately does not do
+
+**It does not rewrite history.** Four Gate 4 reasons read *"reviewed by Ivan: ..."*, eighteen
+evidence blobs carry the name a Pack declared, `audit_log` is hash-chained and Pack versions are
+frozen. An attestation records what was true when it was made; editing it would change what somebody
+attested to. **The account will disagree with its own trail, and that is the correct outcome.**
+
+### Two tests that would have passed for the wrong reason
+
+**`test_a_pack_with_a_validator_failure_never_reaches_the_generators`** broke the Pack with
+`replace("    backup_human: Ivan\n", "")`. After the rename that replace matches nothing, the Pack
+stays valid, V14 never fires - and the failure lands on an assertion about Gate 2 with nothing to
+say why. **The mutation would have stopped working, not the rule.** It now removes the compliance
+officer's backup through YAML, found by role.
+
+The first rewrite of it removed the first `backup_human` line by text, which was the venture
+operator's - and V14 only checks critical roles, so the Pack stayed valid and Gate 2 passed. **Which
+entry loses its backup is the whole mutation**, and the test caught that immediately.
+
+**`test_a_person_a_pack_names_with_no_account_is_named`** asserted `"Ivan" not in names`, guarding
+"somebody who has an account is not reported missing". After the rename that name is absent from
+`missing_people` **for exactly the reason the test exists to rule out**, and it reads as a pass. Both
+the account and the assertion now take the name from the Pack.
+
+### And `dev-up.sh` would have undone it
+
+`OPERATOR_NAME` defaulted to "Ivan" and is used when the operator account is created. A wiped
+database would have recreated the account under the old spelling, silently, and nobody would have
+thought to re-check. **It now defaults to "Ivan Green", and the script never renames an account that
+exists** - that is `humans.rename`'s job, which refuses a clash and writes an event, neither of which
+a default restated by a dev script would do.

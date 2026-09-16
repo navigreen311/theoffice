@@ -551,6 +551,11 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
         # authority over a Forge module everywhere else in this system, and the
         # forbidden-fragment list above would rightly have refused it.
         "/api/humans",
+        # `ivan` only, including your own - tighter than the token route beside it, and
+        # deliberately. Rotating your own token affects only you; a display name is what
+        # two Packs call their reviewer and what two joins match on, so renaming yourself
+        # moves what somebody else's Pack resolves to. Entry 103.
+        "/api/humans/{human_id}/name",
         "/api/humans/{human_id}/roles",
         "/api/humans/{human_id}/status",
         "/api/humans/{human_id}/token",

@@ -153,10 +153,18 @@ async def test_a_person_a_pack_names_with_no_account_is_named(api, admin):
     to yet. The name was Dana, who was invented; since entry 92 it is Ira Green, who is
     real but has no account in this test database - which is exactly the case to report.
     """
-    _id, token = await make("Ivan", "ivan", "ivan@office.example.com")
+    from generators.pack import load_pack
+    from tests.world import PACK_PATH
+
+    # The account is created under the Pack's own venture-operator name, so the "has an
+    # account, not reported missing" assertion below keeps biting after a rename.
+    operator_name = next(
+        h for h in load_pack(PACK_PATH).human_capacity if h.role == "venture_operator"
+    ).human_name
+
+    _id, token = await make(operator_name, "ivan", "ivan@office.example.com")
     async with connection() as conn:
         from broker import packs
-        from tests.world import PACK_PATH
 
         # `publish=True` stores it live in one step; the reconciliation reads live
         # Packs only, because a draft naming somebody is a proposal rather than a
@@ -176,8 +184,18 @@ async def test_a_person_a_pack_names_with_no_account_is_named(api, admin):
     assert ira["role"] == "compliance_officer"
     assert "Gate 10" in ira["reason"]
 
-    # And somebody who does have an account is not reported missing.
-    assert "Ivan" not in names
+    # And somebody who does have an account is not reported missing - asserted against
+    # the name THE PACK USES, not the literal "Ivan".
+    #
+    # As a literal, this assertion passes the moment the Pack stops saying "Ivan": the
+    # name is then absent from `missing_people` for precisely the reason the test exists
+    # to rule out, and it reads as a pass. The founder rename (entry 103) is that change.
+    # The account at the top of this test is created under the Pack's own operator name
+    # for the same reason - and creating a second account with that name is now refused
+    # by `ux_human_display_name`, which is the index doing its job.
+    assert operator_name not in names, (
+        f"{operator_name} has an account here and must not be reported missing"
+    )
 
     # Once the account exists under the name the Pack uses, she stops being reported.
     await make("Ira Green", "ivan", "ira@office.example.com")

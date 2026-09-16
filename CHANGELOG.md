@@ -35,7 +35,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `scripts/console-smoke.sh` all check it; `bootstrap.sh` and CI set it on the databases they
   create. Five tests, including one that refuses the real development DSN.
 
+### Added
+- **`POST /api/humans/{id}/name`: an audited display-name change** (migration 0040, decisions
+  entry 103). `ivan` only, including your own - tighter than the token route beside it, because
+  two Packs name their reviewers by display name and two joins match on it, so renaming yourself
+  moves what somebody else's Pack resolves to. The audit event carries the old name, the new one
+  and who did it. A name another account holds is refused, naming the holder, and refused again
+  by a UNIQUE index on `lower(trim(display_name))` - case-insensitive because that is how the
+  access overview compares. Earlier gate reasons, evidence and published Packs keep the old
+  name: an attestation records what was true when it was made.
+
 ### Changed
+- **`scripts/dev-up.sh` never renames an account that exists**, and `OPERATOR_NAME` now defaults
+  to "Ivan Green". It was "Ivan", so a wiped database would have recreated the operator under the
+  old spelling and silently undone a rename.
 - **The compliance library belongs to a venture** (migration 0039, decisions entry 102). The
   key is `(venture_id, entry_ref)`: one venture could overwrite another's entry under the same
   ref and every check stayed green, because they ask whether a ref resolves and never whose

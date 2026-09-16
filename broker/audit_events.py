@@ -51,6 +51,12 @@ EVENTS: tuple[Event, ...] = (
           "Somebody's token was replaced. The old one stopped working immediately, which "
           "is the entry to look for when a session dies for no apparent reason.",
           "broker.app", CONSOLE),
+    Event("console_human_renamed", "Person renamed",
+          "An account's display name changed, from what to what. Worth an event of its "
+          "own because two Packs name their reviewers by display name and two joins "
+          "match on it - so a rename moves what those resolve to, and the name frozen "
+          "into earlier gate reasons and evidence is deliberately left as it was.",
+          "broker.app", CONSOLE),
     Event("console_role_granted", "Role granted",
           "Somebody was given a role by somebody holding a stronger one.",
           "broker.app", CONSOLE),
