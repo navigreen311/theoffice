@@ -9772,7 +9772,7 @@ before relying on it**. A test that mutates by text has to prove the text was th
 
 ---
 
-## 116. "My token is not working" was a 401 from somebody else's nginx
+## NEXT. "My token is not working" was a 401 from somebody else's nginx
 
 **Found and fixed 2026-09-16.** The token was fine. Nothing about it had expired, been
 rotated out from under anybody, or been rejected by The Office.
