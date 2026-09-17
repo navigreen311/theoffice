@@ -10062,7 +10062,7 @@ entry to derive from, and five CRE Forge modules offer five to seven. Measured, 
 inferred from the count. Nothing is broken today; it is the kind of difference that
 turns into "why did that module get one probe" later.
 
-## NEXT. The Office refused its own text coming back, and called it an outage
+## 123. The Office refused its own text coming back, and called it an outage
 
 Run bcf44c12 cleared Gate 7 and reported at Gate 8:
 
