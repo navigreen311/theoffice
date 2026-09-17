@@ -10061,3 +10061,92 @@ receives (`held_out.py:26-46`). Eleven CapitalForge modules therefore offer it *
 entry to derive from, and five CRE Forge modules offer five to seven. Measured, not
 inferred from the count. Nothing is broken today; it is the kind of difference that
 turns into "why did that module get one probe" later.
+
+## NEXT. The Office refused its own text coming back, and called it an outage
+
+Run bcf44c12 cleared Gate 7 and reported at Gate 8:
+
+    0 of 4 module(s) accepted by SimForge
+
+**SimForge accepted all four.** The refusal was The Office's, reading SimForge's reply:
+
+    submit_curriculum: field 'module_declared_absences.property_lookup.rate_limited'
+    carries 1800 characters of prose. Scenario content must never reach The Office; if
+    this field is legitimate, narrow it rather than widening the check.
+
+`submit_curriculum` echoes `module_declared_absences` back on acceptance - our own
+`not_applicable` reasons - and `assert_no_scenario_content` refuses any echoed string of
+200+ characters that reads like prose. The reasons written on 17 September, carrying the
+ruling and the measured middleware evidence, ran **1,470 to 1,800 characters**. Nothing
+was wrong with the Forge and nothing was wrong with the curriculum.
+
+### Four fixes, and one of them was not in the sizing
+
+**1. The reasons are one sentence, and the argument moved.**
+
+    module             rate_limited            recovery_after_failure
+    assign_contract    1729 -> 155
+    buyer_match        1470 -> 155             954 -> 171
+    comp_analysis      1651 -> 155            1073 -> 177
+    property_lookup    1800 -> 155            1251 -> 177
+    underwrite_deal    1672 -> 155
+    TOTAL              8322 -> 775
+
+The detail is medlink-wholesale#81 - *"Forge surface has no rate limit: the limiter is
+configured but never installed as middleware"*, which exists and is open - and this
+entry. The wire carries one sentence.
+
+**The `recovery_after_failure` column is the part that was not asked for**, and without
+it the fix would not have worked. `assert_no_scenario_content` raises on the FIRST
+offending field, so `rate_limited` masked three more over-length reasons behind it.
+Shortening only the four named would have moved the error rather than removed it. Found
+by writing the test before believing the fix.
+
+**2. A refused response is its own state.** `ResponseRefusedError`, raised by the
+response guard and caught separately by Gate 8, reported as `modules_response_refused`
+and named in the gate's sentence. It is NOT `modules_unreachable`.
+
+    unreachable     nothing was learned. Restart a service.
+    refused         SimForge read the submission and said no. Write scenarios.
+    response        SimForge accepted it and the reply broke the manifest coming back.
+    refused         Shorten what we send, or narrow the guard. Never widen it.
+
+Three outcomes with three different responses, and folding two of them together sent a
+reader to restart a Forge that was answering.
+
+The gate still does not BLOCK on it, for the same reason it does not block on an outage:
+SimForge did not refuse the content, so blocking would report scenarios as wrong when
+they were accepted.
+
+**3. `OFFICE_OPERATOR_TOKEN` is set, and an unverified build is no longer green.**
+`dev-all.sh::api_commit` returns empty without a token, and two of the three paths then
+reported `ok "live (build unverified)"`. Both now call `bad`. A build nobody could
+identify is not a build that was checked - which is how an API started the previous
+evening drove a provisioning run on pre-merge code for an afternoon. The variable is
+documented in `.env.example` and points at a dedicated low-privilege account.
+
+**4. Gate 5 corrects `origin` on the row it re-writes.** `ON CONFLICT ... DO UPDATE SET`
+gains `origin = 'ladder'`, so Greenstone's six `unknown` grants self-correct the next
+time the ladder writes them.
+
+### The audit log cannot settle the six, and that was checked before assuming it
+
+0043 backfilled `bootstrap` from `grant_issued` events carrying `bootstrap: true`, so the
+obvious question is whether the same log can identify the ladder's rows.
+
+**It cannot. Measured: the entire audit log holds three `grant_issued` events and all
+three are Phase 0.8 bootstraps.** `runtime_config.apply` writes no audit event at all -
+`grep -c audit generators/runtime_config.py` returns 0. There is no record of the ladder
+issuing anything, so there is nothing to key a backfill on.
+
+That is why the correction is the upsert and not a migration. The ladder is the only
+party that knows it wrote a row, and it now says so on every write. A migration would be
+inferring it from shape, which 0043 refused to do and this entry does not reopen.
+
+### Left undone, deliberately
+
+Burkham's twenty drafts carry **49 declared reasons over the threshold**. They are
+drafts, never submitted, so they are never echoed and cannot be refused today. The debt
+comes due at approval, not now, and `test_no_declared_reason_would_be_refused_coming_back`
+is scoped to approved keys for exactly that reason: widening it would block Ivan's review
+on prose length before he has read a word.

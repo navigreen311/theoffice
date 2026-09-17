@@ -42,7 +42,11 @@ import uuid
 import pytest
 
 from broker import provisioning
-from broker.simforge import CurriculumRejectedError, mint_run_ref
+from broker.simforge import (
+    CurriculumRejectedError,
+    ResponseRefusedError,
+    mint_run_ref,
+)
 from tests.conftest import requires_db
 from tests.provisioning.test_simforge_handover import (  # noqa: F401 - fixtures
     SimForgeAccepts,
@@ -142,6 +146,62 @@ async def test_a_partial_refusal_still_passes(at_gate_8, operator):  # noqa: F81
     gate_8 = _gate_8(outcomes)
     assert gate_8.verdict == provisioning.PASSED, gate_8.reason
     assert gate_8.evidence["modules_accepted"] == 1
+
+
+# ------------------------------------- the answer The Office refused, not an outage
+
+async def test_a_refused_response_is_not_reported_as_an_outage(at_gate_8, operator):  # noqa: F811
+    """SimForge answering and The Office refusing the answer is a third thing.
+
+    **It cost an afternoon on 17 September 2026.** SimForge echoes
+    `module_declared_absences` back on every acceptance, the declared `rate_limited`
+    reasons ran to 1,470-1,800 characters, and `assert_no_scenario_content` refuses any
+    echoed string that long. Four Greenstone modules were ACCEPTED and recorded as a
+    Forge that could not be reached - so the evidence said restart SimForge, and
+    SimForge was fine.
+
+    Three outcomes, three different responses: restart a service, write scenarios, or
+    shorten what we send. The gate has to tell them apart.
+    """
+    conn, run_id = at_gate_8
+
+    class AcceptsThenEchoesProse:
+        """Accepts, and replies with a field the response manifest refuses."""
+
+        async def submit_curriculum(self, conn, **kwargs) -> dict:
+            module_id = kwargs["payload"]["instruction_set_ref"]["module_id"]
+            raise ResponseRefusedError(
+                f"submit_curriculum: field 'module_declared_absences.{module_id}."
+                "rate_limited' carries 1800 characters of prose."
+            )
+
+        async def run_start(self, conn, **kwargs) -> dict:  # pragma: no cover
+            raise AssertionError("run_start must not be reached")
+
+        async def aclose(self) -> None:
+            pass
+
+    outcomes = await provisioning.advance(
+        conn, run_id=run_id, actor=operator.human_id, simforge=AcceptsThenEchoesProse()
+    )
+    gate_8 = _gate_8(outcomes)
+
+    # NOT blocked: SimForge did not refuse the content, so blocking would report
+    # scenarios as wrong when they were accepted.
+    assert gate_8.verdict == provisioning.PASSED, gate_8.reason
+    assert gate_8.evidence["modules_response_refused"], (
+        "a refused response was not recorded as one"
+    )
+    assert gate_8.evidence["modules_unreachable"] == [], (
+        "a refused response was counted as an outage; that is the misreport this "
+        "test exists to prevent"
+    )
+    assert gate_8.evidence["modules_refused"] == [], (
+        "a refused response was counted as SimForge refusing the curriculum"
+    )
+    # And the sentence says so, because a reader who sees only "0 accepted" will go
+    # and restart a Forge that is answering.
+    assert "refused by The Office reading the reply back" in gate_8.reason
 
 
 # ------------------------------------------------------------- naming the agent

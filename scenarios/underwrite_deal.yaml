@@ -218,28 +218,17 @@ scenarios:
 
 not_applicable:
 
+  # SHORT ON PURPOSE, AND THE LENGTH IS THE POINT.
+  #
+  # SimForge echoes `module_declared_absences` back on every acceptance, and
+  # `assert_no_scenario_content` refuses any echoed string of 200+ characters that reads
+  # like prose. This reason ran to 1672 characters, so SimForge ACCEPTED the
+  # curriculum and The Office then refused its own text coming back - the module counted
+  # as unreachable with nothing wrong on either side.
+  #
+  # The evidence is medlink-wholesale#81. The argument - including why a 429 is the one
+  # error safely retried on a contract write, because it never landed - is in
+  # docs/decisions.md.
   rate_limited: >
-    CRE FORGE CANNOT RETURN 429 ON A MODULE CALL, measured rather than assumed.
-    `backend/app/main.py:87` puts a `Limiter` on `app.state` and `:91` registers the
-    `RateLimitExceeded` handler, with `default_limits=["100/minute"]`
-    (`backend/app/middleware/rate_limit.py:28`). `SlowAPIMiddleware` is never added -
-    `main.py:94` adds `CORSMiddleware` and nothing else - and slowapi's default limits
-    apply only through it. The only live limits are per-route `@limiter.limit`
-    decorators, all of them in `backend/app/api/v1/auth.py`. The Office router is
-    mounted at `main.py:303`; `call_module` (`backend/app/api/forge.py:530`) carries no
-    decorator. The manual agrees by omission: `failure_signatures.hard_failure` lists
-    404, 422 and 500 and names no 429.
-    This module would be the one where a 429 mattered most, since it is the writer and
-    a refused write and a lost response are different states - which is why the absence
-    is declared here rather than passed over.
-    RULED 17 September 2026: THIS IS A DEFECT, AND IT IS RAISED THERE. A limiter that is
-    configured and then not installed is a CRE Forge bug rather than a deliberate
-    exemption. Until it is fixed this class stays declared absent, and the reason is
-    exactly that: **pending CRE Forge rate limiter activation.**
+    Pending CRE Forge rate limiter activation: the limiter is configured and never installed, so no module call can return 429. Raised as medlink-wholesale#81.
 
-    When it ships, this class is authored rather than declared - and it needs authoring
-    with care, because a 429 is the ONE error that is safely retried on a contract
-    write. It means the request was refused before it reached the handler, so nothing
-    landed. That is the opposite of every other failure on `assign_contract`, where a
-    retry may duplicate a document, and an agent taught one habit will apply it to the
-    other.

@@ -265,10 +265,30 @@ async def apply(
                 -- a state `resolve_grant` reports truthfully (`grants.py:225` raises
                 -- NotCertified naming which half is missing); a stale non-NULL ref
                 -- pointing at a deleted row is the silent failure this exists to end.
+                --
+                -- `origin` IS REFRESHED, AND IT IS THE ONE FACT THIS WRITER OWNS.
+                --
+                -- Greenstone's six ladder grants read `origin = 'unknown'` because Gate
+                -- 5 wrote them before 0043 added the column. That is not harmless: the
+                -- supersession rule below requires `l.origin = 'ladder'`, so a future
+                -- Phase 0 grant on this venture would NOT be retired by its replacement.
+                --
+                -- **Backfilling those six on inference was refused.** 0043 would not
+                -- write `ladder` on a guess, and the audit log cannot settle it either -
+                -- checked, on 17 September 2026: the whole log holds three `grant_issued`
+                -- events and all three are Phase 0.8 bootstraps. `apply` writes none, so
+                -- there is no record of the ladder issuing anything.
+                --
+                -- So the row is corrected by the only party that knows: this statement.
+                -- When the ladder writes a grant it says so, and a row it re-writes
+                -- stops claiming not to know. That is a fact this writer observes rather
+                -- than one a migration infers, and it converges - the same argument the
+                -- certification pointers above are refreshed on.
                 ON CONFLICT (grant_id) DO UPDATE SET
                   trust_tier            = EXCLUDED.trust_tier,
                   operation_cert_ref    = EXCLUDED.operation_cert_ref,
-                  dept_context_cert_ref = EXCLUDED.dept_context_cert_ref
+                  dept_context_cert_ref = EXCLUDED.dept_context_cert_ref,
+                  origin                = 'ladder' 
                 """,
                 (
                     grant.grant_id, grant.office_agent_id, grant.forge_id,
