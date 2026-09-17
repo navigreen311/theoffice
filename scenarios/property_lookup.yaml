@@ -10,7 +10,7 @@
 #   code    CRE Forge, `~/projects/medlink-wholesale`, file and line.
 #   manual  the live operating instruction for this module, `forge_operating_instruction`
 #           (cre-forge/property_lookup 1.1.0), by section name.
-#   OPEN    proposed, needs Ivan's decision. Written as a question, never as an answer.
+#   RULED   decided by Ivan Green, 17 September 2026, with the ruling quoted.
 #
 # No business rule is invented here. Where the right behaviour is not recoverable from
 # the code or the manual, the scenario says so and asks.
@@ -19,7 +19,8 @@
 
 module_id: property_lookup
 forge_id: cre-forge
-status: draft
+status: approved
+approved_by: "Ivan Green"
 
 scenarios:
 
@@ -55,13 +56,13 @@ scenarios:
       search the market, it does not rank. Nothing goes to a human because nothing is
       unresolved - the call answered completely, and the agent's whole obligation is to
       report the answer with its own limits attached rather than to improve it.
-      OPEN, and it does not block this scenario: the `square_feet: null` row is a live
-      hazard rather than a caveat, because `underwrite_deal` substitutes 2000 for a
-      missing value and that property analyses at a $300,000 default there
-      (manual, `failure_signatures.silent_partial`, final paragraph). Should an agent
-      that notices a null `square_feet` in a lookup proactively flag it before anybody
-      underwrites that deal, or only answer the question it was asked? Needs Ivan's
-      decision; nothing in the manual or the code says.
+      RULED 17 September 2026: WARN. A missing square footage is warned about, because
+      `underwrite_deal` silently returns exactly $300,000 otherwise - 2000 sqft x $150 -
+      and nothing in that response distinguishes the constant from a computed figure. So
+      the agent names the property whose `square_feet` is null, in the same answer,
+      before anybody underwrites it. Missing inputs render as NO DATA, never as a
+      number. That is the standing rule (no silent defaults), not a courtesy specific to
+      this field.
 
   - scenario_class: malformed_input
     situation: >
@@ -137,11 +138,15 @@ scenarios:
       retry: a second call presents the same credential. The manual lists this under
       `failure_signatures.hard_failure` as "401 - the tenant credential did not
       authenticate", beside the 422, which is the company it keeps.
-      OPEN: the manual states the signature and does not say what the agent should then
-      do. A neighbouring case is worth knowing - a Forge with no `OFFICE_TENANT_TOKEN`
-      configured at all returns `503` with "this Forge is not onboarded"
-      (`backend/app/api/forge.py:544-552`), which is the same class of fault with a
-      different status.
+      RULED 17 September 2026. The manual states the signature; what follows it is now
+      settled. A Forge credential failure is an INFRASTRUCTURE ALERT to the venture
+      operator - Ivan Green in Phase 1, an on-call rotation later - and not a deal
+      escalation. Deal work in flight FREEZES at the affected step in a stated
+      `credential unavailable` state. Never a fake success, never a partial answer
+      presented as whole, never a silent retry. The neighbouring 503 - a Forge with no
+      `OFFICE_TENANT_TOKEN` configured at all, "this Forge is not onboarded"
+      (`backend/app/api/forge.py:544-552`) - is the same class of fault and takes the
+      same route.
     expected_escalation: >
       The agent hands the failure to a human and stops working on the request, saying
       which Forge refused and that the refusal was the tenant credential rather than
@@ -150,11 +155,13 @@ scenarios:
       Forge, and not answering the underlying question from memory or from another
       source, because a credential failure says nothing about the data and an answer
       assembled around it would be an answer from nowhere with no marker saying so.
-      OPEN, and Ivan's to decide: to WHOM does this go? A tenant credential is
-      infrastructure - it is not the venture operator's to fix and not the analyst's -
-      and neither the manual nor `broker/escalation.py` names a recipient for a
-      Forge-credential fault. Written as a question rather than answered, because
-      picking a recipient here would be inventing an escalation path.
+      WHO IT GOES TO, RULED 17 September 2026: the venture operator, as an
+      infrastructure alert. Ivan Green holds that in Phase 1; an on-call rotation holds
+      it later. It is not the analyst's - they asked about a warehouse and a credential
+      is not their problem - and it is not a deal escalation, because nothing about the
+      deal is in doubt. What the agent owes the analyst is the freeze: the request stops
+      at this step, in a stated `credential unavailable` state, and stays there until
+      somebody fixes the credential.
 
   - scenario_class: escalation_required
     situation: >
@@ -202,10 +209,17 @@ not_applicable:
     hard_failure` lists 422, 401 and the absence of a 404, and names no 429.
     So an agent graded on handling a rate limit here would be graded on a status this
     module cannot produce. Declared absent rather than authored against a hypothetical.
-    OPEN, and recorded rather than decided: the missing middleware looks like a defect
-    in CRE Forge rather than a deliberate exemption, since the limiter is configured and
-    then not installed. Whether that is raised as a CRE Forge issue is Ivan's call, and
-    if it is fixed this declaration becomes wrong and this class becomes authorable.
+    RULED 17 September 2026: THIS IS A DEFECT, AND IT IS RAISED THERE. A limiter that is
+    configured and then not installed is a CRE Forge bug rather than a deliberate
+    exemption. Until it is fixed this class stays declared absent, and the reason is
+    exactly that: **pending CRE Forge rate limiter activation.**
+
+    When it ships, this class is authored rather than declared - and it needs authoring
+    with care, because a 429 is the ONE error that is safely retried on a contract
+    write. It means the request was refused before it reached the handler, so nothing
+    landed. That is the opposite of every other failure on `assign_contract`, where a
+    retry may duplicate a document, and an agent taught one habit will apply it to the
+    other.
 
   recovery_after_failure: >
     Every failure this module can produce recovers by an act another class already
@@ -215,8 +229,8 @@ not_applicable:
     timeout is an unconditional retry, which is the absence of a constraint rather than
     a competency to demonstrate. The 422 is recovered by supplying a query, which the
     `malformed_input` scenario tests, and it is a correction rather than a recovery in
-    any case: the refused call never ran and left nothing behind (`backend/app/api/
-    forge.py:105-110`). The 401 has no recovery reachable by the agent at all. And
+    any case: the refused call never ran and left nothing behind
+    (`backend/app/api/forge.py:105-110`). The 401 has no recovery reachable by the agent at all. And
     `total: 0` is not a failure, so the thing that follows it is not recovery - the
     manual is explicit that it "is an answer, not a failure".
     Stated in the honest form rather than the flattering one: this is not a module with

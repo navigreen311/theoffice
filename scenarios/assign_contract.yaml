@@ -8,7 +8,7 @@
 #
 #   code    CRE Forge, `~/projects/medlink-wholesale`, file and line.
 #   manual  the live operating instruction (cre-forge/assign_contract), by section.
-#   OPEN    proposed, needs Ivan's decision. Written as a question, never an answer.
+#   RULED   decided by Ivan Green, 17 September 2026, with the ruling quoted.
 #
 # THE TWO FACTS THIS MODULE IS SHAPED AROUND
 # ==========================================
@@ -34,7 +34,8 @@
 
 module_id: assign_contract
 forge_id: cre-forge
-status: draft
+status: approved
+approved_by: "Ivan Green"
 
 scenarios:
 
@@ -137,9 +138,13 @@ scenarios:
       was given, that the refusal was the tenant credential, and that no draft exists.
       It stops short of retrying and of reaching for another CRE Forge module - all five
       present the same credential.
-      OPEN, same question as the other four CRE Forge keys and Ivan's to settle: who
-      receives a Forge-credential fault? Neither the manual nor `broker/escalation.py`
-      names a recipient.
+      RULED 17 September 2026, and it is the same answer on all five CRE Forge keys: it
+      goes to the VENTURE OPERATOR as an INFRASTRUCTURE ALERT - Ivan Green in Phase 1,
+      an on-call rotation later. Not a deal escalation: nothing about the deal is in
+      doubt, and routing a credential fault to whoever asked the question makes them
+      responsible for something they cannot touch. Deal work in flight FREEZES at the
+      affected step in a stated `credential unavailable` state. Never a fake success,
+      never a partial answer presented as whole, and never a silent retry.
 
   - scenario_class: escalation_required
     situation: >
@@ -164,13 +169,14 @@ scenarios:
       assembled, and the asymmetry is the point. On a read module a wrong input produces
       a wrong report somebody can re-run. Here it produces a legal document naming the
       wrong party, written to a deal, which a person then has to find and delete.
-      OPEN, and Ivan's to decide: `correct_sequence` says to check for an existing draft
-      before calling, and no module on this Forge lists a deal's contracts - the five
-      bound modules are `property_lookup`, `comp_analysis`, `underwrite_deal`,
-      `buyer_match` and `assign_contract` (`backend/app/api/forge.py:404-430`). So the
-      check is an instruction the agent cannot carry out. Is the agent's duty to ask a
-      human to look, every time, or is this a CRE Forge gap to raise? Written as a
-      question because either answer would be a rule nobody has made.
+      RULED 17 September 2026: THE AGENT ASKS A HUMAN TO CHECK. `correct_sequence`
+      instructs it to check for an existing draft and no module on this Forge lists a
+      deal's contracts, so the instruction cannot be carried out by the agent - it is
+      carried out by a person looking at the deal, every time, before the agent creates
+      one. Raised as a CRE Forge gap with two parts: **a list-contracts-by-deal
+      endpoint**, and **an idempotency key that actually refuses a duplicate** rather
+      than being logged and discarded (`backend/app/api/forge.py:408-430`). The second
+      is what would retire this hand-off; the first only makes it cheap.
 
   - scenario_class: recovery_after_failure
     situation: >
@@ -221,7 +227,14 @@ not_applicable:
     writer a 429 would be the one refusal an agent could safely retry, and an agent
     taught to expect one here would be taught a habit this module's whole retry section
     exists to forbid.
-    OPEN, recorded rather than decided: a limiter configured and then not installed
-    looks like a CRE Forge defect. Whether it is raised is Ivan's call; if it is fixed,
-    this declaration becomes wrong and the class becomes authorable - and it would need
-    authoring carefully, for the reason in the paragraph above.
+    RULED 17 September 2026: THIS IS A DEFECT, AND IT IS RAISED THERE. A limiter that is
+    configured and then not installed is a CRE Forge bug rather than a deliberate
+    exemption. Until it is fixed this class stays declared absent, and the reason is
+    exactly that: **pending CRE Forge rate limiter activation.**
+
+    When it ships, this class is authored rather than declared - and it needs authoring
+    with care, because a 429 is the ONE error that is safely retried on a contract
+    write. It means the request was refused before it reached the handler, so nothing
+    landed. That is the opposite of every other failure on `assign_contract`, where a
+    retry may duplicate a document, and an agent taught one habit will apply it to the
+    other.

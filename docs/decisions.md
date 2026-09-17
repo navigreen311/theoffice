@@ -9857,8 +9857,9 @@ line (`~/projects/medlink-wholesale`), the module's live operating instruction b
 section, or **OPEN** - written as a question for Ivan rather than answered. No business
 rule is invented.
 
-Eleven OPEN questions are recorded across the five. The one that recurs on all of them:
-**who receives a Forge-credential fault?** A 401 is infrastructure - not the venture
+Eleven OPEN questions were recorded across the five. **All are now answered** - see the
+rulings below; what follows describes the file as it was drafted. The one that recurred
+on all of them was **who receives a Forge-credential fault?** A 401 is infrastructure - not the venture
 operator's to fix and not the analyst's - and neither the manuals nor
 `broker/escalation.py` names a recipient. The others are per module, including whether
 an agent may widen a comp radius on a human's instruction, whether `underwrite_deal`
@@ -9950,6 +9951,70 @@ capitalforge/client_read, capitalforge/client_read_pii, capitalforge/record_cons
 Confirmed against `main` as well, so it predates this change and is a Pack gap, not a
 consequence of the ruling. Recorded so nobody later reads Burkham's silence as this
 entry's doing.
+
+### The eight open questions, answered - and Greenstone's five keys approved
+
+**Ruled by Ivan Green, 17 September 2026.** The brief asked eight questions; all eight
+are settled. The five Greenstone keys now carry `status: approved` and
+`approved_by: "Ivan Green"`. **Burkham's twenty stay drafts** - they have not been
+reviewed, and this ruling does not reach them.
+
+    1  credential failure   Goes to the VENTURE OPERATOR as an infrastructure alert -
+                            Ivan Green in Phase 1, an on-call rotation later. NOT a deal
+                            escalation. Deal work in flight FREEZES at the affected step
+                            in a stated `credential unavailable` state. Never a fake
+                            success.
+    2  the rate limiter     A defect, raised at CRE Forge. Until fixed, rate-limit
+                            scenarios stay `not_applicable` with the reason **"pending
+                            CRE Forge rate limiter activation"**. When it ships they are
+                            authored, noting that a 429 is the one error safely retried
+                            on a contract write, because it never landed.
+    3  missing square feet  WARN. Underwriting silently returns exactly $300,000
+                            otherwise. Missing inputs render as no-data, never a number.
+    4  widening comps       A human MAY instruct it. The agent never widens on its own.
+                            Every widening records who asked, when, and why.
+    5  "no matches"         Cannot be explained today. Raised as a CRE Forge gap: return
+                            the filters applied, the pre-filter candidate count, and the
+                            per-filter exclusions.
+    6  underwriting a       REFUSE a property with no asking price and no square footage.
+       property with        No analysis beats a default stored as analysis. The refusal
+       neither figure       is visible on the deal.
+    7  a failed re-run      Must not leave the old figure reading as current. Raised as a
+                            CRE Forge gap: a freshness state on every derived figure.
+    8  an existing draft    The agent asks a human to check. Raised as a CRE Forge gap: a
+                            list-contracts-by-deal endpoint, plus an idempotency key that
+                            actually refuses a duplicate.
+
+**Four of the eight are CRE Forge gaps rather than agent policy** - 2, 5, 7 and 8. That
+is the shape worth noticing: half the questions an answer key could not answer were
+questions the Forge does not let anybody answer. Each is recorded here as raised, and
+each answer key says what the agent does until the gap closes.
+
+### Two standing patterns, ruled in their own right
+
+**NO SILENT DEFAULTS.** A system must not produce a plausible number from a missing or
+stale input without labelling it. **Refusing at the source beats catching it
+downstream.**
+
+    Rulings 3, 6 and 7 are all instances. So is the $300,000 constant, so is
+    `arv_confidence: 0.10`, and so is the 2000-square-foot substitution - three separate
+    places on one Forge where an absence became a figure. This is why ruling 6 refuses
+    rather than annotates: an annotation is a catch downstream, and the annotation is
+    the part that gets dropped in the retelling.
+
+**HUMAN OVERRIDE WITH AUDIT.** Any human authorisation of something agent policy would
+block records **actor, timestamp and reason**, and is reviewed by the Compliance Review
+Board.
+
+    Ruling 4 is the instance here - a human may lift the no-widening rule, and the
+    record is the condition rather than a formality, because a widened comp set is
+    indistinguishable from a narrow one once the parameters are gone. The pattern
+    generalises past this Forge: it is the shape every override takes, and it is what
+    keeps "a human said so" from being unfalsifiable.
+
+Both patterns are broader than CRE Forge and broader than answer keys. They are recorded
+as their own rulings so the next module that wants to substitute a default has something
+to be refused by, rather than a precedent buried in a scenario file.
 
 ### Read-only: the twenty audited
 

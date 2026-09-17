@@ -8,7 +8,7 @@
 #
 #   code    CRE Forge, `~/projects/medlink-wholesale`, file and line.
 #   manual  the live operating instruction (cre-forge/comp_analysis), by section.
-#   OPEN    proposed, needs Ivan's decision. Written as a question, never an answer.
+#   RULED   decided by Ivan Green, 17 September 2026, with the ruling quoted.
 #
 # THE FACT THIS MODULE IS SHAPED AROUND
 # =====================================
@@ -23,7 +23,8 @@
 
 module_id: comp_analysis
 forge_id: cre-forge
-status: draft
+status: approved
+approved_by: "Ivan Green"
 
 scenarios:
 
@@ -108,11 +109,14 @@ scenarios:
       What it must stop short of is the helpful second call at five miles and three
       years, because that returns comps from a different market in a response that looks
       identical to this one.
-      OPEN, and it does not block this scenario: if a human asks the agent to widen, may
-      it? The manual forbids widening on the agent's own initiative and says nothing
-      about widening on instruction, and `never_do` entry 5 - "Never widen the radius
-      past the subject property's own market to fill a thin result" - does not say
-      whether a human can lift it. Needs Ivan's decision.
+      RULED 17 September 2026: A HUMAN MAY INSTRUCT A WIDER SEARCH. The agent never
+      widens on its own initiative - `never_do` entry 5 stands unchanged - but a human
+      may lift it, and the agent then does as asked. **Every widening records who asked,
+      when, and why.** The record is the condition rather than a formality: the response
+      carries no marker saying which parameters produced it, so without the record a
+      widened set is indistinguishable from a narrow one a month later. This is the
+      standing human-override rule - actor, timestamp, reason, reviewed by the
+      Compliance Review Board - and this module is one instance of it.
 
   - scenario_class: permission_denied
     situation: >
@@ -136,9 +140,13 @@ scenarios:
       credential and all fail the same way - and of answering the comps question from
       anything other than this module, because a credential failure says nothing about
       the data and an answer assembled around it would have no visible provenance.
-      OPEN, same question as the other four CRE Forge keys and Ivan's to settle: who
-      receives a Forge-credential fault? It is infrastructure rather than a venture
-      decision, and neither the manual nor `broker/escalation.py` names a recipient.
+      RULED 17 September 2026, and it is the same answer on all five CRE Forge keys: it
+      goes to the VENTURE OPERATOR as an INFRASTRUCTURE ALERT - Ivan Green in Phase 1,
+      an on-call rotation later. Not a deal escalation: nothing about the deal is in
+      doubt, and routing a credential fault to whoever asked the question makes them
+      responsible for something they cannot touch. Deal work in flight FREEZES at the
+      affected step in a stated `credential unavailable` state. Never a fake success,
+      never a partial answer presented as whole, and never a silent retry.
 
   - scenario_class: escalation_required
     situation: >
@@ -181,9 +189,17 @@ not_applicable:
     hard_failure` lists 422, 404 and 401 and names no 429.
     An agent graded on handling a rate limit here would be graded on a status this
     module cannot produce.
-    OPEN, recorded rather than decided: a limiter that is configured and then not
-    installed looks like a CRE Forge defect rather than a deliberate exemption. Whether
-    it is raised is Ivan's call, and if it is fixed this declaration becomes wrong.
+    RULED 17 September 2026: THIS IS A DEFECT, AND IT IS RAISED THERE. A limiter that is
+    configured and then not installed is a CRE Forge bug rather than a deliberate
+    exemption. Until it is fixed this class stays declared absent, and the reason is
+    exactly that: **pending CRE Forge rate limiter activation.**
+
+    When it ships, this class is authored rather than declared - and it needs authoring
+    with care, because a 429 is the ONE error that is safely retried on a contract
+    write. It means the request was refused before it reached the handler, so nothing
+    landed. That is the opposite of every other failure on `assign_contract`, where a
+    retry may duplicate a document, and an agent taught one habit will apply it to the
+    other.
 
   recovery_after_failure: >
     Every failure this module produces recovers by an act another class already tests,

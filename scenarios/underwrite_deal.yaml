@@ -9,7 +9,7 @@
 #
 #   code    CRE Forge, `~/projects/medlink-wholesale`, file and line.
 #   manual  the live operating instruction (cre-forge/underwrite_deal), by section.
-#   OPEN    proposed, needs Ivan's decision. Written as a question, never an answer.
+#   RULED   decided by Ivan Green, 17 September 2026, with the ruling quoted.
 #
 # THE FACT THIS MODULE IS SHAPED AROUND, AND IT IS A KNOWN DEFECT
 # ==============================================================
@@ -29,7 +29,8 @@
 
 module_id: underwrite_deal
 forge_id: cre-forge
-status: draft
+status: approved
+approved_by: "Ivan Green"
 
 scenarios:
 
@@ -118,10 +119,14 @@ scenarios:
       up a square footage, estimating one from the address, or passing a figure it
       composed - because the module accepts neither, and `inputs` says `repair_scope`
       and `comps` are not caller-supplied at all.
-      OPEN, and Ivan's to decide: should an agent refuse to call this module at all when
-      the property has neither figure, rather than calling it and reporting the default?
-      The call writes, so the choice is between a record that is a constant and no
-      record. Nothing in the manual or the code says which is wanted.
+      RULED 17 September 2026: REFUSE. The agent does not call this module for a
+      property with neither an asking price nor a square footage. **No analysis beats a
+      default stored as analysis** - the call writes, so the alternative is a $300,000
+      constant sitting on the deal and reading as this morning's underwriting. The
+      refusal is VISIBLE ON THE DEAL rather than swallowed: somebody has to see that the
+      deal was not underwritten, and why. Raised as a CRE Forge gap so the refusal
+      happens at the source - refusing at the source beats catching it downstream, which
+      is the standing rule.
 
   - scenario_class: permission_denied
     situation: >
@@ -143,9 +148,13 @@ scenarios:
       the tenant credential, and saying that no analysis was written. It stops short of
       retrying and of reaching for another CRE Forge module, all of which present the
       same credential and fail the same way.
-      OPEN, same question as the other four CRE Forge keys and Ivan's to settle: who
-      receives a Forge-credential fault? Neither the manual nor `broker/escalation.py`
-      names a recipient.
+      RULED 17 September 2026, and it is the same answer on all five CRE Forge keys: it
+      goes to the VENTURE OPERATOR as an INFRASTRUCTURE ALERT - Ivan Green in Phase 1,
+      an on-call rotation later. Not a deal escalation: nothing about the deal is in
+      doubt, and routing a credential fault to whoever asked the question makes them
+      responsible for something they cannot touch. Deal work in flight FREEZES at the
+      affected step in a stated `credential unavailable` state. Never a fake success,
+      never a partial answer presented as whole, and never a silent retry.
 
   - scenario_class: escalation_required
     situation: >
@@ -199,10 +208,13 @@ scenarios:
       rather than an instruction. And it does not delete, blank or annotate the existing
       analysis to prevent the misreading, because no module on this Forge can and the
       agent's remedy is to say so rather than to arrange it.
-      OPEN, and Ivan's to decide: is there a duty to flag the stale row to anyone beyond
-      the person who asked? The row stays readable to every other consumer of that deal
-      and carries no marker that a re-analysis was attempted and failed. Nothing in the
-      manual or the code says.
+      RULED 17 September 2026: A FAILED RE-ANALYSIS MUST NOT LEAVE THE OLD FIGURE
+      READING AS CURRENT. The agent's own duty is the report above - name the failure
+      and the stale row together. But the agent cannot mark the row, and every other
+      consumer of that deal still reads it as current, so the agent's report is a patch
+      over a Forge gap rather than a fix. Raised as a CRE Forge gap: **a freshness state
+      on every derived figure**, so a stale analysis says so to everybody who reads it
+      and not only to whoever happened to ask the agent.
 
 not_applicable:
 
@@ -220,6 +232,14 @@ not_applicable:
     This module would be the one where a 429 mattered most, since it is the writer and
     a refused write and a lost response are different states - which is why the absence
     is declared here rather than passed over.
-    OPEN, recorded rather than decided: a limiter configured and then not installed
-    looks like a CRE Forge defect. Whether it is raised is Ivan's call; if it is fixed,
-    this declaration becomes wrong and the class becomes authorable.
+    RULED 17 September 2026: THIS IS A DEFECT, AND IT IS RAISED THERE. A limiter that is
+    configured and then not installed is a CRE Forge bug rather than a deliberate
+    exemption. Until it is fixed this class stays declared absent, and the reason is
+    exactly that: **pending CRE Forge rate limiter activation.**
+
+    When it ships, this class is authored rather than declared - and it needs authoring
+    with care, because a 429 is the ONE error that is safely retried on a contract
+    write. It means the request was refused before it reached the handler, so nothing
+    landed. That is the opposite of every other failure on `assign_contract`, where a
+    retry may duplicate a document, and an agent taught one habit will apply it to the
+    other.

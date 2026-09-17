@@ -508,7 +508,20 @@ async def test_curriculum_states_a_denominator_for_every_dimension(artifacts):
     assert artifacts.curriculum.coverage
 
     # Dimensions whose subject can legitimately be empty, and why.
-    may_be_empty = {"compliance_flags_exercised"}
+    #
+    # `modules_with_a_draft_answer_key_awaiting_approval` counts the modules with NO
+    # approved key, and how many of those are at least drafted. Its denominator is the
+    # size of the gap, so 0/0 is the healthy end state - every module has an approved
+    # answer key and there is nothing outstanding. It reached 0/0 the day Ivan approved
+    # Greenstone's five, which is the outcome, not a defect.
+    #
+    # It is named here rather than relaxing the rule, for the reason the docstring
+    # gives: a MODULES dimension falling to zero means the venture operates no modules
+    # and that is a defect. This one is not a count of modules; it is a count of a gap.
+    may_be_empty = {
+        "compliance_flags_exercised",
+        "modules_with_a_draft_answer_key_awaiting_approval",
+    }
 
     for coverage in artifacts.curriculum.coverage:
         if coverage.denominator == 0:

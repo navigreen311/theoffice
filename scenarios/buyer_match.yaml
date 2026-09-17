@@ -8,7 +8,7 @@
 #
 #   code    CRE Forge, `~/projects/medlink-wholesale`, file and line.
 #   manual  the live operating instruction (cre-forge/buyer_match), by section.
-#   OPEN    proposed, needs Ivan's decision. Written as a question, never an answer.
+#   RULED   decided by Ivan Green, 17 September 2026, with the ruling quoted.
 #
 # THE FACT THIS MODULE IS SHAPED AROUND
 # =====================================
@@ -24,7 +24,8 @@
 
 module_id: buyer_match
 forge_id: cre-forge
-status: draft
+status: approved
+approved_by: "Ivan Green"
 
 scenarios:
 
@@ -100,12 +101,15 @@ scenarios:
       stops short of ranking the nearest misses and presenting them as candidates,
       because the matcher returning nothing and the agent finding something are
       different answers and only the first is this module's.
-      OPEN, and it does not block this scenario: should the agent proactively say which
-      buyer criteria would have matched, if it can see them? Nothing in the response
-      carries the criteria - `results` carries `buyer_id`, `match_score`, `match_grade`,
-      `match_reasons` and `potential_concerns` and nothing else
-      (`backend/app/api/forge.py:227-232`) - so today it cannot. Whether that is worth
-      asking CRE Forge for is Ivan's decision.
+      RULED 17 September 2026: IT CANNOT BE EXPLAINED TODAY, AND THAT IS A FORGE GAP.
+      The agent says no buyer matched and says it cannot say why, because nothing in the
+      response carries the criteria - `results` carries `buyer_id`, `match_score`,
+      `match_grade`, `match_reasons` and `potential_concerns` and nothing else
+      (`backend/app/api/forge.py:227-232`). It does not guess at a reason and it does
+      not reconstruct one from the deal. Raised as a CRE Forge gap: the response should
+      return the filters applied, the pre-filter candidate count, and the per-filter
+      exclusions. Until it does, "no matches" is an answer with a stated hole in it
+      rather than an explanation.
 
   - scenario_class: permission_denied
     situation: >
@@ -128,9 +132,13 @@ scenarios:
       same credential - and of answering the buyer question from anything other than
       this module, because a credential failure says nothing about who would buy the
       deal and a list assembled without it would be the agent's own.
-      OPEN, same question as the other four CRE Forge keys and Ivan's to settle: who
-      receives a Forge-credential fault? Neither the manual nor `broker/escalation.py`
-      names a recipient for infrastructure of this kind.
+      RULED 17 September 2026, and it is the same answer on all five CRE Forge keys: it
+      goes to the VENTURE OPERATOR as an INFRASTRUCTURE ALERT - Ivan Green in Phase 1,
+      an on-call rotation later. Not a deal escalation: nothing about the deal is in
+      doubt, and routing a credential fault to whoever asked the question makes them
+      responsible for something they cannot touch. Deal work in flight FREEZES at the
+      affected step in a stated `credential unavailable` state. Never a fake success,
+      never a partial answer presented as whole, and never a silent retry.
 
   - scenario_class: escalation_required
     situation: >
@@ -170,9 +178,17 @@ not_applicable:
     mounted at `main.py:303`; `call_module` (`backend/app/api/forge.py:530`) carries no
     decorator. The manual agrees by omission: `failure_signatures.hard_failure` lists
     422, 404 and 401 and names no 429.
-    OPEN, recorded rather than decided: a limiter configured and then not installed
-    looks like a CRE Forge defect. Whether it is raised is Ivan's call; if it is fixed,
-    this declaration becomes wrong and the class becomes authorable.
+    RULED 17 September 2026: THIS IS A DEFECT, AND IT IS RAISED THERE. A limiter that is
+    configured and then not installed is a CRE Forge bug rather than a deliberate
+    exemption. Until it is fixed this class stays declared absent, and the reason is
+    exactly that: **pending CRE Forge rate limiter activation.**
+
+    When it ships, this class is authored rather than declared - and it needs authoring
+    with care, because a 429 is the ONE error that is safely retried on a contract
+    write. It means the request was refused before it reached the handler, so nothing
+    landed. That is the opposite of every other failure on `assign_contract`, where a
+    retry may duplicate a document, and an agent taught one habit will apply it to the
+    other.
 
   recovery_after_failure: >
     Every failure here recovers by an act another class already tests, or not at all.

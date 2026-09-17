@@ -137,23 +137,30 @@ GREENSTONE = (
 )
 
 
-def test_greenstones_five_are_drafts_and_account_for_every_submittable_class():
+def test_greenstones_five_are_approved_and_account_for_every_submittable_class():
     """The repository's own content, asserted rather than described in a comment.
 
-    These are what SimForge refused all five of on run cb3a47f6, with `missing
-    expected_behavior, expected_escalation` - because no file existed. A file that
-    exists and leaves a class unaccounted for would be refused the same way, so the
-    completeness check is the one that says the refusal is actually addressed.
+    These five were what SimForge refused on run cb3a47f6 with `missing
+    expected_behavior, expected_escalation` - because no file existed. They were drafted
+    on 17 September 2026 and approved the same day, once Ivan answered the eight open
+    questions the drafts had recorded rather than guessed at.
+
+    **The completeness check is the one that says the refusal is actually addressed.** A
+    file that exists and leaves a class unaccounted for is refused exactly as a missing
+    file is, so "a key exists" proves nothing on its own.
     """
     loaded = sc.load_all()
     for module_id in GREENSTONE:
         content = loaded.modules.get(module_id)
         assert content is not None, f"{module_id}: no answer key"
-        assert content.status == sc.DRAFT, (
-            f"{module_id} is marked {content.status!r}. These were drafted by Claude "
-            "and nobody has recorded an approval."
+        assert content.status == sc.APPROVED, (
+            f"{module_id} is marked {content.status!r}; Ivan Green approved these five "
+            "on 17 September 2026."
         )
-        assert loaded.for_module(module_id) is None
+        assert content.approved_by == "Ivan Green"
+        assert loaded.for_module(module_id) is not None, (
+            f"{module_id} is approved and still withheld from the generator"
+        )
 
         accounted = set(content.scenarios) | set(content.not_applicable)
         assert accounted == set(sc.SUBMITTABLE_CLASSES), (
@@ -162,37 +169,24 @@ def test_greenstones_five_are_drafts_and_account_for_every_submittable_class():
         )
 
 
-def test_no_key_is_approved_by_grandfathering():
-    """**Grandfathering is not an approval event.** Ruled by Ivan Green, 17 September 2026.
+def test_no_approved_key_still_asks_an_open_question():
+    """An approved key states what to do. It does not ask.
 
-    Twenty keys were briefly marked `approved` on the argument that it described the
-    status quo: they had been submitted on every Gate 8 run since they were written, and
-    marking them draft would stop a venture that was already certifying. That argument
-    was refused, and it was the wrong argument - it turns "has been used" into "has been
-    reviewed", which is the exact substitution the approval rule exists to prevent.
-
-    This does NOT assert that every key is a draft. That would fail the moment Ivan
-    approves one, which is the intended next step, and a test that blocks the outcome it
-    is waiting for is a test that will be deleted rather than satisfied. What it asserts
-    is narrower and permanent: **an approval names a person who read it.** Any
-    `approved_by` that describes a process rather than a reviewer is the loophole coming
-    back under another word.
+    Each of the five carried OPEN markers while it was a draft - eleven of them, one per
+    question the author refused to answer on Ivan's behalf. Approval is what turned each
+    into a ruling. A surviving OPEN in an approved file would be a question SimForge
+    grades an agent against, which is the failure this pair of states exists to prevent.
     """
     loaded = sc.load_all()
-    assert loaded.modules, "no answer keys loaded; the root resolved somewhere empty"
-
-    excuses = ("grandfather", "status quo", "in service", "pre-existing", "legacy",
-               "existing", "process", "n/a", "none", "tbd", "unknown")
-    offenders = {
-        m: c.approved_by
-        for m, c in loaded.modules.items()
-        if c.status == sc.APPROVED
-        and any(word in c.approved_by.lower() for word in excuses)
-    }
-    assert not offenders, (
-        f"these keys claim an approval nobody gave: {offenders}. `approved_by` is the "
-        "person who read the file, not the reason it was already in use."
-    )
+    for module_id in GREENSTONE:
+        content = loaded.modules[module_id]
+        prose = [a.wire_behavior() + " " + a.expected_escalation
+                 for a in content.scenarios.values()]
+        prose += list(content.not_applicable.values())
+        asking = [p for p in prose if "OPEN" in p]
+        assert not asking, (
+            f"{module_id}: {len(asking)} approved scenario(s) still ask an open question"
+        )
 
 
 def test_every_answer_key_in_the_repository_carries_a_status():
