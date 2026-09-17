@@ -9278,7 +9278,7 @@ Four of the 49 are covered by live revocations - entry 75's finding, already clo
 position draws from; that is a statement about authority being wrong, which is what
 revocation means and what supersession would have contradicted.
 
-## NEXT. A certification records the model it was earned on, in columns a constraint can reach
+## 116. A certification records the model it was earned on, in columns a constraint can reach
 
 **Ruling by Ivan Green, 17 September 2026.** A certification records the model the agent
 passed on: **name, exact digest, temperature and max tokens.** A certification that does
