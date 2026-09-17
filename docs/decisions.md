@@ -9277,3 +9277,186 @@ Four of the 49 are covered by live revocations - entry 75's finding, already clo
 `covered_grants`. Those stay revoked. The four were issued for a department no Burkham
 position draws from; that is a statement about authority being wrong, which is what
 revocation means and what supersession would have contradicted.
+
+## 119. A certification names the model, or it cannot expire when the model moves
+
+**Ruling by Ivan Green, 17 September 2026.** A certification records the model the agent
+passed on: **name, exact digest, temperature and max tokens.** A certification that does
+not name the model cannot enforce re-certification when the model changes.
+
+Recorded, sized, and **not built**. Nothing in this entry ships code.
+
+### What is already true, measured before sizing anything
+
+    on the row      `certification.agent_model text`, from B34's fix. A CHECK already
+                    refuses a row whose `simforge_verdict` is a real verdict and whose
+                    `agent_model` is NULL, so the LABEL is mandatory today.
+    on the wire     `GateResult.agent_model`, a string like `ollama/llama3.1:8b`.
+    in flight       PR #168 adds `model_identity` to the response manifest and to
+                    `GateResult` - provider, model, file digest, file size, parameter
+                    size, quantization, generation settings, fingerprint. It is PARSED
+                    AND CARRIED AND NOT STORED.
+    on the far side SimForge ADR-0060 / #153 builds the record. `AgentRuntime` already
+                    exposes `model_identity(seed)` and `generation_settings(seed)`.
+
+So the fact will reach The Office. **This ruling is about the row and the gates**, which
+is the half nothing covers.
+
+### Why the label is not the fact
+
+`agent_model` reads `ollama/llama3.1:8b` whether the tag was re-pulled at a different
+quantization or served at a different temperature. Two certifications with identical
+`agent_model` can describe different candidates, and nothing can tell them apart.
+
+**Measured, and the gap is not hypothetical:**
+
+    the exam        temperature 0.0, max_tokens 2048.
+                    `simforge/apps/api/src/services/agent_runtime/runtime.py:23-24`,
+                    EXAM_TEMPERATURE and EXAM_MAX_TOKENS, passed explicitly so that the
+                    values `generation_settings` records are the values the call sends.
+    production      temperature 0.7, num_predict 200 / 300 / 500 by route.
+                    `village1.0.2/modules/agent_orchestrator.py:1035-1060`, three
+                    ResponseRoute branches.
+
+Every generation setting differs, on every call, today. The model file is not pinned
+either - `phi4:latest`, which is entry 118's finding. So no certification on record
+describes the model the agent actually runs, and none of them could say so.
+
+### Where the identity comes from: BOTH, and they answer different questions
+
+    SimForge    what answered the EXAM. It runs the battery, it is the only side that
+                sees the weights file, and ADR-0060 already assembles the record.
+    the Village what the agent RUNS. village-os#2 pins the digest and refuses to start
+                agents whose installed digest is not the pinned one.
+
+Enforcement is a comparison between the two, and **The Office can see neither today.**
+It reads roster, departments, agent state, shifts, deputies and the board from the
+Village (`broker/village.py`) and **no model configuration at all** - the Village
+exposes no route that reports an agent's model. Measured, not assumed.
+
+That is the load-bearing finding for the sizing: storing the exam's model is one small
+change; enforcing re-certification needs a second source that does not exist yet.
+
+### What changes in the certification record
+
+    +  model_digest        text. The exact weights file - the thing `agent_model`
+                           cannot say.
+    +  model_temperature   numeric.
+    +  model_max_tokens    integer.
+    +  model_identity      jsonb. The whole record as SimForge sent it, so a field
+                           nobody anticipated is not lost - the same reason
+                           `blast_radius` is stored whole on `revocation`.
+    +  model_fingerprint   text. SimForge's hash over the record. Re-certification on
+                           drift becomes a string comparison rather than a
+                           field-by-field argument.
+
+`agent_model` stays. It is the readable label, every existing row has one, and replacing
+it would rewrite history to look as though it had always carried a digest.
+
+**The CHECK extends the one that already exists.** A row whose `simforge_verdict` is a
+real verdict must carry the digest and the settings, not only the label - the same shape
+as `certified_records_its_basis`, which already demands the instruction hash, the Forge
+api_version and the tier.
+
+**Backfill is `unknown`, never a guess.** Every existing simforge-attested row was earned
+under settings nobody recorded, and writing today's constants into them would manufacture
+a provenance. 0043's `origin` column is the precedent and the argument is identical.
+
+### A new state, not a new flag
+
+`certification.state` already carries `stale_instructions` and `stale_forge` - two
+"was good, now out of date" states with exactly this shape. Model drift is the third:
+**`stale_model`**. Reusing `stale_forge` would collapse "the Forge changed" and "the
+model changed" into one word, and those are answered by different people.
+
+`recompute_staleness` is the mechanism and it already exists
+(`broker/certification.py:516`), driven by `sweep_certification_staleness`, which raises
+a HIGH incident when a newly-stale cert backs a live grant. A model comparison is a
+fourth comparison in a function that already makes three.
+
+### Which gates read it
+
+    Gate 9    **Yes, and it is the one that matters.** It already refuses a certification
+              that reads `certified` and carries no SimForge PASS. A certification whose
+              model no longer matches is the same class of claim: a pass describing
+              something that is not running.
+    Gate 11   **Yes.** It is the last thing between a signature and production authority
+              and it already declines to activate a grant a revocation covers. A grant
+              whose certification is `stale_model` must not activate.
+    Gate 12   Reads `is_assignable`, which is GENERATED. If `stale_model` should make a
+              grant unassignable it belongs in that expression, as 0043 put
+              `superseded_at` there - one definition, four readers.
+    the call  `resolve_grant` joins `certification` on state. A `stale_model` cert should
+      path    refuse at call time with its own error, as `GrantSuperseded` does. THIS IS
+              THE ONE THAT ACTUALLY PROTECTS ANYTHING - gates run once, calls run all day.
+    Gate 8    **No.** It opens the exam; the model is what answers it. Nothing to read.
+
+### The size
+
+    1. migration          five columns, the extended CHECK, `stale_model` in the state
+                          vocabulary, backfill `unknown`.                     SMALL
+    2. record_result      accept and store the new fields; extend the
+                          `certified_records_its_basis` guard.                SMALL
+    3. the sweep          a `model_fingerprint` comparison in
+                          `recompute_staleness` - against WHAT.           **BLOCKED**
+    4. gates 9 / 11 / 12  read the new state.                                 SMALL
+    5. the call path      a refusal naming the model.                         SMALL
+    6. `is_assignable`    drop and re-add, as 0036 and 0043 both did.         SMALL
+
+**Step 3 is where this stops, and it is not small.** A fingerprint comparison needs the
+CURRENT model and The Office has no source for it. That needs one of:
+
+    a. the Village exposes the running model per agent and The Office reads it. A new
+       endpoint on the Village and a new reader in `broker/village.py`. The honest
+       place for it - the Village is what runs the agent.
+    b. SimForge enforces it and The Office records the verdict. But SimForge sees both
+       values only if the Village tells it too, so this moves the problem rather than
+       solving it.
+    c. the pinned digest is configuration The Office holds, and drift is measured
+       against the PIN rather than against the running process. Cheapest, and it
+       verifies a config file rather than a running model.
+
+**Steps 1, 2, 4, 5 and 6 are worth doing without step 3** and should not wait for it.
+They make the fact recorded, refusable and visible; without them the fact arrives on
+PR #168's wire and is dropped on the floor. Step 3 is what makes it *enforced*, and it
+needs a decision between (a), (b) and (c) that is Ivan's.
+
+Ordering: **PR #168 merges before SimForge #153**, because `validate_response` refuses a
+field the manifest does not name and every gate-result read goes through it. This work
+comes after both.
+
+### The ledger numbering, which broke while this was being written
+
+Entry 115 is on `main`. **It is also claimed by two open PRs, and 116 by two more:**
+
+    115   main (#165, merged)  A bootstrap grant is retired, not revoked
+    115   #163                 One Acquisition Analyst seat
+    115   #164                 inherits #163's - it is stacked on that branch
+    116   #164                 a 401 from somebody else's nginx
+    116   #166                 A venture needs an answer key, and an exam needs a name
+    117   #167                 Greenstone's answer keys, drafted
+    118   #169                 A certification describes a digest, not a tag
+    -     #168                 no entry
+
+Three PRs claim 115 and two claim 116. #169 already chose 118 "to avoid a fight, not to
+win it", which is a workaround rather than a rule.
+
+**The cause is that the collision is invisible to git.** Each PR appends to the end of
+`docs/decisions.md` with different surrounding context, so two branches adding `## 116.`
+merge cleanly and main ends up holding two. Nothing fails.
+
+**Proposed rule, two halves, both needed:**
+
+    1. THE NUMBER IS ASSIGNED AT MERGE, NEVER AT AUTHORING. A PR writes its heading as
+       `## NEXT.` and whoever merges renumbers it in that commit. A number cannot be
+       claimed by two branches if no branch claims one.
+    2. A TEST MAKES A DUPLICATE UNMERGEABLE. Assert that the `## N.` headings in
+       `docs/decisions.md` are unique and contiguous from 1, and that no `## NEXT.`
+       survives on main. GitHub runs PR CI against the merge RESULT, so the second PR to
+       claim a number fails before it lands rather than after.
+
+Half 2 is what enforces it; half 1 is what makes the common case painless. **No test
+asserts anything about the ledger's numbering today** - checked, not assumed.
+
+This entry is numbered 119 under the old convention, clear of every open claim, because
+the rule above is a proposal and not yet Ivan's ruling.
