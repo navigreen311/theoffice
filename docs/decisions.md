@@ -9404,3 +9404,126 @@ run, by name, on the first command anybody types. Markdown headings had no such 
 numbering PR left `alembic_version` reading 0043 with both 0044s' columns present, and
 the suite reported 444 errors that were nothing to do with either branch. Rebuilding the
 schema fixed it. The DSN is in one `.env` and nothing stops two checkouts using it.
+## 117. A ledger number is assigned at merge, and a test makes a duplicate unmergeable
+
+**Ruling by Ivan Green, 17 September 2026.** Ledger entry numbers are assigned at merge,
+not at authoring. **A PR writes `## NEXT.`; whoever merges assigns the number.** A test
+asserts that headings are unique, contiguous, and that no `## NEXT.` reaches main.
+
+This entry was written under its own rule - its heading read `## NEXT.` until the
+moment it was merged, and 117 was assigned then.
+
+**The rule was broken on its first use, by the person who made it work.** #173 was
+squash-merged with its heading still reading `## NEXT.`, because the merger - me -
+assigned no number. Nothing caught it: the test that would have is in this entry's own
+PR, which had not landed. Entry 116 is that number, assigned afterwards in a separate
+commit. Recorded here rather than tidied away, because it is the honest measure of how
+much of this rule is a test and how much is a person remembering.
+
+### What broke, measured on the day the rule was made
+
+    115   main (#165, merged)  A bootstrap grant is retired, not revoked
+    115   #163                 One Acquisition Analyst seat
+    115   #164                 inherits #163's - it is stacked on that branch
+    116   #164                 a 401 from somebody else's nginx
+    116   #166                 A venture needs an answer key, and an exam needs a name
+    117   #167                 Greenstone's answer keys, drafted
+    118   #169                 A certification describes a digest, not a tag
+    119   #170                 A certification names the model
+    -     #168                 no entry
+
+Three PRs claimed 115 and two claimed 116. **And while this rule was being built, a
+second 119 was found** - written in another session, on #169's branch, for the same day's
+rulings. Four numbers claimed twice, in one week, in a repository with one author.
+
+### Why git cannot see it
+
+Every entry is appended to the END of `docs/decisions.md`, and two branches appending
+different text after different predecessors have no textual overlap. Git merges them
+cleanly and main ends up holding two `## 116.` headings. **There is no conflict to
+resolve, no warning, and nothing that fails.** The number lives in a markdown heading and
+git has no opinion about markdown headings.
+
+That is why the fix is not "be careful". Being careful was already the system.
+
+### Contiguity is the quieter half
+
+A PR claiming 117 while main sits at 115 merges exactly as cleanly as one claiming 115
+twice. Nothing is duplicated and nothing is lost - but every later reference to "entry
+116" points at nothing, and the gap reads as an entry somebody deleted rather than one
+nobody wrote.
+
+Contiguity is also what makes `## NEXT.` cheap: the number to assign is always `max + 1`.
+No register to consult, nothing to remember, and no second file to keep in step.
+
+### The four tests, and which one is load-bearing
+
+    unique              two entries with one number. **The one that would have caught
+                        every collision above.** It runs against the MERGE RESULT, which
+                        is what GitHub checks out for a `pull_request` event, so the
+                        second PR to claim a number fails before it lands rather than
+                        after.
+    contiguous from 1   the gap case above.
+    in order            a file holding 1..119 shuffled would satisfy both of the above
+                        and still send a reader hunting.
+    the placeholder    on main, none survives; off main, an unassigned heading is the
+                       last heading. Two arms, no skip - see below.
+
+### The fourth test has two arms and no skip, and the reason is CI's own rule
+
+A PR is **supposed** to carry `## NEXT.` - that is the whole mechanism - so a check that
+simply fired on pull requests would fail every PR on the one property it is meant to
+have. The obvious fix is to skip it off main. **That was written, and CI rejected it**:
+the `tests` job refuses to pass if anything skipped, deliberately, because every
+database test is guarded by `requires_db` and a misconfigured Postgres would otherwise
+report a tidy green over several hundred tests that never ran. Weakening that rule to
+accommodate one test would have cost far more than it bought.
+
+So it is one test with two arms, both asserting something real:
+
+    on main     no placeholder survives. This is the rule.
+    off main    a placeholder is expected, so what is checked is that it is used
+                correctly - an entry is appended to the end of the file, so an
+                unassigned heading is the LAST heading. One left in the middle is a
+                botched edit that would otherwise sit there until whoever merged went
+                looking for the number to replace.
+
+Which arm runs is decided by `GITHUB_BASE_REF` (set on a pull request, empty on a push),
+then `GITHUB_REF`, then git. **Unknown resolves to "not main".** A wrong guess in that
+direction is the rule enforced one run later, by the push to main that follows; a wrong
+guess the other way is every developer on every branch red for writing the placeholder
+the rule tells them to write.
+
+So the window is between a merge and that push-to-main run. **What closes it is a person
+- whoever merges assigns the number.** The test catches them forgetting; it is not what
+stops them. Said plainly because a test named like this one invites the opposite
+reading.
+
+### The open claims, renumbered to `## NEXT.`
+
+Every open PR carrying an entry was converted, not only the three that collided:
+
+    #163  115           -> NEXT
+    #164  115, 116      -> NEXT, NEXT   (it is stacked on #163 and carries both)
+    #166  116           -> NEXT
+    #167  117           -> NEXT
+    #170  119           -> NEXT
+    #169  118           -> LEFT ALONE, deliberately. See below.
+
+**#167 and #170 held unique numbers and were converted anyway, because contiguity forces
+it.** With main at 115, #167 merging first would put 117 beside 115 and leave a gap at
+116, and the contiguity test would fail on a PR that had done nothing wrong. Under the
+old convention the numbers only worked if the PRs merged in the order they were opened,
+and nothing was enforcing that either.
+
+**#169 IS NOT CONVERTED AND MUST BE, BY WHOEVER OWNS IT.** Its branch has uncommitted
+work in the shared checkout - a second entry 119, written in another session, recording
+the same day's rulings on exam settings and Village-sourced model identity, plus a
+correction to entry 118. Rewriting the heading underneath that would hand its author a
+conflict in a file they are part-way through editing, which is a worse outcome than the
+number being wrong for another hour. Both of its headings need converting before it is
+committed: 118, and the 119 that is not yet in a commit.
+
+That second 119 is the sharpest evidence for this rule that exists. Two sessions, one
+repository, one afternoon, the same number, neither able to see the other - and the only
+reason it was found at all is that both happened to touch the same working tree.
