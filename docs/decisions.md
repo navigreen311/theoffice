@@ -9277,3 +9277,73 @@ Four of the 49 are covered by live revocations - entry 75's finding, already clo
 `covered_grants`. Those stay revoked. The four were issued for a department no Burkham
 position draws from; that is a statement about authority being wrong, which is what
 revocation means and what supersession would have contradicted.
+
+## 118. A certification describes a digest, not a tag
+
+**Ruled 2026-09-17 by Ivan Green.** Recorded here; built on navigreen311/village-os#2,
+unmerged.
+
+### The ruling
+
+The agent model config pins an exact version or digest, never `latest`. A moving tag
+would silently change the model an agent was certified on.
+
+`phi4:latest` in the Village's `.env` was exactly that. `ollama pull phi4` on any later
+day can put different weights behind the same name, and nothing would notice: the config
+still reads `phi4:latest`, the call still succeeds, and every certification on record is
+describing a model that is no longer running. Nothing in The Office would see it either -
+a certification records `instruction_content_hash` and `forge_api_version`, and neither
+is the model.
+
+### Ollama cannot be addressed by digest, so the digest is checked rather than requested
+
+Measured against the running server before designing around it:
+
+    {"name": "phi4@sha256:ac896e..."}   ->  {"error":"invalid model name"}
+    {"name": "sha256:ac896e..."}        ->  {"error":"model ... not found"}
+
+So the tag stays in the call and the digest becomes a startup precondition. The check runs
+before any agent machinery is constructed, and an unreachable Ollama is a refusal too - a
+check that could not run is not a check that passed, which is `console-smoke.sh`'s rule
+again, two repositories over.
+
+Verified both ways: a wrong digest prints `REFUSING TO START AGENTS` and exits 1; the right
+one prints the verified pin and serves.
+
+### One temperature and one token budget, and where each came from
+
+    model        phi4:latest @ ac896e5b...   read from /api/tags
+    temperature  0.7                          agent_orchestrator.py's hardcoded value -
+                                              what every agent-to-agent call already sent.
+                                              `.env` said 0.8 and never reached Ollama.
+    max_tokens   500                          the default route's value, and the number
+                                              heredity/config.py already used. Largest of
+                                              the three, so no route is truncated.
+
+Three `ResponseRoute`s named the same model but used 200/300/500 tokens. A phone answer and
+an agent-to-agent answer were generated under different settings, and **neither necessarily
+matched what a certification measured.** That is the same defect as the moving tag, one
+layer down: the thing certified was not pinned.
+
+`llm_swap_temperature` stays 0.3, deliberately. That socket asks for structured JSON
+beliefs, not dialogue. It shares the pin and keeps its own sampling, flagged in the file
+rather than assumed.
+
+### What this costs, measured
+
+phi4 is **14.7B, Q4_K_M, 8.43 GB** - roughly twice the 7-9B models already installed
+(4.07-5.07 GB). Its KV cache is ~0.80 GB per concurrent slot at 4K context, against ~0.5 GB
+for llama3.1:8b.
+
+On the one 16 GB card here that is about **7 concurrent requests, where an 8B model gives
+about 20.** The heredity path budgets 50 calls per tick and issues them as a single
+unchunked `asyncio.gather`; 50 slots would need ~40 GB of KV, so the excess queues inside a
+60-second tick timeout rather than running.
+
+A warm answer takes **~1.4-2.4 s** at ~90 tokens/s; the first call after a load adds ~4 s.
+
+### Numbering
+
+Entry numbers are contested right now and this one is chosen to avoid the fight, not to win
+it. `main` is at 115, #163 also claims 115, and #164 and #166 both claim 116. Whoever merges
+those will renumber; 118 is clear of all of them today.
