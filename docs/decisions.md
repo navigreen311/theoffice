@@ -9638,3 +9638,66 @@ reports, and holds nothing.** The hash looked like a credential. The check looke
 oversight and fired 3,592 times, all `detected`, none acted on, because the thing it told
 you to audit was never built. Neither would have been found by reading the code - both took
 looking at what was stored.
+
+## 121. The alarm was three bugs, and salary mints money by accident
+
+**Ruled 2026-09-17 by Ivan Green.** The check fix is on navigreen311/village-os#9,
+unmerged. #4, #7 and #5 are merged.
+
+### The ruling
+
+The NIB conservation alarm was three bugs, not missing money. The books balance exactly.
+The check must read the real currency, the real transaction type and the real tables, and
+must not be able to fall back to a hardcoded number.
+
+### What each bug was
+
+    currency   summed WHERE currency = 'NIB'. Every wallet is 'VCOIN', so 0 of 20 rows
+               matched and circulation read 0.00.
+    issuance   summed transaction_type = 'system_mint'. No such row exists. With no match
+               it fell back to a HARDCODED 10000.0 - which was the entire "issued" figure.
+    escrow     read marketplace_listings, a table that does not exist, guarded so escrow
+               was silently 0 rather than an error.
+
+The anomaly also named `nib_transactions`, a table the check never queries and that has
+never existed, so `audit_nib_transactions` had nothing to run against. **That is why 3,592
+anomalies sat at `detected` with 0 repairs** - not neglect, an impossible instruction.
+
+Issuance is now derived from `from_wallet_id IS NULL`: money with no source wallet was
+created. That is the ledger's own shape rather than a list of type names, which is the
+thing that went stale in the first place.
+
+**And the same bug was next door.** `_check_invalid_states` filtered negative balances by
+`currency = 'NIB'` too, so it has inspected **zero wallets** and reported healthy 3,592
+times. Two checks, one wrong constant, three weeks of green and red both meaning nothing.
+
+### Read-only: the 665,807.29, and what the system intends
+
+Asked whether paying salary creates money or moves it. **The system contains both answers,
+in two modules, and the minting one is the one that ran.**
+
+    modules/banking/banking_service.py:675   pay_salary()
+        from_wallet_id = treasury, to_wallet_id = agent
+        treasury_wallet.balance -= net_salary
+        raises if the treasury cannot cover it
+        -> salary MOVES money. There is a treasury and it can run dry.
+
+    modules/banking/payment_processor.py:248 process_salary_payment()
+        calls banking_service.system_credit(..., transaction_type="salary")
+        system_credit is documented "Add funds to an agent's wallet from the
+        system", and its own signature names salary and bonus as credit types
+        -> salary CREATES money. There is no source and no ceiling.
+
+**The second one wrote every row.** All 221 salary transactions have `from_wallet_id`
+NULL, and **no treasury wallet exists** - 0 of 20 wallets match. So `pay_salary` has never
+run; the transfer semantics it encodes are aspirational.
+
+That is why 665,807.29 of wallet balance has no issuance behind it. It is not corruption
+and not drift: it is one module minting under a label the other module uses for transfers.
+
+**The options, stated rather than chosen.** Either salary is issuance, and the conservation
+rule is "wallets equal everything ever minted" - which the books already satisfy exactly,
+and which means the money supply grows with payroll forever. Or salary is a transfer, and a
+treasury wallet has to exist, be funded at genesis, and be allowed to run out - which makes
+payroll a constraint agents can hit. The first is what runs. The second is what the richer
+code path believes. Not fixed, per the ruling.
