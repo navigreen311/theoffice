@@ -8983,3 +8983,89 @@ see rather than a cleaner one the fixture invented.
     counsel-reviewed"          one row with a sentence in it. V34 reads it, V41 reports
                                it, and `test_the_application_role_cannot_edit_a_discharge`
                                pins that neither can be changed without a new row.
+
+---
+
+## 113. Publish before reviewing, two seats named - and a health check that refuses to call a stale process healthy
+
+**Ruled 2026-09-16 by Ivan Green.** Rulings 1 and 2 are recorded and ruling 1 is executed;
+the script is on an open PR.
+
+### 1. Greenstone's Gate 4 review is done on a Pack that carries its hours sources
+
+Publish first, then review. **Measured before executing it, because the obvious worry turned
+out to be unfounded and the real reason is different:**
+
+    does publishing change the artifacts hash?   NO. Live 1.8.0 and the main file both
+                                                 generate 8b9069657a9531ce. A provenance
+                                                 `source` reaches no artifact - it is read
+                                                 by V13's evidence basis and by V39, and
+                                                 neither is generator output.
+    does publishing supersede a run?             NO. `packs.store` supersedes the previous
+                                                 business_pack row and touches
+                                                 provisioning_run not at all. Run 7d793254
+                                                 kept its FK to (greenstone, 1.8.0), which
+                                                 still exists at status `superseded`.
+
+**So nothing forced a new run - which is exactly why the ruling is needed.** The run would
+have sat at Gate 4 on 1.8.0 indefinitely, and a Gate 4 review is recorded as
+`reviewed by <name>: <note>` frozen into `provisioning_gate_result`. It would have been a
+review of a Pack whose hours cite nothing, attested by name, with nothing anywhere saying
+which version was read.
+
+Executed: **1.9.0 published** (content hash `2bce5a35`), 7d793254 aborted holding no
+signature, fresh run **3f967932** advanced to Gate 4 on 1.9.0.
+
+**V39 no longer flags Greenstone:**
+
+    before (1.8.0)   Unsourced declarations: burkham-wickmont, greenstone
+    after  (1.9.0)   Unsourced declarations: burkham-wickmont
+
+### 2. Buyer Network Manager's two seats: Ronan Valek and Seraphine Valek
+
+Entry 92 measured that appointment takes the first `headcount` by `agent_name` among
+certified candidates, with **no skill fit, no workload balance and no look at other
+ventures' grants** - so the choice is made at certification, not at appointment. It also
+measured that Ronan, Seraphine, Thalia and Ulric are exactly the operations ICs holding no
+Burkham grant, and that certifying only those four yields Ronan and Seraphine by alphabet.
+
+**This ruling names them directly rather than relying on that.** Alphabetical emergence is
+how they came out, not why they are the choice, and a decision that rests on sort order is
+a decision that changes when somebody is renamed.
+
+Not yet executed: they hold no certifications, so the position still reports 2 unfilled
+with 12 candidates.
+
+### 3. A live process is not an up-to-date one
+
+`scripts/dev-all.sh` starts the six services or reports what is already running, checks each
+by **response body** rather than status code, and refuses to call the API healthy when its
+build is not the commit checked out.
+
+**Each of its three rules is something that went wrong this week.**
+
+    never kill by port      `taskkill //PID <holder of 8080> //T //F` took Docker Desktop's
+                            backend with it - com.docker.backend.exe forwards 8080 and every
+                            container port - so CRE Forge went unreachable and the next
+                            provisioning advance failed on V2. Entry 91's hazard, hit anyway.
+                            **The script demonstrated the fix on its first run**, naming
+                            `com.docker.backend.exe` as the holder of 8080 and refusing.
+    check the body          a port answering proves a process, not the right one.
+    stale is a failure      after a merge, a stale API answered /api/live with 200 and 404ed
+                            a route that had just landed. The route was in the file and not
+                            in the process.
+
+**And the build commit does NOT go on `/api/live`.** It did for exactly one commit, and
+`test_live_answers_without_a_token_and_says_nothing_else` refused it - correctly. D1 is a
+stated control: *"A liveness endpoint is reachable by anyone who can reach the port.
+Everything it returns is public, so it returns one word."* Telling an unauthenticated caller
+which build is running is the disclosure that pin exists to prevent.
+
+So `/api/version` is authenticated, and the script reads `OFFICE_OPERATOR_TOKEN`. **Without
+one it reports the build UNVERIFIED and does not call the API healthy** - a check that could
+not run is not a check that passed, which is `console-smoke.sh`'s rule applied one script
+over.
+
+**What it does not catch:** an uncommitted working tree. `BUILD_COMMIT` and the comparison
+both read `git rev-parse HEAD`, so a process started before an *edit* looks current. The
+check is against a stale PROCESS, which is the failure that actually happened.
