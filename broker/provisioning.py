@@ -41,6 +41,7 @@ from psycopg.types.json import Jsonb
 from broker import audit, humans, instructions, knowledge, packs, revocation
 from broker.simforge import (
     CurriculumRejectedError,
+    ResponseRefusedError,
     SimForgeClient,
     SimForgeError,
     department_basis_hash,
@@ -772,9 +773,17 @@ async def _gate_8(ctx: _Context) -> GateOutcome:
         "modules_refused": sorted(
             o["module_id"] for o in attempted if o.get("violations")
         ),
+        # THREE OUTCOMES, NOT TWO. A refused response is neither a rejection nor an
+        # outage: SimForge accepted the submission and the reply broke the manifest on
+        # the way back. Folding it into `unreachable` said the Forge was down when it
+        # had just answered.
         "modules_unreachable": sorted(
             o["module_id"] for o in attempted
             if not o.get("curriculum_accepted") and not o.get("violations")
+            and not o.get("response_refused")
+        ),
+        "modules_response_refused": sorted(
+            o["module_id"] for o in attempted if o.get("response_refused")
         ),
         # Kept, and kept SEPARATE from the takers. `requires_certification` is who
         # could fill a seat and holds no certification; the takers are who holds the
@@ -802,7 +811,15 @@ async def _gate_8(ctx: _Context) -> GateOutcome:
         ],
     }
 
+    echoed = [o for o in attempted if o.get("response_refused")]
     tail = f"; {len(skipped)} module(s) have no live instruction" if skipped else ""
+    if echoed:
+        # Named in the sentence. A reader who sees only "0 accepted" will restart
+        # SimForge, and SimForge is not the problem.
+        tail += (
+            f"; {len(echoed)} accepted by SimForge and refused by The Office reading "
+            "the reply back"
+        )
     if department_units:
         # Named in the sentence rather than only in the evidence: unit B gates
         # appointment on its own, and a reader who sees only a module count cannot tell
@@ -850,6 +867,10 @@ async def _gate_8(ctx: _Context) -> GateOutcome:
     # content. A module accepted with no exam taker never reaches here - it is skipped
     # earlier, as a roster finding.
     refused = [o for o in attempted if o.get("violations")]
+    # A refused RESPONSE counts with the outages for the purpose of the block, and for
+    # the same reason: SimForge did not refuse the content, so blocking would report
+    # scenarios as wrong when they were accepted. It is reported separately because the
+    # fix is different - shorten what The Office sends, rather than restart anything.
     unreachable = [
         o for o in attempted
         if not o.get("curriculum_accepted") and not o.get("violations")
@@ -936,6 +957,7 @@ async def _submit_one_module(
 
     run_ref: str | None = None
     error: str | None = None
+    response_refused = False
     violations: list[str] | None = None
     module_level: str | None = None
     gate_9_5_flag: Any = None
@@ -1057,6 +1079,17 @@ async def _submit_one_module(
         # is a service to restart.
         violations = exc.violations
         error = str(exc)
+    except ResponseRefusedError as exc:
+        # SIMFORGE ANSWERED AND THE OFFICE REFUSED THE ANSWER. Not an outage, and not a
+        # rejection either - the submission was accepted and the reply broke the
+        # response manifest coming back.
+        #
+        # Kept apart because the three have three different responses: restart a
+        # service, write scenarios, or shorten what we send. Reporting this as
+        # `unreachable` cost an afternoon on 17 September 2026, when four modules
+        # SimForge had accepted were recorded as a Forge that could not be reached.
+        error = str(exc)
+        response_refused = True
     except SimForgeError as exc:
         # Not fatal. The Office's half - the curriculum, the counts, the row - is
         # complete and reproducible; what failed is the other side receiving it.
@@ -1137,6 +1170,9 @@ async def _submit_one_module(
         outcome["already_open"] = already_open
     if error is not None:
         outcome["error"] = error
+    if response_refused:
+        # The distinguishing mark, on the row rather than inferred from the message.
+        outcome["response_refused"] = True
     if violations is not None:
         outcome["violations"] = violations
     return outcome

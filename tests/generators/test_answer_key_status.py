@@ -189,6 +189,44 @@ def test_no_approved_key_still_asks_an_open_question():
         )
 
 
+def test_no_declared_reason_would_be_refused_coming_back():
+    """**A reason SimForge echoes must survive The Office reading it back.**
+
+    `submit_curriculum` returns `module_declared_absences` - our own
+    `not_applicable` reasons - and `assert_no_scenario_content` refuses any echoed
+    string of 200+ characters that reads like prose. So a reason long enough to be
+    thorough is a reason that makes the module unreachable, and on 17 September 2026
+    four Greenstone modules were accepted by SimForge and refused by The Office on
+    exactly that.
+
+    The threshold is transcribed from `_looks_like_prose`, with its source named, for
+    the same reason `test_portfolio_health_declaration` transcribes SimForge's
+    classifier: this suite does not import the broker's wire layer, and a drift in
+    either would fail there first.
+    """
+    loaded = sc.load_all()
+    too_long = {}
+    # APPROVED KEYS ONLY, and the scope is the rule rather than a convenience: a draft
+    # is never submitted, so it is never echoed and cannot be refused coming back. The
+    # twenty Burkham drafts carry long reasons today and 49 of them would trip this -
+    # which is real debt, and it comes due at approval, not now. Widening this test to
+    # cover them would block Ivan's review on prose length before he has read a word.
+    for module_id in loaded.modules:
+        content = loaded.for_module(module_id)
+        if content is None:
+            continue
+        for cls, reason in content.not_applicable.items():
+            # `broker/simforge.py::_looks_like_prose`
+            if len(reason) >= 200 and len(reason.split()) >= 30 and reason.count(" ") > 20:
+                too_long[f"{module_id}/{cls}"] = len(reason)
+    assert not too_long, (
+        "these declared reasons would be refused when SimForge echoes them back, "
+        f"making the module unreachable for a reason nothing is wrong with: {too_long}. "
+        "Put the argument in the ledger and the evidence in the Forge's issue tracker; "
+        "the wire carries one sentence."
+    )
+
+
 def test_every_answer_key_in_the_repository_carries_a_status():
     """Total, not just the new five. A file with no status cannot load at all."""
     loaded = sc.load_all()

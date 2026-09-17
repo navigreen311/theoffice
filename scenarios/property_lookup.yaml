@@ -194,47 +194,22 @@ scenarios:
 
 not_applicable:
 
+  # SHORT ON PURPOSE, AND THE LENGTH IS THE POINT.
+  #
+  # SimForge echoes `module_declared_absences` back on every acceptance, and
+  # `assert_no_scenario_content` refuses any echoed string of 200+ characters that reads
+  # like prose. This reason ran to 1800 characters, so SimForge ACCEPTED the
+  # curriculum and The Office then refused its own text coming back - the module counted
+  # as unreachable with nothing wrong on either side.
+  #
+  # The evidence is medlink-wholesale#81. The argument - including why a 429 is the one
+  # error safely retried on a contract write, because it never landed - is in
+  # docs/decisions.md.
   rate_limited: >
-    CRE FORGE CANNOT RETURN 429 ON A MODULE CALL, measured rather than assumed.
-    `backend/app/main.py:87` puts a `Limiter` on `app.state` and `:91` registers
-    `rate_limit_exceeded_handler` for `RateLimitExceeded`, and the limiter is
-    constructed with `default_limits=["100/minute"]`
-    (`backend/app/middleware/rate_limit.py:28`) - so it reads as a limited application.
-    It is not. `SlowAPIMiddleware` is never added: `main.py` adds `CORSMiddleware` at
-    `:94` and nothing else, and slowapi's default limits apply only through that
-    middleware. What remains is per-route `@limiter.limit` decorators, and every one of
-    them is in `backend/app/api/v1/auth.py` (login, register, MFA). The Office's router
-    is mounted at `main.py:303` and `call_module` (`backend/app/api/forge.py:530`)
-    carries no decorator. The manual agrees by omission: `failure_signatures.
-    hard_failure` lists 422, 401 and the absence of a 404, and names no 429.
-    So an agent graded on handling a rate limit here would be graded on a status this
-    module cannot produce. Declared absent rather than authored against a hypothetical.
-    RULED 17 September 2026: THIS IS A DEFECT, AND IT IS RAISED THERE. A limiter that is
-    configured and then not installed is a CRE Forge bug rather than a deliberate
-    exemption. Until it is fixed this class stays declared absent, and the reason is
-    exactly that: **pending CRE Forge rate limiter activation.**
+    Pending CRE Forge rate limiter activation: the limiter is configured and never installed, so no module call can return 429. Raised as medlink-wholesale#81.
 
-    When it ships, this class is authored rather than declared - and it needs authoring
-    with care, because a 429 is the ONE error that is safely retried on a contract
-    write. It means the request was refused before it reached the handler, so nothing
-    landed. That is the opposite of every other failure on `assign_contract`, where a
-    retry may duplicate a document, and an agent taught one habit will apply it to the
-    other.
-
+  # SHORT ON PURPOSE - see the rate_limited note above. The argument at length is in
+  # docs/decisions.md; a declared reason SimForge echoes back has to survive
+  # `assert_no_scenario_content`, and this one ran to 1251 characters.
   recovery_after_failure: >
-    Every failure this module can produce recovers by an act another class already
-    tests, or has no recovery at all. The manual's `retry_vs_escalate` opens "RETRY
-    FREELY. It is a pure read: nothing is written, nothing is sent, and a retry after a
-    timeout costs nothing and cannot duplicate anything" - so recovery from a 500 or a
-    timeout is an unconditional retry, which is the absence of a constraint rather than
-    a competency to demonstrate. The 422 is recovered by supplying a query, which the
-    `malformed_input` scenario tests, and it is a correction rather than a recovery in
-    any case: the refused call never ran and left nothing behind
-    (`backend/app/api/forge.py:105-110`). The 401 has no recovery reachable by the agent at all. And
-    `total: 0` is not a failure, so the thing that follows it is not recovery - the
-    manual is explicit that it "is an answer, not a failure".
-    Stated in the honest form rather than the flattering one: this is not a module with
-    no recovery behaviour, it is a module whose only recovery is the free retry, every
-    other repair being a correction another class already covers. This is the same
-    reasoning `scenarios/statement_pull.yaml` records for the same class, reached here
-    from this module's own manual rather than borrowed.
+    Every failure here recovers by an unconditional retry, which the manual licenses without condition; the 422 is a correction another class tests, and `total: 0` is not a failure.

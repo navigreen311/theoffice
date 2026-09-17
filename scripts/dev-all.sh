@@ -336,7 +336,14 @@ if probe api "http://127.0.0.1:$API_PORT/api/live" '"status":"live"'; then
     sleep 2
     if start_api; then
       RUNNING="$(api_commit)"
-      if [ -n "$RUNNING" ]; then ok "live on ${RUNNING:0:12}"; else ok "live (build unverified)"; fi
+      if [ -n "$RUNNING" ]; then
+        ok "live on ${RUNNING:0:12}"
+      else
+        # NOT `ok`. A build nobody could identify is not a build that was checked.
+        # This read green until 17 September 2026, when an API started the previous
+        # evening drove a provisioning run on pre-merge code for an afternoon.
+        bad "live, but the build is UNVERIFIED - set OFFICE_OPERATOR_TOKEN"
+      fi
     else
       bad "did not come back"
     fi
@@ -351,7 +358,14 @@ elif [ -n "$(pids_on_port "$API_PORT")" ]; then
 else
   if start_api; then
     RUNNING="$(api_commit)"
-    if [ -n "$RUNNING" ]; then ok "live on ${RUNNING:0:12}"; else ok "live (build unverified)"; fi
+    if [ -n "$RUNNING" ]; then
+      ok "live on ${RUNNING:0:12}"
+    else
+      # NOT `ok`. A build nobody could identify is not a build that was checked.
+      # This read green until 17 September 2026, when an API started the previous
+      # evening drove a provisioning run on pre-merge code for an afternoon.
+      bad "live, but the build is UNVERIFIED - set OFFICE_OPERATOR_TOKEN"
+    fi
   else
     bad "did not start"
   fi

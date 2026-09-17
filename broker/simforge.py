@@ -86,6 +86,28 @@ class SimForgeError(Exception):
     """SimForge could not be reached, or answered in a shape the contract forbids."""
 
 
+class ResponseRefusedError(SimForgeError):
+    """SimForge answered, and The Office refused the answer.
+
+    **Its own type because it is neither of the two things the caller already handles.**
+    `SimForgeError` means nothing was learned - the service was unreachable, and the
+    response to that is to restart something. `CurriculumRejectedError` means SimForge
+    read the submission and said no, and the response to that is to write scenarios.
+    This is a third thing: the submission was ACCEPTED and the reply broke The Office's
+    own contract on the way back.
+
+    It happened on 17 September 2026 and read as an outage for an afternoon. Four
+    Greenstone modules were accepted by SimForge and reported `unreachable`, because
+    SimForge echoes `module_declared_absences` back and the declared reasons ran to
+    1,470-1,800 characters - over `_looks_like_prose`'s threshold. Nothing was wrong with
+    the Forge, nothing was wrong with the curriculum, and the evidence said the Forge
+    could not be reached.
+
+    The response to this one is a third thing too: shorten what The Office sends, or
+    narrow the guard. Never widen it - the guard is the read-path control.
+    """
+
+
 class CurriculumRejectedError(SimForgeError):
     """SimForge validated the curriculum and refused it, naming what is missing.
 
@@ -786,7 +808,7 @@ def assert_no_scenario_content(endpoint: str, body: Any, *, path: str = "") -> N
             lowered = key.lower()
             for fragment in FORBIDDEN_NAME_FRAGMENTS:
                 if fragment in lowered:
-                    raise SimForgeError(
+                    raise ResponseRefusedError(
                         f"{endpoint}: field {here!r} matches forbidden fragment "
                         f"{fragment!r}. The Office has no read path to scenario "
                         "content; this field must not exist."
@@ -796,7 +818,7 @@ def assert_no_scenario_content(endpoint: str, body: Any, *, path: str = "") -> N
         for i, item in enumerate(body):
             assert_no_scenario_content(endpoint, item, path=f"{path}[{i}]")
     elif isinstance(body, str) and _looks_like_prose(body):
-        raise SimForgeError(
+        raise ResponseRefusedError(
             f"{endpoint}: field {path!r} carries {len(body)} characters of prose. "
             "Scenario content must never reach The Office; if this field is "
             "legitimate, narrow it rather than widening the check."
