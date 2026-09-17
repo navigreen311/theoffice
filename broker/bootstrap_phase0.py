@@ -323,6 +323,52 @@ async def _already_granted(
     return uuid.UUID(str(row[0]))
 
 
+async def _assert_not_on_the_ladder(conn: AsyncConnection, venture_id: str) -> None:
+    """Refuse a venture that is already provisioning. Phase 0 is for one that is not.
+
+    **This is the collision that stopped run cb3a47f6 at Gate 7.** Three agents were
+    bootstrapped for greenstone hours after its Pack went live and a run was under way.
+    Gate 5 then issued the ladder's own grants for the same three triples, and Gate 7 -
+    whose entire job is "grants are issued inactive and activated only against a valid
+    sign-off" - found three active ones and blocked, three gates past the human review.
+
+    Phase 0's own header says what it is for: *"Phase 0 predates [the ladder] and exists to
+    answer a narrower question: does the call path work at all."* A venture with a live
+    Pack and a run in flight has answered that question. It does not need a bootstrap; it
+    needs Gate 11.
+
+    Supersession cleans this up where it has already happened. This stops it happening
+    again, which is cheaper than cleaning up and is the half a reader should meet first.
+    """
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT pack_version FROM business_pack "
+            " WHERE venture_id = %s AND status = 'live'",
+            (venture_id,),
+        )
+        pack = await cur.fetchone()
+        await cur.execute(
+            "SELECT run_id, status, current_gate FROM provisioning_run "
+            " WHERE venture_id = %s AND status NOT IN ('aborted', 'rejected') "
+            " ORDER BY started_at DESC LIMIT 1",
+            (venture_id,),
+        )
+        run = await cur.fetchone()
+
+    if pack is None or run is None:
+        return
+
+    raise BootstrapError(
+        f"{venture_id} is on the ladder: Pack {pack['pack_version']} is live and run "
+        f"{str(run['run_id'])[:8]} is {run['status']} at gate {run['current_gate']}. "
+        "Phase 0 exists to prove the call path works before the ladder does, and this "
+        "venture is past that. The grant it would write is ACTIVE, the ladder issues its "
+        "own INACTIVE, and Gate 7 blocks a venture holding both - which is how run "
+        "cb3a47f6 stopped three gates after its human review. Nothing was written. "
+        "Abort the run first, or let Gate 11 activate the grants the ladder already made."
+    )
+
+
 async def plan(
     conn: AsyncConnection, *, ref: str | None = None,
     forge_id: str = DEFAULT_FORGE_ID, module_id: str = DEFAULT_MODULE_ID,
@@ -336,6 +382,7 @@ async def plan(
     """
     tier = DEFAULT_TIER
     if venture_id is not None:
+        await _assert_not_on_the_ladder(conn, venture_id)
         tier = await _assert_pair_in_pack(
             conn, venture_id=venture_id, forge_id=forge_id, module_id=module_id,
             department=None if ref else department,
@@ -578,8 +625,8 @@ async def apply(
             INSERT INTO agent_forge_grant
               (grant_id, office_agent_id, forge_id, module_id, venture_id, trust_tier,
                operation_cert_ref, dept_context_cert_ref, granted_by,
-               activated_at, activated_by)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, now(), %s)
+               activated_at, activated_by, origin)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, now(), %s, 'bootstrap')
             """,
             (grant_id, office_agent_id, forge_id, module_id, venture_id, tier,
              str(unit_a.cert_id), str(unit_b.cert_id), human.human_id, human.human_id),

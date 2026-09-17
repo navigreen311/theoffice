@@ -235,7 +235,8 @@ async def apply(
                 """
                 INSERT INTO agent_forge_grant
                   (grant_id, office_agent_id, forge_id, module_id, venture_id,
-                   trust_tier, operation_cert_ref, dept_context_cert_ref, granted_by)
+                   trust_tier, operation_cert_ref, dept_context_cert_ref, granted_by,
+                   origin)
                 VALUES (%s, %s, %s, %s, %s, %s,
                         (SELECT cert_id::text FROM certification
                           WHERE unit = 'A' AND office_agent_id = %s
@@ -245,7 +246,7 @@ async def apply(
                              ON i.department = cb.department
                           WHERE cb.unit = 'B' AND i.office_agent_id = %s
                             AND cb.forge_id = %s),
-                        %s)
+                        %s, 'ladder')
                 -- POINTERS ARE REFRESHED; HISTORY IS NOT.
                 --
                 -- This used to set `trust_tier` alone, and that left a re-run unable to
@@ -278,6 +279,55 @@ async def apply(
                 ),
             )
             written["grants"] += 1
+
+        # RETIRE THE PHASE 0 GRANTS THIS RUN HAS JUST REPLACED.
+        #
+        # `bootstrap-phase0` issues one identity, two certifications, one grant and one
+        # shift so that a real call can be made before the ladder exists. The grant it
+        # writes is ACTIVE by design - an inactive one would prove nothing, and proving
+        # the call path works is the whole of Phase 0.
+        #
+        # Which means a venture that bootstraps and then provisions ends up holding two
+        # grants for the same triple: one active, one inactive. Gate 7 exists to refuse
+        # exactly that shape - "grants are issued inactive and activated only against a
+        # valid sign-off" - and run cb3a47f6 blocked on it, three gates after the review.
+        #
+        # **Retired, not revoked.** Revocation means the authority was wrong; a Phase 0
+        # grant that has been replaced was not. It is also the wrong instrument: the
+        # narrowest revocation scope is (agent, forge, module), which covers the
+        # replacement too, so revoking would leave Gate 11 unable to activate the grant
+        # this very loop just wrote. Measured before this was built.
+        #
+        # The row stays readable, and `resolve_grant` refuses it with `GrantSuperseded`.
+        await cur.execute(
+            """
+            UPDATE agent_forge_grant b SET superseded_at = now()
+             WHERE b.venture_id = %s
+               AND b.origin = 'bootstrap'
+               AND b.superseded_at IS NULL
+               AND EXISTS (
+                 SELECT 1 FROM agent_forge_grant l
+                  WHERE l.office_agent_id = b.office_agent_id
+                    AND l.forge_id        = b.forge_id
+                    AND l.module_id       = b.module_id
+                    AND l.venture_id      = b.venture_id
+                    AND l.grant_id       <> b.grant_id
+                    -- `= 'ladder'` and not `<> 'bootstrap'`. The ruling is that the
+                    -- LADDER issuing its own grant retires the bootstrap one, and
+                    -- `origin` has a third value: `unknown`, for the rows that predate
+                    -- 0043 and for anything else that writes a grant without saying so.
+                    -- An `unknown` row must not retire anything - nothing is retired on
+                    -- a guess. (0043 applies a looser one-off over cb3a47f6's three,
+                    -- whose replacements Gate 5 wrote before this column existed and so
+                    -- backfilled as `unknown`; that migration says why, over rows that
+                    -- were counted first.)
+                    AND l.origin          = 'ladder'
+                    AND l.superseded_at IS NULL
+               )
+            """,
+            (config.venture_id,),
+        )
+        written["grants_superseded"] = cur.rowcount
 
         await cur.execute(
             """
