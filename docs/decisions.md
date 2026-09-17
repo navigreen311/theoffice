@@ -9527,3 +9527,75 @@ committed: 118, and the 119 that is not yet in a commit.
 That second 119 is the sharpest evidence for this rule that exists. Two sessions, one
 repository, one afternoon, the same number, neither able to see the other - and the only
 reason it was found at all is that both happened to touch the same working tree.
+
+## NEXT. One session per checkout, and the two ways two sessions corrupted each other
+
+**Ruling by Ivan Green, 17 September 2026.** Only one Claude Code session works in a repo
+checkout at a time. **Parallel sessions use separate worktrees and separate test
+databases.**
+
+Recorded in `CLAUDE.md` section 3.1 as well as here, because a rule about what to do
+before running anything has to be somewhere a session reads before it runs anything.
+This entry is the reasoning; that is the instruction.
+
+### The first failure: a branch that changed underneath
+
+A session set out to branch from main, ran `git checkout main && git checkout -b ...`,
+and later found itself on `ai-feature/pin-agent-model-ruling` - another session's
+branch - **with that session's uncommitted work in the tree.**
+
+The work was a draft entry 119 recording the same day's rulings on exam settings and
+Village-sourced model identity, plus a correction to entry 118. It had taken somebody an
+afternoon and existed in exactly one place: an unstaged diff.
+
+Nothing in git prevents this and nothing warns about it. Two processes share one
+`.git`, and a checkout is global to it. What saved the work was noticing that
+`git status` showed a change nobody in that session had made - so the check is cheap and
+the failure is silent, which is the worst combination a rule can address and the reason
+this one is written down.
+
+**What to do with what you find: leave it.** Not stash, not commit, not check out over
+it, and not rewrite a heading in a file somebody is part-way through editing. Say what
+you found and work somewhere else.
+
+### The second failure: two worktrees, one test database
+
+Two branches each added a migration numbered `0044`. Applied from two worktrees against
+the one test database named in the one `.env`, the result was a schema holding **both**
+sets of columns while `alembic_version` read `0043`.
+
+The suite then reported **444 errors belonging to neither branch.** The first instinct
+was that the new constraint had broken something; it had not. Both branches were fine.
+The database was not.
+
+    measured    alembic_version 0043, curriculum_submission.office_agent_id present,
+                certification.model_digest present. Two different 0044s, applied, with
+                the version table saying neither had been.
+    fix         DROP SCHEMA public CASCADE; CREATE SCHEMA public; alembic upgrade head.
+    cost        two full-suite runs and a stretch of debugging the wrong thing.
+
+**So a worktree is not enough on its own.** It isolates the files and shares the
+database, and the database is where migrations land. A parallel session needs
+`OFFICE_TEST_ADMIN_DSN` and `OFFICE_TEST_APP_DSN` pointed at a database of its own.
+
+**The diagnostic rule, written down because it was learned twice in one day: a suite
+that fails for a reason you cannot explain is the database until proven otherwise.**
+Rebuild the schema before reading the code.
+
+### What two sessions cannot see about each other, and which of it is caught
+
+    migration numbers   CAUGHT. Two revisions sharing a `down_revision` give alembic two
+                        heads and it refuses to run, by name, on the first command
+                        anybody types. The 0044 collision cost a rename.
+    ledger numbers      NOT CAUGHT, until entry 117. Two branches appending to the end
+                        of `docs/decisions.md` have no textual overlap, so git merges
+                        them cleanly and main ends up holding two entries with one
+                        number. Four were claimed twice in a week, and the second entry
+                        119 was found only because both sessions touched one working
+                        tree.
+    everything else     not caught, and this ruling is the control.
+
+The pattern is worth naming: **the collisions that were caught are the ones where a tool
+had an opinion.** Alembic has an opinion about two heads. Git has none about a markdown
+heading, and none about which session checked out which branch. Where no tool has an
+opinion, the rule has to be a rule, and it has to be somewhere a session reads first.
