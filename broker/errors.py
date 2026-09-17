@@ -110,6 +110,24 @@ class ForgeUnreachable(OfficeError):
     status_code = 502
 
 
+class GrantSuperseded(OfficeError):
+    """The grant exists, and the ladder has replaced it.
+
+    A Phase 0 bootstrap grant is retired when `runtime_config.apply` issues the ladder's
+    own for the same agent, forge, module and venture. The row stays - it is the record of
+    the first real brokered call, and entry 72 refused deleting authority through the one
+    mechanism that leaves no record.
+
+    **Distinct from `NotGranted` because the fix is different, and distinct from `Revoked`
+    because the fact is different.** Revoked means somebody decided this authority was
+    wrong. Superseded means it was replaced: whoever is reading this refusal should be
+    looking at the newer grant and asking whether Gate 11 activated it, not at why this one
+    was taken away.
+    """
+
+    audit_event = "call_refused_grant_superseded"
+
+
 class GrantNotActivated(OfficeError):
     """The grant exists and is certified, but has not been activated.
 

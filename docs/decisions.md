@@ -9158,3 +9158,122 @@ This is **not** entry 75's Burkham problem, which was revoked Phase 0 grants hel
 and was closed by `covered_grants`. This is B3: no SimForge verdict exists for the module at
 all. Certifying Victor, Ronan and Seraphine by bootstrap puts Greenstone in exactly the
 position B3 describes, and no amount of bootstrapping clears it.
+## 115. A bootstrap grant is retired, not revoked - and the same premise was wrong in three more gates
+
+**Ruled by Ivan Green, 16 September 2026.** Phase 0 bootstrap grants are **retired, never
+deleted and never revoked**, when the ladder issues its own grant for the same agent, forge,
+module and venture. A retired grant is kept as history and refused at call time.
+
+### What stopped run cb3a47f6
+
+Three agents were bootstrapped for greenstone hours after its Pack went live and a run was
+under way. `bootstrap-phase0` issues an **active** grant by design - Phase 0 exists to prove
+the call path works, and an inactive grant proves nothing. Gate 5 then issued the ladder's
+own, inactive, for the same three triples. Gate 7 found three active grants and blocked,
+three gates past the human review.
+
+### Why not revocation, measured before anything was built
+
+A revocation's narrowest scope is `agent_module`: agent, forge, module. `blast_radius`
+reported `grants=2` on each of the three - the bootstrap grant **and its replacement** - and
+Gate 11 activates with `AND NOT (g.grant_id = ANY(covered))`. Revoking would have traded a
+Gate 7 block for a Gate 11 one and left three of six grants permanently unactivatable.
+
+It would also have said the wrong thing. Revocation means the authority was wrong. That is
+what Amelie Wystan's engineering-department grants got, with a reason naming why they should
+never have existed. A Phase 0 grant that has been replaced was not wrong. It did its job.
+
+### `origin` has three values and one of them is `unknown`
+
+    bootstrap   an audit `grant_issued` event carries `bootstrap: true` and names this
+                grant_id. Three rows, all from 16 September.
+    ladder      written by `runtime_config.apply`. Gate 5 retires a bootstrap grant only
+                against one of these.
+    unknown     it existed before 0043 and nothing machine-readable says which wrote it.
+                57 rows. The column default, so a writer that does not declare says so.
+
+**The third value is the honest one, and it is why Amelie's grants read `unknown`.** Her
+`cre-forge/property_lookup` *was* a Phase 0 grant - the revocation over it says so, in prose,
+naming commit d3c7573 - and marking it `bootstrap` would mean reading a sentence and writing
+it into a column as fact. Defaulting the rest to `ladder` would be worse: a claim that the
+sixteen gates issued rows they did not. The backfill asserts only what the audit log proves.
+
+### How cb3a47f6's three were superseded
+
+Gate 5 had already run for that venture, so nothing would retire them on its own. Rather than
+a one-off script nobody finds again, **0043 applies the rule once**, with the same predicate
+`runtime_config.apply` runs after issuing. The database leaves the migration in exactly the
+state Gate 5 would have left it in, and the rule has one definition rather than two.
+
+The migration's one-off is deliberately looser than the runtime's - it retires against any
+non-bootstrap replacement, where the runtime requires `origin = 'ladder'`. It has to be:
+Gate 5 wrote those three replacements before this column existed, so they backfilled as
+`unknown`. The looseness is bounded by being applied once, over rows that were counted first.
+
+### Three gates that were not in the sizing
+
+Gate 7 was the symptom. Three more read the venture's grants with the same premise:
+
+    Gate 9    demanded Unit A and Unit B for a retired grant. Measured: with one present,
+              "2 of 22 certification unit(s) are not certified" and the run held at 9;
+              without it, "20 certification unit(s) certified across 10 grant(s)". This gate
+              already declines to ask a REVOKED grant for a certification (entry 91). Same
+              argument, other half.
+    Gate 11   would have activated one. Today it cannot - a retired grant is always an
+              already-activated bootstrap one - but that is a fact about who writes what,
+              not a rule. Activating history is the worst thing this gate could do.
+    Gate 12   counted retired rows in its `total`.
+
+**And `is_assignable`, which is where this was really hiding.** It is a GENERATED column
+making one claim: that `resolve_grant` can return this row. A retired grant carries both
+certification refs and `activated_at`, so it read **true** while the call path refused it.
+Gate 12, the console's grant badge, `roster` and `ventures` all read that column and would
+all have been wrong in the same way. 0043 redefines it, as 0036 did when revocation left the
+row. Verified after applying: the three retired grants report `is_assignable = false`.
+
+### The guard: stopping the collision is cheaper than repairing it
+
+`bootstrap-phase0` now refuses a venture with a live Pack and a non-aborted run, naming the
+Pack version, the run id, its status and gate, and saying that Gate 7 is what would have
+broken. Nothing is written.
+
+### Read-only: who Amelie Wystan is, asked before this shipped
+
+Engineering department, identity created 29 August 2026, **status `active`**. Three grants,
+all `origin = 'unknown'`:
+
+    cre-forge/property_lookup    greenstone         29 Aug, by Ivan Green      active
+    capitalforge/client_read     burkham-wickmont    3 Sep, by smoke-e4fc20ff  inactive
+    simforge/gate_result         greenstone          4 Sep, by smoke-e4fc20ff  active
+
+Four revocations touch her. The `agent`-scope one of 13 September - the sync-roster departure
+cascade - **was reinstated on 14 September**: no agent departed, the sync ran against a
+database the Village had never synced. The three live ones are `agent_module`, one per grant,
+ruled 14 and 15 September. Their reason is the same in each: issued for department
+`engineering`, a hardcoded default from before the `--department` flag existed, and no
+position in either Pack draws from engineering.
+
+**Should they be superseded instead? No.** Supersession says a replacement exists, and
+supersession keys on (agent, forge, module, venture). Measured: no other grant exists on any
+of her three triples **for her**. Victor Serath holds `cre-forge/property_lookup` on
+greenstone - a different agent, so not a replacement; `simforge/gate_result` is operated by
+no Greenstone position at all. Calling these retired would assert a replacement that does not
+exist, and would erase the finding that they should never have been issued.
+
+**Does the revocation covering them affect any current Greenstone agent? No.** All three live
+revocations are `agent_module` keyed to her `office_agent_id`; `blast_radius` reports
+`agents: 1, grants: 1` on each.
+
+### Read-only: what this changes for Burkham's run 8ed2f39a
+
+**Nothing.** Measured: burkham-wickmont holds 49 grants, **all `unknown`, none active, none
+retired** - so Gate 7 already passes for it and no predicate added here moves. The run is
+blocked at Gate 9, on two refusals that are about certification and not about grants:
+
+    "8 of 98 certification unit(s) are not certified (8 x never_certified)"
+    "90 certification(s) read as certified but carry no SimForge PASS"
+
+Four of the 49 are covered by live revocations - entry 75's finding, already closed by
+`covered_grants`. Those stay revoked. The four were issued for a department no Burkham
+position draws from; that is a statement about authority being wrong, which is what
+revocation means and what supersession would have contradicted.

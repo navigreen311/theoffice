@@ -45,6 +45,7 @@ from broker import audit, humans
 from broker.certification import cap_tier
 from broker.errors import (
     GrantNotActivated,
+    GrantSuperseded,
     IdentityInactive,
     ModuleExcluded,
     NotAuthorized,
@@ -130,6 +131,7 @@ SELECT
     m.is_mutating,
     m.compliance_flags_implied,
     g.activated_at,
+    g.superseded_at,
     ca.state          AS unit_a_state,
     ca.certified_tier AS unit_a_tier,
     cb.state          AS unit_b_state,
@@ -157,7 +159,13 @@ WHERE g.office_agent_id = %(agent_id)s
   AND g.forge_id        = %(forge_id)s
   AND g.module_id       = %(module_id)s
   AND g.venture_id      = %(venture_id)s
-ORDER BY g.granted_at DESC
+-- A LIVE GRANT BEATS A RETIRED ONE, WHATEVER THE DATES SAY.
+--
+-- `granted_at DESC` alone is nearly always enough: the ladder issues after the bootstrap.
+-- Nearly is not a rule. Ordering retired rows last means the refusal below fires only when
+-- EVERY grant for this triple has been superseded, which is the state it describes -
+-- rather than when the newest one happens to be the retired one.
+ORDER BY (g.superseded_at IS NOT NULL), g.granted_at DESC
 LIMIT 1
 """
 
@@ -271,6 +279,17 @@ async def resolve_grant(
             unit_a_state=unit_a,
             unit_b_state=unit_b,
             department=row["department"],
+        )
+
+    # Retired before activation is considered: a superseded grant's `activated_at` is
+    # whatever it was when the ladder replaced it, and reporting "not activated" for a row
+    # that WAS activated would name the wrong problem.
+    if row["superseded_at"] is not None:
+        raise GrantSuperseded(
+            "grant was superseded when the ladder issued its own for this agent, forge, "
+            "module and venture; it is kept as history and confers nothing",
+            grant_id=str(row["grant_id"]),
+            venture_id=venture_id,
         )
 
     # Gate 11. An issued-but-unactivated grant is a venture mid-provisioning, not a

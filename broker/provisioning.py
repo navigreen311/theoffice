@@ -560,8 +560,19 @@ async def _gate_7(ctx: _Context) -> GateOutcome:
     """
     async with ctx.conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
+            # RETIRED GRANTS ARE NOT AUTHORITY, AND THIS GATE IS ABOUT AUTHORITY.
+            #
+            # A Phase 0 grant the ladder has replaced is kept as history and refused at
+            # call time; counting it here would block a run on a row that grants nothing.
+            # That is what stopped cb3a47f6: three active bootstrap grants, each already
+            # superseded in fact by Gate 5's own, with no way to say so.
+            #
+            # `superseded_at IS NULL` and not `origin <> 'bootstrap'`: the question is
+            # whether this grant still confers authority, not who wrote it. A bootstrap
+            # grant with no replacement still blocks, which is correct - it is live.
             "SELECT grant_id, activated_at IS NOT NULL AS active "
-            "FROM agent_forge_grant WHERE venture_id = %s",
+            "FROM agent_forge_grant "
+            "WHERE venture_id = %s AND superseded_at IS NULL",
             (ctx.venture_id,),
         )
         rows = await cur.fetchall()
@@ -1411,13 +1422,24 @@ async def _gate_9(ctx: _Context) -> GateOutcome:
               ON ca.unit = 'A' AND ca.cert_id::text = g.operation_cert_ref
             LEFT JOIN certification cb
               ON cb.unit = 'B' AND cb.cert_id::text = g.dept_context_cert_ref
-            WHERE g.venture_id = %s
+            WHERE g.venture_id = %s AND g.superseded_at IS NULL
             ORDER BY g.grant_id
             """,
             (ctx.venture_id,),
         )
         rows = [dict(r) for r in await cur.fetchall()]
 
+    # A RETIRED GRANT IS NOT ASKED FOR A CERTIFICATION EITHER, for the same reason as
+    # the paragraph below and by the same argument. The predicate is in the SQL rather
+    # than here because a retired grant is not a finding this gate reports - it confers
+    # nothing, so there is nothing to say about it. This was not in the sizing: the
+    # symptom was Gate 7, but Gate 9 reads the venture's grants with exactly the same
+    # premise, and a bootstrap grant the ladder replaced would still have demanded Unit A
+    # on its module and Unit B on its department - certifiable, but certified for a row
+    # that grants nothing. Measured, not reasoned: with one retired grant present this
+    # gate reported "2 of 22 certification unit(s) are not certified" and held the run at
+    # 9; without it, "20 certification unit(s) certified across 10 grant(s)".
+    #
     # REVOKED GRANTS ARE NOT ASKED FOR A CERTIFICATION - decisions entry 91, B53's shape.
     #
     # Gate 11 learned in B53 that a grant a live revocation covers is not one it may
@@ -1634,6 +1656,11 @@ async def _gate_11(ctx: _Context) -> GateOutcome:
             "  FROM office_agent_identity i "
             " WHERE i.office_agent_id = g.office_agent_id AND i.status = 'active' "
             "   AND g.venture_id = %s AND g.activated_at IS NULL "
+            # Belt and braces, and cheap. Today a retired grant is always an activated
+            # bootstrap one, so `activated_at IS NULL` already excludes it - but that is
+            # a fact about who writes what, not a rule. Activating history would be the
+            # worst thing this gate could do.
+            "   AND g.superseded_at IS NULL "
             "   AND NOT (g.grant_id = ANY(%s))",
             (ctx.actor, ctx.venture_id, list(covered)),
         )
@@ -1699,8 +1726,12 @@ async def _gate_11(ctx: _Context) -> GateOutcome:
 async def _gate_12(ctx: _Context) -> GateOutcome:
     async with ctx.conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
+            # `total` counts live grants only, so the two figures are drawn from the same
+            # population. `is_assignable` is GENERATED and 0043 added `superseded_at IS
+            # NULL` to it; counting retired rows in `total` alone would report them as
+            # unreachable grants, which is true but is not the warning V38 is making.
             "SELECT count(*) FILTER (WHERE is_assignable) AS assignable, count(*) AS total "
-            "FROM agent_forge_grant WHERE venture_id = %s",
+            "FROM agent_forge_grant WHERE venture_id = %s AND superseded_at IS NULL",
             (ctx.venture_id,),
         )
         row = await cur.fetchone()
