@@ -132,6 +132,19 @@ class GateResult:
     #: a parse error at the boundary - the two need different responses, and the first
     #: names the missing fact while the second only says the shape was wrong.
     agent_model: str | None = None
+    #: The same candidate in full: model name, the model FILE with its size and
+    #: quantization, the generation settings the exam ran under, and a fingerprint over
+    #: all of it (SimForge ADR-0060).
+    #:
+    #: **Read, recorded, and not interpreted here.** Whether the model that earned a
+    #: certification is still the one an agent runs is SimForge's rule to enforce - it
+    #: owns the exam and it is the side that can see both values. The Office's interest
+    #: is that the fact travels with the verdict and is on the row, so a certification
+    #: nobody can attribute to a specific model file cannot be produced quietly.
+    #:
+    #: Optional for the reason `agent_model` is: an older SimForge that does not send it
+    #: must produce a refusal that names the missing fact, not a parse error about shape.
+    model_identity: dict[str, Any] | None = None
 
 
 def submission_unit(module_id: str | None) -> tuple[str, str]:
@@ -814,6 +827,7 @@ def parse_gate_result(body: dict[str, Any]) -> GateResult:
         scenario_count=body["scenario_count"],
         coverage_denominator=body["coverage_denominator"],
         agent_model=body.get("agent_model"),
+        model_identity=body.get("model_identity"),
     )
 
 
