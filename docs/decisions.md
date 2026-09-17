@@ -9410,3 +9410,93 @@ day one agent moves is the day the uniform answer becomes a lie.
 `diff()`, a `Change` kind, and the rendering in `__main__`. Plus one thing that is not on
 that list - `certification.agent_model` holds a tag, and ruling 1 means it should hold the
 digest.
+
+## 118. Four refusals: no fake answers, no cloud, no thaw, no queue
+
+**Ruled 2026-09-17 by Ivan Green.** All four built on navigreen311/village-os#2,
+unmerged. Each has a test that proves the refusal, because a control nobody tested is
+a control nobody has.
+
+### 1. Agents never fake an answer
+
+A failed model call is an error, logged and returned as one, never a canned reply.
+
+`_generate_fallback_response` returned **"I understand. Let me think about that and get
+back to you."** on any non-200 and on every exception. Nothing downstream could tell that
+from an answer - it was stored as a message, it counted as a reply, and an agent nobody
+reached looked like one with nothing to say.
+
+**This was not hypothetical.** `phi4:latest` was named in config and not installed, so
+every agent-to-agent call in the village returned exactly that sentence. Whatever is in
+`messages` from that period is that string, not agent speech.
+
+Now `_fail_model_call`: ERROR with the agent and the cause, then `ModelCallFailed`.
+
+### 2. Nothing reaches a cloud provider unless Ivan Green turns it on
+
+`AGENT_ALLOW_CLOUD`, default off, deliberately absent from `.env.example` so nobody
+inherits it. Five live call sites:
+
+    app.py:2252, 2343          OpenAI SDK
+    app.py:2973, 3846, 3913    POST api.openai.com
+    rag.py:291                 SDK, model hardcoded to gpt-4
+
+The test asserts against the files, not the flag, because a guard on four of five sites
+is no guard.
+
+**A correction to an earlier report of mine.** I named
+`ai/response_generator.py:843-856` as the cloud route. It is dead code - **nothing
+imports it**, and its six OpenAI call sites are unreachable. The live path is a
+*duplicate of the same methods inside `app.py`*, reached from
+`app/blueprints/api/chat.py:231`. Same file-and-its-copy trap as elsewhere in this
+estate: the one that looked live was the dead one.
+
+### 3. Behaviour is frozen between scheduled training checkpoints
+
+Agents may collect lessons; nothing applies them, until collection, review, versioning
+and re-certification exist.
+
+`AGENT_BEHAVIOR_FROZEN`, default on. Three paths refuse:
+
+    llm_swap_enabled    refused in HeredityConfig.__post_init__, so a thawing config
+                        cannot be constructed at all
+    daily reflection    writes `adjustments`; collection and application are the same
+                        call, and separating them IS the checkpoint work that does not
+                        exist yet, so the whole path is refused rather than half-run
+    AME self-tuning     its docstring claims system parameters only, but those decide
+                        which agents act and how often, which reaches behaviour by
+                        another route
+
+**The freeze was already true, and that was the problem.** `llm_swap_enabled` was False,
+every learning table held zero rows, and `max(llm_last_fired_tick)` was 0 across all 186
+agents. Behaviour was frozen by accident, and an accident is not a control - nothing
+would have refused a thaw, and nobody would have been told one happened.
+
+### 4. Simultaneous calls match what the machine serves
+
+Recorded here because it was built before it was written down. The number is **2**, and
+it came from measurement rather than arithmetic:
+
+    n=1  wall 1.20s   47.4 tok/s aggregate   peak VRAM 10714 MiB
+    n=2  wall 1.75s   70.9 tok/s aggregate   peak VRAM 10714 MiB
+    n=4  wall 3.47s   79.5 tok/s aggregate   peak VRAM 10714 MiB
+    n=8  wall 6.51s   82.7 tok/s aggregate   peak VRAM 10716 MiB
+
+VRAM does not move between n=1 and n=8, so the VRAM sum - free memory divided by KV per
+slot, "about seven" - describes a card that is never asked for a seventh slot. Wall time
+doubles with n and aggregate never beats one stream's own ~90 tok/s: **the card generates
+one response at a time.** 2 is the last value that buys anything, and everything past it
+is queue depth.
+
+`llm_swap_max_calls_per_tick` was 50 and 50 was never reachable: 50 replies of 150 tokens
+at 83 tok/s is ~90s, past the batch's own 60s timeout. The orchestrator path had no limit
+at all. Both now share one gate, and a queued call logs at WARNING with its wait instead
+of expiring into an exception indistinguishable from a dead model.
+
+**And the batch runner never worked.** Both branches passed `asyncio.gather(...)` to
+`asyncio.run`, which wants a coroutine and gets a `_GatheringFuture`:
+`ValueError: a coroutine was expected`. For every n, including 1. The 60s timeout was not
+a bound either - `with ThreadPoolExecutor` calls `shutdown(wait=True)` on exit - and the
+TimeoutError it raised was uncaught at the tick site, so it would have taken the
+affect/mood/grief decay with it. A limit on a function that raises on every path is not a
+limit, so it was fixed alongside.
