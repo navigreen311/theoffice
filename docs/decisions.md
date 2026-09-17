@@ -9599,7 +9599,7 @@ The pattern is worth naming: **the collisions that were caught are the ones wher
 had an opinion.** Alembic has an opinion about two heads. Git has none about a markdown
 heading, and none about which session checked out which branch. Where no tool has an
 opinion, the rule has to be a rule, and it has to be somewhere a session reads first.
-## NEXT. A venture needs an answer key, and an exam needs a name on it
+## 119. A venture needs an answer key, and an exam needs a name on it
 
 **Five rulings by Ivan Green, 17 September 2026.**
 
