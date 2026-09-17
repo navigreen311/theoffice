@@ -9707,3 +9707,65 @@ listening on the developer's machine. It was green while Gate 8 could not block.
 block made that dependency visible as sixteen failures in gates the helper only passes
 through, so it now uses an accepting double. The hand-over keeps its own suites, and
 they assert the real verdicts including the block.
+
+---
+
+## 115. One Acquisition Analyst seat, and a mutation that had quietly stopped mutating
+
+**Built 2026-09-16.** The Village now carries exactly one Acquisition Analyst - Victor
+Serath, retitled from Trend Analyst 2 and moved to report to the Research Director - so
+Greenstone's `headcount: 3` was a guess that would leave V24 failing on two seats no agent
+exists for.
+
+**Verified against the running Village before anything was changed**, rather than taken
+from the direction: `/api/org/roster` serves `victor_serath` with `title: "Acquisition
+Analyst"` and `reports_to_id: dr_brann_lorvik`.
+
+### The artifacts hash moves, and the contrast is the useful part
+
+    provenance `source` (1.9.0)   8b9069657a9531ce -> 8b9069657a9531ce   SAME
+    headcount 3 -> 1              8b9069657a9531ce -> fc323b7aa7c29b7a   MOVED
+
+A provenance source is read by V13's evidence basis and by V39, neither of which is
+generator output. A headcount reaches `roles`, `appointment` and `runtime_config`. **Two
+Pack edits, one visible to a Gate 10 signature and one not**, and nothing about either edit
+says which from the outside.
+
+Three golden snapshots moved and each diff was read: `roles` (the number), `appointment`
+(two of the three test-world research agents stop being appointed), `runtime_config` (their
+four grants go). `approval_projection` did NOT move - Acquisition Analyst is `auto_execute`,
+so its headcount has never reached a reviewer.
+
+### The roster sync, and the departure nobody asked about
+
+    Changed manager (1)   Victor Serath   theodore_horven -> dr_brann_lorvik
+    Changed title (1)     Victor Serath   Trend Analyst 2 -> Acquisition Analyst
+    Gone from the Village (1)   Sable Quint
+
+The title line exists because of entry 114, which found `sync-roster` wrote `title` on every
+upsert and never compared it. One agent, two rows - and a third change the direction did not
+mention.
+
+**Sable Quint was measured before applying, not after.** It is `village_agent_ref =
+'dep-test-stayer'`, a departure-test fixture: no `office_agent_identity`, **0 grants, 0
+certifications**. The departure revoked nothing. Worth recording because entry 85 lists
+"Sable Quint's grants" among the counts a direction asserted that did not exist; measured
+again here, it is still zero.
+
+### A test that passed by not testing
+
+`test_a_publish_that_does_not_match_its_description_is_refused` drifted a Pack by two lines
+and declared one, expecting a refusal. It built the drift with
+
+    .replace("headcount: 3", "headcount: 99", 1)
+
+and after this change **no `headcount: 3` remained**. The replace became a no-op, the file
+drifted by exactly the one line the publish declared, nothing was refused, and the test went
+green.
+
+**The guard was fine. The mutation had stopped working.** That is entry 103's finding in a
+second place - *"The mutation would have stopped working, not the rule"* - and it is the
+second time in this repository that a text-replace mutation has silently stopped mutating.
+
+It now matches `headcount: \d+` whatever the number, and **asserts the mutation landed
+before relying on it**. A test that mutates by text has to prove the text was there.

@@ -123,7 +123,11 @@ positions_required:
     # pending_activation on 2026-09-16 (item F, decisions entry 109). It was never this
     # position's: neither property_lookup nor comp_analysis contacts an owner.
     compliance_flags_in_scope: []
-    headcount: 3
+    # ONE SEAT, 2026-09-16. Three was the original guess; the Village now carries exactly
+    # one Acquisition Analyst - Victor Serath, retitled from Trend Analyst 2 and moved to
+    # report to the Research Director. A headcount of three would leave V24 failing on two
+    # seats no agent exists for.
+    headcount: 1
     trust_tier_ceiling: auto_execute
     lifecycle_stages_owned: [Source, Qualify]
     # One step per module, in the stage it runs in. The generator used to emit the cross

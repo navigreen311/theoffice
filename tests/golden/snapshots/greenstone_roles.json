@@ -13,7 +13,7 @@
         "cre-forge/comp_analysis",
         "cre-forge/property_lookup"
       ],
-      "headcount": 3,
+      "headcount": 1,
       "implied_compliance_flags": [],
       "lifecycle_stages_owned": [
         "Source",

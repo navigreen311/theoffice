@@ -30,6 +30,7 @@ invented by this repository.
 from __future__ import annotations
 
 import contextlib
+import re
 import uuid
 
 import httpx
@@ -730,14 +731,31 @@ async def test_a_publish_that_does_not_match_its_description_is_refused(world, b
     """THE test. Three lines approved, a file carrying more, nothing written.
 
     This is the morning of 6 September with the assertion moved into the path.
+
+    **THE MUTATION USED TO BE `replace("headcount: 3", ...)` AND IT STOPPED MUTATING.**
+    Greenstone's Acquisition Analyst went from three seats to one on 2026-09-16, no
+    `headcount: 3` was left in the Pack, and the second replace became a no-op - so the
+    file drifted by ONE line, which is exactly what the publish declared, and nothing was
+    refused. **The test passed by not testing.** That is entry 103's finding in a second
+    place: *"The mutation would have stopped working, not the rule."*
+
+    It now matches whatever number is there, and asserts the mutation landed before
+    relying on it. A test that mutates by text has to prove the text was there.
     """
     actor = world.human_id
     async with connection() as conn:
         await _publish(conn, base_yaml, "9.1.0", actor)
 
-        drifted = base_yaml.replace(
-            "source_department: research", "source_department: banking", 1
-        ).replace("headcount: 3", "headcount: 99", 1)
+        drifted = re.sub(
+            r"headcount: \d+",
+            "headcount: 99",
+            base_yaml.replace(
+                "source_department: research", "source_department: banking", 1
+            ),
+            count=1,
+        )
+        assert drifted.count("headcount: 99") == 1, "the headcount mutation did not land"
+        assert "source_department: banking" in drifted, "the department mutation did not land"
 
         with pytest.raises(packs.PackDiffUnexpectedError) as exc:
             await _publish(conn, drifted, "9.1.1", actor, expect_changed_lines=1)

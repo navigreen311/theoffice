@@ -28,34 +28,6 @@
     },
     {
       "forge_id": "cre-forge",
-      "grant_id": "197fa3ae-641f-5924-8fd1-3489eb6621b8",
-      "module_id": "comp_analysis",
-      "office_agent_id": "22222222-2222-5222-8222-222222222222",
-      "trust_tier": "auto_execute"
-    },
-    {
-      "forge_id": "cre-forge",
-      "grant_id": "46155161-f870-5d6e-bfe8-9fcd03ab0688",
-      "module_id": "property_lookup",
-      "office_agent_id": "22222222-2222-5222-8222-222222222222",
-      "trust_tier": "auto_execute"
-    },
-    {
-      "forge_id": "cre-forge",
-      "grant_id": "5ef2a7b0-e845-5aaf-9013-058042b8294f",
-      "module_id": "comp_analysis",
-      "office_agent_id": "33333333-3333-5333-8333-333333333333",
-      "trust_tier": "auto_execute"
-    },
-    {
-      "forge_id": "cre-forge",
-      "grant_id": "9b21b656-efbc-559b-93b8-7fb4b54988a4",
-      "module_id": "property_lookup",
-      "office_agent_id": "33333333-3333-5333-8333-333333333333",
-      "trust_tier": "auto_execute"
-    },
-    {
-      "forge_id": "cre-forge",
       "grant_id": "378362b2-a3f1-569e-81c2-79e8d711485e",
       "module_id": "assign_contract",
       "office_agent_id": "66666666-6666-5666-8666-666666666666",
