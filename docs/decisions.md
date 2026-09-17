@@ -9277,3 +9277,226 @@ Four of the 49 are covered by live revocations - entry 75's finding, already clo
 `covered_grants`. Those stay revoked. The four were issued for a department no Burkham
 position draws from; that is a statement about authority being wrong, which is what
 revocation means and what supersession would have contradicted.
+
+## 116. A certification describes a digest, not a tag
+
+**Ruled 2026-09-17 by Ivan Green.** Recorded here; built on navigreen311/village-os#2,
+unmerged.
+
+### The ruling
+
+The agent model config pins an exact version or digest, never `latest`. A moving tag
+would silently change the model an agent was certified on.
+
+`phi4:latest` in the Village's `.env` was exactly that. `ollama pull phi4` on any later
+day can put different weights behind the same name, and nothing would notice: the config
+still reads `phi4:latest`, the call still succeeds, and every certification on record is
+describing a model that is no longer running.
+
+**Corrected after this entry was first written.** It said The Office records nothing about
+the model. That is wrong: migration 0035 added `certification.agent_model`, and the
+`certified_records_its_basis` CHECK requires it on any certified row carrying an answered
+SimForge verdict. What it records is `provider/model` - `ollama/phi4:latest` - **a tag**.
+So The Office does record the model, in precisely the form this ruling says is not enough.
+The gap is narrower than claimed and sharper: the column exists and holds the wrong kind of
+value.
+
+### Ollama cannot be addressed by digest, so the digest is checked rather than requested
+
+Measured against the running server before designing around it:
+
+    {"name": "phi4@sha256:ac896e..."}   ->  {"error":"invalid model name"}
+    {"name": "sha256:ac896e..."}        ->  {"error":"model ... not found"}
+
+So the tag stays in the call and the digest becomes a startup precondition. The check runs
+before any agent machinery is constructed, and an unreachable Ollama is a refusal too - a
+check that could not run is not a check that passed, which is `console-smoke.sh`'s rule
+again, two repositories over.
+
+Verified both ways: a wrong digest prints `REFUSING TO START AGENTS` and exits 1; the right
+one prints the verified pin and serves.
+
+### One temperature and one token budget, and where each came from
+
+    model        phi4:latest @ ac896e5b...   read from /api/tags
+    temperature  0.7                          agent_orchestrator.py's hardcoded value -
+                                              what every agent-to-agent call already sent.
+                                              `.env` said 0.8 and never reached Ollama.
+    max_tokens   500                          the default route's value, and the number
+                                              heredity/config.py already used. Largest of
+                                              the three, so no route is truncated.
+
+Three `ResponseRoute`s named the same model but used 200/300/500 tokens. A phone answer and
+an agent-to-agent answer were generated under different settings, and **neither necessarily
+matched what a certification measured.** That is the same defect as the moving tag, one
+layer down: the thing certified was not pinned.
+
+`llm_swap_temperature` stays 0.3, deliberately. That socket asks for structured JSON
+beliefs, not dialogue. It shares the pin and keeps its own sampling, flagged in the file
+rather than assumed.
+
+### What this costs, measured
+
+phi4 is **14.7B, Q4_K_M, 8.43 GB** - roughly twice the 7-9B models already installed
+(4.07-5.07 GB). Its KV cache is ~0.80 GB per concurrent slot at 4K context, against ~0.5 GB
+for llama3.1:8b.
+
+On the one 16 GB card here that is about **7 concurrent requests, where an 8B model gives
+about 20.** The heredity path budgets 50 calls per tick and issues them as a single
+unchunked `asyncio.gather`; 50 slots would need ~40 GB of KV, so the excess queues inside a
+60-second tick timeout rather than running.
+
+A warm answer takes **~1.4-2.4 s** at ~90 tokens/s; the first call after a load adds ~4 s.
+
+### Numbering
+
+Numbered 116 and 117, contiguously after main's 115, because the ledger requires contiguity -
+`test_entry_numbers_are_contiguous_from_one` fails on a gap. An earlier draft of this entry
+picked 118 to dodge a collision and was simply wrong: the gap is not allowed.
+
+The collision is therefore unavoidable and is resolved at merge, not here. #164 and #166 both
+claim 116 and #167 claims 117; whoever merges second renumbers.
+
+## 117. Exams at production settings, and a model identity the Village will say out loud
+
+**Ruled 2026-09-17 by Ivan Green.** Both recorded; neither built. The timeout change they
+arrived with is on navigreen311/village-os#2, unmerged.
+
+### 1. Exams run at production settings
+
+The model, temperature and max tokens used in certification are the ones the agent runs on
+the job.
+
+This is entry 118's rule one layer up. Pinning the weights stops the model changing under a
+certified agent; it does nothing about an agent certified at one temperature and working at
+another. Both are the same failure - the thing measured was not the thing that runs.
+
+It already had a live instance. Three `ResponseRoute`s shared a model and used 200/300/500
+max tokens, so **two agents on the same weights were already answering under different
+settings**, and any exam would have matched at most one of them. #2 collapses that to one
+temperature (0.7) and one token budget (500) for every route, which is what makes this
+ruling expressible at all.
+
+### 2. The Village exposes each agent's current model identity
+
+Name, digest, temperature, max tokens, over the API, so The Office can tell when it changes.
+
+**Which route: `/api/org/roster`.** Measured rather than chosen:
+
+    it is the only Village route The Office already reads   village.py:303, every sync
+    the per-agent compare loop already exists               sync_roster.diff()
+    a fifth Change kind costs what `title` cost             entry 114's five-point change
+
+Anything on a new route needs a new fetch, a new store and new diff logic before it can
+report a single change. On this one, a model that moves becomes a line in the sync report
+the same day.
+
+**Two frictions, stated rather than designed around.**
+
+`org.py` documents itself as *"a straight serialization of `load_roster()` - no new source
+of truth, no second parse of agentsrole.yaml"*. The model is not in that YAML and never
+will be, so per-agent model fields break that sentence. The alternative - a sibling `model`
+block beside `agents` - keeps the docstring true but is not per-agent, which is what the
+ruling asks for. The ruling wins; the docstring needs rewriting with it.
+
+And the model is uniform today. There is no per-agent model field anywhere: `agents` has 92
+columns and none of them is one, and the orchestrator's route branches all name the same
+model. So per-agent identity repeats one value 186 times until that stops being true. That
+is the right shape for a certification record even so - certification is per agent, and the
+day one agent moves is the day the uniform answer becomes a lie.
+
+**What it takes on The Office's side** is exactly entry 114's list, once more: a
+`village_agent` migration for the columns, the `_office_roster` SELECT, the compare in
+`diff()`, a `Change` kind, and the rendering in `__main__`. Plus one thing that is not on
+that list - `certification.agent_model` holds a tag, and ruling 1 means it should hold the
+digest.
+
+## 118. Four refusals: no fake answers, no cloud, no thaw, no queue
+
+**Ruled 2026-09-17 by Ivan Green.** All four built on navigreen311/village-os#2,
+unmerged. Each has a test that proves the refusal, because a control nobody tested is
+a control nobody has.
+
+### 1. Agents never fake an answer
+
+A failed model call is an error, logged and returned as one, never a canned reply.
+
+`_generate_fallback_response` returned **"I understand. Let me think about that and get
+back to you."** on any non-200 and on every exception. Nothing downstream could tell that
+from an answer - it was stored as a message, it counted as a reply, and an agent nobody
+reached looked like one with nothing to say.
+
+**This was not hypothetical.** `phi4:latest` was named in config and not installed, so
+every agent-to-agent call in the village returned exactly that sentence. Whatever is in
+`messages` from that period is that string, not agent speech.
+
+Now `_fail_model_call`: ERROR with the agent and the cause, then `ModelCallFailed`.
+
+### 2. Nothing reaches a cloud provider unless Ivan Green turns it on
+
+`AGENT_ALLOW_CLOUD`, default off, deliberately absent from `.env.example` so nobody
+inherits it. Five live call sites:
+
+    app.py:2252, 2343          OpenAI SDK
+    app.py:2973, 3846, 3913    POST api.openai.com
+    rag.py:291                 SDK, model hardcoded to gpt-4
+
+The test asserts against the files, not the flag, because a guard on four of five sites
+is no guard.
+
+**A correction to an earlier report of mine.** I named
+`ai/response_generator.py:843-856` as the cloud route. It is dead code - **nothing
+imports it**, and its six OpenAI call sites are unreachable. The live path is a
+*duplicate of the same methods inside `app.py`*, reached from
+`app/blueprints/api/chat.py:231`. Same file-and-its-copy trap as elsewhere in this
+estate: the one that looked live was the dead one.
+
+### 3. Behaviour is frozen between scheduled training checkpoints
+
+Agents may collect lessons; nothing applies them, until collection, review, versioning
+and re-certification exist.
+
+`AGENT_BEHAVIOR_FROZEN`, default on. Three paths refuse:
+
+    llm_swap_enabled    refused in HeredityConfig.__post_init__, so a thawing config
+                        cannot be constructed at all
+    daily reflection    writes `adjustments`; collection and application are the same
+                        call, and separating them IS the checkpoint work that does not
+                        exist yet, so the whole path is refused rather than half-run
+    AME self-tuning     its docstring claims system parameters only, but those decide
+                        which agents act and how often, which reaches behaviour by
+                        another route
+
+**The freeze was already true, and that was the problem.** `llm_swap_enabled` was False,
+every learning table held zero rows, and `max(llm_last_fired_tick)` was 0 across all 186
+agents. Behaviour was frozen by accident, and an accident is not a control - nothing
+would have refused a thaw, and nobody would have been told one happened.
+
+### 4. Simultaneous calls match what the machine serves
+
+Recorded here because it was built before it was written down. The number is **2**, and
+it came from measurement rather than arithmetic:
+
+    n=1  wall 1.20s   47.4 tok/s aggregate   peak VRAM 10714 MiB
+    n=2  wall 1.75s   70.9 tok/s aggregate   peak VRAM 10714 MiB
+    n=4  wall 3.47s   79.5 tok/s aggregate   peak VRAM 10714 MiB
+    n=8  wall 6.51s   82.7 tok/s aggregate   peak VRAM 10716 MiB
+
+VRAM does not move between n=1 and n=8, so the VRAM sum - free memory divided by KV per
+slot, "about seven" - describes a card that is never asked for a seventh slot. Wall time
+doubles with n and aggregate never beats one stream's own ~90 tok/s: **the card generates
+one response at a time.** 2 is the last value that buys anything, and everything past it
+is queue depth.
+
+`llm_swap_max_calls_per_tick` was 50 and 50 was never reachable: 50 replies of 150 tokens
+at 83 tok/s is ~90s, past the batch's own 60s timeout. The orchestrator path had no limit
+at all. Both now share one gate, and a queued call logs at WARNING with its wait instead
+of expiring into an exception indistinguishable from a dead model.
+
+**And the batch runner never worked.** Both branches passed `asyncio.gather(...)` to
+`asyncio.run`, which wants a coroutine and gets a `_GatheringFuture`:
+`ValueError: a coroutine was expected`. For every n, including 1. The 60s timeout was not
+a bound either - `with ThreadPoolExecutor` calls `shutdown(wait=True)` on exit - and the
+TimeoutError it raised was uncaught at the tick site, so it would have taken the
+affect/mood/grief decay with it. A limit on a function that raises on every path is not a
+limit, so it was fixed alongside.
