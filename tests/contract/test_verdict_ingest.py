@@ -52,6 +52,11 @@ from broker import sweeps
 from broker.db import connection
 from broker.simforge import GateResult, SimForgeClient, SimForgeError
 from tests.conftest import drop_forge, requires_db
+from tests.world import (
+    FIXTURE_MODEL_DIGEST,
+    FIXTURE_MODEL_MAX_TOKENS,
+    FIXTURE_MODEL_TEMPERATURE,
+)
 
 pytestmark = [requires_db, pytest.mark.db]
 
@@ -91,6 +96,21 @@ def _gate_result(verdict: str, *, run_ref: str, tier: str | None = None) -> Gate
         # omitting it would build a verdict the ingest cannot store, and every test
         # through it would fail for the wrong reason.
         agent_model="ollama/llama3.1:8b",
+        # And since 0044 the LABEL above is not enough: `certification_names_its_model`
+        # demands the digest and the settings too, because the same label describes
+        # different weights whenever a tag is re-pulled. Same reasoning as the comment
+        # above, one ruling later - a helper omitting this would build a verdict the
+        # ingest cannot store.
+        model_identity={
+            "provider": "ollama",
+            "model": "llama3.1:8b",
+            "file_digest": FIXTURE_MODEL_DIGEST,
+            "settings": {
+                "temperature": FIXTURE_MODEL_TEMPERATURE,
+                "max_tokens": FIXTURE_MODEL_MAX_TOKENS,
+            },
+            "fingerprint": "sha256:" + "ab" * 32,
+        },
     )
 
 

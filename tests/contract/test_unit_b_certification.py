@@ -49,6 +49,7 @@ from broker import sweeps
 from broker.db import connection
 from broker.simforge import GateResult, SimForgeError, department_basis_hash
 from tests.conftest import drop_forge, requires_db
+from tests.world import FIXTURE_MODEL_IDENTITY
 
 pytestmark = [requires_db, pytest.mark.db]
 
@@ -111,6 +112,9 @@ def _domain_result(verdict: str, *, run_ref: str, tier: str | None = None) -> Ga
         # omitting it would build a verdict the ingest cannot store, and every test
         # through it would fail for the wrong reason.
         agent_model="ollama/llama3.1:8b",
+        # And since 0044 the label is not enough on a verdict that confers authority:
+        # `certification_names_its_model` wants the digest and the settings too.
+        model_identity=FIXTURE_MODEL_IDENTITY,
     )
 
 

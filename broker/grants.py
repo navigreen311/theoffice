@@ -44,6 +44,7 @@ from psycopg.rows import dict_row
 from broker import audit, humans
 from broker.certification import cap_tier
 from broker.errors import (
+    CertificationNamesNoModel,
     GrantNotActivated,
     GrantSuperseded,
     IdentityInactive,
@@ -134,6 +135,8 @@ SELECT
     g.superseded_at,
     ca.state          AS unit_a_state,
     ca.certified_tier AS unit_a_tier,
+    ca.model_digest   AS unit_a_digest,
+    ca.simforge_verdict AS unit_a_verdict,
     cb.state          AS unit_b_state,
     x.reason          AS exclusion_reason
 FROM agent_forge_grant g
@@ -279,6 +282,24 @@ async def resolve_grant(
             unit_a_state=unit_a,
             unit_b_state=unit_b,
             department=row["department"],
+        )
+
+    # THE CERTIFICATION PASSED AND NOTHING CAN SAY WHICH MODEL PASSED IT.
+    #
+    # After `NotCertified`, because "not certified" and "certified by a model nobody
+    # recorded" are different facts and the first is the more basic one. Before
+    # supersession and activation, because those are about the GRANT and this is about
+    # the certification behind it.
+    #
+    # Only a SimForge-attested row is asked. A bootstrap certification carries no model
+    # by design - no battery ran, so none answered - and demanding one here would refuse
+    # every Phase 0 call for lacking a fact Phase 0 is defined not to have.
+    if row["unit_a_verdict"] is not None and not row["unit_a_digest"]:
+        raise CertificationNamesNoModel(
+            "certification carries a SimForge verdict and no model digest; it cannot be "
+            "expired when the model changes, so it cannot be relied on now",
+            forge_id=forge_id,
+            module_id=module_id,
         )
 
     # Retired before activation is considered: a superseded grant's `activated_at` is

@@ -1416,7 +1416,9 @@ async def _gate_9(ctx: _Context) -> GateOutcome:
                    COALESCE(ca.state, 'never_certified') AS unit_a_state,
                    COALESCE(cb.state, 'never_certified') AS unit_b_state,
                    ca.simforge_verdict AS unit_a_verdict,
-                   cb.simforge_verdict AS unit_b_verdict
+                   cb.simforge_verdict AS unit_b_verdict,
+                   ca.model_digest AS unit_a_digest,
+                   cb.model_digest AS unit_b_digest
             FROM agent_forge_grant g
             LEFT JOIN certification ca
               ON ca.unit = 'A' AND ca.cert_id::text = g.operation_cert_ref
@@ -1468,6 +1470,7 @@ async def _gate_9(ctx: _Context) -> GateOutcome:
 
     by_state: dict[str, int] = {}
     unattested: list[str] = []
+    unpinned: list[str] = []
     failing: list[dict[str, str]] = []
     for row in rows:
         for unit in ("a", "b"):
@@ -1482,6 +1485,11 @@ async def _gate_9(ctx: _Context) -> GateOutcome:
                 # A certification carrying no SimForge PASS was not produced by a
                 # Readiness Gate, whatever its state column says.
                 unattested.append(f"{row['grant_id'][:8]}/unit{unit.upper()}")
+            elif not row[f"unit_{unit}_digest"]:
+                # It passed, SimForge said so, and nothing can say WHICH MODEL passed.
+                # Separate from `unattested` because the responses differ: that one is
+                # a certification to go and earn, this one is a row to re-certify.
+                unpinned.append(f"{row['grant_id'][:8]}/unit{unit.upper()}")
 
     evidence = {
         "grants": len(rows),
@@ -1490,6 +1498,7 @@ async def _gate_9(ctx: _Context) -> GateOutcome:
         "not_certified": failing[:20],
         "not_certified_total": len(failing),
         "certified_without_simforge_verdict": unattested[:20],
+        "certified_without_a_model_digest": unpinned[:20],
         "withheld_revoked": len(withheld),
         "withheld_revoked_grants": [r["grant_id"] for r in withheld][:20],
         "revocation_scopes": withheld_scopes,
@@ -1513,6 +1522,27 @@ async def _gate_9(ctx: _Context) -> GateOutcome:
             f"{len(unattested)} certification(s) read as certified but carry no SimForge "
             "PASS. A certification nothing external attested is a certification The "
             f"Office wrote for itself.{withheld_note}",
+            evidence,
+        )
+    # A CERTIFICATION THAT CANNOT NAME THE MODEL CANNOT EXPIRE WHEN THE MODEL MOVES.
+    # Ruled 17 September 2026.
+    #
+    # Third in the sequence and narrower each time: not certified, then certified by
+    # nobody external, then attested by SimForge and unattributable to a model file.
+    # `agent_model` does not close this - it is a LABEL, and the same tag re-pulled at
+    # a different quantization produces the identical string.
+    #
+    # 0044's `certification_names_its_model` makes this unreachable for any row written
+    # after it, which is the point: the constraint is the control and this is the gate
+    # saying so where a run can see it. What it does catch is a row that predates 0044,
+    # and it will keep catching it until somebody re-certifies.
+    if unpinned:
+        return GateOutcome(
+            "9", BLOCKED,
+            f"{len(unpinned)} certification(s) carry a SimForge verdict and no model "
+            "digest. A certification that cannot name the model it was earned on cannot "
+            "be re-certified when the model changes - `agent_model` is a label and the "
+            f"same label describes different weights.{withheld_note}",
             evidence,
         )
     return GateOutcome(
@@ -1661,6 +1691,21 @@ async def _gate_11(ctx: _Context) -> GateOutcome:
             # a fact about who writes what, not a rule. Activating history would be the
             # worst thing this gate could do.
             "   AND g.superseded_at IS NULL "
+            # THE MODEL, at the last point before production authority. Ruled 17
+            # September 2026. A grant whose unit-A certification carries a SimForge
+            # verdict and no model digest is a grant nobody could re-certify when the
+            # model moves, and this gate is the last thing between a signature and an
+            # agent that can act. Gate 9 refuses the run for the same reason; this is
+            # the same rule at the moment it becomes irreversible.
+            #
+            # `simforge_verdict IS NOT NULL` scopes it: a bootstrap certification has
+            # no model by design and Gate 11 has always activated grants that rest on
+            # one.
+            "   AND NOT EXISTS ("
+            "       SELECT 1 FROM certification ca "
+            "        WHERE ca.cert_id::text = g.operation_cert_ref "
+            "          AND ca.simforge_verdict IS NOT NULL "
+            "          AND ca.model_digest IS NULL) "
             "   AND NOT (g.grant_id = ANY(%s))",
             (ctx.actor, ctx.venture_id, list(covered)),
         )
@@ -1730,8 +1775,20 @@ async def _gate_12(ctx: _Context) -> GateOutcome:
             # population. `is_assignable` is GENERATED and 0043 added `superseded_at IS
             # NULL` to it; counting retired rows in `total` alone would report them as
             # unreachable grants, which is true but is not the warning V38 is making.
-            "SELECT count(*) FILTER (WHERE is_assignable) AS assignable, count(*) AS total "
-            "FROM agent_forge_grant WHERE venture_id = %s AND superseded_at IS NULL",
+            "SELECT count(*) FILTER (WHERE is_assignable) AS assignable, "
+            "       count(*) AS total, "
+            # Reported, not enforced. Gate 12 is a warning gate and this is a figure a
+            # reader needs to interpret the other two: "10 of 10 assignable" says
+            # nothing about whether those ten can be expired when the model changes.
+            # `is_assignable` is GENERATED and deliberately not touched here - it
+            # answers "can `resolve_grant` return this row", and the call path already
+            # refuses an unattributable certification with its own error.
+            "       count(*) FILTER (WHERE "
+            "         EXISTS (SELECT 1 FROM certification ca "
+            "                  WHERE ca.cert_id::text = g.operation_cert_ref "
+            "                    AND ca.model_digest IS NOT NULL)) AS model_named "
+            "FROM agent_forge_grant g "
+            "WHERE venture_id = %s AND superseded_at IS NULL",
             (ctx.venture_id,),
         )
         row = await cur.fetchone()
@@ -1747,6 +1804,7 @@ async def _gate_12(ctx: _Context) -> GateOutcome:
     evidence: dict[str, Any] = {
         "assignable": int(row["assignable"]),
         "total": int(row["total"]),
+        "model_named": int(row["model_named"]),
         "warnings": [r.rule_id for r in report.warnings],
         **{r.rule_id: r.message for r in report.results},
     }
@@ -1755,7 +1813,8 @@ async def _gate_12(ctx: _Context) -> GateOutcome:
     )
     return GateOutcome(
         "12", PASSED,
-        f"live: {row['assignable']} of {row['total']} grant(s) assignable; trust tiers "
+        f"live: {row['assignable']} of {row['total']} grant(s) assignable, "
+        f"{row['model_named']} naming the model certified; trust tiers "
         f"active, revocation armed.{advisory}",
         evidence,
     )
