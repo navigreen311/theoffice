@@ -9835,7 +9835,7 @@ a hand-run function call. The token has been reissued again through
 `POST /api/humans/{id}/token`, which writes the event, so the current credential has a
 provenance the previous one did not.
 
-## NEXT. Greenstone's answer keys, drafted - and what the twenty existing ones actually say
+## 122. Greenstone's answer keys, drafted - and what the twenty existing ones actually say
 
 Ruling 1 of entry 116: every venture needs an answer key for every module its agents
 operate. Greenstone had none. This drafts all five, marks every one **draft**, and
