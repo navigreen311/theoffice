@@ -9278,7 +9278,7 @@ Four of the 49 are covered by live revocations - entry 75's finding, already clo
 position draws from; that is a statement about authority being wrong, which is what
 revocation means and what supersession would have contradicted.
 
-## 119. A certification names the model, or it cannot expire when the model moves
+## NEXT. A certification names the model, or it cannot expire when the model moves
 
 **Ruling by Ivan Green, 17 September 2026.** A certification records the model the agent
 passed on: **name, exact digest, temperature and max tokens.** A certification that does
