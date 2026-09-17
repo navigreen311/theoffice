@@ -9278,7 +9278,7 @@ Four of the 49 are covered by live revocations - entry 75's finding, already clo
 position draws from; that is a statement about authority being wrong, which is what
 revocation means and what supersession would have contradicted.
 
-## 118. A certification describes a digest, not a tag
+## 116. A certification describes a digest, not a tag
 
 **Ruled 2026-09-17 by Ivan Green.** Recorded here; built on navigreen311/village-os#2,
 unmerged.
@@ -9291,9 +9291,15 @@ would silently change the model an agent was certified on.
 `phi4:latest` in the Village's `.env` was exactly that. `ollama pull phi4` on any later
 day can put different weights behind the same name, and nothing would notice: the config
 still reads `phi4:latest`, the call still succeeds, and every certification on record is
-describing a model that is no longer running. Nothing in The Office would see it either -
-a certification records `instruction_content_hash` and `forge_api_version`, and neither
-is the model.
+describing a model that is no longer running.
+
+**Corrected after this entry was first written.** It said The Office records nothing about
+the model. That is wrong: migration 0035 added `certification.agent_model`, and the
+`certified_records_its_basis` CHECK requires it on any certified row carrying an answered
+SimForge verdict. What it records is `provider/model` - `ollama/phi4:latest` - **a tag**.
+So The Office does record the model, in precisely the form this ruling says is not enough.
+The gap is narrower than claimed and sharper: the column exists and holds the wrong kind of
+value.
 
 ### Ollama cannot be addressed by digest, so the digest is checked rather than requested
 
@@ -9344,6 +9350,63 @@ A warm answer takes **~1.4-2.4 s** at ~90 tokens/s; the first call after a load 
 
 ### Numbering
 
-Entry numbers are contested right now and this one is chosen to avoid the fight, not to win
-it. `main` is at 115, #163 also claims 115, and #164 and #166 both claim 116. Whoever merges
-those will renumber; 118 is clear of all of them today.
+Numbered 116 and 117, contiguously after main's 115, because the ledger requires contiguity -
+`test_entry_numbers_are_contiguous_from_one` fails on a gap. An earlier draft of this entry
+picked 118 to dodge a collision and was simply wrong: the gap is not allowed.
+
+The collision is therefore unavoidable and is resolved at merge, not here. #164 and #166 both
+claim 116 and #167 claims 117; whoever merges second renumbers.
+
+## 117. Exams at production settings, and a model identity the Village will say out loud
+
+**Ruled 2026-09-17 by Ivan Green.** Both recorded; neither built. The timeout change they
+arrived with is on navigreen311/village-os#2, unmerged.
+
+### 1. Exams run at production settings
+
+The model, temperature and max tokens used in certification are the ones the agent runs on
+the job.
+
+This is entry 118's rule one layer up. Pinning the weights stops the model changing under a
+certified agent; it does nothing about an agent certified at one temperature and working at
+another. Both are the same failure - the thing measured was not the thing that runs.
+
+It already had a live instance. Three `ResponseRoute`s shared a model and used 200/300/500
+max tokens, so **two agents on the same weights were already answering under different
+settings**, and any exam would have matched at most one of them. #2 collapses that to one
+temperature (0.7) and one token budget (500) for every route, which is what makes this
+ruling expressible at all.
+
+### 2. The Village exposes each agent's current model identity
+
+Name, digest, temperature, max tokens, over the API, so The Office can tell when it changes.
+
+**Which route: `/api/org/roster`.** Measured rather than chosen:
+
+    it is the only Village route The Office already reads   village.py:303, every sync
+    the per-agent compare loop already exists               sync_roster.diff()
+    a fifth Change kind costs what `title` cost             entry 114's five-point change
+
+Anything on a new route needs a new fetch, a new store and new diff logic before it can
+report a single change. On this one, a model that moves becomes a line in the sync report
+the same day.
+
+**Two frictions, stated rather than designed around.**
+
+`org.py` documents itself as *"a straight serialization of `load_roster()` - no new source
+of truth, no second parse of agentsrole.yaml"*. The model is not in that YAML and never
+will be, so per-agent model fields break that sentence. The alternative - a sibling `model`
+block beside `agents` - keeps the docstring true but is not per-agent, which is what the
+ruling asks for. The ruling wins; the docstring needs rewriting with it.
+
+And the model is uniform today. There is no per-agent model field anywhere: `agents` has 92
+columns and none of them is one, and the orchestrator's route branches all name the same
+model. So per-agent identity repeats one value 186 times until that stops being true. That
+is the right shape for a certification record even so - certification is per agent, and the
+day one agent moves is the day the uniform answer becomes a lie.
+
+**What it takes on The Office's side** is exactly entry 114's list, once more: a
+`village_agent` migration for the columns, the `_office_roster` SELECT, the compare in
+`diff()`, a `Change` kind, and the rendering in `__main__`. Plus one thing that is not on
+that list - `certification.agent_model` holds a tag, and ruling 1 means it should hold the
+digest.
