@@ -9277,3 +9277,105 @@ Four of the 49 are covered by live revocations - entry 75's finding, already clo
 `covered_grants`. Those stay revoked. The four were issued for a department no Burkham
 position draws from; that is a statement about authority being wrong, which is what
 revocation means and what supersession would have contradicted.
+
+## NEXT. A ledger number is assigned at merge, and a test makes a duplicate unmergeable
+
+**Ruling by Ivan Green, 17 September 2026.** Ledger entry numbers are assigned at merge,
+not at authoring. **A PR writes `## NEXT.`; whoever merges assigns the number.** A test
+asserts that headings are unique, contiguous, and that no `## NEXT.` reaches main.
+
+This entry is written under its own rule, which is why its heading has no number.
+
+### What broke, measured on the day the rule was made
+
+    115   main (#165, merged)  A bootstrap grant is retired, not revoked
+    115   #163                 One Acquisition Analyst seat
+    115   #164                 inherits #163's - it is stacked on that branch
+    116   #164                 a 401 from somebody else's nginx
+    116   #166                 A venture needs an answer key, and an exam needs a name
+    117   #167                 Greenstone's answer keys, drafted
+    118   #169                 A certification describes a digest, not a tag
+    119   #170                 A certification names the model
+    -     #168                 no entry
+
+Three PRs claimed 115 and two claimed 116. **And while this rule was being built, a
+second 119 was found** - written in another session, on #169's branch, for the same day's
+rulings. Four numbers claimed twice, in one week, in a repository with one author.
+
+### Why git cannot see it
+
+Every entry is appended to the END of `docs/decisions.md`, and two branches appending
+different text after different predecessors have no textual overlap. Git merges them
+cleanly and main ends up holding two `## 116.` headings. **There is no conflict to
+resolve, no warning, and nothing that fails.** The number lives in a markdown heading and
+git has no opinion about markdown headings.
+
+That is why the fix is not "be careful". Being careful was already the system.
+
+### Contiguity is the quieter half
+
+A PR claiming 117 while main sits at 115 merges exactly as cleanly as one claiming 115
+twice. Nothing is duplicated and nothing is lost - but every later reference to "entry
+116" points at nothing, and the gap reads as an entry somebody deleted rather than one
+nobody wrote.
+
+Contiguity is also what makes `## NEXT.` cheap: the number to assign is always `max + 1`.
+No register to consult, nothing to remember, and no second file to keep in step.
+
+### The four tests, and which one is load-bearing
+
+    unique              two entries with one number. **The one that would have caught
+                        every collision above.** It runs against the MERGE RESULT, which
+                        is what GitHub checks out for a `pull_request` event, so the
+                        second PR to claim a number fails before it lands rather than
+                        after.
+    contiguous from 1   the gap case above.
+    in order            a file holding 1..119 shuffled would satisfy both of the above
+                        and still send a reader hunting.
+    no `## NEXT.` on    the placeholder is a number nobody has assigned yet, and main
+    main                holds no such thing.
+
+### The fourth test does not run on a pull request, and that is the rule working
+
+A PR is **supposed** to carry `## NEXT.` - that is the whole mechanism - so a check that
+fired on pull requests would fail every PR on the one property it is meant to have. It is
+skipped unless the checkout is main, decided by `GITHUB_BASE_REF` (set on a pull request,
+empty on a push), then `GITHUB_REF`, then git.
+
+**Unknown resolves to "not main", which skips.** A wrong skip is the rule enforced one
+run later, by the push to main that follows. A wrong assertion is every developer on
+every branch red for writing the placeholder the rule tells them to write.
+
+So the window is between a merge and that push-to-main run. **What closes it is a person
+- whoever merges assigns the number.** The test catches them forgetting; it is not what
+stops them. Said plainly because a test named `test_no_placeholder_reaches_main` invites
+the opposite reading.
+
+### The open claims, renumbered to `## NEXT.`
+
+Every open PR carrying an entry was converted, not only the three that collided:
+
+    #163  115           -> NEXT
+    #164  115, 116      -> NEXT, NEXT   (it is stacked on #163 and carries both)
+    #166  116           -> NEXT
+    #167  117           -> NEXT
+    #170  119           -> NEXT
+    #169  118           -> LEFT ALONE, deliberately. See below.
+
+**#167 and #170 held unique numbers and were converted anyway, because contiguity forces
+it.** With main at 115, #167 merging first would put 117 beside 115 and leave a gap at
+116, and the contiguity test would fail on a PR that had done nothing wrong. Under the
+old convention the numbers only worked if the PRs merged in the order they were opened,
+and nothing was enforcing that either.
+
+**#169 IS NOT CONVERTED AND MUST BE, BY WHOEVER OWNS IT.** Its branch has uncommitted
+work in the shared checkout - a second entry 119, written in another session, recording
+the same day's rulings on exam settings and Village-sourced model identity, plus a
+correction to entry 118. Rewriting the heading underneath that would hand its author a
+conflict in a file they are part-way through editing, which is a worse outcome than the
+number being wrong for another hour. Both of its headings need converting before it is
+committed: 118, and the 119 that is not yet in a commit.
+
+That second 119 is the sharpest evidence for this rule that exists. Two sessions, one
+repository, one afternoon, the same number, neither able to see the other - and the only
+reason it was found at all is that both happened to touch the same working tree.
