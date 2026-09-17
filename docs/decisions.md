@@ -9332,24 +9332,38 @@ No register to consult, nothing to remember, and no second file to keep in step.
     contiguous from 1   the gap case above.
     in order            a file holding 1..119 shuffled would satisfy both of the above
                         and still send a reader hunting.
-    no `## NEXT.` on    the placeholder is a number nobody has assigned yet, and main
-    main                holds no such thing.
+    the placeholder    on main, none survives; off main, an unassigned heading is the
+                       last heading. Two arms, no skip - see below.
 
-### The fourth test does not run on a pull request, and that is the rule working
+### The fourth test has two arms and no skip, and the reason is CI's own rule
 
 A PR is **supposed** to carry `## NEXT.` - that is the whole mechanism - so a check that
-fired on pull requests would fail every PR on the one property it is meant to have. It is
-skipped unless the checkout is main, decided by `GITHUB_BASE_REF` (set on a pull request,
-empty on a push), then `GITHUB_REF`, then git.
+simply fired on pull requests would fail every PR on the one property it is meant to
+have. The obvious fix is to skip it off main. **That was written, and CI rejected it**:
+the `tests` job refuses to pass if anything skipped, deliberately, because every
+database test is guarded by `requires_db` and a misconfigured Postgres would otherwise
+report a tidy green over several hundred tests that never ran. Weakening that rule to
+accommodate one test would have cost far more than it bought.
 
-**Unknown resolves to "not main", which skips.** A wrong skip is the rule enforced one
-run later, by the push to main that follows. A wrong assertion is every developer on
-every branch red for writing the placeholder the rule tells them to write.
+So it is one test with two arms, both asserting something real:
+
+    on main     no placeholder survives. This is the rule.
+    off main    a placeholder is expected, so what is checked is that it is used
+                correctly - an entry is appended to the end of the file, so an
+                unassigned heading is the LAST heading. One left in the middle is a
+                botched edit that would otherwise sit there until whoever merged went
+                looking for the number to replace.
+
+Which arm runs is decided by `GITHUB_BASE_REF` (set on a pull request, empty on a push),
+then `GITHUB_REF`, then git. **Unknown resolves to "not main".** A wrong guess in that
+direction is the rule enforced one run later, by the push to main that follows; a wrong
+guess the other way is every developer on every branch red for writing the placeholder
+the rule tells them to write.
 
 So the window is between a merge and that push-to-main run. **What closes it is a person
 - whoever merges assigns the number.** The test catches them forgetting; it is not what
-stops them. Said plainly because a test named `test_no_placeholder_reaches_main` invites
-the opposite reading.
+stops them. Said plainly because a test named like this one invites the opposite
+reading.
 
 ### The open claims, renumbered to `## NEXT.`
 

@@ -210,29 +210,49 @@ def _checkout_is_main() -> bool:
     return branch.returncode == 0 and branch.stdout.strip() == "main"
 
 
-def test_no_placeholder_reaches_main():
+def test_a_placeholder_never_reaches_main_and_is_used_correctly_off_it():
     """`## NEXT.` is a number nobody has assigned yet, and main holds no such thing.
 
-    **This half deliberately does not run on a pull request**, and that is the rule
-    working rather than a hole in it. A PR is SUPPOSED to carry `## NEXT.` - that is
-    what stops two branches claiming one number - so a check that fired there would fail
-    every PR on the one property it is meant to have.
+    **One test with two arms rather than a skip, and that is not a style choice.** CI
+    refuses to pass if anything skipped - deliberately, because every database test is
+    guarded by `requires_db` and a misconfigured Postgres would otherwise report a tidy
+    green over several hundred tests that never ran. A conditional skip here would trip
+    that rule on every pull request, and weakening the rule to accommodate one test
+    would cost far more than it bought.
 
-    The window is therefore between a merge and the push-to-main run that follows it.
-    What closes that window is the other half of the rule, which is a person: whoever
-    merges assigns the number. **This test catches them forgetting; it is not what stops
-    them.** Said plainly because a test named like this one invites the opposite
-    reading.
+    So both arms assert something real:
+
+        on main     no placeholder survives. This is the rule.
+        off main    a placeholder is EXPECTED - it is what stops two branches claiming
+                    one number - so what is checked instead is that it is used
+                    correctly: an entry is appended to the end of the file, so an
+                    unassigned heading is the last heading. One left in the middle is
+                    a botched edit, and it would otherwise sit there until whoever
+                    merged went looking for the number to replace.
+
+    The window the rule leaves open is between a merge and the push-to-main run that
+    follows it. **What closes that window is a person** - whoever merges assigns the
+    number. This test catches them forgetting; it is not what stops them. Said plainly
+    because a test named like this one invites the opposite reading.
     """
-    if not _checkout_is_main():
-        pytest.skip("not main: `## NEXT.` is expected on a branch, and is the point")
-
     text = DECISIONS.read_text(encoding="utf-8")
-    count = len(PLACEHOLDER_HEADING.findall(text))
-    assert count == 0, (
-        f"{count} entry heading(s) still read `{PLACEHOLDER}`. The number is assigned "
-        f"at merge: replace each with the next free number ({max(entry_numbers() or [0]) + 1} "
-        "and upward, in the order they appear)."
+    placeholders = [m.start() for m in PLACEHOLDER_HEADING.finditer(text)]
+
+    if _checkout_is_main():
+        assert not placeholders, (
+            f"{len(placeholders)} entry heading(s) still read `{PLACEHOLDER}`. The "
+            "number is assigned at merge: replace each with the next free number "
+            f"({max(entry_numbers() or [0]) + 1} and upward, in the order they appear)."
+        )
+        return
+
+    if not placeholders:
+        return
+    numbered = [m.start() for m in ENTRY_HEADING.finditer(text)]
+    assert max(placeholders) > max(numbered, default=-1), (
+        "a `## NEXT.` heading sits above a numbered one. An entry is appended to the "
+        "end of the file, so an unassigned heading is the last heading - one in the "
+        "middle is a botched edit, and whoever merges would have to go looking for it."
     )
 
 
