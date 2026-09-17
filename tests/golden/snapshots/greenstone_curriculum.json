@@ -45,6 +45,12 @@
       ]
     },
     {
+      "covered": 5,
+      "denominator": 5,
+      "dimension": "modules_with_a_draft_answer_key_awaiting_approval",
+      "uncovered": []
+    },
+    {
       "covered": 7,
       "denominator": 9,
       "dimension": "scenario_classes_the_office_may_submit",

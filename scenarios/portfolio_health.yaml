@@ -21,8 +21,24 @@
 #
 # Seven submittable classes, all accounted for: two authored, five declared.
 
+# STATUS ADDED 17 SEPTEMBER 2026, AND IT IS A DESCRIPTION OF THE STATUS QUO
+#
+#   Ivan Green ruled that answer keys are drafted by Claude and approved by him, and
+#   that a draft is never submitted. `status` is now a required key, so this file needs
+#   one. It is marked `approved` because that is what it already is operationally: it
+#   has been submitted to SimForge on every Gate 8 run since it was written, and marking
+#   it `draft` today would stop a venture that is already certifying.
+#
+#   THAT IS GRANDFATHERING, NOT AN APPROVAL EVENT. Nothing recorded an approval of this
+#   file by name before today, and `approved_by` below says exactly that rather than
+#   claiming a signature that was never given. If these twenty should be re-approved
+#   under the new ruling, that is Ivan's call and it is a separate act - see
+#   docs/decisions.md entry 117.
+
 module_id: portfolio_health
 forge_id: capitalforge
+status: approved
+approved_by: "in service before the 17 September 2026 ruling; grandfathered"
 
 scenarios:
 
