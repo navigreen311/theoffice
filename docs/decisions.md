@@ -9277,3 +9277,130 @@ Four of the 49 are covered by live revocations - entry 75's finding, already clo
 `covered_grants`. Those stay revoked. The four were issued for a department no Burkham
 position draws from; that is a statement about authority being wrong, which is what
 revocation means and what supersession would have contradicted.
+
+## NEXT. A certification records the model it was earned on, in columns a constraint can reach
+
+**Ruling by Ivan Green, 17 September 2026.** A certification records the model the agent
+passed on: **name, exact digest, temperature and max tokens.** A certification that does
+not name the model cannot enforce re-certification when the model changes.
+
+Five of the six sized steps. The sixth - comparing the recorded model against the one an
+agent is running - is left for when the Village exposes it, and the reason is below.
+
+### What the label could not say
+
+`agent_model` has been mandatory on an answered SimForge verdict since B34. It carries
+`ollama/llama3.1:8b`, and that string is identical whether the tag was re-pulled at a
+different quantization or served at a different temperature.
+
+**Measured, and live rather than theoretical:**
+
+    the exam        temperature 0.0, max_tokens 2048. SimForge `EXAM_TEMPERATURE` and
+                    `EXAM_MAX_TOKENS`, `agent_runtime/runtime.py:23-24`, passed
+                    explicitly so the values `generation_settings` records are the
+                    values the call sends.
+    production      temperature 0.7, num_predict 200 / 300 / 500 by route. Village
+                    `modules/agent_orchestrator.py:1035-1060`.
+
+Every generation setting differs, on every call.
+
+### What is on the row
+
+    model_digest        the exact weights file.
+    model_temperature   }  the two settings the ruling names.
+    model_max_tokens    }
+    model_identity      jsonb, the record as SimForge sent it.
+    model_fingerprint   SimForge's hash over the record, indexed where present.
+
+**Five columns and not one jsonb.** The jsonb alone would carry everything and
+`certification` would then hold a fact no constraint can reach and no index can find.
+The scalars are promoted so a CHECK can demand them; the whole record is kept beside
+them so a field nobody anticipated is not lost. `revocation.blast_radius` is the
+precedent and the same trade.
+
+`agent_model` stays. Replacing it would rewrite history to look as though it had always
+carried a digest.
+
+### The rule is scoped to `certified` and `provisional`, and a FAIL is not asked
+
+B34's constraint keys on the VERDICT and demands the label on every answered one.
+`certification_names_its_model` keys on the STATE and demands the model only where an
+agent can act - which is the ruling's own wording, *the model the agent PASSED on*.
+
+**A FAIL is deliberately exempt.** It records that an agent was tested and did not pass:
+a claim that cannot go stale, so there is nothing to expire. Demanding the digest there
+would make an older SimForge's failure **refused rather than recorded**, and the finding
+would be gone. `record_result` already reasons this way about the Forge api_version,
+whose docstring says a FAIL needs no basis. Losing a pass is safe. Losing a failure is
+not.
+
+### The constraint is the control; the guard is the sentence
+
+Both exist and they are not redundant. `record_result` raises a message naming
+`file_digest`, `settings.temperature` or `settings.max_tokens` - whichever is missing -
+and says why a label is not enough. The CHECK catches everything that does not go
+through that function, which is not hypothetical: B34's own suite exists because a
+direct INSERT wrote a row nobody could attribute.
+
+**The CHECK is validated rather than `NOT VALID`, and that was measured before it was
+written.** `certification` held 26 rows, all `certified`, all with `simforge_verdict IS
+NULL` and `agent_model IS NULL` - every one bootstrap-attested. No row in the database
+carried a real SimForge verdict at all, so nothing violated it. Had that not been true
+the honest move would have been `NOT VALID`; it is worth recording that the strict
+version was available because the data allowed it, not because the rule is lenient.
+
+### Which gates read it
+
+    Gate 9    a third refusal, narrower than the two above it: not certified, then
+              certified by nobody external, then attested by SimForge and
+              unattributable to a model file. Reachable only for a row written before
+              0044 - which is the point. The constraint makes it impossible going
+              forward and the gate is what catches what is already there.
+    Gate 11   will not activate a grant whose unit-A certification carries a verdict and
+              no digest. The last thing between a signature and production authority,
+              and the same rule at the moment it becomes irreversible.
+    Gate 12   reports `model_named` beside `assignable`. A warning gate: "10 of 10
+              assignable" says nothing about whether those ten can be expired.
+    the call  `resolve_grant` refuses with `CertificationNamesNoModel`, its own type.
+      path    `NotCertified` would say the certification is missing or not current,
+              which is false and sends the reader to re-run a gate that already passed.
+              **This is the one that protects anything** - gates run once per
+              provisioning run, calls run all day.
+
+`is_assignable` is deliberately NOT touched. It answers "can `resolve_grant` return this
+row", and the call path refuses with its own error, which is a better answer than a
+grant silently reading unassignable.
+
+### What is not built, and why it is not a gap that can be closed here
+
+**No `stale_model` state, and no comparison.** Deciding a certification has gone stale
+needs the model the agent is running NOW. The Office has no source for it: `village.py`
+reads roster, departments, agent state, shifts, deputies and the board, and **no model
+configuration at all**. The Village exposes no route that reports an agent's model.
+
+An enum value nothing writes is a control that looks correct in review and does nothing,
+which is the specific failure this codebase keeps finding. It goes in with the
+comparison that sets it, in one migration, when ruling 2 of the same day is built -
+*the Village is the source for an agent's current model identity, and The Office reads
+it from the Village's API.*
+
+### Depends on PR #168, which is not merged
+
+`GateResult.model_identity` is #168's field. This branch is cut from it, so **#168 must
+merge first**, and #168 itself must merge before SimForge #153 - `validate_response` is
+field-set equality and refuses a body carrying a field the manifest does not name, so
+SimForge sending `model_identity` early would turn the whole ingest sweep into errors.
+
+Order: #168, then this, then SimForge #153.
+
+### Two collisions found while building it
+
+**The migration is `0044` and so is PR #166's.** Whichever merges second renumbers to
+0045. That is the ledger-numbering problem one directory over - and there it is already
+solved: two revisions sharing a `down_revision` give alembic two heads and it refuses to
+run, by name, on the first command anybody types. Markdown headings had no such check.
+
+**Two worktrees against one test database is a trap.** Building this alongside the
+numbering PR left `alembic_version` reading 0043 with both 0044s' columns present, and
+the suite reported 444 errors that were nothing to do with either branch. Rebuilding the
+schema fixed it. The DSN is in one `.env` and nothing stops two checkouts using it.

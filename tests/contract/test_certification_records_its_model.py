@@ -22,6 +22,7 @@ import pytest
 from broker import certification
 from broker.db import connection
 from tests.conftest import requires_db
+from tests.world import FIXTURE_MODEL_IDENTITY
 
 pytestmark = [requires_db, pytest.mark.db]
 
@@ -100,7 +101,8 @@ async def test_the_model_reaches_the_row_and_is_not_merely_accepted(seed_agent):
     """
     async with connection() as conn:
         await certification.record_result(
-            conn, office_agent_id=seed_agent, agent_model=MODEL, **await _basis()
+            conn, office_agent_id=seed_agent, agent_model=MODEL,
+            model_identity=FIXTURE_MODEL_IDENTITY, **await _basis()
         )
         async with conn.cursor() as cur:
             await cur.execute(

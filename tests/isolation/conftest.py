@@ -8,6 +8,12 @@ from collections.abc import Iterator
 import psycopg
 import pytest
 
+from tests.world import (
+    FIXTURE_MODEL_DIGEST,
+    FIXTURE_MODEL_MAX_TOKENS,
+    FIXTURE_MODEL_TEMPERATURE,
+)
+
 
 @pytest.fixture(autouse=True)
 def _clean_shifts(admin: psycopg.Connection) -> Iterator[None]:
@@ -85,11 +91,13 @@ def certified_forge(admin: psycopg.Connection, seed_agent):
             INSERT INTO certification
               (cert_id, unit, office_agent_id, forge_id, module_id, state,
                certified_tier, instruction_content_hash, forge_api_version,
-               rubric_kind, rubric_version, simforge_verdict, agent_model)
+               rubric_kind, rubric_version, simforge_verdict, agent_model,
+               model_digest, model_temperature, model_max_tokens)
             VALUES (%s, 'A', %s, %s, %s, 'certified', 'auto_execute', %s, '1.4.0',
-                    'operation', '1.0.0', 'PASS', 'ollama/llama3.1:8b')
+                    'operation', '1.0.0', 'PASS', 'ollama/llama3.1:8b', %s, %s, %s)
             """,
-            (str(cert_id), seed_agent, forge_id, module_id, row[0]),
+            (str(cert_id), seed_agent, forge_id, module_id, row[0],
+             FIXTURE_MODEL_DIGEST, FIXTURE_MODEL_TEMPERATURE, FIXTURE_MODEL_MAX_TOKENS),
         )
     admin.commit()
     yield forge_id, module_id, seed_agent, cert_id
