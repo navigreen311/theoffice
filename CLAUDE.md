@@ -40,6 +40,47 @@ Save the plan to `docs/plans/<feature>-PLAN.md` before implementing. It is far c
 
 ---
 
+## 3.1 ONE SESSION PER CHECKOUT — read this before you run anything
+
+**Ruled by Ivan Green, 17 September 2026: only one Claude Code session works in a repo checkout at a time. Parallel sessions use separate worktrees and separate test databases.**
+
+**Before you touch this checkout, check whether somebody else is already in it.** `git status` and `git branch --show-current` are the whole check, and they cost nothing:
+
+```
+git branch --show-current     # a branch you did not check out = another session
+git status --short            # uncommitted changes you did not make = another session
+```
+
+If either surprises you, **stop and work in a worktree instead**:
+
+```
+git worktree add -b ai-feature/<slug> ../theoffice-<slug> origin/main
+```
+
+**Leave what you find alone.** Do not stash it, do not commit it, do not check out over it, and do not renumber or rewrite a file another session is part-way through editing. Say what you found, in your reply, and carry on somewhere else.
+
+### The two failures this prevents, both of which happened on 17 September 2026
+
+1. **A branch switched under a session.** Work began on what looked like a fresh branch off main and was actually another session's feature branch with uncommitted work on it. One `git checkout` would have destroyed an afternoon of somebody else's editing.
+
+2. **Two worktrees, one test database.** Both branches added a migration numbered `0044`. The test database ended up holding both sets of columns with `alembic_version` reading `0043`, and the suite reported **444 errors belonging to neither branch**. The DSN lives in one `.env` and nothing stops two checkouts using it.
+
+**So a worktree is not enough on its own — it needs its own database.** Point `OFFICE_TEST_ADMIN_DSN` and `OFFICE_TEST_APP_DSN` at a database named for the branch, create it, and migrate it:
+
+```
+createdb theoffice_test_<slug>
+OFFICE_TEST_ADMIN_DSN=postgresql://postgres:...@127.0.0.1:5432/theoffice_test_<slug> \
+  python -m alembic upgrade head
+```
+
+A suite that fails for a reason you cannot explain is the symptom. **Rebuild the schema before you debug the code** — `DROP SCHEMA public CASCADE; CREATE SCHEMA public;` then `alembic upgrade head`. Twice on that day the "failure" was the database and not the branch.
+
+### What two sessions cannot see about each other
+
+Neither the ledger numbering nor a migration number is safe by convention alone. Two branches appending to the end of `docs/decisions.md` merge cleanly and main ends up holding two entries with the same number — **four numbers were claimed twice in one week.** That is what `## NEXT.` and `tests/test_docs.py` exist for (decisions entry 117); alembic already refuses two heads, which is why the migration collision cost a rename and the ledger one did not get caught at all.
+
+---
+
 ## 4. DEVELOPMENT PROCESS — the six-step recipe
 
 Every feature runs all six, in order.
