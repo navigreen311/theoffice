@@ -748,7 +748,12 @@ async def _gate_8(ctx: _Context) -> GateOutcome:
             await client.aclose()
 
     attempted = [o for o in submitted if "skipped" not in o]
-    accepted = [o for o in attempted if o["run_ref"]]
+    # ACCEPTED MEANS SIMFORGE SAID YES TO THE CURRICULUM, not that a run was opened.
+    # The two were one number until 17 September 2026 and they answer different
+    # questions: a refused curriculum is scenarios somebody has to write, an accepted
+    # curriculum with no run is a module no agent holds a grant for.
+    accepted = [o for o in attempted if o.get("curriculum_accepted")]
+    handed_over = [o for o in attempted if o["run_ref"]]
     skipped = [o for o in submitted if "skipped" in o]
     units_opened = [u for u in department_units if u.get("run_ref")]
     await ctx.conn.commit()
@@ -757,9 +762,28 @@ async def _gate_8(ctx: _Context) -> GateOutcome:
         "scenario_count": total,
         # True only when every module SimForge was asked about answered with a ref. A
         # row being written is not a hand-over, and neither is three of five landing.
-        "handed_over_to_simforge": bool(attempted) and len(accepted) == len(attempted),
+        "handed_over_to_simforge": bool(attempted) and len(handed_over) == len(attempted),
         "modules_submitted": len(attempted),
         "modules_accepted": len(accepted),
+        "modules_handed_over": len(handed_over),
+        "exams_opened": sum(len(o.get("exam_takers", [])) for o in attempted),
+        # Kept apart because the responses differ: a refusal is scenarios somebody has
+        # to write, an outage is a service to restart - and only the first can block.
+        "modules_refused": sorted(
+            o["module_id"] for o in attempted if o.get("violations")
+        ),
+        "modules_unreachable": sorted(
+            o["module_id"] for o in attempted
+            if not o.get("curriculum_accepted") and not o.get("violations")
+        ),
+        # Kept, and kept SEPARATE from the takers. `requires_certification` is who
+        # could fill a seat and holds no certification; the takers are who holds the
+        # grant. They were one number until 17 September and the difference is the
+        # whole reason no exam was ever named: greenstone reported ten candidates on
+        # two modules and none on the other two, and not one of the ten held a grant.
+        "certification_candidates": {
+            m: [c["agent_name"] for c in cs] for m, cs in sorted(candidates.items())
+        },
         # Named, never folded into the submitted count. A module with no live
         # instruction was not refused and was not lost - nothing was sent for it, and
         # the fix is to author the instruction rather than to look at SimForge.
@@ -786,22 +810,120 @@ async def _gate_8(ctx: _Context) -> GateOutcome:
         tail += (
             f"; {len(units_opened)} of {len(department_units)} department unit(s) opened"
         )
+    exams = detail["exams_opened"]
     if not attempted:
         reason = f"{total} scenario(s) generated; no module to submit{tail}"
-    elif len(accepted) == len(attempted):
+    elif len(handed_over) == len(attempted):
         reason = (
             f"{total} scenario(s) submitted "
             f"({len(curriculum.domain_scenarios)} domain, "
             f"{len(curriculum.operation_scenarios)} operation) "
-            f"across {len(attempted)} module(s){tail}"
+            f"across {len(attempted)} module(s); {exams} exam(s) opened{tail}"
         )
     else:
         reason = (
             f"{total} scenario(s) generated; "
-            f"{len(accepted)} of {len(attempted)} module(s) accepted by SimForge{tail}"
+            f"{len(accepted)} of {len(attempted)} module(s) accepted by SimForge; "
+            f"{exams} exam(s) opened{tail}"
+        )
+
+    # ZERO ACCEPTED IS A BLOCK - WHEN SIMFORGE ANSWERED. Ruled 17 September 2026.
+    #
+    # This gate passed on everything for its whole life, deliberately: a rejection is an
+    # answer, the evidence records it, and blocking the ladder on a service that is
+    # allowed to be down would be worse. That argument holds for SOME modules refused.
+    # It does not hold for all of them. A venture whose every curriculum was refused has
+    # no answer key, and the four gates above this one are being run against a
+    # certification story that cannot start. Run cb3a47f6 passed this gate on
+    # "0 of 5 module(s) accepted by SimForge" and stopped at 9 with twelve
+    # certifications nothing external had attested - three gates later, for a reason
+    # this gate already knew.
+    #
+    # **A SERVICE THAT IS DOWN HAS NOT REFUSED ANYTHING.** "SimForge accepts zero
+    # modules" presupposes SimForge answered. An unreachable Forge produces the same
+    # `accepted == 0` and means something completely different - and CI runs no
+    # SimForge at all, so a block that could not tell the two apart would stop every run
+    # on every machine that has not got one. `violations` is the tell: it exists only on
+    # a 422 the validator produced.
+    #
+    # `accepted` and not `handed_over`: the block is about SimForge refusing the
+    # content. A module accepted with no exam taker never reaches here - it is skipped
+    # earlier, as a roster finding.
+    refused = [o for o in attempted if o.get("violations")]
+    unreachable = [
+        o for o in attempted
+        if not o.get("curriculum_accepted") and not o.get("violations")
+    ]
+    if attempted and not accepted and refused and not unreachable:
+        names = sorted(o["module_id"] for o in refused)
+        quoted = " First: " + "; ".join(refused[0]["violations"][:2])
+        return GateOutcome(
+            "8", BLOCKED,
+            f"SimForge accepted none of the {len(attempted)} module(s) submitted "
+            f"({', '.join(names)}). Nothing here can be certified: every scenario was "
+            f"refused, so no exam exists to sit and Gate 9 has nothing external to "
+            f"read.{quoted}",
+            detail,
         )
 
     return GateOutcome("8", PASSED, reason, detail)
+
+
+async def _exam_takers(
+    conn: AsyncConnection, *, venture_id: str, forge_id: str, module_id: str
+) -> list[dict[str, Any]]:
+    """Who takes this module's exam: the holders of a live grant for it.
+
+    RULED 17 SEPTEMBER 2026, AND MEASURED BEFORE IT WAS BUILT
+    =========================================================
+
+        The gate used to name an agent only when `_certification_candidates` returned
+        exactly one, and that never happened. Measured on greenstone: ten candidates
+        for `assign_contract` and `buyer_match`, **none** for `comp_analysis` and
+        `property_lookup`. So `agent_id` was NULL on every run ever opened and SimForge
+        skipped all of them - `battery.py` requires `run.agentId`.
+
+        It was also the wrong population. `_certification_candidates` reads
+        `requires_certification`, whose own docstring says it deliberately excludes the
+        appointed agent: it is the pool of people who could fill a seat and do not hold
+        the certification yet. None of greenstone's ten holds a grant for the module.
+
+    THE SAME POPULATION THE VERDICT WILL BE WRITTEN FOR
+    ===================================================
+
+        `sweeps._grant_holders` resolves a returning verdict against `agent_forge_grant`
+        and `grants.py` joins `certification` on `(office_agent_id, forge_id,
+        module_id)`. Gate 9 reads certification through grants. If the exam named a
+        population the verdict could not be written for, the ladder would be testing one
+        set of agents and certifying another.
+
+        So this asks the question in the same table, with the same key - and excludes
+        retired and revoked grants, because neither confers the authority the exam is
+        about.
+    """
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT g.grant_id, g.office_agent_id, i.agent_name "
+            "FROM agent_forge_grant g "
+            "  JOIN office_agent_identity i ON i.office_agent_id = g.office_agent_id "
+            " WHERE g.venture_id = %s AND g.forge_id = %s AND g.module_id = %s "
+            "   AND g.superseded_at IS NULL "
+            " ORDER BY i.agent_name, g.office_agent_id",
+            (venture_id, forge_id, module_id),
+        )
+        rows = [dict(r) for r in await cur.fetchall()]
+
+    covered = await revocation.covered_grants(conn, venture_id=venture_id)
+    seen: set[Any] = set()
+    takers: list[dict[str, Any]] = []
+    for row in rows:
+        if row["grant_id"] in covered or row["office_agent_id"] in seen:
+            continue
+        seen.add(row["office_agent_id"])
+        takers.append(
+            {"office_agent_id": row["office_agent_id"], "agent_name": row["agent_name"]}
+        )
+    return takers
 
 
 async def _submit_one_module(
@@ -834,21 +956,39 @@ async def _submit_one_module(
             "skipped": "no live operating instruction for this module",
         }
 
+    # WHO TAKES THIS EXAM. Ruled 17 September 2026: every submission names the agent.
+    # One run per taker, because SimForge's battery scores `run.agentId` - one agent -
+    # so a module two agents hold is two exams and not one exam about two people.
+    takers = await _exam_takers(
+        ctx.conn, venture_id=ctx.venture_id, forge_id=forge_id, module_id=module_id
+    )
+
+    if not takers:
+        # NOT A SUBMISSION, for the reason the missing-instruction branch gives above.
+        # An exam nobody sits teaches SimForge an instruction set and owes a verdict
+        # that can never be read: `sweeps` would poll a run that was never opened, and
+        # a `curriculum_submission` row with no ref and no agent is the "something was
+        # handed over" lie that table exists not to tell.
+        #
+        # This is a roster finding and it is reported as one. greenstone's
+        # `underwrite_deal` is the live case: Deal Underwriter is unfilled, so no grant
+        # exists and no agent can be examined on it.
+        return {
+            "module_id": module_id,
+            "scenario_count": len(scenarios),
+            "run_ref": None,
+            "skipped": "no agent holds a live grant for this module, so nobody can sit "
+                       "its exam",
+        }
+
     payload = _curriculum_payload(
-        instruction=instruction, scenarios=scenarios, candidates=candidates,
+        instruction=instruction, scenarios=scenarios, candidates=takers,
         modules_in_forge=modules_in_forge, modules_uncovered=modules_uncovered,
         venture_id=ctx.venture_id,
     )
 
-    # Minted HERE, before anything is sent. `OperationRunStartRequest.run_ref` is an
-    # input field, so this side owns the ref; deriving it from the submission's natural
-    # key is what makes a retry land on the run that is already open instead of opening
-    # a second one with a fresh window. See `mint_run_ref`.
-    minted_ref = mint_run_ref(
-        venture_id=ctx.venture_id, forge_id=forge_id, module_id=module_id,
-        content_hash=instruction.content_hash,
-    )
     unit, rubric_kind = submission_unit(module_id)
+    opened: list[dict[str, Any]] = []
     try:
         acceptance = await client.submit_curriculum(
             ctx.conn, scenario_pack_ref=f"{pack_ref}/{module_id}",
@@ -866,36 +1006,51 @@ async def _submit_one_module(
         # A' - the call that was declared, documented and never made. Without it
         # SimForge holds no row between the curriculum and the verdict, so a hung
         # battery produces nothing at all and TIMEOUT is unreachable from either side.
-        started = await client.run_start(
-            ctx.conn,
-            run_ref=minted_ref,
-            unit=unit,
-            forge_id=forge_id,
-            instruction_content_hash=instruction.content_hash,
-            rubric_kind=rubric_kind,
-            module_id=module_id,
-            # Sent only when the run covers exactly one candidate. A unit A run is
-            # agent x forge x module and `certification_units_requested` already named
-            # every candidate; picking one of several to put in this field would be a
-            # claim about which agent the run is for, made by whichever sort order
-            # `candidates` happened to arrive in.
-            agent_id=candidates[0]["office_agent_id"] if len(candidates) == 1 else None,
-            # Gate 8 submits per module, so every run it opens is unit A. A department
-            # id here would be a unit B assertion on a unit A run.
-            department_id=None,
-            scenario_count=len(scenarios),
-            coverage_denominator=max(modules_in_forge, 1),
-            # Omitted, not guessed. The window is SimForge's policy and The Office holds
-            # no opinion about how long an operation battery may take; sending a number
-            # would put an Office default in front of the Forge's own.
-            window_minutes=None,
-        )
-        already_open = bool(started.get("already_open"))
-        # Set last, and only once BOTH halves landed. A ref stored after a failed
-        # `run_start` names a run SimForge has never heard of: the sweep would poll
-        # `gate_result` and take a 404 forever, which is worse than the NULL it
-        # replaced because it looks like a hand-over that worked.
-        run_ref = minted_ref
+        #
+        # The curriculum above went over ONCE - it is the same text for every taker and
+        # SimForge upserts one instruction set per module. The run is what is per agent.
+        for taker in takers:
+            # Minted HERE, before anything is sent. `OperationRunStartRequest.run_ref`
+            # is an input field, so this side owns the ref; deriving it from the
+            # submission's natural key is what makes a retry land on the run that is
+            # already open instead of opening a second one with a fresh window. The
+            # agent is part of that key now. See `mint_run_ref`.
+            minted_ref = mint_run_ref(
+                venture_id=ctx.venture_id, forge_id=forge_id, module_id=module_id,
+                content_hash=instruction.content_hash,
+                office_agent_id=taker["office_agent_id"],
+            )
+            started = await client.run_start(
+                ctx.conn,
+                run_ref=minted_ref,
+                unit=unit,
+                forge_id=forge_id,
+                instruction_content_hash=instruction.content_hash,
+                rubric_kind=rubric_kind,
+                module_id=module_id,
+                agent_id=str(taker["office_agent_id"]),
+                # Gate 8 submits per module, so every run it opens is unit A. A
+                # department id here would be a unit B assertion on a unit A run.
+                department_id=None,
+                scenario_count=len(scenarios),
+                coverage_denominator=max(modules_in_forge, 1),
+                # Omitted, not guessed. The window is SimForge's policy and The Office
+                # holds no opinion about how long an operation battery may take;
+                # sending a number would put an Office default in front of the Forge's.
+                window_minutes=None,
+            )
+            opened.append({
+                "office_agent_id": taker["office_agent_id"],
+                "agent_name": taker["agent_name"],
+                # Set only once BOTH halves landed. A ref stored after a failed
+                # `run_start` names a run SimForge has never heard of: the sweep would
+                # poll `gate_result` and take a 404 forever, which is worse than the
+                # NULL it replaced because it looks like a hand-over that worked.
+                "run_ref": minted_ref,
+                "already_open": bool(started.get("already_open")),
+            })
+        already_open = any(o["already_open"] for o in opened) if opened else None
+        run_ref = opened[0]["run_ref"] if opened else None
     except CurriculumRejectedError as exc:
         # An answer, not an outage. Kept apart in the evidence because the response to
         # each is different: a rejection is scenarios somebody has to write, an outage
@@ -912,22 +1067,57 @@ async def _submit_one_module(
     # `simforge_run_ref` is the whole point of this package: B8's retirement condition
     # is a stored ref, not a call that returned one. It is NULL unless the curriculum
     # was accepted AND the run was opened, which is what "handed over" now means.
-    await _record_submission(
-        ctx,
-        forge_id=forge_id,
-        module_id=module_id,
-        department=None,
-        scenario_pack_ref=f"{pack_ref}/{module_id}",
-        scenario_count=len(scenarios),
-        coverage_denominator=max(modules_in_forge, 1),
-        instruction_content_hash=instruction.content_hash,
-        run_ref=run_ref,
-    )
+    #
+    # ONE ROW PER TAKER, each naming its own agent and carrying its own ref. A single
+    # row for a module two agents sat would be the shape the sweep had to guess its way
+    # out of, and 0044 exists so it no longer has to.
+    if opened:
+        for entry in opened:
+            await _record_submission(
+                ctx,
+                forge_id=forge_id,
+                module_id=module_id,
+                department=None,
+                office_agent_id=entry["office_agent_id"],
+                scenario_pack_ref=f"{pack_ref}/{module_id}",
+                scenario_count=len(scenarios),
+                coverage_denominator=max(modules_in_forge, 1),
+                instruction_content_hash=instruction.content_hash,
+                run_ref=entry["run_ref"],
+            )
+    else:
+        # No run was opened: the curriculum was refused or SimForge was down. The row is
+        # still written, with a NULL ref, because it records that The Office tried - the
+        # shape `test_a_run_that_did_not_open_stores_no_ref` pins. It names no agent
+        # because no agent sat it.
+        await _record_submission(
+            ctx,
+            forge_id=forge_id,
+            module_id=module_id,
+            department=None,
+            office_agent_id=None,
+            scenario_pack_ref=f"{pack_ref}/{module_id}",
+            scenario_count=len(scenarios),
+            coverage_denominator=max(modules_in_forge, 1),
+            instruction_content_hash=instruction.content_hash,
+            run_ref=None,
+        )
 
     outcome: dict[str, Any] = {
         "module_id": module_id,
         "scenario_count": len(scenarios),
         "run_ref": run_ref,
+        # SimForge said yes to the curriculum. NOT the same as a run being opened: a
+        # module whose curriculum is accepted and whose exam nobody sits is a finding
+        # about the roster, not about the curriculum, and the two must not be one
+        # number. This is what the zero-accepted block below reads.
+        "curriculum_accepted": error is None,
+        # Who sat it. Empty and accepted means the module has no live grant holder.
+        "exam_takers": [
+            {"office_agent_id": str(o["office_agent_id"]),
+             "agent_name": o["agent_name"], "run_ref": o["run_ref"]}
+            for o in opened
+        ],
         # Carried out of here because the unit-B pass needs the basis this module was
         # actually handed over under, and re-reading `instructions.live` after the fact
         # would answer a question about now rather than about the submission.
@@ -956,6 +1146,7 @@ async def _record_submission(
     ctx: _Context, *, forge_id: str, module_id: str | None, department: str | None,
     scenario_pack_ref: str, scenario_count: int, coverage_denominator: int,
     instruction_content_hash: str, run_ref: str | None,
+    office_agent_id: Any | None = None,
     members: dict[str, str] | None = None,
 ) -> None:
     """The one place Gate 8 writes a `curriculum_submission` row, for either unit.
@@ -990,13 +1181,14 @@ async def _record_submission(
             INSERT INTO curriculum_submission
               (submission_id, venture_id, forge_id, module_id, department,
                scenario_pack_ref, scenario_count, coverage_denominator,
-               instruction_content_hash, submitted_by, simforge_run_ref)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               instruction_content_hash, submitted_by, simforge_run_ref,
+               office_agent_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 submission_id, ctx.venture_id, forge_id, module_id, department,
                 scenario_pack_ref, scenario_count, coverage_denominator,
-                instruction_content_hash, ctx.actor, run_ref,
+                instruction_content_hash, ctx.actor, run_ref, office_agent_id,
             ),
         )
         if members:
@@ -1244,7 +1436,17 @@ def _curriculum_payload(
             {
                 "unit_type": "agent_operation",
                 "forge_id": instruction.forge_id,
-                "agent_id": c["office_agent_id"],
+                # THE AGENTS WHO WILL SIT THE EXAM - the holders of a live grant for
+                # this module, which is the population `_exam_takers` returns and the
+                # population the verdict will be written for. It used to be
+                # `requires_certification`, the pool of people who could fill a seat
+                # and hold no grant: a certification requested for an agent Gate 9
+                # cannot read through a grant is a request nothing can satisfy.
+                #
+                # SimForge consumes only `module_id` from this list, so this is a
+                # declaration rather than an instruction - which is exactly why it has
+                # to be a true one. Nothing on the far side would have complained.
+                "agent_id": str(c["office_agent_id"]),
                 "module_id": instruction.module_id,
             }
             for c in candidates

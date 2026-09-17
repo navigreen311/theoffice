@@ -89,7 +89,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0044"
+EXPECTED_SCHEMA_REVISION = "0045"
 
 # `live_grants` means "a grant no live revocation covers". The four-scope rule that
 # decides that has exactly one copy - `revocation._covers`, the same text

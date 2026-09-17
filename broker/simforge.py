@@ -171,6 +171,7 @@ def mint_run_ref(
     module_id: str | None,
     content_hash: str,
     department: str | None = None,
+    office_agent_id: uuid.UUID | None = None,
 ) -> str:
     """The run reference The Office mints, and SimForge opens a run under.
 
@@ -218,12 +219,35 @@ def mint_run_ref(
         other and `submission_unit` is what decides; a ref carrying both would be a ref
         that cannot say which.
 
+    A UNIT-A REF NAMES THE AGENT, FOR THE REASON A UNIT-B REF NAMES THE DEPARTMENT
+    ==============================================================================
+
+        Ruled 17 September 2026: every exam submission names the agent taking it. A
+        module with two grant holders is two exams, because SimForge's battery scores
+        `run.agentId` - one agent - so one run cannot be about both.
+
+        Without the agent segment those two runs would mint the SAME ref. `open_run` is
+        idempotent on the ref, so the second `run_start` would land silently on the
+        first agent's run, both submissions would carry one ref, and one verdict would
+        be read back as two agents' results. That is the department collision above,
+        one unit over, and it is the same bug.
+
+        Eight characters of the uuid, not the whole of it: enough to distinguish the
+        agents of one venture from each other in a ref whose job is to be recognised in
+        a log line, and the full id is on the `curriculum_submission` row.
+
+        A ref minted without an agent is a ref for a run that names nobody. Those exist
+        - every unit-A run opened before this ruling - and they keep their old shape
+        rather than being re-derived, so a ref that is already open still resolves.
+
     Carries no scenario content: two ids, a module or department name and a hash
     prefix. The hash is truncated because the full 64 characters buy nothing a reader
     wants and make the ref unreadable in a log line, where its only job is to be
     recognised.
     """
     target = module_id or (f"dept:{department}" if department else "-")
+    if module_id and office_agent_id is not None:
+        target = f"{module_id}@{str(office_agent_id)[:8]}"
     return ":".join(("office", venture_id, forge_id, target, content_hash[:12]))
 
 
@@ -915,7 +939,7 @@ async def overdue_submissions(
             """
             SELECT submission_id, venture_id, forge_id, module_id, department,
                    scenario_pack_ref, simforge_run_ref, submitted_at,
-                   instruction_content_hash,
+                   instruction_content_hash, office_agent_id,
                    EXTRACT(EPOCH FROM (now() - submitted_at)) / 3600.0 AS hours_waiting
             FROM curriculum_submission
             WHERE result_received_at IS NULL

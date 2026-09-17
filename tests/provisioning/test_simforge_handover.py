@@ -163,7 +163,7 @@ async def _submissions(conn, venture_id: str = VENTURE) -> list[dict]:
         await cur.execute(
             """
             SELECT scenario_pack_ref, simforge_run_ref, scenario_count, module_id,
-                   department
+                   department, office_agent_id
             FROM curriculum_submission WHERE venture_id = %s
             ORDER BY submitted_at
             """,
@@ -173,7 +173,7 @@ async def _submissions(conn, venture_id: str = VENTURE) -> list[dict]:
     return [
         {
             "pack_ref": r[0], "run_ref": r[1], "count": r[2], "module_id": r[3],
-            "department": r[4],
+            "department": r[4], "office_agent_id": r[5],
         }
         for r in rows
     ]
@@ -224,8 +224,11 @@ async def test_an_accepted_handover_stores_the_run_ref(at_gate_8, operator):
 
     rows = await _submissions(conn)
     assert rows, "gate 8 wrote no submission"
-    # One row per module, each naming its module and carrying its ref. `module_id` has
-    # existed since migration 0007 and was NULL on every row Gate 8 ever wrote.
+    # One row per (module, AGENT), each carrying its own ref. It was one row per module
+    # until 17 September 2026, when Ivan Green ruled that every exam submission names
+    # the agent taking it: SimForge's battery scores `run.agentId` - one agent - so a
+    # module two agents hold is two exams, and one row for both would be the shape the
+    # sweep had to guess its way out of.
     #
     # The ref is minted by The Office, so the assertion is that every row has one and
     # that it is the one `run_start` was opened with - not that it equals a literal a
@@ -236,9 +239,11 @@ async def test_an_accepted_handover_stores_the_run_ref(at_gate_8, operator):
     per_module = _unit_a(rows)
     assert per_module, "gate 8 wrote no per-module submission"
     assert all(r["module_id"] for r in per_module), "a unit-A row with no module"
-    assert len({r["module_id"] for r in per_module}) == len(per_module), (
-        "two rows for one module"
+    assert all(r["office_agent_id"] for r in per_module), (
+        "a unit-A row that names no agent: nothing can say who sat this exam"
     )
+    keyed = {(r["module_id"], r["office_agent_id"]) for r in per_module}
+    assert len(keyed) == len(per_module), "two rows for one (module, agent)"
 
     gate = _gate_8(outcomes)
     assert gate.evidence["handed_over_to_simforge"] is True
@@ -367,6 +372,13 @@ async def test_a_refusal_is_recorded_as_an_answer_not_as_an_outage(
     different: a rejection is a list of scenarios somebody has to write, and an outage
     is a service to restart. The evidence carries `violations` for the first and only
     `error` for the second.
+
+    **The verdict changed on 17 September 2026 and the distinction did not.** Ivan Green
+    ruled that Gate 8 blocks when SimForge accepts zero modules, so a total refusal now
+    stops the run - see `test_gate_8_names_the_agent.py`, where the block and its
+    boundary are the subject. Everything this test is about is below the verdict line
+    and is unchanged: the violations are kept, they name the missing class, and the row
+    exists with no ref.
     """
     conn, run_id = at_gate_8
 
@@ -376,9 +388,12 @@ async def test_a_refusal_is_recorded_as_an_answer_not_as_an_outage(
     )
 
     gate = _gate_8(outcomes)
-    assert gate.verdict == provisioning.PASSED
+    assert gate.verdict == provisioning.BLOCKED
     assert gate.evidence["handed_over_to_simforge"] is False
     assert gate.evidence["modules_accepted"] == 0
+    # A refusal, and it is recorded as one rather than as an outage.
+    assert gate.evidence["modules_refused"]
+    assert gate.evidence["modules_unreachable"] == []
 
     attempts = _attempts(gate)
     assert attempts, "nothing was submitted, so nothing was refused"
@@ -499,7 +514,7 @@ async def test_the_ref_gate_8_mints_is_derived_from_the_submission(at_gate_8, op
         await cur.execute(
             """
             SELECT venture_id, forge_id, module_id, department,
-                   instruction_content_hash, simforge_run_ref
+                   instruction_content_hash, simforge_run_ref, office_agent_id
             FROM curriculum_submission WHERE venture_id = %s
             """,
             (VENTURE,),
@@ -510,10 +525,16 @@ async def test_the_ref_gate_8_mints_is_derived_from_the_submission(at_gate_8, op
     # Both units, recomputed from their own row. A unit-B ref names the department in
     # the segment a unit-A ref names the module in, precisely so two departments
     # operating one module set on one Forge do not mint one ref and land on one run.
-    for venture_id, forge_id, module_id, department, content_hash, stored in rows:
+    #
+    # A unit-A ref names the AGENT in that same segment, for the identical reason: two
+    # holders of one module would otherwise mint one ref, and `open_run` is idempotent
+    # on it, so the second exam would land silently on the first agent's run.
+    for (venture_id, forge_id, module_id, department, content_hash, stored,
+         agent_id) in rows:
         assert stored == mint_run_ref(
             venture_id=venture_id, forge_id=forge_id,
             module_id=module_id, department=department, content_hash=content_hash,
+            office_agent_id=agent_id,
         ), f"{module_id or department}: the ref is not a function of the submission"
 
 
