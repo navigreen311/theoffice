@@ -56,7 +56,8 @@
       "scenario_count": "How many scenarios ran.",
       "coverage_denominator": "How many there were. Report the denominator.",
       "completed_at": "When the run finished. A timestamp carries no scenario content.",
-      "agent_model": "provider/model that answered the battery, e.g. ollama/llama3.1:8b. Provenance, never content: it names the candidate, not what it said. Required in the record by certified_records_its_basis whenever a real verdict arrives."
+      "agent_model": "provider/model that answered the battery, e.g. ollama/llama3.1:8b. Provenance, never content: it names the candidate, not what it said. Required in the record by certified_records_its_basis whenever a real verdict arrives.",
+   "model_identity": "The candidate in FULL, where agent_model is only its label: {provider, model, file_digest, file_size_bytes, parameter_size, quantization, settings, fingerprint}. Village agents run on local models, and a certification counts only if it was earned on the exact model the agent runs in production - the same tag re-pulled at a different quantization, or served at a different temperature, produces the identical agent_model string and a different candidate. Provenance, never content: a sha256 of a weights file, a byte count, a quantization code like Q4_K_M, and the generation settings SimForge sent (temperature, token cap, seed). It names what answered and carries nothing it said. The fingerprint is a hash over the whole record, so re-certification on drift is a string comparison. See SimForge ADR-0060."
     }
   },
   "get_certification_status": {
