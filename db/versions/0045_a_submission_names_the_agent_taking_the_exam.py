@@ -1,10 +1,27 @@
 """A curriculum submission names the agent taking the exam
 
-Revision ID: 0044
-Revises: 0043
+Revision ID: 0045
+Revises: 0044
 
 Ruled 17 September 2026 (Ivan Green): **every exam submission names the agent taking
 it.** Until now none did, and the column this adds is what makes the sentence true.
+
+RENUMBERED FROM 0044 TO 0045, AND THE COLLISION IS WORTH THE PARAGRAPH
+======================================================================
+
+    This was written as `0044` while another session wrote a different `0044` -
+    `certification.model_digest` and its siblings, PR #173. Both branched from 0043 and
+    neither could see the other.
+
+    **Alembic catches that and `docs/decisions.md` did not.** Two revisions sharing a
+    `down_revision` give alembic two heads and it refuses to run, by name, on the first
+    command anybody types, so this cost a rename. Four ledger entry numbers were claimed
+    twice in the same week and nothing failed at all, because git has no opinion about a
+    markdown heading. Entry 117 gives the ledger the equivalent; entry 118 is the rule
+    about the sessions.
+
+    Ruled by Ivan Green: whichever of the two merges second renumbers. #173 merged
+    first, so this is 0045.
 
 WHAT THE ABSENCE COST
 =====================
@@ -44,8 +61,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0044"
-down_revision = "0043"
+revision = "0045"
+down_revision = "0044"
 branch_labels = None
 depends_on = None
 

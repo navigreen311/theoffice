@@ -630,6 +630,12 @@ async def _ingest_one(
                 # a fact - the same rule `functions_in_module` follows when The Office
                 # sends 0 instead of inventing a denominator.
                 agent_model=result.agent_model,
+                # The candidate in full, straight from the verdict and never
+                # defaulted - same rule as `agent_model` on the line above. A model
+                # identity this sweep assembled would be a guess about what answered,
+                # and `record_result` refuses an incomplete one rather than storing a
+                # partial record a later reader takes for the whole thing.
+                model_identity=result.model_identity,
                 attested_by="simforge",
             )
         except certification.CertificationError as exc:

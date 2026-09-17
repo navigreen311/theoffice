@@ -28,9 +28,11 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
 
 #: The verdicts that mean SOMETHING ANSWERED, imported rather than restated.
 #: `simforge.TERMINAL_VERDICTS` is the one definition, named by P-03 when it decided
@@ -341,6 +343,37 @@ async def department_api_version(
 
     return next(iter(by_version))
 
+def _model_scalars(
+    identity: dict[str, Any] | None,
+) -> tuple[str | None, float | None, int | None]:
+    """The three the ruling names, lifted out of SimForge's record.
+
+    **Promoted, not extracted.** The whole record is stored too, in `model_identity`.
+    These three are lifted into their own columns because a CHECK can demand a column
+    and cannot demand a key inside a jsonb without asserting a shape The Office does not
+    own - `revocation.blast_radius` keeps the whole thing for the same reason and the
+    same trade.
+
+    Reads defensively because the shape is SimForge's. A record that arrives without
+    `settings`, or with `max_tokens` spelled some other way, yields `None` and the
+    caller refuses with a sentence naming what is missing - which is a better failure
+    than a `KeyError` from inside a database write.
+    """
+    if not isinstance(identity, dict):
+        return None, None, None
+    digest = identity.get("file_digest")
+    settings = identity.get("settings")
+    if not isinstance(settings, dict):
+        settings = {}
+    temperature = settings.get("temperature")
+    max_tokens = settings.get("max_tokens")
+    return (
+        str(digest) if digest else None,
+        float(temperature) if isinstance(temperature, int | float) else None,
+        int(max_tokens) if isinstance(max_tokens, int) else None,
+    )
+
+
 async def record_result(
     conn: AsyncConnection,
     *,
@@ -358,6 +391,7 @@ async def record_result(
     threshold: float | None = None,
     scenario_pack_ref: str | None = None,
     agent_model: str | None = None,
+    model_identity: dict[str, Any] | None = None,
     attested_by: str = "simforge",
     bootstrap_reason: str | None = None,
 ) -> CertState:
@@ -434,6 +468,49 @@ async def record_result(
             "or expire when the model moves. See blocking.md B34."
         )
 
+    # THE LABEL IS NOT THE MODEL. Ruled 17 September 2026.
+    #
+    # `agent_model` above is `ollama/llama3.1:8b`, and it reads identically whether the
+    # tag was re-pulled at a different quantization or served at a different
+    # temperature. The check above has been satisfied by a string that cannot answer
+    # "is this still the model the agent runs" since the day it was written.
+    #
+    # Raised here as well as enforced by `certification_names_its_model` in 0044,
+    # because a CHECK violation names a constraint and this names the fact. The
+    # constraint is the control; this is the sentence the person reads.
+    # SCOPED TO THE VERDICTS THAT CONFER AUTHORITY, and that is the ruling's own
+    # wording: "the model the agent PASSED on". `certified` and `provisional` are the
+    # two states an agent can act under, and they are the two that have to be
+    # withdrawable when the model moves.
+    #
+    # A FAIL is deliberately NOT asked. It records that an agent was tested and did not
+    # pass - a claim that cannot go stale, so there is nothing to expire - and
+    # `record_result` already treats it that way for the Forge api_version, whose
+    # docstring says a FAIL "needs no basis". Demanding the digest here would make an
+    # older SimForge's failure REFUSED RATHER THAN RECORDED, which loses the finding
+    # entirely. Losing a pass is safe; losing a failure is not.
+    digest, temperature, max_tokens = _model_scalars(model_identity)
+    if attested_by == "simforge" and state in (CERTIFIED, PROVISIONAL) and (
+        not digest or temperature is None or max_tokens is None
+    ):
+        missing = [
+            name for name, value in (
+                ("file_digest", digest),
+                ("settings.temperature", temperature),
+                ("settings.max_tokens", max_tokens),
+            ) if value is None or value == ""
+        ]
+        raise CertificationError(
+            f"a SimForge verdict must record the model it was earned on, and this one "
+            f"is missing {', '.join(missing)}. `agent_model` is a LABEL: the same tag "
+            "re-pulled at a different quantization, or served at a different "
+            "temperature, produces the identical string and a different candidate. The "
+            "digest and the generation settings are what make a certification "
+            "attributable to one model file, and without them re-certification on "
+            "drift cannot be enforced. SimForge sends them as `model_identity` "
+            "(ADR-0060)."
+        )
+
     if state == CERTIFIED and not (
         instruction_content_hash and forge_api_version and certified_tier
     ):
@@ -470,8 +547,10 @@ async def record_result(
               (cert_id, unit, office_agent_id, department, forge_id, module_id,
                state, certified_tier, instruction_content_hash, forge_api_version,
                rubric_kind, rubric_version, score, threshold, scenario_pack_ref, agent_model,
-               simforge_verdict)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               simforge_verdict, model_digest, model_temperature, model_max_tokens,
+               model_identity, model_fingerprint)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s)
             ON CONFLICT {conflict} DO UPDATE SET
               state = EXCLUDED.state,
               certified_tier = EXCLUDED.certified_tier,
@@ -483,6 +562,14 @@ async def record_result(
               scenario_pack_ref = EXCLUDED.scenario_pack_ref,
               agent_model = EXCLUDED.agent_model,
               simforge_verdict = EXCLUDED.simforge_verdict,
+              -- Replaced, not merged. A re-certification is a new exam on whatever
+              -- model answered it, and keeping the previous digest beside the new
+              -- verdict would describe a run that never happened.
+              model_digest = EXCLUDED.model_digest,
+              model_temperature = EXCLUDED.model_temperature,
+              model_max_tokens = EXCLUDED.model_max_tokens,
+              model_identity = EXCLUDED.model_identity,
+              model_fingerprint = EXCLUDED.model_fingerprint,
               updated_at = now()
             RETURNING cert_id, unit, state, certified_tier
             """,
@@ -505,6 +592,21 @@ async def record_result(
                 # NULL on a bootstrap. See the docstring: this column means
                 # SimForge said so, and nothing else may write into it.
                 None if attested_by == "bootstrap" else verdict,
+                # The model, same rule as `agent_model` above: a bootstrap records no
+                # model because none answered. The guard higher up has already refused
+                # a simforge verdict missing any of the three.
+                None if attested_by == "bootstrap" else digest,
+                None if attested_by == "bootstrap" else temperature,
+                None if attested_by == "bootstrap" else max_tokens,
+                # Stored whole beside the promoted three, so a field SimForge adds
+                # later is on the row rather than discarded on the way in.
+                (
+                    Jsonb(model_identity)
+                    if attested_by != "bootstrap" and model_identity is not None
+                    else None
+                ),
+                None if attested_by == "bootstrap"
+                else (model_identity or {}).get("fingerprint"),
             ),
         )
         row = await cur.fetchone()

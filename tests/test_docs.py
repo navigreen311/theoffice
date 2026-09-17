@@ -16,7 +16,10 @@ increment corrected have not silently returned.
 
 from __future__ import annotations
 
+import os
 import re
+import subprocess
+from itertools import pairwise
 from pathlib import Path
 
 import pytest
@@ -95,4 +98,175 @@ def test_a_corrected_claim_does_not_come_back(doc: str, claim: str):
     assert claim not in text, (
         f"{doc} claims {claim!r} again. That was true once and is not now - check "
         "whether the capability regressed before re-adding the sentence."
+    )
+
+
+# --------------------------------------------------------------- the ledger numbering
+
+DECISIONS = DOCS / "decisions.md"
+
+#: What a PR writes instead of a number. Ruled by Ivan Green, 17 September 2026:
+#: **entry numbers are assigned at merge, not at authoring.**
+PLACEHOLDER = "## NEXT."
+
+#: `## 116. A venture needs an answer key` -> 116. Anchored, because `## 3.5` appears in
+#: prose inside several entries and a loose pattern would read gate numbers as entries.
+ENTRY_HEADING = re.compile(r"^## (\d+)\. ", re.MULTILINE)
+
+#: The placeholder AS A HEADING. Anchored for a second reason: the rule has to be
+#: described somewhere, and the entry that records it necessarily writes `## NEXT.` in
+#: prose several times. Counting every occurrence would make the rule's own entry the
+#: thing that fails the rule, and main could never be clean.
+PLACEHOLDER_HEADING = re.compile(r"^## NEXT\. ", re.MULTILINE)
+
+
+def entry_numbers() -> list[int]:
+    return [int(m) for m in ENTRY_HEADING.findall(DECISIONS.read_text(encoding="utf-8"))]
+
+
+def test_entry_numbers_are_unique():
+    """**The one that would have caught it.**
+
+    On 17 September 2026 three open PRs claimed entry 115 and two claimed 116. Nothing
+    failed, and nothing could have: each PR appends to the END of this file with
+    different surrounding context, so two branches adding `## 116.` merge cleanly and
+    main ends up holding two of them. Git has no opinion about the number in a heading.
+
+    This runs against the MERGE RESULT on every pull request - which is what GitHub
+    checks out for a `pull_request` event - so the second PR to claim a number fails
+    before it lands rather than after.
+    """
+    numbers = entry_numbers()
+    duplicates = sorted({n for n in numbers if numbers.count(n) > 1})
+    assert not duplicates, (
+        f"docs/decisions.md has more than one entry numbered {duplicates}. Two branches "
+        "claimed the same number and git merged them cleanly because they appended in "
+        "different places. Renumber the later one - see the numbering rule in the "
+        "ledger."
+    )
+
+
+def test_entry_numbers_are_contiguous_from_one():
+    """A gap is the other half of a collision, and it is the quieter half.
+
+    A PR that claims 117 while main is at 115 merges just as cleanly as one that claims
+    115 twice. Nothing is duplicated and nothing is lost, but every reference to "entry
+    116" afterwards points at nothing, and the absence reads as an entry somebody
+    deleted rather than one nobody wrote.
+
+    Contiguity is also what makes `## NEXT.` work: the number to assign is always
+    `max + 1`, with no register to consult and nothing to remember.
+    """
+    numbers = entry_numbers()
+    assert numbers, "no entries found; the heading pattern no longer matches the file"
+    expected = list(range(1, len(numbers) + 1))
+    missing = sorted(set(expected) - set(numbers))
+    assert sorted(numbers) == expected, (
+        f"docs/decisions.md is not contiguous from 1. Missing: {missing or 'none'}; "
+        f"highest: {max(numbers)}; count: {len(numbers)}."
+    )
+
+
+def test_entries_are_in_order():
+    """Numbered in the order they appear, so the file reads as a sequence.
+
+    Sorting is not enough on its own: a file holding 1..119 in a shuffled order would
+    satisfy both tests above and still send a reader hunting.
+    """
+    numbers = entry_numbers()
+    assert numbers == sorted(numbers), (
+        "docs/decisions.md entries are out of order. The first descent is at "
+        f"{next((b for a, b in pairwise(numbers) if b < a), None)}."
+    )
+
+
+def _checkout_is_main() -> bool:
+    """Whether the thing being tested IS main, asked three ways in priority order.
+
+    `GITHUB_BASE_REF` is set on a `pull_request` event and empty on a push, so it is the
+    first and most reliable signal: a PR is never main, whatever it is merging into.
+    `GITHUB_REF` then names the branch on a push. Off CI there is neither, so the branch
+    is read from git.
+
+    **Unknown resolves to "not main", which skips the check.** A wrong skip is a rule
+    enforced one run later, by the push to main that follows; a wrong assertion is every
+    developer on every branch red for writing the placeholder the rule tells them to
+    write. The asymmetry is the whole reason this function exists rather than one
+    environment variable.
+    """
+    if os.environ.get("GITHUB_BASE_REF"):
+        return False
+    ref = os.environ.get("GITHUB_REF")
+    if ref:
+        return ref == "refs/heads/main"
+    try:
+        branch = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True, text=True, timeout=10,
+            cwd=DECISIONS.parent,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return branch.returncode == 0 and branch.stdout.strip() == "main"
+
+
+def test_a_placeholder_never_reaches_main_and_is_used_correctly_off_it():
+    """`## NEXT.` is a number nobody has assigned yet, and main holds no such thing.
+
+    **One test with two arms rather than a skip, and that is not a style choice.** CI
+    refuses to pass if anything skipped - deliberately, because every database test is
+    guarded by `requires_db` and a misconfigured Postgres would otherwise report a tidy
+    green over several hundred tests that never ran. A conditional skip here would trip
+    that rule on every pull request, and weakening the rule to accommodate one test
+    would cost far more than it bought.
+
+    So both arms assert something real:
+
+        on main     no placeholder survives. This is the rule.
+        off main    a placeholder is EXPECTED - it is what stops two branches claiming
+                    one number - so what is checked instead is that it is used
+                    correctly: an entry is appended to the end of the file, so an
+                    unassigned heading is the last heading. One left in the middle is
+                    a botched edit, and it would otherwise sit there until whoever
+                    merged went looking for the number to replace.
+
+    The window the rule leaves open is between a merge and the push-to-main run that
+    follows it. **What closes that window is a person** - whoever merges assigns the
+    number. This test catches them forgetting; it is not what stops them. Said plainly
+    because a test named like this one invites the opposite reading.
+    """
+    text = DECISIONS.read_text(encoding="utf-8")
+    placeholders = [m.start() for m in PLACEHOLDER_HEADING.finditer(text)]
+
+    if _checkout_is_main():
+        assert not placeholders, (
+            f"{len(placeholders)} entry heading(s) still read `{PLACEHOLDER}`. The "
+            "number is assigned at merge: replace each with the next free number "
+            f"({max(entry_numbers() or [0]) + 1} and upward, in the order they appear)."
+        )
+        return
+
+    if not placeholders:
+        return
+    numbered = [m.start() for m in ENTRY_HEADING.finditer(text)]
+    assert max(placeholders) > max(numbered, default=-1), (
+        "a `## NEXT.` heading sits above a numbered one. An entry is appended to the "
+        "end of the file, so an unassigned heading is the last heading - one in the "
+        "middle is a botched edit, and whoever merges would have to go looking for it."
+    )
+
+
+def test_the_placeholder_is_what_the_rule_says_it_is():
+    """The constant above and the ledger's own words, asserted against each other.
+
+    A rule recorded in prose and enforced by a constant is two spellings of one thing,
+    and this is the test that keeps them in step. If the ledger ever says the
+    placeholder is something else, this fails rather than the enforcement quietly
+    checking for a string nobody writes any more.
+    """
+    text = DECISIONS.read_text(encoding="utf-8")
+    assert f"`{PLACEHOLDER}`" in text, (
+        f"no entry in docs/decisions.md mentions `{PLACEHOLDER}`. Either the rule was "
+        "never recorded or the placeholder changed and this check now enforces a string "
+        "nobody uses."
     )
