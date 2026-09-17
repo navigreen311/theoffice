@@ -9901,19 +9901,55 @@ reached the curriculum.
 is answerable for is the shape a rubber stamp has, and a name beside a draft is a
 signature on something nobody signed.
 
-### THE TWENTY EXISTING FILES WERE MARKED `approved`, AND THAT NEEDS IVAN'S CONFIRMATION
+### THE TWENTY EXISTING FILES ARE DRAFTS. GRANDFATHERING IS NOT AN APPROVAL EVENT
 
-`status` is required, so the twenty files that predate this ruling need one. They are
-marked `approved`, and **that is a description of the status quo rather than an approval
-event**: they have been submitted to SimForge on every Gate 8 run since they were
-written, and marking them `draft` today would stop a venture that is already certifying.
+**Ruled by Ivan Green, 17 September 2026**, refusing the argument this entry first made:
 
-Nothing recorded an approval of any of them by name. `approved_by` says exactly that -
-*"in service before the 17 September 2026 ruling; grandfathered"* - rather than claiming
-a signature nobody gave, and each file carries a comment block saying so.
+> Burkham's 20 pre-existing answer keys are not approved. Grandfathering is not an
+> approval event. They are marked draft until Ivan Green reviews them, and a draft is
+> never submitted to SimForge.
 
-**This is the one thing in this entry that is a decision Ivan has not made.** If the
-twenty should be re-approved under the new ruling, that is a separate act.
+The refused argument was that `approved` described the status quo - the twenty had been
+submitted on every Gate 8 run since they were written, and marking them draft would stop
+a venture that was already certifying. **It was the wrong argument.** It turns "has been
+used" into "has been reviewed", which is the exact substitution the approval rule exists
+to prevent. A key nobody read is a key nobody read, however long it has been in service.
+
+So all twenty carry `status: draft` and no `approved_by`, and each says at the top that
+it was briefly marked approved and why that was refused.
+
+`test_no_key_is_approved_by_grandfathering` pins it. It deliberately does NOT assert
+that every key is a draft - that would fail the moment Ivan approves one, which is the
+intended next step. It asserts the narrower, permanent thing: an `approved_by` that
+describes a process rather than a person is the loophole coming back under another word.
+
+### What it costs, measured rather than estimated
+
+    every answer key in the repository   25, all draft. `for_module` returns content for
+                                         NONE of them.
+    greenstone                           unchanged - its five were already drafts.
+                                         15 operation scenarios, all with empty
+                                         `expected_behavior`, which SimForge refuses.
+    burkham's 10 live modules            withheld. Gate 8 would submit curricula with
+                                         empty required fields, SimForge would refuse
+                                         all ten, and entry 119's rule then BLOCKS the
+                                         gate on zero accepted.
+
+**Run 8ed2f39a is unaffected, and not because this is harmless: it is already aborted.**
+It was blocked at Gate 9 earlier the same day and has since been abandoned. Nothing this
+ruling does reaches it.
+
+**No Burkham certification is touched.** All 90 certification rows behind Burkham's
+grants are `certified` with `simforge_verdict IS NULL` - every one bootstrap-attested.
+Not one was earned from an answer key, so withdrawing the keys withdraws nothing that
+was earned. What it removes is the ability to earn any more until Ivan reviews them.
+
+**And Burkham could not run the ladder today regardless.** Its live Pack 0.10.0 fails
+generation before Gate 3: *"Intake Concierge: no stage declared for
+capitalforge/client_read, capitalforge/client_read_pii, capitalforge/record_consent."*
+Confirmed against `main` as well, so it predates this change and is a Pack gap, not a
+consequence of the ruling. Recorded so nobody later reads Burkham's silence as this
+entry's doing.
 
 ### Read-only: the twenty audited
 

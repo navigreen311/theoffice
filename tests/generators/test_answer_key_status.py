@@ -162,6 +162,39 @@ def test_greenstones_five_are_drafts_and_account_for_every_submittable_class():
         )
 
 
+def test_no_key_is_approved_by_grandfathering():
+    """**Grandfathering is not an approval event.** Ruled by Ivan Green, 17 September 2026.
+
+    Twenty keys were briefly marked `approved` on the argument that it described the
+    status quo: they had been submitted on every Gate 8 run since they were written, and
+    marking them draft would stop a venture that was already certifying. That argument
+    was refused, and it was the wrong argument - it turns "has been used" into "has been
+    reviewed", which is the exact substitution the approval rule exists to prevent.
+
+    This does NOT assert that every key is a draft. That would fail the moment Ivan
+    approves one, which is the intended next step, and a test that blocks the outcome it
+    is waiting for is a test that will be deleted rather than satisfied. What it asserts
+    is narrower and permanent: **an approval names a person who read it.** Any
+    `approved_by` that describes a process rather than a reviewer is the loophole coming
+    back under another word.
+    """
+    loaded = sc.load_all()
+    assert loaded.modules, "no answer keys loaded; the root resolved somewhere empty"
+
+    excuses = ("grandfather", "status quo", "in service", "pre-existing", "legacy",
+               "existing", "process", "n/a", "none", "tbd", "unknown")
+    offenders = {
+        m: c.approved_by
+        for m, c in loaded.modules.items()
+        if c.status == sc.APPROVED
+        and any(word in c.approved_by.lower() for word in excuses)
+    }
+    assert not offenders, (
+        f"these keys claim an approval nobody gave: {offenders}. `approved_by` is the "
+        "person who read the file, not the reason it was already in use."
+    )
+
+
 def test_every_answer_key_in_the_repository_carries_a_status():
     """Total, not just the new five. A file with no status cannot load at all."""
     loaded = sc.load_all()

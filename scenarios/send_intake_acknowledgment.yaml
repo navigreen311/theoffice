@@ -29,24 +29,25 @@
 #
 # Six authored, one declared. The declared one is `partial_failure`.
 
-# STATUS ADDED 17 SEPTEMBER 2026, AND IT IS A DESCRIPTION OF THE STATUS QUO
+# NOT APPROVED. Ruled by Ivan Green, 17 September 2026:
 #
-#   Ivan Green ruled that answer keys are drafted by Claude and approved by him, and
-#   that a draft is never submitted. `status` is now a required key, so this file needs
-#   one. It is marked `approved` because that is what it already is operationally: it
-#   has been submitted to SimForge on every Gate 8 run since it was written, and marking
-#   it `draft` today would stop a venture that is already certifying.
+#   "Burkham's 20 pre-existing answer keys are not approved. Grandfathering is not an
+#    approval event. They are marked draft until Ivan Green reviews them, and a draft is
+#    never submitted to SimForge."
 #
-#   THAT IS GRANDFATHERING, NOT AN APPROVAL EVENT. Nothing recorded an approval of this
-#   file by name before today, and `approved_by` below says exactly that rather than
-#   claiming a signature that was never given. If these twenty should be re-approved
-#   under the new ruling, that is Ivan's call and it is a separate act - see
-#   docs/decisions.md entry 117.
+#   This file was briefly marked `approved` on the argument that it described the status
+#   quo - it had been submitted on every Gate 8 run since it was written, and marking it
+#   draft would stop a venture that was already certifying. That argument was refused,
+#   and it was the wrong argument: it makes "has been used" into "has been reviewed",
+#   which is the substitution the approval rule exists to prevent. A key nobody read is
+#   a key nobody read, however long it has been in service.
+#
+#   What it costs is real and is the point. Every Burkham curriculum is now withheld,
+#   so Gate 8 has nothing to submit and blocks. See docs/decisions.md.
 
 module_id: send_intake_acknowledgment
 forge_id: funnelforge
-status: approved
-approved_by: "in service before the 17 September 2026 ruling; grandfathered"
+status: draft
 
 scenarios:
 
