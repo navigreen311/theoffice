@@ -22,6 +22,35 @@ import psycopg
 import psycopg.types.json
 import pytest
 
+#: WHAT A FIXTURE CERTIFICATION SAYS IT WAS EARNED ON.
+#:
+#: Since 0044 a row carrying an answered SimForge verdict must name the model, not only
+#: its label - `certification_names_its_model`. Every fixture below writes
+#: `simforge_verdict = 'PASS'`, so every one of them needs these three, and a fixture
+#: that omitted them would fail at the INSERT rather than in the test that reads it.
+#:
+#: The values are SimForge's exam constants (`EXAM_TEMPERATURE`, `EXAM_MAX_TOKENS`) and
+#: a digest that is visibly fake. A plausible-looking sha256 here would be a fixture
+#: pretending to be evidence.
+FIXTURE_MODEL_DIGEST = "sha256:" + "f1" * 32
+FIXTURE_MODEL_TEMPERATURE = 0.0
+FIXTURE_MODEL_MAX_TOKENS = 2048
+
+#: The same three in the shape SimForge sends them, for a test that goes through
+#: `record_result` rather than writing the row itself. One spelling, so a change to
+#: what the record must contain is made here and not in nine call sites.
+FIXTURE_MODEL_IDENTITY = {
+    "provider": "ollama",
+    "model": "llama3.1:8b",
+    "file_digest": FIXTURE_MODEL_DIGEST,
+    "settings": {
+        "temperature": FIXTURE_MODEL_TEMPERATURE,
+        "max_tokens": FIXTURE_MODEL_MAX_TOKENS,
+    },
+    "fingerprint": "sha256:" + "ab" * 32,
+}
+
+
 ROOT = Path(__file__).resolve().parents[1]
 PACK_PATH = ROOT / "packs" / "greenstone.yaml"
 
@@ -577,14 +606,17 @@ def certify(conn: psycopg.Connection, agent_ids, modules, *, forge=FORGE_ID,
                     INSERT INTO certification
                       (cert_id, unit, office_agent_id, forge_id, module_id, state,
                        certified_tier, instruction_content_hash, forge_api_version,
-                       rubric_kind, rubric_version, simforge_verdict, agent_model)
+                       rubric_kind, rubric_version, simforge_verdict, agent_model,
+                       model_digest, model_temperature, model_max_tokens)
                     VALUES (%s, 'A', %s, %s, %s, 'certified', %s, %s, %s,
-                            'operation', '1.4.0', 'PASS', 'ollama/llama3.1:8b')
+                            'operation', '1.4.0', 'PASS', 'ollama/llama3.1:8b',
+                            %s, %s, %s)
                     ON CONFLICT (office_agent_id, forge_id, module_id)
                       WHERE unit = 'A' DO NOTHING
                     """,
                     (str(uuid.uuid4()), agent_id, forge, module_id, tier,
-                     hashes[module_id], api),
+                     hashes[module_id], api, FIXTURE_MODEL_DIGEST,
+                     FIXTURE_MODEL_TEMPERATURE, FIXTURE_MODEL_MAX_TOKENS),
                 )
         for dept in unit_b_departments:
             cur.execute(
@@ -592,13 +624,15 @@ def certify(conn: psycopg.Connection, agent_ids, modules, *, forge=FORGE_ID,
                 INSERT INTO certification
                   (cert_id, unit, department, forge_id, state, certified_tier,
                    instruction_content_hash, forge_api_version, rubric_kind,
-                   rubric_version, simforge_verdict, agent_model)
+                   rubric_version, simforge_verdict, agent_model,
+                   model_digest, model_temperature, model_max_tokens)
                 VALUES (%s, 'B', %s, %s, 'certified', 'auto_execute', %s, %s,
-                        'domain', '3.2.0', 'PASS', 'ollama/llama3.1:8b')
+                        'domain', '3.2.0', 'PASS', 'ollama/llama3.1:8b', %s, %s, %s)
                 ON CONFLICT (department, forge_id) WHERE unit = 'B' DO NOTHING
                 """,
                 (str(uuid.uuid4()), dept, forge,
-                 next(iter(hashes.values())), api),
+                 next(iter(hashes.values())), api, FIXTURE_MODEL_DIGEST,
+                 FIXTURE_MODEL_TEMPERATURE, FIXTURE_MODEL_MAX_TOKENS),
             )
     conn.commit()
 

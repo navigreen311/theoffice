@@ -21,6 +21,7 @@ from broker.db import connection
 from broker.errors import NotCertified
 from broker.instructions import InstructionError
 from tests.conftest import requires_db
+from tests.world import FIXTURE_MODEL_IDENTITY
 
 pytestmark = [requires_db, pytest.mark.db]
 
@@ -248,6 +249,7 @@ async def test_a_certified_result_must_record_its_basis(registered_forge, seed_a
                 conn, unit="A", forge_id=forge_id, module_id=module_id,
                 office_agent_id=seed_agent, verdict="PASS", rubric_version="1.0.0",
                 agent_model="ollama/llama3.1:8b",
+                model_identity=FIXTURE_MODEL_IDENTITY,
             )
 
 
@@ -275,6 +277,7 @@ async def test_a_unit_a_cert_with_no_live_instruction_goes_stale(
             conn, unit="A", forge_id=forge_id, module_id=module_id,
             office_agent_id=seed_agent, verdict="PASS", rubric_version="1.0.0",
                 agent_model="ollama/llama3.1:8b",
+                model_identity=FIXTURE_MODEL_IDENTITY,
             certified_tier="auto_execute",
             # The fixture's forge is at 2.1.0. Passing anything else makes
             # stale_forge fire and the test measures the wrong rule.
@@ -314,7 +317,8 @@ async def test_unit_b_is_not_swept_stale_for_having_no_module(
         await certification.record_result(
             conn, unit="B", forge_id=forge_id, department="engineering",
             verdict="PASS", rubric_version="1.0.0",
-                agent_model="ollama/llama3.1:8b", certified_tier="auto_execute",
+                agent_model="ollama/llama3.1:8b",
+                model_identity=FIXTURE_MODEL_IDENTITY, certified_tier="auto_execute",
             instruction_content_hash="d" * 64, forge_api_version="2.1.0",
         )
         await certification.recompute_staleness(conn, forge_id=forge_id)
@@ -386,6 +390,7 @@ async def test_a_real_verdict_still_records_one(registered_forge, seed_agent, ad
             conn, unit="A", forge_id=forge_id, module_id=module_id,
             office_agent_id=seed_agent, verdict="PASS", rubric_version="1.0.0",
                 agent_model="ollama/llama3.1:8b",
+                model_identity=FIXTURE_MODEL_IDENTITY,
             certified_tier="auto_execute",
             instruction_content_hash="b" * 64, forge_api_version="1.0.0",
             scenario_pack_ref="pack-7",

@@ -43,6 +43,28 @@ class NotCertified(OfficeError):
     audit_event = "call_refused_not_certified"
 
 
+class CertificationNamesNoModel(OfficeError):
+    """The certification passed, and nothing can say which model passed it.
+
+    **Its own type, for the reason `GrantSuperseded` has one.** `NotCertified` would say
+    the certification is missing or not current, which is false and sends the reader to
+    re-run a Readiness Gate that already passed. The certification is real; what is
+    missing is the one fact that lets it EXPIRE - the model file it was earned on.
+
+    Ruled 17 September 2026: a certification records the model the agent passed on, by
+    name, exact digest, temperature and max tokens. `agent_model` carries the label, and
+    the same label describes different weights whenever a tag is re-pulled.
+
+    Reachable only for a row written before 0044, whose
+    `certification_names_its_model` CHECK makes it impossible afterwards. It is here
+    because the call path is the one place that runs on every call rather than once per
+    provisioning run, and a row that predates the constraint would otherwise dispatch
+    for ever.
+    """
+
+    audit_event = "call_refused_certification_names_no_model"
+
+
 class IdentityInactive(OfficeError):
     """The agent identity is suspended, revoked, or retired."""
 
