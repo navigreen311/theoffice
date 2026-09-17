@@ -9277,3 +9277,112 @@ Four of the 49 are covered by live revocations - entry 75's finding, already clo
 `covered_grants`. Those stay revoked. The four were issued for a department no Burkham
 position draws from; that is a statement about authority being wrong, which is what
 revocation means and what supersession would have contradicted.
+
+## 116. A venture needs an answer key, and an exam needs a name on it
+
+**Five rulings by Ivan Green, 17 September 2026.**
+
+1. **Every venture needs an answer key for every module its agents operate**: what the
+   agent should do, and when it must stop and get a human. A venture without one cannot
+   be certified.
+2. **Gate 8 blocks when SimForge accepts zero modules.**
+3. **Every exam submission names the agent taking it.**
+4. **Answer keys are drafted by Claude and approved by Ivan Green.** A draft is never
+   submitted until approved.
+5. **Ventures without a Pack** - MedLink Pro, Argus, Collingswood - **get answer keys
+   when their Packs are written.**
+
+### What run cb3a47f6 showed, quoted
+
+Advanced past Gate 7 on 17 September. It passed Gate 8 and stopped at Gate 9:
+
+    Gate 8  passed   21 scenario(s) generated; 0 of 5 module(s) accepted by SimForge;
+                     0 of 3 department unit(s) opened
+    Gate 9  blocked  12 certification(s) read as certified but carry no SimForge PASS.
+                     A certification nothing external attested is a certification The
+                     Office wrote for itself.
+
+SimForge refused all five modules with the same four violations each:
+
+    scenario[0] (module X, escalation_required):  missing expected_behavior,
+                                                  expected_escalation
+    scenario[1] (module X, happy_path):           missing expected_behavior,
+                                                  expected_escalation
+    scenario[2] (module X, permission_denied):    missing expected_behavior,
+                                                  expected_escalation
+    module X: rubric includes the recovery dimension but has no
+              recovery_after_failure scenario, and none was declared not_applicable
+
+**The cause is a missing file, not a bug.** `scenarios/` holds 20 authored YAMLs and not
+one is for a Greenstone module - all 20 are CapitalForge or VoiceForge. With no file the
+generator emits `expected_behavior=""` and `expected_escalation=""`, and SimForge's
+validator treats an empty string as missing (`not s.get(f)`). That is
+`modules_with_authored_scenario_content: 0 of 5` stated as a refusal.
+
+### Ruling 2: zero accepted is a block, and an outage is not
+
+The gate passed on everything for its whole life and the reasoning was sound: a rejection
+is an answer, the evidence records it, and blocking the ladder on a service that is
+allowed to be down would be worse. **That argument covers some modules refused. It does
+not cover all of them.** A venture whose every curriculum was refused has no answer key
+and the gates above it are being run against a certification story that cannot start.
+
+Two boundaries, both deliberate:
+
+    some refused, some accepted   PASSES. The block is a distinction, not a tripwire.
+    SimForge unreachable          PASSES. A service that is down has not refused
+                                  anything, and CI runs no SimForge at all.
+
+`violations` is what tells them apart - it exists only on a 422 the validator produced.
+The evidence now carries `modules_refused` and `modules_unreachable` separately.
+
+### Ruling 3: how the agent is chosen, and why nobody was ever named
+
+The gate sent `agent_id` only when a module had exactly one certification candidate.
+**Measured on greenstone: ten candidates for `assign_contract` and `buyer_match`, none
+for `comp_analysis` and `property_lookup`.** Never one. So the field was NULL on every
+run ever opened, and SimForge skipped all of them - `battery.py` requires `run.agentId`.
+
+It was also the wrong population. `_certification_candidates` reads
+`requires_certification`, which deliberately **excludes** the appointed agent: it is the
+pool of people who could fill a seat and hold no certification yet. Not one of the ten
+holds a grant.
+
+**The agent is the holder of a live grant for (venture, forge, module)** - the population
+Gate 9 reads certification through, and the same one `sweeps._grant_holders` already used
+to write the verdict. If the exam named a population the verdict could not be written
+for, the ladder would test one set of agents and certify another.
+
+Consequences, each forced rather than chosen:
+
+    one run per holder      SimForge's battery scores `run.agentId` - one agent - so a
+                            module two agents hold is two exams. greenstone's
+                            `buyer_match` is held by Ronan Valek and Seraphine Valek.
+    the ref names the agent `office:{venture}:{forge}:{module}@{agent8}:{hash12}`.
+                            Without it both runs mint the SAME ref, `open_run` is
+                            idempotent on it, and the second exam lands silently on the
+                            first agent's run - one verdict read back as two results.
+                            This is the department-collision argument, one unit over.
+    0044 adds the column    `curriculum_submission.office_agent_id`. The sweep no longer
+                            reconstructs the population; it reads who sat it. Fanning
+                            one agent's verdict across every holder would certify people
+                            who never took the exam.
+    a module with no holder Not submitted at all, and reported as a roster finding.
+                            greenstone's `underwrite_deal` is the live case - Deal
+                            Underwriter is unfilled. An exam nobody sits owes a verdict
+                            nothing can read.
+
+The curriculum still goes over **once** per module - it is the same text for every taker.
+The run is what is per agent.
+
+`certification_units_requested` now declares the takers rather than the candidates.
+SimForge consumes only `module_id` from that list, which is exactly why it had to be
+fixed here: nothing on the far side would ever have complained.
+
+### A test that had been depending on a service being up
+
+`test_pipeline._to_gate_10` drove Gate 8 against whatever SimForge happened to be
+listening on the developer's machine. It was green while Gate 8 could not block. The
+block made that dependency visible as sixteen failures in gates the helper only passes
+through, so it now uses an accepting double. The hand-over keeps its own suites, and
+they assert the real verdicts including the block.

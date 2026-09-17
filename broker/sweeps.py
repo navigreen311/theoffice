@@ -377,8 +377,12 @@ async def _grant_holders(
     """
     async with conn.cursor() as cur:
         await cur.execute(
+            # `superseded_at IS NULL`: a retired grant confers nothing, so its holder
+            # is not who a verdict is about. 0043's rule, in the one place that asks
+            # this question from the other direction.
             "SELECT DISTINCT office_agent_id FROM agent_forge_grant "
             "WHERE venture_id = %s AND forge_id = %s AND module_id = %s "
+            "  AND superseded_at IS NULL "
             "ORDER BY office_agent_id",
             (venture_id, forge_id, module_id),
         )
@@ -575,7 +579,17 @@ async def _ingest_one(
             {"submission_id": str(submission_id), "reason": str(exc)}
         )
 
-    if unit == "A":
+    targets: list[dict[str, Any]]
+    if unit == "A" and sub.get("office_agent_id") is not None:
+        # THE SUBMISSION NAMES WHO SAT IT, so nothing has to be reconstructed. Ruled 17
+        # September 2026 and carried by 0044. SimForge's battery scores `run.agentId` -
+        # one agent - so this verdict is that agent's result and writing it onto every
+        # holder of the module would certify people who never took the exam.
+        targets = [{"office_agent_id": sub["office_agent_id"], "department": None}]
+    elif unit == "A":
+        # A row from before 0044, which named nobody. The old reconstruction, kept
+        # verbatim for exactly those rows: they are real submissions the sweep may still
+        # owe a verdict on, and refusing them now would strand them.
         holders = await _grant_holders(
             conn,
             venture_id=sub["venture_id"],
@@ -588,9 +602,7 @@ async def _ingest_one(
             # submission stays open, because the verdict is still owed to somebody.
             findings["no_grant_holders"].append(str(submission_id))
             return
-        targets: list[dict[str, Any]] = [
-            {"office_agent_id": h, "department": None} for h in holders
-        ]
+        targets = [{"office_agent_id": h, "department": None} for h in holders]
     else:
         targets = [{"office_agent_id": None, "department": sub["department"]}]
 

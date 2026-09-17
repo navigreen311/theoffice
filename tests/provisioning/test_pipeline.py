@@ -62,8 +62,24 @@ def _verdicts(outcomes) -> dict[str, str]:
     return {o.gate: o.verdict for o in outcomes}
 
 
-async def _to_gate_10(conn, operator, signer, *, held_out=None):
-    """Everything up to and including a valid Gate 10 signature. Returns the run id."""
+async def _to_gate_10(conn, operator, signer, *, held_out=None, simforge=None):
+    """Everything up to and including a valid Gate 10 signature. Returns the run id.
+
+    **Gate 8 is given an accepting SimForge, and that is a fix rather than a shortcut.**
+    Every test that calls this is about gates 9 to 12 - signatures, activation,
+    revocation - and none of them is about the hand-over. Until 17 September 2026 this
+    helper drove Gate 8 against whatever SimForge happened to be listening on the
+    developer's machine: green if one was running and the venture had answer keys, and
+    silently dependent on an external service otherwise. Gate 8 now blocks when SimForge
+    accepts nothing, so that dependency became visible as sixteen failures in gates this
+    helper only passes through.
+
+    The hand-over has its own suites - `test_simforge_handover.py` and
+    `test_gate_8_names_the_agent.py` - and they assert the real verdicts, including the
+    block. Nothing is hidden here that is not asserted there.
+    """
+    from tests.provisioning.test_simforge_handover import SimForgeAccepts
+
     run_id = await provisioning.start_run(
         conn, venture_id=VENTURE, started_by=operator.human_id
     )
@@ -74,6 +90,7 @@ async def _to_gate_10(conn, operator, signer, *, held_out=None):
     outcomes = await provisioning.advance(
         conn, run_id=run_id, actor=operator.human_id,
         held_out=held_out or HeldOutPasses(),
+        simforge=simforge or SimForgeAccepts(),
     )
     gate_10 = next(o for o in outcomes if o.gate == "10")
     await humans.sign_off(

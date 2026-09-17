@@ -205,8 +205,14 @@ async def test_no_curriculum_is_submitted_for_a_department(
     keyed `(forgeId, moduleId, contentHash)`. A department hand-over would therefore
     either 422 on the missing module or bind an instruction set under an invented one.
 
-    So every curriculum this gate sends names a real module, and the number of them is
-    the number of per-module rows. A unit B is `run_start` and the correlation row.
+    So every curriculum this gate sends names a real module, and the modules it names
+    are exactly the modules the per-module rows name. A unit B is `run_start` and the
+    correlation row.
+
+    **Modules, not rows.** Since 17 September 2026 a module carries one row per agent
+    sitting its exam - the curriculum is the same text for every taker and goes over
+    once, the run is what is per agent. Comparing counts rather than module sets would
+    now fail for a reason that has nothing to do with departments.
     """
     conn, run_id = at_gate_8
     fake = SimForgeAccepts()
@@ -217,8 +223,12 @@ async def test_no_curriculum_is_submitted_for_a_department(
     )
 
     per_module = await _rows(conn, department=False)
-    assert len(fake.calls) == len(per_module), (
+    submitted = {c["payload"]["instruction_set_ref"]["module_id"] for c in fake.calls}
+    assert submitted == {r["module_id"] for r in per_module}, (
         "a curriculum was submitted that no per-module row accounts for"
+    )
+    assert len(fake.calls) == len(submitted), (
+        "one module's curriculum went over more than once"
     )
     for call in fake.calls:
         module_id = call["payload"]["instruction_set_ref"]["module_id"]
