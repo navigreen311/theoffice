@@ -9528,7 +9528,7 @@ That second 119 is the sharpest evidence for this rule that exists. Two sessions
 repository, one afternoon, the same number, neither able to see the other - and the only
 reason it was found at all is that both happened to touch the same working tree.
 
-## NEXT. One session per checkout, and the two ways two sessions corrupted each other
+## 118. One session per checkout, and the two ways two sessions corrupted each other
 
 **Ruling by Ivan Green, 17 September 2026.** Only one Claude Code session works in a repo
 checkout at a time. **Parallel sessions use separate worktrees and separate test
