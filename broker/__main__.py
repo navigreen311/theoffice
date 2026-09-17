@@ -320,6 +320,7 @@ async def _sync_roster(confirm: bool) -> int:
             ("department", "Changed department"),
             ("role", "Changed role"),
             ("reporting", "Changed manager"),
+            ("title", "Changed title"),
         ):
             rows = diff.of(kind)
             if not rows:

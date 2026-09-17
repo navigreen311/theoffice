@@ -67,7 +67,7 @@ class SyncError(Exception):
 class Change:
     """One agent's difference between the Village and The Office."""
 
-    kind: str  # new | departed | department | role | reporting
+    kind: str  # new | departed | department | role | reporting | title
     village_agent_ref: str
     agent_name: str
     detail: str
@@ -97,6 +97,7 @@ class Diff:
             "department_changes": len(self.of("department")),
             "role_changes": len(self.of("role")),
             "reporting_changes": len(self.of("reporting")),
+            "title_changes": len(self.of("title")),
             "changes": [
                 {
                     "kind": c.kind,
@@ -133,7 +134,7 @@ async def _office_roster(conn: AsyncConnection) -> dict[str, dict[str, Any]]:
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
             "SELECT village_agent_ref, agent_name, department, role_key, reports_to, "
-            "       status "
+            "       title, status "
             "FROM village_agent"
         )
         return {r["village_agent_ref"]: dict(r) for r in await cur.fetchall()}
@@ -171,6 +172,18 @@ async def diff(conn: AsyncConnection) -> Diff:
                 "reporting", ref, name,
                 f"{here.get('reports_to') or 'nobody'} -> "
                 f"{agent.get('reports_to_id') or 'nobody'}",
+            ))
+        # A TITLE CHANGE IS A CHANGE. `apply` has always written `title = EXCLUDED.title`,
+        # so a retitle landed in the table while the report said "No change" - the one
+        # field the sync carried and never compared. Greenstone's Acquisition Analyst is
+        # what surfaced it: Victor Serath's seat was repurposed from Trend Analyst 2, and
+        # a sync would have applied the new title silently. What a sync writes and what a
+        # sync reports are meant to be the same list.
+        if (here.get("title") or "") != (agent.get("title") or ""):
+            result.changes.append(Change(
+                "title", ref, name,
+                f"{here.get('title') or 'no title'} -> "
+                f"{agent.get('title') or 'no title'}",
             ))
 
     for ref, here in sorted(office_rows.items()):

@@ -359,3 +359,50 @@ async def test_the_stored_origin_agrees_with_the_classifier(clean):
         f"stored origin disagrees with the classifier for {len(disagreed)} accounts: "
         f"{[r['display_name'] for r in disagreed[:5]]}"
     )
+
+# ================================================== A RETITLE IS A CHANGE
+
+async def test_a_retitle_is_reported_as_exactly_one_change(clean, monkeypatch):
+    """The one field the sync carried and never compared.
+
+    `apply` has always written `title = EXCLUDED.title`, so a retitle landed in the
+    table while the report said "No change". What a sync writes and what a sync reports
+    are meant to be the same list, and for this field they were not.
+
+    Greenstone's Acquisition Analyst is the case that surfaced it: Victor Serath's seat
+    was repurposed from `Trend Analyst 2`, and before this the new title would have
+    been applied silently.
+
+    Asserted as EXACTLY one change, not "a title change is present". The bug was a
+    missing comparison; a test that only checked for its presence would pass against a
+    version that reported the retitle twice, or that reported every agent every run.
+    """
+    _village_says(monkeypatch, [VILLAGE_AGENT])
+    actor = await _make("Sync operator", "sync")
+    _mark_real(clean, actor)
+    async with connection() as conn:
+        await sync_roster.apply(conn, actor=actor, confirmed=True)
+
+    # Nothing else moves - same ref, same department, same role_key, same manager.
+    _village_says(monkeypatch, [{**VILLAGE_AGENT, "title": "Acquisition Analyst"}])
+    async with connection() as conn:
+        result = await sync_roster.diff(conn)
+
+    assert len(result.changes) == 1, result.summary()
+    change = result.changes[0]
+    assert change.kind == "title"
+    assert change.village_agent_ref == VILLAGE_AGENT["agent_id"]
+    assert change.detail == "Research Analyst -> Acquisition Analyst"
+    assert result.summary()["title_changes"] == 1
+
+
+async def test_an_unchanged_title_is_not_a_change(clean, monkeypatch):
+    """The other half. A comparison that always fires is not a comparison."""
+    _village_says(monkeypatch, [VILLAGE_AGENT])
+    actor = await _make("Sync operator", "sync")
+    _mark_real(clean, actor)
+    async with connection() as conn:
+        await sync_roster.apply(conn, actor=actor, confirmed=True)
+        result = await sync_roster.diff(conn)
+
+    assert result.empty, result.summary()
