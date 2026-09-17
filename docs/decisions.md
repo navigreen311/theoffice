@@ -9710,7 +9710,7 @@ they assert the real verdicts including the block.
 
 ---
 
-## NEXT. One Acquisition Analyst seat, and a mutation that had quietly stopped mutating
+## 120. One Acquisition Analyst seat, and a mutation that had quietly stopped mutating
 
 **Built 2026-09-16.** The Village now carries exactly one Acquisition Analyst - Victor
 Serath, retitled from Trend Analyst 2 and moved to report to the Research Director - so
