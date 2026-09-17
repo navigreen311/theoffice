@@ -267,7 +267,7 @@ def _coverage(
     hashes: dict[str, str],
     content: ScenarioContentSet,
 ) -> list[Coverage]:
-    """Eight dimensions, each with its denominator and its misses named."""
+    """Nine dimensions, each with its denominator and its misses named."""
     positions = {p.position_title for p in roles.positions}
     roles_with_domain = {s.role for s in domain}
     modules = {m for p in roles.positions for m in p.module_ids}
@@ -278,6 +278,11 @@ def _coverage(
     }
     modules_with_hash = {m for m in modules if hashes.get(m)}
     modules_with_content = {m for m in modules if content.for_module(m) is not None}
+    # Authored, validated, and waiting for Ivan. `for_module` returns None for a draft,
+    # so a drafted module is indistinguishable from an unwritten one in every count
+    # above - and they are completely different pieces of work. This is the line that
+    # keeps them apart.
+    modules_drafted = modules & set(content.drafts())
 
     # A class is accounted for when a scenario exists for it - authored, mechanical or
     # declared absent. "Every submittable class accounted for" is what SimForge needs
@@ -343,6 +348,23 @@ def _coverage(
             covered=len(modules_with_content),
             denominator=len(modules),
             uncovered=sorted(modules - modules_with_content),
+        ),
+        Coverage(
+            # DRAFTED, NOT SUBMITTED. Ruled 17 September 2026: answer keys are drafted
+            # by Claude and approved by Ivan Green, and a draft is never submitted.
+            #
+            # `covered` is what is still WAITING, which is the wrong way round for a
+            # coverage dimension and is deliberate: every other line here counts work
+            # that is done, and a line counting drafts as progress would report a
+            # venture as nearly certified when nobody had approved anything. The
+            # denominator is the modules with no approved content, so a venture with
+            # nothing drafted and nothing written reads 0 of N, and one whose every gap
+            # is drafted reads N of N - "all of the missing work is written and waiting"
+            # rather than "the work is done".
+            dimension="modules_with_a_draft_answer_key_awaiting_approval",
+            covered=len(modules_drafted),
+            denominator=len(modules - modules_with_content),
+            uncovered=sorted(modules - modules_with_content - modules_drafted),
         ),
         Coverage(
             # THE RECORDED CAP. Constant by construction, and that is the point: the

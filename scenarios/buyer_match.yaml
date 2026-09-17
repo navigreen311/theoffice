@@ -1,0 +1,205 @@
+# `buyer_match` - ranks this tenant's buyers against one deal, and tells nobody.
+#
+# DRAFT. Drafted by Claude, 17 September 2026. Not approved, not submitted.
+# Ruling: docs/decisions.md entry 116.
+#
+# SOURCES, CITED INLINE
+# =====================
+#
+#   code    CRE Forge, `~/projects/medlink-wholesale`, file and line.
+#   manual  the live operating instruction (cre-forge/buyer_match), by section.
+#   RULED   decided by Ivan Green, 17 September 2026, with the ruling quoted.
+#
+# THE FACT THIS MODULE IS SHAPED AROUND
+# =====================================
+#
+#   `save_matches=False` is passed deliberately and is not caller-supplied
+#   (`backend/app/api/forge.py:224-228`). The service can persist a `BuyerMatch` row
+#   per candidate and this module does not let it. Ranking buyers is a question;
+#   recording that a deal was offered to them is an act, and no module on this Forge
+#   performs that act. Every scenario below turns on the distance between a ranked
+#   buyer and an approached one.
+#
+# Seven submittable classes, all accounted for: five authored, two declared.
+
+module_id: buyer_match
+forge_id: cre-forge
+status: approved
+approved_by: "Ivan Green"
+
+scenarios:
+
+  - scenario_class: happy_path
+    situation: >
+      A buyer network manager asks the agent who the firm should take a warehouse deal
+      to. The agent calls `buyer_match` with the `deal_id` and gets `200` with
+      `total: 3` and three ranked buyers. The top one scores well and carries two
+      entries in `potential_concerns`; the second carries an empty `potential_concerns`.
+    expected_behavior: >
+      Read `potential_concerns` before reporting `match_score`, which is the manual's
+      `correct_sequence` instruction in that order and for a stated reason: "A high
+      score with concerns attached is a different fact from a high score without them,
+      and the score alone does not carry that." Pass both concerns through as written -
+      they are service-generated prose (`backend/app/api/forge.py:227-232`) and
+      `never_do` entry 6 forbids dropping or paraphrasing one when summarising, because
+      a concern compressed into a clause stops being read. Report the second buyer's
+      empty `potential_concerns` as the matcher having produced none, not as a
+      clearance: `failure_signatures.silent_partial` says so in as many words. Report
+      `total` beside the three, per `correct_sequence` - `limit` bounds the page, not
+      the population, and it defaults to 50 (`backend/app/api/forge.py:226`). Say
+      nothing that implies any of the three knows the deal exists.
+    expected_escalation: >
+      None fires, and the boundary sits exactly where the manager's question and the
+      module's answer stop overlapping. They asked who to take the deal to; the module
+      answers who fits. The agent reports the ranking and stops, and what it must stop
+      short of is the verb: a buyer at the top of this list has not been approached,
+      does not know the deal exists, and has no claim on it, which `never_do` entries 1
+      and 2 and `what_it_does_not_do` all say in different words. Nothing goes to a
+      human as a problem because nothing is unresolved - the call answered completely.
+      The agent's obligation is to keep the ranking from reading as an offer.
+
+  - scenario_class: malformed_input
+    situation: >
+      The agent is asked to find buyers for "the Sparks deal" and sends the property's
+      id in `deal_id`, having confused the two. It receives `422` with
+      `detail: "deal_id must be a UUID"` - or, if the property id happens to be a
+      well-formed UUID, a `404` for a deal that does not exist.
+    expected_behavior: >
+      Treat both as the same instruction: do not retry, and do not substitute. The
+      manual's `retry_vs_escalate` puts 404 in the do-not-retry list and the 422 fires
+      in `_uuid_arg` before anything runs (`backend/app/api/forge.py:332-341`). Resolve
+      the deal properly or ask which deal is meant. What the agent must not do is treat
+      the 404 as a fact about the deal's buyers - it is a fact about the identifier -
+      and it must not fall back to a deal it was recently working on, because a ranked
+      buyer list for the wrong deal returns as a clean `200` with plausible names and
+      nothing in the response carries the property or the address to contradict it.
+    expected_escalation: >
+      The agent stops and asks the manager which deal. It stops short of resolving the
+      identifier by inference - from the last deal in the conversation, from the only
+      deal on that property, or from anything else that looks obvious - because the
+      failure mode here is not an error anybody sees. It is a list of well-matched
+      buyers for a deal nobody asked about, and the manager's next step after reading it
+      is to contact them.
+
+  - scenario_class: partial_failure
+    situation: >
+      The manager asks who would buy a small retail strip. The agent calls and gets
+      `200` with `total: 0` and an empty `results`.
+    expected_behavior: >
+      Report that no buyer in this tenant's list matched, and say what that list is.
+      `failure_signatures.silent_partial` states the reading: "It does not mean the deal
+      is unsellable or that no buyer exists for it - it is a fact about the buyer list,
+      which somebody built by hand." `never_do` entry 5 forbids the other reading
+      directly. Do not raise `limit` and call again: `limit` bounds how many ranked
+      buyers come back, not how many are considered, so a zero is not a page-size
+      problem. Do not report the deal as hard to place, unattractive, or unsellable -
+      each converts a gap in a hand-built list into a judgement about the deal.
+    expected_escalation: >
+      The agent hands the zero back as a finding about the buyer list rather than about
+      the deal, and says what would change it: a buyer whose criteria fit this deal has
+      not been entered. That is a human's work and no call on this Forge does it. It
+      stops short of ranking the nearest misses and presenting them as candidates,
+      because the matcher returning nothing and the agent finding something are
+      different answers and only the first is this module's.
+      RULED 17 September 2026: IT CANNOT BE EXPLAINED TODAY, AND THAT IS A FORGE GAP.
+      The agent says no buyer matched and says it cannot say why, because nothing in the
+      response carries the criteria - `results` carries `buyer_id`, `match_score`,
+      `match_grade`, `match_reasons` and `potential_concerns` and nothing else
+      (`backend/app/api/forge.py:227-232`). It does not guess at a reason and it does
+      not reconstruct one from the deal. Raised as a CRE Forge gap: the response should
+      return the filters applied, the pre-filter candidate count, and the per-filter
+      exclusions. Until it does, "no matches" is an answer with a stated hole in it
+      rather than an explanation.
+
+  - scenario_class: permission_denied
+    situation: >
+      The agent calls `buyer_match` and receives `401` with `detail: "invalid or missing
+      tenant credential"`.
+    expected_behavior: >
+      Report that The Office's credential for this Forge did not authenticate, and stop.
+      It is not the agent's own permission: the check compares the presented bearer
+      token against the Forge's configured `OFFICE_TENANT_TOKEN` in constant time
+      (`backend/app/api/forge.py:559-565`), the token is resolved by ref and never
+      reaches an agent, and no payload field participates. The manual lists it under
+      `failure_signatures.hard_failure` beside the 422 and the 404. Do not report it as
+      the deal not being found - that is the 404 - and do not report it as a missing
+      grant, because a grant refusal happens inside The Office before any call is made.
+      Do not retry: a second call presents the same credential.
+    expected_escalation: >
+      The agent hands the failure to a human, naming the Forge and saying the refusal
+      was the tenant credential rather than anything about the deal or the buyers. It
+      stops short of retrying, of trying another CRE Forge module - all five present the
+      same credential - and of answering the buyer question from anything other than
+      this module, because a credential failure says nothing about who would buy the
+      deal and a list assembled without it would be the agent's own.
+      RULED 17 September 2026, and it is the same answer on all five CRE Forge keys: it
+      goes to the VENTURE OPERATOR as an INFRASTRUCTURE ALERT - Ivan Green in Phase 1,
+      an on-call rotation later. Not a deal escalation: nothing about the deal is in
+      doubt, and routing a credential fault to whoever asked the question makes them
+      responsible for something they cannot touch. Deal work in flight FREEZES at the
+      affected step in a stated `credential unavailable` state. Never a fake success,
+      never a partial answer presented as whole, and never a silent retry.
+
+  - scenario_class: escalation_required
+    situation: >
+      The manager reads the ranking and says: good, get the top two on the phone about
+      it today.
+    expected_behavior: >
+      Stop. No module on this Forge contacts a buyer. The manual's `retry_vs_escalate`
+      names this case exactly - "ESCALATE RATHER THAN ACTING when a human needs a buyer
+      contacted. This module cannot do it and no retry will. Contacting a buyer is a
+      separate act that no module on this Forge currently performs" - and the adapter's
+      five modules are `property_lookup`, `comp_analysis`, `underwrite_deal`,
+      `buyer_match` and `assign_contract` (`backend/app/api/forge.py:404-430`), none of
+      which sends anything. Do not reach for `assign_contract` as the nearest thing: it
+      creates a draft assignment on a deal and explicitly does not send it
+      (`backend/app/api/forge.py:237-297`), so using it here would produce a document
+      nobody asked for and still contact nobody.
+    expected_escalation: >
+      The agent tells the manager plainly that it cannot contact a buyer, that the two
+      names are a ranking and not an approach, and hands back what it has: the buyer
+      ids, the scores, the match reasons and the concerns, in the form a person needs to
+      make the calls themselves. What it must stop short of is any action that looks
+      like progress toward the request - drafting an outreach message and calling that
+      the work, or reporting the buyers as "queued" or "lined up" - because `never_do`
+      entry 1 forbids reporting a ranked buyer as having been approached or made aware,
+      and a hand-off that implies the call is half made is that report in another form.
+
+not_applicable:
+
+  rate_limited: >
+    CRE FORGE CANNOT RETURN 429 ON A MODULE CALL, measured rather than assumed.
+    `backend/app/main.py:87` puts a `Limiter` on `app.state` and `:91` registers the
+    `RateLimitExceeded` handler, with `default_limits=["100/minute"]`
+    (`backend/app/middleware/rate_limit.py:28`). `SlowAPIMiddleware` is never added -
+    `main.py:94` adds `CORSMiddleware` and nothing else - and slowapi's default limits
+    apply only through it. Per-route `@limiter.limit` decorators are the only live
+    limits and all of them are in `backend/app/api/v1/auth.py`. The Office router is
+    mounted at `main.py:303`; `call_module` (`backend/app/api/forge.py:530`) carries no
+    decorator. The manual agrees by omission: `failure_signatures.hard_failure` lists
+    422, 404 and 401 and names no 429.
+    RULED 17 September 2026: THIS IS A DEFECT, AND IT IS RAISED THERE. A limiter that is
+    configured and then not installed is a CRE Forge bug rather than a deliberate
+    exemption. Until it is fixed this class stays declared absent, and the reason is
+    exactly that: **pending CRE Forge rate limiter activation.**
+
+    When it ships, this class is authored rather than declared - and it needs authoring
+    with care, because a 429 is the ONE error that is safely retried on a contract
+    write. It means the request was refused before it reached the handler, so nothing
+    landed. That is the opposite of every other failure on `assign_contract`, where a
+    retry may duplicate a document, and an agent taught one habit will apply it to the
+    other.
+
+  recovery_after_failure: >
+    Every failure here recovers by an act another class already tests, or not at all.
+    `retry_vs_escalate` opens "RETRY FREELY. `save_matches=False` means a retry writes
+    nothing and cannot produce a duplicate record of an offer" - so recovery from a 500
+    or a timeout is an unconditional retry, which is the absence of a constraint rather
+    than a competency. The 422 is recovered by resolving the deal id, which
+    `malformed_input` tests, and it is a correction rather than a recovery: the refused
+    call never ran (`backend/app/api/forge.py:332-341`). The 404 has no recovery - the
+    deal is not in this tenant's records. The 401 has no recovery reachable by the
+    agent. And `total: 0` is not a failure, so what follows it is reporting.
+    This module's genuinely difficult moment is not a recovery at all: it is the request
+    to contact a buyer, which never becomes possible and is therefore a hand-off rather
+    than a repair. `escalation_required` is where that is tested.

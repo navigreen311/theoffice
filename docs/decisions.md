@@ -9834,3 +9834,230 @@ event, so the hash-chained log would hold no record that it happened."* The same
 a hand-run function call. The token has been reissued again through
 `POST /api/humans/{id}/token`, which writes the event, so the current credential has a
 provenance the previous one did not.
+
+## 122. Greenstone's answer keys, drafted - and what the twenty existing ones actually say
+
+Ruling 1 of entry 116: every venture needs an answer key for every module its agents
+operate. Greenstone had none. This drafts all five, marks every one **draft**, and
+builds the mechanism that keeps a draft out of SimForge's hands.
+
+### The five, and what is in them
+
+`scenarios/{assign_contract,buyer_match,comp_analysis,property_lookup,underwrite_deal}
+.yaml`. Each accounts for all seven submittable classes:
+
+    assign_contract   6 authored, 1 declared
+    underwrite_deal   6 authored, 1 declared
+    buyer_match       5 authored, 2 declared
+    comp_analysis     5 authored, 2 declared
+    property_lookup   5 authored, 2 declared
+
+Every expected behaviour and escalation cites its source: CRE Forge code by file and
+line (`~/projects/medlink-wholesale`), the module's live operating instruction by
+section, or **OPEN** - written as a question for Ivan rather than answered. No business
+rule is invented.
+
+Eleven OPEN questions were recorded across the five. **All are now answered** - see the
+rulings below; what follows describes the file as it was drafted. The one that recurred
+on all of them was **who receives a Forge-credential fault?** A 401 is infrastructure - not the venture
+operator's to fix and not the analyst's - and neither the manuals nor
+`broker/escalation.py` names a recipient. The others are per module, including whether
+an agent may widen a comp radius on a human's instruction, whether `underwrite_deal`
+should refuse a property with neither asking price nor square footage rather than
+return the $300,000 default, and how an agent is meant to satisfy `assign_contract`'s
+instruction to check for an existing draft when no module on this Forge lists a deal's
+contracts.
+
+### `rate_limited` is declared absent on all five, and it was measured
+
+**CRE Forge cannot return 429 on a module call.** `backend/app/main.py:87` puts a
+`Limiter` on `app.state`, `:91` registers the `RateLimitExceeded` handler, and the
+limiter carries `default_limits=["100/minute"]`
+(`backend/app/middleware/rate_limit.py:28`) - so it reads as a limited application.
+**`SlowAPIMiddleware` is never added**: `main.py:94` adds `CORSMiddleware` and nothing
+else, and slowapi's default limits apply only through that middleware. The only live
+limits are per-route `@limiter.limit` decorators, every one of them in
+`backend/app/api/v1/auth.py`. The Office router is mounted at `main.py:303` and
+`call_module` (`backend/app/api/forge.py:530`) carries no decorator.
+
+A limiter configured and then not installed looks like a CRE Forge defect rather than a
+deliberate exemption. Recorded in all five files as OPEN, not raised.
+
+### `status` is required, and neither default was acceptable
+
+Ruling 4 needs a mechanism, not a convention. `scenario_content` now requires
+`status: draft|approved` on every file, with no default - defaulting to `approved`
+submits unreviewed prose that SimForge then **grades an agent against**, and defaulting
+to `draft` silently stops a venture that is already certifying.
+
+`ScenarioContentSet.for_module` returns `None` for a draft, so a drafted module is in
+exactly the position of an unwritten one as far as the generator, Gate 8 and SimForge
+are concerned. `drafts()` and a new coverage dimension keep the difference visible:
+"nobody has written it" and "somebody wrote it and it is waiting for Ivan" are different
+pieces of work. The golden moved by exactly one line - `modules_with_a_draft_answer_key
+_awaiting_approval: 5 of 5` - and nothing else, which is the proof that no draft prose
+reached the curriculum.
+
+`approved_by` is required on an approved file and refused on a draft. An approval nobody
+is answerable for is the shape a rubber stamp has, and a name beside a draft is a
+signature on something nobody signed.
+
+### THE TWENTY EXISTING FILES ARE DRAFTS. GRANDFATHERING IS NOT AN APPROVAL EVENT
+
+**Ruled by Ivan Green, 17 September 2026**, refusing the argument this entry first made:
+
+> Burkham's 20 pre-existing answer keys are not approved. Grandfathering is not an
+> approval event. They are marked draft until Ivan Green reviews them, and a draft is
+> never submitted to SimForge.
+
+The refused argument was that `approved` described the status quo - the twenty had been
+submitted on every Gate 8 run since they were written, and marking them draft would stop
+a venture that was already certifying. **It was the wrong argument.** It turns "has been
+used" into "has been reviewed", which is the exact substitution the approval rule exists
+to prevent. A key nobody read is a key nobody read, however long it has been in service.
+
+So all twenty carry `status: draft` and no `approved_by`, and each says at the top that
+it was briefly marked approved and why that was refused.
+
+`test_no_key_is_approved_by_grandfathering` pins it. It deliberately does NOT assert
+that every key is a draft - that would fail the moment Ivan approves one, which is the
+intended next step. It asserts the narrower, permanent thing: an `approved_by` that
+describes a process rather than a person is the loophole coming back under another word.
+
+### What it costs, measured rather than estimated
+
+    every answer key in the repository   25, all draft. `for_module` returns content for
+                                         NONE of them.
+    greenstone                           unchanged - its five were already drafts.
+                                         15 operation scenarios, all with empty
+                                         `expected_behavior`, which SimForge refuses.
+    burkham's 10 live modules            withheld. Gate 8 would submit curricula with
+                                         empty required fields, SimForge would refuse
+                                         all ten, and entry 119's rule then BLOCKS the
+                                         gate on zero accepted.
+
+**Run 8ed2f39a is unaffected, and not because this is harmless: it is already aborted.**
+It was blocked at Gate 9 earlier the same day and has since been abandoned. Nothing this
+ruling does reaches it.
+
+**No Burkham certification is touched.** All 90 certification rows behind Burkham's
+grants are `certified` with `simforge_verdict IS NULL` - every one bootstrap-attested.
+Not one was earned from an answer key, so withdrawing the keys withdraws nothing that
+was earned. What it removes is the ability to earn any more until Ivan reviews them.
+
+**And Burkham could not run the ladder today regardless.** Its live Pack 0.10.0 fails
+generation before Gate 3: *"Intake Concierge: no stage declared for
+capitalforge/client_read, capitalforge/client_read_pii, capitalforge/record_consent."*
+Confirmed against `main` as well, so it predates this change and is a Pack gap, not a
+consequence of the ruling. Recorded so nobody later reads Burkham's silence as this
+entry's doing.
+
+### The eight open questions, answered - and Greenstone's five keys approved
+
+**Ruled by Ivan Green, 17 September 2026.** The brief asked eight questions; all eight
+are settled. The five Greenstone keys now carry `status: approved` and
+`approved_by: "Ivan Green"`. **Burkham's twenty stay drafts** - they have not been
+reviewed, and this ruling does not reach them.
+
+    1  credential failure   Goes to the VENTURE OPERATOR as an infrastructure alert -
+                            Ivan Green in Phase 1, an on-call rotation later. NOT a deal
+                            escalation. Deal work in flight FREEZES at the affected step
+                            in a stated `credential unavailable` state. Never a fake
+                            success.
+    2  the rate limiter     A defect, raised at CRE Forge. Until fixed, rate-limit
+                            scenarios stay `not_applicable` with the reason **"pending
+                            CRE Forge rate limiter activation"**. When it ships they are
+                            authored, noting that a 429 is the one error safely retried
+                            on a contract write, because it never landed.
+    3  missing square feet  WARN. Underwriting silently returns exactly $300,000
+                            otherwise. Missing inputs render as no-data, never a number.
+    4  widening comps       A human MAY instruct it. The agent never widens on its own.
+                            Every widening records who asked, when, and why.
+    5  "no matches"         Cannot be explained today. Raised as a CRE Forge gap: return
+                            the filters applied, the pre-filter candidate count, and the
+                            per-filter exclusions.
+    6  underwriting a       REFUSE a property with no asking price and no square footage.
+       property with        No analysis beats a default stored as analysis. The refusal
+       neither figure       is visible on the deal.
+    7  a failed re-run      Must not leave the old figure reading as current. Raised as a
+                            CRE Forge gap: a freshness state on every derived figure.
+    8  an existing draft    The agent asks a human to check. Raised as a CRE Forge gap: a
+                            list-contracts-by-deal endpoint, plus an idempotency key that
+                            actually refuses a duplicate.
+
+**Four of the eight are CRE Forge gaps rather than agent policy** - 2, 5, 7 and 8. That
+is the shape worth noticing: half the questions an answer key could not answer were
+questions the Forge does not let anybody answer. Each is recorded here as raised, and
+each answer key says what the agent does until the gap closes.
+
+### Two standing patterns, ruled in their own right
+
+**NO SILENT DEFAULTS.** A system must not produce a plausible number from a missing or
+stale input without labelling it. **Refusing at the source beats catching it
+downstream.**
+
+    Rulings 3, 6 and 7 are all instances. So is the $300,000 constant, so is
+    `arv_confidence: 0.10`, and so is the 2000-square-foot substitution - three separate
+    places on one Forge where an absence became a figure. This is why ruling 6 refuses
+    rather than annotates: an annotation is a catch downstream, and the annotation is
+    the part that gets dropped in the retelling.
+
+**HUMAN OVERRIDE WITH AUDIT.** Any human authorisation of something agent policy would
+block records **actor, timestamp and reason**, and is reviewed by the Compliance Review
+Board.
+
+    Ruling 4 is the instance here - a human may lift the no-widening rule, and the
+    record is the condition rather than a formality, because a widened comp set is
+    indistinguishable from a narrow one once the parameters are gone. The pattern
+    generalises past this Forge: it is the shape every override takes, and it is what
+    keeps "a human said so" from being unfalsifiable.
+
+Both patterns are broader than CRE Forge and broader than answer keys. They are recorded
+as their own rulings so the next module that wants to substitute a default has something
+to be refused by, rather than a precedent buried in a scenario file.
+
+### Read-only: the twenty audited
+
+Asked: does each cover all seven classes, does every scenario have expected behaviour
+and escalation, does its module have a never-do list, is it marked approved?
+
+    all seven classes           20 of 20. No gaps.
+    behaviour and escalation    20 of 20. The loader refuses an empty one
+                                (`_REQUIRED_SCENARIO_KEYS`), so this could not be
+                                otherwise - which is why it was checked at the file
+                                rather than trusted.
+    marked approved             0 of 20 before this PR. No file carried any marker.
+    never-do list               11 of 20. The other nine have NO LIVE OPERATING
+                                INSTRUCTION AT ALL.
+
+**Burkham's live Pack has no gap.** Pack 0.10.0 operates ten capitalforge modules and
+every one has an answer key: `client_read`, `client_read_pii`,
+`compliance_manifest_assemble`, `portfolio_health`, `record_consent`,
+`regulator_dossier_export`, `restack_recommend`, `scan_communication`, `statement_pull`,
+`submit_application`. Nothing is missing for Burkham.
+
+**The nine with no instruction are funnelforge**, not Burkham: `capture_contact`,
+`distribute_referrer_briefing`, `read_funnel_analytics`, `schedule_blueprint_call`,
+`send_brief_cover`, `send_deliverable_cover`, `send_followup_no_engagement`,
+`send_intake_acknowledgment`, `send_scheduling_confirmation`. Gate 8 skips a module with
+no live instruction before it ever reads the content, so these nine answer keys cannot
+be submitted by any venture today. Authored and unreachable.
+
+**Six module names in `packs/burkham-wickmont.split.draft.yaml` have no answer key**:
+`assemble_evidence`, `build_packet`, `bureau_pull`, `client_lookup`, `lender_match`,
+`readiness_score`. That Pack is not live - burkham-wickmont runs 0.10.0 - so this is a
+gap in a draft Pack rather than in a running venture, and ruling 5's shape applies: the
+keys follow the Pack.
+
+### A shape difference worth knowing before anybody relies on the held-out classes
+
+CapitalForge's eleven never-do lists are **strings** - one markdown blob each. CRE
+Forge's five are **JSON arrays** of five to seven discrete entries. Both are non-empty
+and the hand-over copes: `_curriculum_payload` wraps a string in a one-element list
+(`broker/provisioning.py:1216-1218`).
+
+But SimForge derives the two held-out classes structurally from the never-do list it
+receives (`held_out.py:26-46`). Eleven CapitalForge modules therefore offer it **one**
+entry to derive from, and five CRE Forge modules offer five to seven. Measured, not
+inferred from the count. Nothing is broken today; it is the kind of difference that
+turns into "why did that module get one probe" later.

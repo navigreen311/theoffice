@@ -27,9 +27,16 @@ def write(tmp_path: Path, name: str, body: str) -> Path:
     return path
 
 
+# `status` is required since 17 September 2026 - an answer key is drafted and then
+# approved, and only an approved one is submitted. It is `approved` here because this
+# fixture stands in for a live content file, and the tests below are about the class
+# vocabulary rather than about approval. The approval rule has its own suite,
+# `tests/generators/test_answer_key_status.py`.
 MINIMAL = """
 module_id: {module}
 forge_id: capitalforge
+status: approved
+approved_by: "test fixture"
 scenarios:
   - scenario_class: happy_path
     situation: A human forwards a note and asks for it to be filed.

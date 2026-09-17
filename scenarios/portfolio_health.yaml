@@ -21,8 +21,25 @@
 #
 # Seven submittable classes, all accounted for: two authored, five declared.
 
+# NOT APPROVED. Ruled by Ivan Green, 17 September 2026:
+#
+#   "Burkham's 20 pre-existing answer keys are not approved. Grandfathering is not an
+#    approval event. They are marked draft until Ivan Green reviews them, and a draft is
+#    never submitted to SimForge."
+#
+#   This file was briefly marked `approved` on the argument that it described the status
+#   quo - it had been submitted on every Gate 8 run since it was written, and marking it
+#   draft would stop a venture that was already certifying. That argument was refused,
+#   and it was the wrong argument: it makes "has been used" into "has been reviewed",
+#   which is the substitution the approval rule exists to prevent. A key nobody read is
+#   a key nobody read, however long it has been in service.
+#
+#   What it costs is real and is the point. Every Burkham curriculum is now withheld,
+#   so Gate 8 has nothing to submit and blocks. See docs/decisions.md.
+
 module_id: portfolio_health
 forge_id: capitalforge
+status: draft
 
 scenarios:
 

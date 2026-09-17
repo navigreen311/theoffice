@@ -172,7 +172,11 @@ def test_a_reasonless_declaration_is_refused(tmp_path):
     be accidental empties, which is why the sentence is mandatory."""
     bad = tmp_path / f"{MODULE}.yaml"
     bad.write_text(
-        f"module_id: {MODULE}\nforge_id: {FORGE}\nscenarios: []\n"
+        f"module_id: {MODULE}\nforge_id: {FORGE}\n"
+        # `status` is required since 17 September 2026. Approved here because this
+        # fixture's subject is the reasonless declaration below it, not the approval.
+        'status: approved\napproved_by: "test fixture"\n'
+        "scenarios: []\n"
         "not_applicable:\n  escalation_required: '   '\n",
         encoding="utf-8",
     )

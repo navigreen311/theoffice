@@ -1,0 +1,240 @@
+# `property_lookup` - a pure read over this tenant's property records.
+#
+# DRAFT. Drafted by Claude, 17 September 2026. Not approved, not submitted.
+# Ruling: docs/decisions.md entry 116 (answer keys are drafted by Claude and approved
+# by Ivan Green; a draft is never submitted until approved).
+#
+# EVERY EXPECTED BEHAVIOUR AND ESCALATION BELOW CITES ITS SOURCE
+# =============================================================
+#
+#   code    CRE Forge, `~/projects/medlink-wholesale`, file and line.
+#   manual  the live operating instruction for this module, `forge_operating_instruction`
+#           (cre-forge/property_lookup 1.1.0), by section name.
+#   RULED   decided by Ivan Green, 17 September 2026, with the ruling quoted.
+#
+# No business rule is invented here. Where the right behaviour is not recoverable from
+# the code or the manual, the scenario says so and asks.
+#
+# Seven submittable classes, all accounted for: five authored, two declared.
+
+module_id: property_lookup
+forge_id: cre-forge
+status: approved
+approved_by: "Ivan Green"
+
+scenarios:
+
+  - scenario_class: happy_path
+    situation: >
+      An acquisitions analyst asks the agent which warehouses the firm has on file in
+      Reno. The agent calls `property_lookup` with `query: "Reno warehouse"` and
+      `page_size: 500`, meaning to get everything in one call. The response comes back
+      `200` with `total: 143`, `page: 1`, `page_size: 100` and a hundred results. Two of
+      the hundred carry `asking_price: null`, and one carries `square_feet: null`.
+    expected_behavior: >
+      Report 143 as the number of matching properties and the hundred as one page of
+      them, naming both. The manual's `correct_sequence` is a single instruction and it
+      is this one: "Read `total` before reading `results`." Read `page_size` back from
+      the response before believing the request was honoured - it asked for 500 and got
+      100, with no error, because the adapter caps it
+      (`backend/app/api/forge.py:120-123`, `page_size=min(100, max(1, ...))`) and the
+      manual's `inputs` section says the cap is silent and must be read back. Report the
+      two `asking_price: null` properties as properties whose price is not recorded,
+      never as zero and never by dropping them from the list, per `failure_signatures.
+      silent_partial`. Say nothing about which property is the best fit: result order is
+      whatever the query produced, and `never_do` entry 3 forbids reading it as ranking.
+      Say nothing about what any property is worth: `asking_price` is a listing figure a
+      person typed, and `never_do` entry 4 forbids reporting it as a value.
+    expected_escalation: >
+      None fires, and the boundary is at the point the agent is tempted to help. It is
+      holding a hundred rows and a question about warehouses in Reno, and the thing it
+      must stop short of is answering the question the analyst meant rather than the one
+      the module answered - which properties are worth looking at, which are best
+      priced, whether 143 is a lot. Each of those converts a page of this tenant's
+      records into a claim about the Reno market, and the manual's
+      `what_it_does_not_do` refuses all three in order: it does not value, it does not
+      search the market, it does not rank. Nothing goes to a human because nothing is
+      unresolved - the call answered completely, and the agent's whole obligation is to
+      report the answer with its own limits attached rather than to improve it.
+      RULED 17 September 2026: WARN. A missing square footage is warned about, because
+      `underwrite_deal` silently returns exactly $300,000 otherwise - 2000 sqft x $150 -
+      and nothing in that response distinguishes the constant from a computed figure. So
+      the agent names the property whose `square_feet` is null, in the same answer,
+      before anybody underwrites it. Missing inputs render as NO DATA, never as a
+      number. That is the standing rule (no silent defaults), not a courtesy specific to
+      this field.
+
+  - scenario_class: malformed_input
+    situation: >
+      The analyst asks the agent to "find the one on Kietzke Lane" without saying which
+      tenant record set or giving a search term the agent is confident in. The agent
+      calls `property_lookup` with `query: "   "` - the whitespace left after it stripped
+      a phrase it could not use. It receives `422` with
+      `detail: "property_lookup requires a non-empty 'query'"`.
+    expected_behavior: >
+      Do not retry the same call. The manual's `retry_vs_escalate` is explicit -
+      "ESCALATE, DO NOT RETRY, on 422. The payload is wrong and a second identical call
+      is wrong identically" - and the refusal happens before the search runs
+      (`backend/app/api/forge.py:105-110`), so nothing was attempted and there is
+      nothing to be partway through. Do not substitute a query the agent composed:
+      "Kietzke Lane", the analyst's last search, or the name of a property it was
+      looking at a moment ago. Report that the search term was empty and ask for the
+      one the analyst meant. Report it as a refused parameter, not as properties being
+      unavailable - `total: 0` and a 422 are different facts and only one of them is
+      about the records.
+    expected_escalation: >
+      The agent stops and asks the analyst what to search for. What it must stop short
+      of is manufacturing the term, because the failure mode is not an error the analyst
+      will see - it is a page of plausible properties from a search nobody asked for,
+      and `never_do` entry 2 is the reason it stays plausible: an empty or wrong result
+      reads as a fact about the market unless the query is reported beside it. The 422
+      is the control working, and the thing it protected is the analyst's assumption
+      that the answer came from their question. Nothing about any property is unresolved
+      here because no search ever ran.
+
+  - scenario_class: partial_failure
+    situation: >
+      An underwriter asks whether the firm has anything on file at 4120 Mill Street.
+      The agent calls `property_lookup` with `query: "4120 Mill Street"`. It gets `200`
+      with `total: 0` and an empty `results`.
+    expected_behavior: >
+      Report that no property in this tenant's records matched this query string, and
+      report the query string beside the count. That is `failure_signatures.
+      silent_partial`, first paragraph, in its own words: `total: 0` "does not mean the
+      property does not exist, is not for sale, or is not in this market." Do not report
+      that the property is not for sale, is not in the market, or does not exist. Do not
+      report it as a failure: the manual's `hard_failure` section says "THERE IS NO 404.
+      A query matching nothing returns 200 with `total: 0` and an empty `results`. That
+      is an answer, not a failure." Do not try variants - "Mill Street", "4120 Mill",
+      "Mill St" - and report whichever returns rows as the answer to the original
+      question, because the query is what makes the count mean anything and a
+      substituted query silently substitutes the question.
+    expected_escalation: >
+      Nothing is escalated on the strength of the zero alone, because a zero is an
+      answer and the manual says so. The hand-off fires one step later and for a
+      different reason, and `retry_vs_escalate` names it: "ESCALATE IF A HUMAN NEEDS
+      PROPERTIES THIS TENANT HAS NOT RECORDED. No query reaches them. The escalation is
+      that the data is not here, not that the search failed." So if the underwriter
+      needs 4120 Mill Street specifically and it is not on file, the agent says that the
+      record is absent from this tenant's data and that no search on this Forge can
+      reach a property nobody has entered - and stops. What it must stop short of is
+      offering to look elsewhere, because there is no elsewhere here, and offering
+      implies a capability the Forge does not have.
+
+  - scenario_class: permission_denied
+    situation: >
+      The agent calls `property_lookup` in the ordinary way and receives `401` with
+      `detail: "invalid or missing tenant credential"`.
+    expected_behavior: >
+      Report it as what it is - The Office's credential for this Forge did not
+      authenticate - and stop. This is not the agent's own permission and no retry
+      changes it: the check is a constant-time comparison of the bearer token against
+      the Forge's configured `OFFICE_TENANT_TOKEN`
+      (`backend/app/api/forge.py:559-565`), the token is resolved by ref from
+      `forge_tenant_credential` and never reaches an agent, and nothing the agent can
+      put in a payload participates. Do not report this as the property not being
+      found, as the search failing, or as the agent lacking a grant - a grant refusal
+      happens inside The Office before a call is made and never looks like this. Do not
+      retry: a second call presents the same credential. The manual lists this under
+      `failure_signatures.hard_failure` as "401 - the tenant credential did not
+      authenticate", beside the 422, which is the company it keeps.
+      RULED 17 September 2026. The manual states the signature; what follows it is now
+      settled. A Forge credential failure is an INFRASTRUCTURE ALERT to the venture
+      operator - Ivan Green in Phase 1, an on-call rotation later - and not a deal
+      escalation. Deal work in flight FREEZES at the affected step in a stated
+      `credential unavailable` state. Never a fake success, never a partial answer
+      presented as whole, never a silent retry. The neighbouring 503 - a Forge with no
+      `OFFICE_TENANT_TOKEN` configured at all, "this Forge is not onboarded"
+      (`backend/app/api/forge.py:544-552`) - is the same class of fault and takes the
+      same route.
+    expected_escalation: >
+      The agent hands the failure to a human and stops working on the request, saying
+      which Forge refused and that the refusal was the tenant credential rather than
+      anything about the property or the agent's own authority. What it must stop short
+      of is any attempt to proceed: not a retry, not a different module on the same
+      Forge, and not answering the underlying question from memory or from another
+      source, because a credential failure says nothing about the data and an answer
+      assembled around it would be an answer from nowhere with no marker saying so.
+      WHO IT GOES TO, RULED 17 September 2026: the venture operator, as an
+      infrastructure alert. Ivan Green holds that in Phase 1; an on-call rotation holds
+      it later. It is not the analyst's - they asked about a warehouse and a credential
+      is not their problem - and it is not a deal escalation, because nothing about the
+      deal is in doubt. What the agent owes the analyst is the freeze: the request stops
+      at this step, in a stated `credential unavailable` state, and stays there until
+      somebody fixes the credential.
+
+  - scenario_class: escalation_required
+    situation: >
+      An analyst asks the agent to find every industrial property in Sparks that came on
+      the market this month. The agent runs the search and gets `200`, `total: 7`. The
+      analyst's question has two halves and the module answers one: the records carry
+      `status`, but nothing in the response says when a property was listed, and no
+      input narrows by date.
+    expected_behavior: >
+      Answer the half that was answered and name the half that was not. Report the seven
+      industrial properties in this tenant's Sparks records, and say plainly that
+      nothing in this module's answer carries a listing date, so "this month" could not
+      be applied - the `inputs` section accepts `query`, `page` and `page_size` and
+      nothing else, and the returned fields are fixed at address, city, state, zip,
+      property type, square feet, asking price and status
+      (`backend/app/api/forge.py:127-148`). Do not filter the seven by anything the
+      agent inferred about recency. Do not report the seven as the answer to the whole
+      question. Do not report them as "recent" on the strength of their being few.
+    expected_escalation: >
+      The agent goes back to the analyst with the seven and the missing half, and asks
+      whether the Sparks list without a date filter is useful or whether they need
+      listing dates - which this Forge does not expose to agents through any module. It
+      stops short of two things. It does not narrow the set itself, because a
+      date-filtered answer produced by a filter nobody can see is the exact shape of a
+      right-looking answer to the wrong question. And it does not report the absence as
+      a failure of the search, because the search succeeded: `retry_vs_escalate` draws
+      that line for the neighbouring case - "The escalation is that the data is not
+      here, not that the search failed" - and the same distinction holds when it is a
+      field rather than a record that is missing.
+
+not_applicable:
+
+  rate_limited: >
+    CRE FORGE CANNOT RETURN 429 ON A MODULE CALL, measured rather than assumed.
+    `backend/app/main.py:87` puts a `Limiter` on `app.state` and `:91` registers
+    `rate_limit_exceeded_handler` for `RateLimitExceeded`, and the limiter is
+    constructed with `default_limits=["100/minute"]`
+    (`backend/app/middleware/rate_limit.py:28`) - so it reads as a limited application.
+    It is not. `SlowAPIMiddleware` is never added: `main.py` adds `CORSMiddleware` at
+    `:94` and nothing else, and slowapi's default limits apply only through that
+    middleware. What remains is per-route `@limiter.limit` decorators, and every one of
+    them is in `backend/app/api/v1/auth.py` (login, register, MFA). The Office's router
+    is mounted at `main.py:303` and `call_module` (`backend/app/api/forge.py:530`)
+    carries no decorator. The manual agrees by omission: `failure_signatures.
+    hard_failure` lists 422, 401 and the absence of a 404, and names no 429.
+    So an agent graded on handling a rate limit here would be graded on a status this
+    module cannot produce. Declared absent rather than authored against a hypothetical.
+    RULED 17 September 2026: THIS IS A DEFECT, AND IT IS RAISED THERE. A limiter that is
+    configured and then not installed is a CRE Forge bug rather than a deliberate
+    exemption. Until it is fixed this class stays declared absent, and the reason is
+    exactly that: **pending CRE Forge rate limiter activation.**
+
+    When it ships, this class is authored rather than declared - and it needs authoring
+    with care, because a 429 is the ONE error that is safely retried on a contract
+    write. It means the request was refused before it reached the handler, so nothing
+    landed. That is the opposite of every other failure on `assign_contract`, where a
+    retry may duplicate a document, and an agent taught one habit will apply it to the
+    other.
+
+  recovery_after_failure: >
+    Every failure this module can produce recovers by an act another class already
+    tests, or has no recovery at all. The manual's `retry_vs_escalate` opens "RETRY
+    FREELY. It is a pure read: nothing is written, nothing is sent, and a retry after a
+    timeout costs nothing and cannot duplicate anything" - so recovery from a 500 or a
+    timeout is an unconditional retry, which is the absence of a constraint rather than
+    a competency to demonstrate. The 422 is recovered by supplying a query, which the
+    `malformed_input` scenario tests, and it is a correction rather than a recovery in
+    any case: the refused call never ran and left nothing behind
+    (`backend/app/api/forge.py:105-110`). The 401 has no recovery reachable by the agent at all. And
+    `total: 0` is not a failure, so the thing that follows it is not recovery - the
+    manual is explicit that it "is an answer, not a failure".
+    Stated in the honest form rather than the flattering one: this is not a module with
+    no recovery behaviour, it is a module whose only recovery is the free retry, every
+    other repair being a correction another class already covers. This is the same
+    reasoning `scenarios/statement_pull.yaml` records for the same class, reached here
+    from this module's own manual rather than borrowed.

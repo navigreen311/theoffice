@@ -122,7 +122,22 @@ DEFAULT_SECTIONS: dict[str, str] = {
 #: Top-level keys a content file may carry. Anything else is refused rather than
 #: ignored - a misspelled key that loads silently is a scenario nobody authored and
 #: everybody believes was authored.
-_FILE_KEYS = frozenset({"module_id", "forge_id", "scenarios", "not_applicable"})
+_FILE_KEYS = frozenset({
+    "module_id", "forge_id", "scenarios", "not_applicable", "status", "approved_by",
+})
+
+#: An answer key is drafted and then approved, and only an approved one is submitted.
+#: Ruled by Ivan Green, 17 September 2026: "Answer keys are drafted by Claude and
+#: approved by Ivan Green. A draft is never submitted until approved."
+#:
+#: `status` is REQUIRED and there is no default. A missing status would have to mean
+#: one of the two, and both readings are wrong: defaulting to `approved` submits
+#: unreviewed prose that SimForge then GRADES an agent against, and defaulting to
+#: `draft` would silently stop a venture that is already certifying. The key is cheap
+#: and the ambiguity is not.
+DRAFT = "draft"
+APPROVED = "approved"
+_STATUSES = (DRAFT, APPROVED)
 
 #: Per-scenario keys. Same rule.
 _SCENARIO_KEYS = frozenset({
@@ -197,6 +212,14 @@ class ModuleContent:
 
     module_id: str
     forge_id: str
+    status: str = APPROVED
+    """`draft` or `approved`. A draft is loaded, validated and reported, and never
+    submitted - see `ScenarioContentSet.for_module`."""
+
+    approved_by: str = ""
+    """Who approved it. Required on an approved file, refused on a draft: a name
+    beside `status: draft` is a signature on something nobody signed."""
+
     scenarios: dict[str, AuthoredScenario] = field(default_factory=dict)
     """Keyed by scenario class. One per class, because the operation key is
     `(module, class)` - `docs/scenario-contract.md` §11 A2.1."""
@@ -230,7 +253,29 @@ class ScenarioContentSet:
     modules: dict[str, ModuleContent] = field(default_factory=dict)
 
     def for_module(self, module_id: str) -> ModuleContent | None:
-        return self.modules.get(module_id)
+        """The APPROVED content for a module, or None.
+
+        **A draft is not content as far as anything downstream is concerned.** The
+        generator, the coverage report and Gate 8 all ask this question, and a draft
+        answering it would be submitted to SimForge and graded - which is precisely
+        what the 17 September ruling forbids.
+
+        Returning None rather than raising: a module with a draft key is in the same
+        position as a module with no key at all, which is a state the pipeline already
+        handles and reports. `drafts()` is how the difference stays visible, because
+        "nobody has written it" and "somebody wrote it and it is waiting for Ivan" are
+        different pieces of work.
+        """
+        content = self.modules.get(module_id)
+        if content is not None and content.status == DRAFT:
+            return None
+        return content
+
+    def drafts(self) -> dict[str, ModuleContent]:
+        """Authored, validated, and not submitted. Reported, never silently dropped."""
+        return {
+            m: c for m, c in sorted(self.modules.items()) if c.status == DRAFT
+        }
 
 
 def default_root() -> Path:
@@ -286,6 +331,25 @@ def load_module(path: Path | str) -> ModuleContent:
 
     module_id = _require_str(p.name, raw, "module_id")
     forge_id = _require_str(p.name, raw, "forge_id")
+    status = _require_str(p.name, raw, "status")
+    if status not in _STATUSES:
+        raise ScenarioContentError(
+            f"{p.name} declares status {status!r}. It must be one of "
+            f"{', '.join(_STATUSES)} - an answer key is drafted and then approved, and "
+            "only an approved one is submitted (Ivan Green, 17 September 2026)."
+        )
+    approved_by = str(raw.get("approved_by") or "").strip()
+    if status == APPROVED and not approved_by:
+        raise ScenarioContentError(
+            f"{p.name} is approved and names nobody. `approved_by` is who is answerable "
+            "for the prose SimForge will grade an agent against; an approval with no "
+            "name on it is the shape a rubber stamp has."
+        )
+    if status == DRAFT and approved_by:
+        raise ScenarioContentError(
+            f"{p.name} is a draft and carries approved_by {approved_by!r}. A name "
+            "beside a draft is a signature on something nobody signed."
+        )
     if p.stem != module_id:
         raise ScenarioContentError(
             f"{p.name} declares module_id {module_id!r}. The filename is the index "
@@ -325,6 +389,7 @@ def load_module(path: Path | str) -> ModuleContent:
 
     return ModuleContent(
         module_id=module_id, forge_id=forge_id,
+        status=status, approved_by=approved_by,
         scenarios=scenarios, not_applicable=not_applicable,
     )
 

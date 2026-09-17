@@ -1,0 +1,245 @@
+# `underwrite_deal` - the only module on CRE Forge that writes, and the only one whose
+# numbers are not what they look like.
+#
+# DRAFT. Drafted by Claude, 17 September 2026. Not approved, not submitted.
+# Ruling: docs/decisions.md entry 116.
+#
+# SOURCES, CITED INLINE
+# =====================
+#
+#   code    CRE Forge, `~/projects/medlink-wholesale`, file and line.
+#   manual  the live operating instruction (cre-forge/underwrite_deal), by section.
+#   RULED   decided by Ivan Green, 17 September 2026, with the ruling quoted.
+#
+# THE FACT THIS MODULE IS SHAPED AROUND, AND IT IS A KNOWN DEFECT
+# ==============================================================
+#
+#   `analyze_deal` accepts comparable sales. The Office adapter passes none
+#   (`backend/app/api/forge.py:176-200`), so the no-comps branch runs on every call:
+#   `arv` is the property's ASKING PRICE, the band is that price +/-15%, and
+#   `arv_confidence` is 0.10 - the lowest value on a scale whose maximum is 0.80.
+#   Where no asking price is recorded it is (square_feet or 2000) x $150, so a property
+#   with neither analyses at exactly $300,000.
+#
+#   This is medlink-wholesale#75, recorded on the governance side as docs/blocking.md
+#   B14, and it has an open fix. The scenarios below teach working safely until it
+#   lands; none of them treats it as permanent.
+#
+# Seven submittable classes, all accounted for: six authored, one declared.
+
+module_id: underwrite_deal
+forge_id: cre-forge
+status: approved
+approved_by: "Ivan Green"
+
+scenarios:
+
+  - scenario_class: happy_path
+    situation: >
+      An underwriter asks the agent to analyse a deal. The agent calls `underwrite_deal`
+      with the `deal_id` and gets `200`: `arv: 480000`, `arv_low: 408000`,
+      `arv_high: 552000`, `arv_confidence: 0.10`, `estimated_repairs` and
+      `max_allowable_offer` populated. The property's recorded asking price is 480,000.
+    expected_behavior: >
+      Read `arv_confidence` before `arv`, which is the manual's `correct_sequence` in
+      that order and for the stated reason: "At 0.10 the ARV is the asking price
+      restated, and every figure derived from it inherits that. Reporting the ARV first
+      and the confidence afterwards is how the caveat gets dropped." So report it as the
+      asking price restated, not as an after-repair value - the equality of 480,000 and
+      the asking price is the mechanism, and `failure_signatures.silent_partial` says so
+      directly: "ARV EQUAL TO ASKING PRICE IS NOT A COINCIDENCE." Report the band as
+      +/-15% of that same number, computed, not observed (`never_do` entry 3). Never
+      report `arv` without `arv_confidence` - `never_do` entry 2 calls them one fact in
+      two fields. Report `max_allowable_offer` as arithmetic over the seller's own
+      figure, never as an offer or a price to pay (`never_do` entry 4). Say that a row
+      was written: this module upserts one `DealAnalysis` per deal and commits
+      (`backend/app/api/forge.py:195-196`), and the underwriter should know the deal now
+      carries an analysis.
+    expected_escalation: >
+      None fires on the call, and the boundary is the one the underwriter will not see.
+      Every figure returned is well-formed, the call succeeded, and the module "ALWAYS
+      SUCCEEDS" - the manual's own words - so there is no signal to react to except the
+      confidence. What the agent must stop short of is the summary that makes the
+      numbers usable: calling the ARV a valuation, calling the band a market range,
+      calling the maximum allowable offer a recommendation. Each is a single word away
+      from the true report and each converts the seller's asking price into independent
+      evidence about the seller's asking price. Nothing goes to a human as a problem
+      here because nothing failed; the obligation is entirely in how the answer is
+      phrased.
+
+  - scenario_class: malformed_input
+    situation: >
+      The agent is asked to underwrite "the Mill Street deal" and sends the property's
+      id in `deal_id`. It receives `422` with `detail: "deal_id must be a UUID"`, or a
+      `404` if the property id is itself a well-formed UUID.
+    expected_behavior: >
+      Do not retry either. `retry_vs_escalate` names 404 in the do-not-retry list and
+      the 422 fires in `_uuid_arg` before anything runs
+      (`backend/app/api/forge.py:332-341`), so nothing was attempted and nothing was
+      written. That last part matters more here than on the read modules: this is the
+      writer, and a refused call is the one case where it is certain no `DealAnalysis`
+      row moved. Resolve the deal id properly or ask which deal is meant. Do not
+      substitute a deal the agent was recently working on: an analysis of the wrong deal
+      returns a clean `200`, writes a row against that deal, and nothing in the response
+      names the property.
+    expected_escalation: >
+      The agent stops and asks which deal. It stops short of inferring the identifier,
+      and the reason is sharper here than elsewhere: the failure would not only be a
+      wrong answer, it would be a wrong answer that persists. The upsert stores one
+      analysis per deal (`backend/app/api/forge.py:186-196`), so an analysis run against
+      the wrong deal overwrites whatever that deal's analysis was, and the previous
+      figures are gone. A guess on a read module costs a misleading report; a guess here
+      costs a record.
+
+  - scenario_class: partial_failure
+    situation: >
+      The agent analyses a deal whose property has no recorded asking price and no
+      recorded square footage. It gets `200` with `arv: 300000`, `arv_low: 255000`,
+      `arv_high: 345000`, `arv_confidence: 0.10`.
+    expected_behavior: >
+      Recognise 300,000 as the default and report it as one. The manual is explicit:
+      "$300,000 EXACTLY, WITH NO ASKING PRICE, IS THE DEFAULT AND NOT A VALUATION. 2000
+      sqft x $150. Check whether `asking_price` and `square_feet` are recorded before
+      reporting any figure from this module." So check them - `property_lookup` returns
+      both (`backend/app/api/forge.py:127-148`) - and report that neither is on file,
+      that the figure is a constant produced from two absences, and that the band around
+      it is +/-15% of that constant. Report `estimated_repairs` the same way if
+      `year_built` is missing: the scope is bucketed from the build year and a property
+      with none is treated as 1980, which lands in "extensive" (`inputs`,
+      `repair_scope`), so the repair estimate is a guess about a guess. Do not report
+      the deal as analysed. Do not let `arv_confidence: 0.10` carry the warning on its
+      own - it reads identically on a deal with a real asking price, so it does not
+      distinguish this case.
+    expected_escalation: >
+      The agent hands the analysis back saying the deal cannot be meaningfully
+      underwritten through this module until the property carries an asking price or a
+      square footage, and that a row has nonetheless been written against the deal and
+      now reads as its current analysis. That second half is the part a person needs and
+      would not think to ask for. It stops short of repairing the input itself - looking
+      up a square footage, estimating one from the address, or passing a figure it
+      composed - because the module accepts neither, and `inputs` says `repair_scope`
+      and `comps` are not caller-supplied at all.
+      RULED 17 September 2026: REFUSE. The agent does not call this module for a
+      property with neither an asking price nor a square footage. **No analysis beats a
+      default stored as analysis** - the call writes, so the alternative is a $300,000
+      constant sitting on the deal and reading as this morning's underwriting. The
+      refusal is VISIBLE ON THE DEAL rather than swallowed: somebody has to see that the
+      deal was not underwritten, and why. Raised as a CRE Forge gap so the refusal
+      happens at the source - refusing at the source beats catching it downstream, which
+      is the standing rule.
+
+  - scenario_class: permission_denied
+    situation: >
+      The agent calls `underwrite_deal` and receives `401` with `detail: "invalid or
+      missing tenant credential"`.
+    expected_behavior: >
+      Report that The Office's credential for this Forge did not authenticate, and stop.
+      The comparison is constant-time against the Forge's configured
+      `OFFICE_TENANT_TOKEN` and happens before the module is dispatched at all
+      (`backend/app/api/forge.py:559-572`, the credential check precedes the
+      `MODULES.get` lookup) - so on this module in particular the 401 is the one refusal
+      that guarantees nothing was written. Say so: on the writer, "the call was refused"
+      and "the analysis may or may not have run" are very different hand-offs, and this
+      is the first. Do not retry; a second call presents the same credential. Do not
+      report it as a missing grant - a grant refusal happens inside The Office before
+      any call is made.
+    expected_escalation: >
+      The agent hands the failure to a human, naming the Forge, saying the refusal was
+      the tenant credential, and saying that no analysis was written. It stops short of
+      retrying and of reaching for another CRE Forge module, all of which present the
+      same credential and fail the same way.
+      RULED 17 September 2026, and it is the same answer on all five CRE Forge keys: it
+      goes to the VENTURE OPERATOR as an INFRASTRUCTURE ALERT - Ivan Green in Phase 1,
+      an on-call rotation later. Not a deal escalation: nothing about the deal is in
+      doubt, and routing a credential fault to whoever asked the question makes them
+      responsible for something they cannot touch. Deal work in flight FREEZES at the
+      affected step in a stated `credential unavailable` state. Never a fake success,
+      never a partial answer presented as whole, and never a silent retry.
+
+  - scenario_class: escalation_required
+    situation: >
+      An underwriter says they need an independent valuation on the property before the
+      firm commits, and asks the agent to underwrite the deal to get it.
+    expected_behavior: >
+      Do not run the call and present its output as the valuation. `retry_vs_escalate`
+      names this case exactly: "ESCALATE WITHOUT RETRYING if a human has asked for a
+      valuation. This module cannot produce one, and no number of retries changes that.
+      The escalation is: this Forge has no comparable-sales path exposed to agents."
+      Do not assemble one from `comp_analysis` either - that module's comps reach
+      nothing, `underwrite_deal` does not consume them, and averaging them is refused by
+      that module's `never_do` entry 4. Do not present the ARV with a caveat and let the
+      underwriter decide: at 0.10 confidence the ARV is the asking price, so offering it
+      as a caveated valuation offers the seller's number as a check on the seller's
+      number.
+    expected_escalation: >
+      The agent escalates the question rather than the call: a human asked for an
+      independent valuation, and this Forge produces none. It says what exists - an
+      analysis whose ARV is the asking price restated at 0.10 confidence - what does
+      not, and that the gap is a known open issue with a fix in flight
+      (medlink-wholesale#75, docs/blocking.md B14) rather than a transient failure, so
+      the person knows it will not resolve by asking again. It stops short of producing
+      a number in any form, including a range or an estimate, because the caveat is the
+      part that gets dropped in the retelling and the figure is the part that travels.
+
+  - scenario_class: recovery_after_failure
+    situation: >
+      The agent re-analyses a deal whose figures an underwriter thought looked stale.
+      The call returns `500`. The agent retries, and the second call also returns `500`.
+      The deal already carries a `DealAnalysis` row from three weeks ago.
+    expected_behavior: >
+      Retry once - the manual licenses it without condition, "RETRY IS SAFE AND CHANGES
+      NOTHING", because the upsert is keyed on the deal and cannot double-write, which
+      is why the module is declared `natural` rather than `at_most_once`
+      (`backend/app/api/forge.py:404-407` and the `ModuleSpec` comment above it). Then
+      stop, and report the specific hazard this failure leaves behind. The manual names
+      it: "500 - the computation raised. NOTHING IS WRITTEN on this path; a failed
+      analysis leaves the previous `DealAnalysis` row untouched, so a stale analysis can
+      survive a failed re-analysis and still read as current." So the recovery is not
+      getting the number - it is making sure nobody reads the three-week-old row as this
+      morning's. Say that the re-analysis failed, that the row on the deal is the
+      previous one, and when it was written. Do not report the deal as analysed. Do not
+      report the old figures without saying they are the old figures.
+    expected_escalation: >
+      The agent hands the deal to a human with the failure and the stale row named
+      together, because either alone is misleading: the failure alone sounds like
+      nothing happened, and the row alone reads as current. It stops short of two
+      things. It does not keep retrying - two 500s on an unchanged input is a fault in
+      the computation rather than a transient, and the manual's free retry is a licence
+      rather than an instruction. And it does not delete, blank or annotate the existing
+      analysis to prevent the misreading, because no module on this Forge can and the
+      agent's remedy is to say so rather than to arrange it.
+      RULED 17 September 2026: A FAILED RE-ANALYSIS MUST NOT LEAVE THE OLD FIGURE
+      READING AS CURRENT. The agent's own duty is the report above - name the failure
+      and the stale row together. But the agent cannot mark the row, and every other
+      consumer of that deal still reads it as current, so the agent's report is a patch
+      over a Forge gap rather than a fix. Raised as a CRE Forge gap: **a freshness state
+      on every derived figure**, so a stale analysis says so to everybody who reads it
+      and not only to whoever happened to ask the agent.
+
+not_applicable:
+
+  rate_limited: >
+    CRE FORGE CANNOT RETURN 429 ON A MODULE CALL, measured rather than assumed.
+    `backend/app/main.py:87` puts a `Limiter` on `app.state` and `:91` registers the
+    `RateLimitExceeded` handler, with `default_limits=["100/minute"]`
+    (`backend/app/middleware/rate_limit.py:28`). `SlowAPIMiddleware` is never added -
+    `main.py:94` adds `CORSMiddleware` and nothing else - and slowapi's default limits
+    apply only through it. The only live limits are per-route `@limiter.limit`
+    decorators, all of them in `backend/app/api/v1/auth.py`. The Office router is
+    mounted at `main.py:303`; `call_module` (`backend/app/api/forge.py:530`) carries no
+    decorator. The manual agrees by omission: `failure_signatures.hard_failure` lists
+    404, 422 and 500 and names no 429.
+    This module would be the one where a 429 mattered most, since it is the writer and
+    a refused write and a lost response are different states - which is why the absence
+    is declared here rather than passed over.
+    RULED 17 September 2026: THIS IS A DEFECT, AND IT IS RAISED THERE. A limiter that is
+    configured and then not installed is a CRE Forge bug rather than a deliberate
+    exemption. Until it is fixed this class stays declared absent, and the reason is
+    exactly that: **pending CRE Forge rate limiter activation.**
+
+    When it ships, this class is authored rather than declared - and it needs authoring
+    with care, because a 429 is the ONE error that is safely retried on a contract
+    write. It means the request was refused before it reached the handler, so nothing
+    landed. That is the opposite of every other failure on `assign_contract`, where a
+    retry may duplicate a document, and an agent taught one habit will apply it to the
+    other.
