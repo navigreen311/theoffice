@@ -9069,3 +9069,92 @@ over.
 **What it does not catch:** an uncommitted working tree. `BUILD_COMMIT` and the comparison
 both read `git rev-parse HEAD`, so a process started before an *edit* looks current. The
 check is against a stale PROCESS, which is the failure that actually happened.
+
+## 114. Greenstone's Acquisition Analyst, a hand-off the roster cannot hold - and the one field a sync wrote without ever comparing
+
+**Ruled 2026-09-16 by Ivan Green.** Rulings 1 and 2 are recorded; ruling 3 is built and on
+an open PR, unmerged pending review.
+
+### 1. Acquisition Analyst is one seat, and Victor Serath holds it
+
+Inside-out, deal-specific work: comps and property lookups per pipeline deal, handed to the
+founders as inputs. **Not a Market Analyst**, which is the outside-in market study and is a
+different job the Village already staffs three times over.
+
+Filled from the existing roster rather than by creating an agent. Victor Serath, Research,
+`individual_contributor`, reporting to Dr. Brann Lorvik.
+
+**The seat was chosen because it was a duplicate, and that is measurable.** `agentsrole.yaml`
+carried `Trend Analyst 2` twice - Victor Serath and Clara Falcor, identical titles, same
+manager, same ladder rung. Victor's is repurposed; Clara keeps hers.
+
+**What the roster cannot tell you, stated rather than implied.** It has four fields - `name`,
+`title`, `role_key`, `reports_to` - and no field for workload, assignment or capacity. Nothing
+in it shows who is busy. Duplicate title, leaf position in the reporting graph, and "no code
+names this agent" are the proxies that were available, and they are proxies.
+
+**The position id is deliberately unchanged.** The seat keeps `research_trend_analyst_2`;
+`village.db`'s `agents.position_id_evo` joins on it and a repurposed seat is the same seat.
+A hazard comes with that, measured by simulating a reseed:
+
+    delete positions.json and reseed ->  Victor  research_trend_analyst_2   -> research_acquisition_analyst
+                                         Clara   research_trend_analyst_2_1 -> research_trend_analyst_2
+
+Clara loses the `_1` dedup suffix because ids are derived from the title at seed time and
+Victor's title no longer collides with hers. That silently invalidates **her** row - the one
+seat this ruling promised not to touch. Do not reseed without migrating it.
+
+### 2. The founder hand-off is recorded here because the roster cannot name a person
+
+The work flows to Ivan Green and Ira Green while **Deal Underwriter** is pending. Neither is
+in the Village's 186, and `reports_to` must name a roster agent: `org.py` returns
+`reports_to_id: null` for a name the roster does not hold, commented as *"a data fault worth
+seeing rather than papering over"*. Every one of the 186 resolves today.
+
+So the reporting line points at Dr. Brann Lorvik, the Research Director, and **the hand-off
+has no field in the Village to live in.** It lives in this entry. A reporting line that named
+a founder would be the first dangling `reports_to` in the file, and it would be recording an
+accountability relationship in a column built for an org chart.
+
+### 3. A sync that writes a field and never compares it
+
+`sync-roster` diffed `department`, `role_key` and `reports_to`. It wrote
+`title = EXCLUDED.title` on every upsert. **`_office_roster` did not even `SELECT` the
+column** - so a retitle landed in `village_agent` while the report said "No change".
+
+    before   Victor Serath retitled -> sync reports nothing, writes the new title
+    after    Victor Serath retitled -> "Changed title (1)  Trend Analyst 2 -> Acquisition Analyst"
+
+What a sync writes and what a sync reports are meant to be the same list. This is the
+narrower cousin of the departure rule the module already states in four places: the
+destructive half of a sync is confirmed because nobody should discover it from a summary
+printed afterwards. A field written without being shown is the same failure, quieter.
+
+**The test asserts EXACTLY one change, not that a title change is present.** The defect was a
+missing comparison, and a test that only checked for presence would pass against a version
+that reported the retitle twice or reported every agent on every run. Confirmed to fail
+against the unfixed module, with `changes=[]` - the precise symptom.
+
+### Measured, not executed: Phase 0 certifications will block Greenstone at Gate 9
+
+Asked read-only, before the certification step. **Yes, and by the same mechanism as B3.**
+
+Gate 9 reads the certification record and has two refusals. Phase 0 clears the first and is
+caught by the second:
+
+    state         `certified`, derived from verdict='PASS'      -> passes the first check
+    simforge_verdict   NULL, because `attested_by='bootstrap'`  -> caught by the second
+
+`certification.record_result` writes it: *"A bootstrap now writes `simforge_verdict = NULL`
+and must give a reason."* `bootstrap_phase0` says the same at both call sites - *"Not a
+SimForge verdict, and it no longer says it is."*
+
+Gate 9's refusal, verbatim:
+
+    "N certification(s) read as certified but carry no SimForge PASS. A certification
+     nothing external attested is a certification The Office wrote for itself."
+
+This is **not** entry 75's Burkham problem, which was revoked Phase 0 grants held at Gate 9
+and was closed by `covered_grants`. This is B3: no SimForge verdict exists for the module at
+all. Certifying Victor, Ronan and Seraphine by bootstrap puts Greenstone in exactly the
+position B3 describes, and no amount of bootstrapping clears it.
