@@ -9500,3 +9500,70 @@ a bound either - `with ThreadPoolExecutor` calls `shutdown(wait=True)` on exit -
 TimeoutError it raised was uncaught at the tick site, so it would have taken the
 affect/mood/grief decay with it. A limit on a function that raises on every path is not a
 limit, so it was fixed alongside.
+
+## 119. Three weeks of messages that were not speech
+
+**Ruled 2026-09-17 by Ivan Green.** Recorded; built on navigreen311/village-os#4, unmerged.
+PRs #2 and #3 are merged.
+
+### The finding
+
+Of 6,147 rows in the Village's `messages` table, **6,122 - 99.6% - are one string**:
+
+    [System: Agent response generation failed - using fallback mode]
+
+`phi4:latest` was named in config and not installed, so nothing answered and the failure was
+written to the table shaped exactly like a reply. The range is **2026-08-28 21:22:56 to
+2026-09-17 10:27:16**, across 20 senders. The 25 genuine messages all arrive **after 10:30 on
+17 September - ninety seconds after the model finished downloading.**
+
+**And I had the wrong string.** I reported the orchestrator's canned sentence, "I understand.
+Let me think about that and get back to you.", as what filled the table. It appears **zero**
+times in any of the three databases. A different fallback, elsewhere, wrote all 6,122. The
+ruling in entry 118 was right; my account of the damage named the wrong source.
+
+**Nothing consumed them.** The marker exists in exactly one place in the whole database -
+`messages.content`. `threads`, `conversations`, the per-agent belief and affect blobs, every
+learning table, and every file under `VillageData/` are clean. That containment is luck: the
+paths that would have eaten it were the ones entry 118's freeze found already disabled.
+
+### The ruling
+
+Marked, not deleted. The rows record three weeks when agents produced no speech, which is
+worth keeping. Nothing may read them as speech.
+
+The mark goes in `provenance_data` - the only column that is both purpose-named and NULL on
+every row, so writing it cannot change what any existing query returns. `content` is
+untouched byte for byte, and the mark carries its sha256 so a later reader can prove it.
+
+**Coverage is 5 of 36 and the entry says so.** Thirty-six sites read `messages`; five are
+filtered - the API routes that hand text to a caller - and thirty-one are not. They are named
+in `tests/_message_reader_inventory.txt` and pinned by a test, so a new unfiltered reader
+fails the suite. That is the enforceable half of the ruling. The other half is 31 conversions
+not yet made.
+
+### What else is failing silently: one thing, loudly, for three weeks
+
+A full scan of stored data for fallback and placeholder strings found the 6,122 and nothing
+else of that kind. It did find this:
+
+    nib_conservation health check    CRITICAL on all 3,592 runs
+    since                            2026-08-29 04:25, continuously to 2026-09-17 20:03
+    anomaly                          NIB imbalance: issued 10,000.00, in circulation 0.00
+    status                           all 3,592 still `detected`; repaired 0; executed 0
+
+Every other check - broken relationships, duplicates, invalid states, missing data - is
+healthy on all 3,592 runs. This one is not, and nothing has ever acted on it.
+
+**It is also measuring the wrong thing.** The anomaly names `table_name = nib_transactions`,
+and **that table does not exist**, which is why `repairs_executed` is 0 - the repair action
+targets something absent. Meanwhile `wallets` holds **2,665,337.96** while the snapshot
+records `total_in_wallets = 0.0`. So the currency invariant is broken *and* the check cannot
+see where the money is. Both are true; neither has been looked at.
+
+### One more placeholder, in the account that logs in
+
+`users` has a single row, `admin`, whose `password_hash` is the literal string
+`$2b$12$placeholder_hash_for_admin_user`. That is not a bcrypt hash. The Village prints
+`Admin Login: admin / village_admin_2024` at startup, so either that password does not work
+or something is not checking the hash.
