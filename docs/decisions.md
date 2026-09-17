@@ -9567,3 +9567,74 @@ see where the money is. Both are true; neither has been looked at.
 `$2b$12$placeholder_hash_for_admin_user`. That is not a bcrypt hash. The Village prints
 `Admin Login: admin / village_admin_2024` at startup, so either that password does not work
 or something is not checking the hash.
+
+## 120. No placeholder credentials, and a check nothing acts on is not a check
+
+**Ruled 2026-09-17 by Ivan Green.** Recorded; built on navigreen311/village-os#5 and #6,
+both unmerged.
+
+### 1. No default or placeholder credentials
+
+The admin password is a real hash, set at install, never printed at startup and never
+hardcoded.
+
+`users` held one row whose `password_hash` was the literal string
+`$2b$12$placeholder_hash_for_admin_user` - the shape of a bcrypt hash and not one. A real
+default, `village_admin_2024`, was in three more places, one of them **the startup banner,
+printed on every boot into any log that captured stdout.**
+
+**And nothing verified a password at all.** `/login` renders a template; there is no POST
+handler and no `check_password_hash` anywhere in the tree. So the placeholder was not
+protecting an account - it was sitting in the table an authentication system would later
+trust. #5 therefore ships the verifier as well as the refusal: a test that "the placeholder
+cannot authenticate" needs something that authenticates.
+
+**The existing row is kept and refused.** Deleting it would take the account's id, email and
+creation date, which are the only record of when this village was installed. A new install
+writes NULL rather than a placeholder - NULL is honest, a fake hash is a claim that an
+account is provisioned.
+
+### 2. A check nothing acts on is not a check
+
+**It was the check that was broken, not the money.** Measured before touching anything:
+
+    wallets total          2,665,807.286022
+    system_credit          2,000,000.000000
+    salary                   464,988.550000
+    bonus                    200,818.736022
+    ---------------------------------------
+    credit+salary+bonus    2,665,807.286022
+    difference                     0.000000
+
+The ledger balances to the last decimal. Transfers net to zero. There is no missing money.
+
+**Three independent faults made it report otherwise, every twenty minutes for three weeks:**
+
+    currency        the check sums `WHERE currency = 'NIB'`. Every wallet is 'VCOIN'.
+                    0 of 20 rows match, so total_in_wallets reads 0.00.
+    issuance        it sums `transaction_type = 'system_mint'`. There are no such rows.
+                    The real type is `system_credit`. With no match it falls back to a
+                    hardcoded 10,000.0 - which is the entire "issued" figure it reported.
+    escrow          it reads `marketplace_listings`, a table that does not exist. Guarded
+                    by `_table_exists`, so escrow is silently 0 rather than an error.
+
+So `issued: 10000.0, circulation: 0.0` compares a hardcoded default against a currency
+filter that matches nothing. **Both numbers in the alert are artefacts.**
+
+**And the anomaly names a table the check never queries.** `table_name="nib_transactions"`
+and `repair_action="audit_nib_transactions"` are hardcoded literals; the check reads
+`wallets`, `transactions` and `marketplace_listings`. `nib_transactions` does not exist,
+which is why `repairs_executed` is 0 across all 3,592 runs - the repair targets nothing.
+
+**One real question survives the correction.** Of the 2,665,807.29 in wallets, 665,807.29
+arrived as `salary` and `bonus` with no `system_credit` behind it. Whether those are mints
+or transfers is a design question about what conservation means here. It is not corruption,
+and it is not what the alert said.
+
+### Why both rulings are the same ruling
+
+A placeholder hash and a broken health check are the same failure: **a control that exists,
+reports, and holds nothing.** The hash looked like a credential. The check looked like
+oversight and fired 3,592 times, all `detected`, none acted on, because the thing it told
+you to audit was never built. Neither would have been found by reading the code - both took
+looking at what was stored.
