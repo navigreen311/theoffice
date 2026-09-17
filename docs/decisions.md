@@ -9769,3 +9769,68 @@ second time in this repository that a text-replace mutation has silently stopped
 
 It now matches `headcount: \d+` whatever the number, and **asserts the mutation landed
 before relying on it**. A test that mutates by text has to prove the text was there.
+
+---
+
+## 116. "My token is not working" was a 401 from somebody else's nginx
+
+**Found and fixed 2026-09-16.** The token was fine. Nothing about it had expired, been
+rotated out from under anybody, or been rejected by The Office.
+
+### What was actually happening
+
+    console/lib/api.ts    const API_BASE = process.env.OFFICE_API_URL ?? "http://127.0.0.1:8080"
+    port 8080             visonaudioforge-nginx-1, 0.0.0.0:8080->80/tcp
+
+The Office's API was on 9200, because Docker Desktop's backend holds 8080 on this machine
+and `dev-all.sh` correctly refused to start there. **Nothing told the console.** It fell
+back to its default, reached a container from an unrelated project, and got:
+
+    {"detail":"Missing authentication: provide an Authorization: Bearer <token> header
+     or an X-API-Key header"}
+
+which the console surfaces as a rejected session - a bounce back to the login page, which
+looks exactly like a bad token.
+
+### This is decisions entry 22's class, and it is the third instance
+
+    the Village, 8002     a VAF container held the port. Its 401 was read as the Village
+                          refusing a credential FOR A WEEK (port-allocation.md line 82).
+    CapitalForge          an unconfigured bridge 401s from tenantMiddleware instead of
+                          404ing as its own .env.example documents. Cost a morning.
+    the console, 8080     this one.
+
+**The diagnostic each time is the same: the service's OWN rejection code being absent.**
+The Office refuses with its own message; `{"detail":"Missing authentication..."}` is not
+it. A 401 says only that something on that port wants credentials - never that yours are
+wrong.
+
+### The bug was in `dev-all.sh`, which I wrote two days ago
+
+It started the API on `$API_PORT` and the console with no `OFFICE_API_URL` at all, **then
+reported both healthy.** A health script that starts two services on mismatched ports and
+calls the result green is worse than no health script: it converts a five-minute
+misconfiguration into a hunt for a credential problem that does not exist.
+
+    fixed   the console is started with OFFICE_API_URL="http://127.0.0.1:$API_PORT", and
+            the line says which port it was pointed at
+    and     a console this script did NOT start is reported DOWN, not OK - it answers,
+            and nothing here can read which API it was built against. Calling that
+            healthy would be claiming a wiring the script neither did nor can see.
+
+**The second half matters more than the first.** The first time this ran after the fix it
+refused the console I had started by hand, which is correct and is the only reason the
+mismatch cannot come back silently.
+
+### Also corrected: a token rotated with no audit row
+
+`humans.reissue_token` writes no audit event - the CALLER does, which is why `dev-up.sh`
+writes `console_token_reissued` immediately after calling it. I called the function
+directly on 16 September, so the account's token changed with nothing in the hash-chained
+log to say so.
+
+**That is entry 103's rule broken one function over:** *"hand-run SQL writes no audit
+event, so the hash-chained log would hold no record that it happened."* The same is true of
+a hand-run function call. The token has been reissued again through
+`POST /api/humans/{id}/token`, which writes the event, so the current credential has a
+provenance the previous one did not.

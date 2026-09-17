@@ -370,15 +370,38 @@ fi
 
 step "Console :$CONSOLE_PORT"
 if probe console "http://127.0.0.1:$CONSOLE_PORT/login" "<html"; then
-  ok "serving"
+  if [ -f "$RUN_DIR/console.pid" ]; then
+    ok "serving, pointed at 127.0.0.1:$API_PORT"
+  else
+    # It answers, and nothing here can see which API it was started against. Saying
+    # "OK" would be claiming a wiring this script did not do and cannot read.
+    bad "serving, but this script did not start it - OFFICE_API_URL unknown. Restart it"
+    say "      with: ./scripts/dev-all.sh --stop && ./scripts/dev-all.sh"
+  fi
 elif [ "$STATUS_ONLY" -eq 1 ]; then
   report_down "not serving" "$CONSOLE_PORT"
 elif [ -n "$(pids_on_port "$CONSOLE_PORT")" ]; then
   bad "port held by $(port_holder "$CONSOLE_PORT") and it is not the console"
 elif [ -d "$ROOT/console/.next" ]; then
-  ( cd "$ROOT/console" && start_bg console npx next start -p "$CONSOLE_PORT" )
+  # THE CONSOLE MUST BE TOLD WHERE THE API IS, AND THIS SCRIPT IS THE ONLY THING
+  # THAT KNOWS. `console/lib/api.ts` defaults to 127.0.0.1:8080, and on this machine
+  # 8080 is `visonaudioforge-nginx-1` - a container from another project that Docker
+  # starts on boot. It answers, with:
+  #
+  #     {"detail":"Missing authentication: provide an Authorization: Bearer <token>"}
+  #
+  # which the console surfaces as a rejected token. **That is why a perfectly good
+  # token "stopped working" on 16 September**, and it is decisions entry 22's class
+  # for the third time: a 401 from the wrong service, read as a credential refusal.
+  # The Village spent a week behind the same mistake on 8002.
+  #
+  # Starting the console without this was a real bug in this script: it started the
+  # API on one port and pointed the console at another, then reported both healthy.
+  ( cd "$ROOT/console" || exit 1
+    OFFICE_API_URL="http://127.0.0.1:$API_PORT" \
+      start_bg console npx next start -p "$CONSOLE_PORT" )
   if wait_for 60 probe console "http://127.0.0.1:$CONSOLE_PORT/login" "<html"; then
-    ok "serving"
+    ok "serving, pointed at 127.0.0.1:$API_PORT"
   else
     bad "did not serve in 60s"
   fi
