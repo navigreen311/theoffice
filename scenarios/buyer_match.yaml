@@ -9,9 +9,15 @@
 #
 # Situations rewritten in the SECOND PERSON. No fact added, removed or reworded by that rewrite.
 
+# APPROVED by Ivan Green, 18 September 2026, after review of all 44 scenarios across
+# the five keys. `drafted_by` stays: who wrote it and who approved it are two facts and
+# the file records both. See docs/decisions.md.
+
 module_id: buyer_match
 forge_id: cre-forge
-status: draft
+status: approved
+approved_by: "Ivan Green"
+approved_on: "2026-09-18"
 drafted_by: "Claude"
 supersedes: "the approved 5-scenario key, 17 September 2026"
 revised: "18 September 2026, ADR-0080 ruling 3"

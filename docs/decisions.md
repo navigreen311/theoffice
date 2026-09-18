@@ -10327,3 +10327,108 @@ flat key is ABSENT - because absence is the shape `extra="forbid"` refuses - and
 six field names against a transcription of `ExpectedAnswer`, with its source named.
 Transcribed rather than imported, for the reason `test_village_seal` exists: a
 cross-import is how the separation between the two applications dies.
+
+## NEXT. Forty-four read, forty-four approved - and the approval carries a date this time
+
+**Ruled by Ivan Green, 18 September 2026:** *"I approve all 44 Greenstone answer keys.
+Flip them to approved, approved_by 'Ivan Green', dated 2026-09-18. Burkham's 20 stay
+draft."*
+
+So the five Greenstone keys are approved and Burkham's twenty are not. That asymmetry is
+the ruling, not an oversight: an approval covers what was read and nothing else.
+
+### The new field, and the round trip that demanded it
+
+`approved_on` joins `approved_by` on every approved key - required on an approved file,
+**refused on a draft**, under exactly the same rule as the name.
+
+It is here because of what happened to these five in eight days. They were approved on
+**17 September**. SimForge's split keys superseded them the same week, which returned all
+five to `draft` (entry 124). They are approved again **today**, over different prose.
+
+**With only a name, those two approvals are the same approval.** A file reading
+`status: approved, approved_by: Ivan Green` says nothing about which of the two bodies of
+text he read, and the one he read first no longer exists. That is the grandfathering
+question from 17 September arriving from the other direction: there, use was mistaken for
+review; here, an old review would have been mistaken for a current one. A date is what
+distinguishes them, so the date is required.
+
+`fullmatch` on `YYYY-MM-DD`, so `18 September 2026` is refused rather than half-read.
+One format, and a date that sorts is a date that can be compared against `revised`.
+
+### What the approval turned on
+
+    dimension                                          before -> after
+    modules_with_authored_scenario_content                0/5 -> 5/5
+    modules_accounting_for_every_submittable_class        0/5 -> 5/5
+    modules_with_a_draft_answer_key_awaiting_approval     5/5 -> 0/0
+    operation scenario rows in the curriculum              15 -> 52
+
+**The 52 is 44 authored plus 8 declared absent**, and the distinction matters: 44 is what
+SimForge grades, 8 are the `not_applicable` rows that account for the rest of the
+submittable classes without asking anyone to answer them.
+
+The 15 before were neither. Counted from the superseded snapshot: **0 carried an answer
+and 0 carried a declared reason** - five modules times the three classes the generator
+emits mechanically (`happy_path`, `escalation_required`, `permission_denied`), every
+field on them empty. That is the whole shape of a withheld draft. `for_module` returns
+`None` while a key is drafted, which withholds its declared absences along with its
+scenarios, so the curriculum did not merely lack answers: it could not say which classes
+Greenstone had deliberately ruled out either.
+
+Per module, measured: `assign_contract` 8, `buyer_match` 8, `comp_analysis` 5,
+`property_lookup` 10, `underwrite_deal` 13.
+
+Two dimensions do NOT move, and neither is about the approval:
+
+    scenario_classes_the_office_may_submit   7/9   `never_do_violation` and
+                                                   `silent_failure` are held out by
+                                                   contract. 7 of 9 is the ceiling.
+    roles_with_domain_scenarios              2/3   Deal Underwriter is an unfilled seat,
+                                                   which no answer key can fill.
+
+### Gate 8: six exams, and one module that hands over and opens nothing
+
+Measured against the live grant table, not predicted:
+
+    module             scenarios  exams  who sits it
+    assign_contract        8        2    Ronan Valek, Seraphine Valek
+    buyer_match            8        2    Ronan Valek, Seraphine Valek
+    comp_analysis          5        1    Victor Serath
+    property_lookup       10        1    Victor Serath
+    underwrite_deal       13        0    -- nobody --
+
+All five carry a live operating instruction, so all five hand their curriculum over. Six
+runs open, one per taker per module, because SimForge's battery scores `run.agentId` and
+a module two agents hold is two exams rather than one exam about two people.
+
+**`underwrite_deal` hands over completely and opens no run.** Deal Underwriter is
+unfilled, so nobody holds a grant for it. That is entry 124's correction doing the work it
+was built for: its 13 scenarios reach SimForge and bind to an instruction set that was
+previously unreachable, and they sit there until somebody fills the seat. A hand-over is
+about the curriculum; a run is about a taker.
+
+**Gate 8 stops blocking.** It blocks when SimForge accepts zero modules; five modules
+now carry approved content and six runs are owed verdicts.
+
+### What this does not unblock
+
+Gate 9 still waits on SimForge. The verdicts have to come back before any certification
+is written, and that path is SimForge's #153. Nothing here changes that, and the six open
+exams are what make the wait visible rather than a guess.
+
+### Burkham's twenty, still drafted, still carrying debt
+
+**46** of their declared reasons exceed the prose threshold that
+`assert_no_scenario_content` refuses coming back (entry 123). They cannot be refused
+today because a draft is never submitted and therefore never echoed.
+
+*Entry 123 recorded 49.* Re-counted here against the same rule, and the files have not
+changed since #167 - so 49 was a miscount, not a decrease. The number is 46 under either
+reading of the threshold: `>= 200 characters` alone gives 46, and the full
+`_looks_like_prose` conjunction gives 46.
+
+`test_no_declared_reason_would_be_refused_coming_back` stays scoped to approved keys for
+that reason: widening it would block Ivan's review on prose length before he has read a
+word. **The debt comes due at their approval, and this entry is where it was last
+counted.**

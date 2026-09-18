@@ -175,7 +175,7 @@ def test_a_reasonless_declaration_is_refused(tmp_path):
         f"module_id: {MODULE}\nforge_id: {FORGE}\n"
         # `status` is required since 17 September 2026. Approved here because this
         # fixture's subject is the reasonless declaration below it, not the approval.
-        'status: approved\napproved_by: "test fixture"\n'
+        'status: approved\napproved_by: "test fixture"\napproved_on: "2026-09-18"\n'
         "scenarios: []\n"
         "not_applicable:\n  escalation_required: '   '\n",
         encoding="utf-8",

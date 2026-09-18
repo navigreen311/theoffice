@@ -54,6 +54,7 @@ THE SEVEN THE OFFICE MAY AUTHOR, AND WHY IT IS NOT NINE
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -124,6 +125,7 @@ DEFAULT_SECTIONS: dict[str, str] = {
 #: everybody believes was authored.
 _FILE_KEYS = frozenset({
     "module_id", "forge_id", "scenarios", "not_applicable", "status", "approved_by",
+    "approved_on",
     # Provenance the split keys carry. `drafted_by` is who wrote it - the counterpart to
     # `approved_by` and never a substitute for it. `supersedes` and `revised` say which
     # key this replaces and under which ruling, so a reader meeting the file knows it is
@@ -145,6 +147,11 @@ _FILE_KEYS = frozenset({
 DRAFT = "draft"
 APPROVED = "approved"
 _STATUSES = (DRAFT, APPROVED)
+
+#: The one form `approved_on` may take. `fullmatch`, so `18 September 2026` is refused
+#: rather than half-read: one format means no reader of the ledger or of a key has to
+#: parse two, and a date that sorts is a date that can be compared to `revised`.
+_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 #: Per-scenario keys. Same rule.
 _SCENARIO_KEYS = frozenset({
@@ -252,6 +259,20 @@ class ModuleContent:
     approved_by: str = ""
     """Who approved it. Required on an approved file, refused on a draft: a name
     beside `status: draft` is a signature on something nobody signed."""
+
+    approved_on: str = ""
+    """WHEN it was approved, ISO `YYYY-MM-DD`. Required on an approved file, refused on
+    a draft, under the same rule as the name.
+
+    Separate from `approved_by` because a name and a date are two facts, and folding the
+    date into the name would make `approved_by` unusable as what it is - the person
+    answerable for prose SimForge grades an agent against.
+
+    **The date is what tells two approvals apart.** Greenstone's five were approved on
+    17 September, superseded by SimForge's split keys, and approved again on the 18th
+    after Ivan read all 44. With only a name, the second approval is indistinguishable
+    from the first still sitting there over prose that has since been replaced -
+    exactly the carry-forward the 17 September ruling on grandfathering refused."""
 
     scenarios: dict[str, list[AuthoredScenario]] = field(default_factory=dict)
     """Class -> the scenarios probing it, in file order.
@@ -384,11 +405,24 @@ def load_module(path: Path | str) -> ModuleContent:
             "only an approved one is submitted (Ivan Green, 17 September 2026)."
         )
     approved_by = str(raw.get("approved_by") or "").strip()
+    approved_on = str(raw.get("approved_on") or "").strip()
     if status == APPROVED and not approved_by:
         raise ScenarioContentError(
             f"{p.name} is approved and names nobody. `approved_by` is who is answerable "
             "for the prose SimForge will grade an agent against; an approval with no "
             "name on it is the shape a rubber stamp has."
+        )
+    if status == APPROVED and not _ISO_DATE.fullmatch(approved_on):
+        raise ScenarioContentError(
+            f"{p.name} is approved and carries approved_on {approved_on!r}. An approval "
+            "needs the date it was given, as YYYY-MM-DD: without one it cannot be "
+            "compared against the content it approved, and `revised` already dates the "
+            "other side of that question."
+        )
+    if status == DRAFT and approved_on:
+        raise ScenarioContentError(
+            f"{p.name} is a draft and carries approved_on {approved_on!r}. A date beside "
+            "a draft dates an approval nobody gave."
         )
     if status == DRAFT and approved_by:
         raise ScenarioContentError(
@@ -433,7 +467,7 @@ def load_module(path: Path | str) -> ModuleContent:
 
     return ModuleContent(
         module_id=module_id, forge_id=forge_id,
-        status=status, approved_by=approved_by,
+        status=status, approved_by=approved_by, approved_on=approved_on,
         scenarios=scenarios, not_applicable=not_applicable,
     )
 
