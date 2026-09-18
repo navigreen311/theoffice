@@ -174,6 +174,76 @@ def test_every_field_the_submission_schema_requires_is_present():
     }
 
 
+#: SimForge's `ExpectedAnswer`, transcribed from
+#: `apps/api/src/schemas/operation_payloads.py`. Transcribed rather than imported for
+#: the reason `test_portfolio_health_declaration` gives about the same boundary: this
+#: suite does not import SimForge, and a cross-import is how the separation dies.
+#:
+#: Both that model and `OperationScenarioSubmission` carry `extra="forbid"` since
+#: ADR-0083, so a key outside these six takes the whole submission down.
+SIMFORGE_ANSWER_FIELDS = {
+    "act", "record", "record_subject", "record_claim", "record_claim_options",
+    "expected_caveat",
+}
+
+
+def test_the_answer_arrives_in_simforge_declared_shape():
+    """**NESTED, not spread.** The bug this pins was live on main for a day.
+
+    The keys were spread flat on the guess that each would be its own field on
+    `OperationScenarioSubmission`. SimForge declares one `expected_answer` of type
+    `ExpectedAnswer`, and ADR-0083 set `extra="forbid"` on both payloads - so `act`
+    arriving at the top level stopped being ignored and started taking the whole
+    submission with it.
+
+    The field NAMES were right the whole time, which is why nothing caught it while
+    extras were still being dropped silently.
+    """
+    answer = {
+        "act": "PROCEED",
+        "record_subject": "total",
+        "record_claim": "143",
+        "record_claim_options": ["143", "100"],
+    }
+    sent = payload(
+        FakeScenario(
+            scenario_class="happy_path",
+            summary="An analyst asks how many warehouses are on file.",
+            expected_behavior="Report `total`, not the length of the page.",
+            expected_escalation="None fires; the call answered completely.",
+            expected_answer=answer,
+        )
+    )["operation_scenarios"][0]
+
+    assert sent["expected_answer"] == answer, "the answer did not arrive whole"
+    # The flat spelling is the defect. Asserted by absence, because that is the shape
+    # `extra="forbid"` refuses.
+    for key in answer:
+        assert key not in sent, (
+            f"{key!r} is a top-level field; SimForge forbids it and would refuse the "
+            "whole submission"
+        )
+    assert set(sent["expected_answer"]) <= SIMFORGE_ANSWER_FIELDS, (
+        "the answer carries a key SimForge's ExpectedAnswer does not declare"
+    )
+    assert set(sent) == {
+        "scenario_class", "module_id", "instruction_section",
+        "expected_behavior", "expected_escalation", "expected_answer",
+    }
+
+
+def test_a_scenario_with_no_answer_omits_the_field_entirely():
+    """Absent, never `{}` and never `null`.
+
+    SimForge declares it `ExpectedAnswer | None` so that absent means *this scenario
+    has no machine-checkable half*. An empty object would claim a blank one, which is
+    the substitution entry 122 refuses - and `extra="forbid"` would not catch it,
+    because the field is declared.
+    """
+    sent = payload(AUTHORED)["operation_scenarios"][0]
+    assert "expected_answer" not in sent
+
+
 def test_a_declared_absence_still_sends_no_scenario_row():
     """The classed fields do not turn a declaration into a submittable scenario."""
     result = payload(DECLARED_ABSENT)
