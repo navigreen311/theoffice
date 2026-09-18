@@ -200,7 +200,7 @@ def test_a_class_may_carry_several_occasions(tmp_path):
     `not_applicable` declares classes, and SimForge's `classify_certification_level`
     reads a set of classes. Only the number of occasions per class changes.
 
-    **Needs Ivan's ratification.** Until then this test records a proposal, not a rule.
+    **Ratified by Ivan Green, 18 September 2026** - decisions entry 124.
     """
     body = MINIMAL.format(module="m")
     write(tmp_path, "m.yaml", body + body.split("scenarios:")[1])

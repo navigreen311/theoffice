@@ -10151,7 +10151,7 @@ comes due at approval, not now, and `test_no_declared_reason_would_be_refused_co
 is scoped to approved keys for exactly that reason: widening it would block Ivan's review
 on prose length before he has read a word.
 
-## NEXT. The split keys arrive, and they break a clause written to keep the counts equal
+## 124. The split keys arrive, and A2.1 is amended to keep the counts equal
 
 Three pieces, and the third needed a contract amendment nobody had asked for.
 
@@ -10225,8 +10225,16 @@ class changes. The scenario id gains an ordinal **only where it has to** - a cla
 one occasion keeps `op-<module>-<class>` unchanged, so 27 existing ids and the golden's
 ordering are untouched.
 
-**This needs Ivan's ratification. Until then it is a proposal that happens to be
-running.**
+**RATIFIED by Ivan Green, 18 September 2026**, in the terms the amendment was proposed
+on:
+
+> The purpose is that both sides count the same scenarios; SimForge grades 44, so The
+> Office must submit 44. The key stays `(module, class)` everywhere it decides anything;
+> only occasions-per-class changes.
+
+So A2.1 now reads for occasions rather than rows, and the clause keeps the job it was
+written for. `test_a_class_may_carry_several_occasions` is the enforcement, and it says
+in its own docstring which rule it used to assert and why that reversed.
 
 ### What changed in the golden
 

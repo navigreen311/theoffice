@@ -267,7 +267,7 @@ class ModuleContent:
     Keying stays `(module, class)` everywhere it decides anything: coverage counts
     classes, `not_applicable` declares classes, and SimForge's `classify_certification_
     level` reads a set of classes. What changes is only how many occasions may probe one
-    class. **Needs Ivan's ratification before it is more than a proposal.**"""
+    class. **Ratified by Ivan Green, 18 September 2026 - entry 124.**"""
 
     not_applicable: dict[str, str] = field(default_factory=dict)
     """class -> reason, in prose. ADR-0049: the absence is stated rather than
