@@ -10433,7 +10433,7 @@ that reason: widening it would block Ivan's review on prose length before he has
 word. **The debt comes due at their approval, and this entry is where it was last
 counted.**
 
-## NEXT. The gate recorded what it sent, and never what sent it
+## 127. The gate recorded what it sent, and never what sent it
 
 Twice in two days a provisioning run reached Gate 8 on code older than the checkout,
 submitted a superseded curriculum, and reported success. Both took forensics, days and
