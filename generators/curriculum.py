@@ -93,6 +93,7 @@ from generators.scenario_content import (
     HELD_OUT_CLASSES,
     MECHANICAL_SECTIONS,
     SUBMITTABLE_CLASSES,
+    AuthoredScenario,
     ModuleContent,
     ScenarioContentError,
     ScenarioContentSet,
@@ -190,15 +191,48 @@ def _operation_scenarios(
 
     out: list[CurriculumScenario] = []
     for scenario_class in sorted(set(classes)):
-        authored = content.scenarios.get(scenario_class) if content else None
+        # SEVERAL OCCASIONS MAY PROBE ONE CLASS - proposed amendment to A2.1, see
+        # `ModuleContent.scenarios`. `[None]` keeps the unauthored and declared-absent
+        # paths exactly as they were: one row, carrying the reason or nothing.
+        found = (content.scenarios.get(scenario_class) if content else None) or []
+        authored_list: list[AuthoredScenario | None] = list(found) or [None]
         reason = content.not_applicable.get(scenario_class, "") if content else ""
+        for ordinal, authored in enumerate(authored_list):
+            out.append(_operation_row(
+                module, scenario_class, authored, reason,
+                content, hashes, ordinal, len(authored_list),
+            ))
+    return out
+
+
+def _operation_row(
+    module: str,
+    scenario_class: str,
+    authored: AuthoredScenario | None,
+    reason: str,
+    content: ModuleContent | None,
+    hashes: dict[str, str],
+    ordinal: int,
+    siblings: int,
+) -> CurriculumScenario:
+    """One row. Split out when a class stopped being limited to one occasion."""
+    if True:
         section = (
-            content.section_for(scenario_class) if content
+            (authored.instruction_section if authored and authored.instruction_section
+             else content.section_for(scenario_class)) if content
             else MECHANICAL_SECTIONS.get(scenario_class, "")
         )
-        out.append(
+        return (
             CurriculumScenario(
-                scenario_id=f"op-{module}-{scenario_class}",
+                # THE ORDINAL ONLY APPEARS WHEN IT HAS TO. A class with one occasion
+                # keeps the id it has always had, so every existing reference and the
+                # golden's own ordering are untouched; a class with several gets
+                # `-2`, `-3` and so on. Suffixing unconditionally would have rewritten
+                # 27 ids to express a fact about 5 of them.
+                scenario_id=(
+                    f"op-{module}-{scenario_class}" if siblings == 1
+                    else f"op-{module}-{scenario_class}-{ordinal + 1}"
+                ),
                 kind="operation",
                 # No position in the key (contract A2.1). Empty rather than a
                 # plausible-looking join across the positions that operate this
@@ -228,9 +262,11 @@ def _operation_scenarios(
                 # reserved for SimForge's own authoring.
                 never_do_entry="",
                 not_applicable_reason=reason,
+                # The gradeable half. Empty for a class nobody split, and emitted as
+                # absent rather than as a blank - see `_answer` in scenario_content.
+                expected_answer=dict(authored.expected_answer) if authored else {},
             )
         )
-    return out
 
 
 def _check_forge(content: ModuleContent, forge_id: str) -> None:

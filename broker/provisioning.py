@@ -763,7 +763,15 @@ async def _gate_8(ctx: _Context) -> GateOutcome:
         "scenario_count": total,
         # True only when every module SimForge was asked about answered with a ref. A
         # row being written is not a hand-over, and neither is three of five landing.
-        "handed_over_to_simforge": bool(attempted) and len(handed_over) == len(attempted),
+        # HANDED OVER MEANS THE CURRICULUM LANDED, not that a run opened. Those were
+        # one number until 18 September, when a module with no exam taker started
+        # submitting its instruction set anyway - `underwrite_deal` hands over
+        # completely and opens nothing, and reporting that as a failed hand-over would
+        # say SimForge never got the module it now holds.
+        #
+        # `accepted` is `error is None`, and a `run_start` that throws sets `error` - so
+        # this still goes False when a run that SHOULD have opened did not.
+        "handed_over_to_simforge": bool(attempted) and len(accepted) == len(attempted),
         "modules_submitted": len(attempted),
         "modules_accepted": len(accepted),
         "modules_handed_over": len(handed_over),
@@ -924,7 +932,8 @@ async def _exam_takers(
     """
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
-            "SELECT g.grant_id, g.office_agent_id, i.agent_name "
+            "SELECT g.grant_id, g.office_agent_id, i.agent_name, "
+            "       i.village_agent_ref "
             "FROM agent_forge_grant g "
             "  JOIN office_agent_identity i ON i.office_agent_id = g.office_agent_id "
             " WHERE g.venture_id = %s AND g.forge_id = %s AND g.module_id = %s "
@@ -941,9 +950,11 @@ async def _exam_takers(
         if row["grant_id"] in covered or row["office_agent_id"] in seen:
             continue
         seen.add(row["office_agent_id"])
-        takers.append(
-            {"office_agent_id": row["office_agent_id"], "agent_name": row["agent_name"]}
-        )
+        takers.append({
+            "office_agent_id": row["office_agent_id"],
+            "agent_name": row["agent_name"],
+            "village_agent_ref": row["village_agent_ref"],
+        })
     return takers
 
 
@@ -985,24 +996,22 @@ async def _submit_one_module(
         ctx.conn, venture_id=ctx.venture_id, forge_id=forge_id, module_id=module_id
     )
 
-    if not takers:
-        # NOT A SUBMISSION, for the reason the missing-instruction branch gives above.
-        # An exam nobody sits teaches SimForge an instruction set and owes a verdict
-        # that can never be read: `sweeps` would poll a run that was never opened, and
-        # a `curriculum_submission` row with no ref and no agent is the "something was
-        # handed over" lie that table exists not to tell.
-        #
-        # This is a roster finding and it is reported as one. greenstone's
-        # `underwrite_deal` is the live case: Deal Underwriter is unfilled, so no grant
-        # exists and no agent can be examined on it.
-        return {
-            "module_id": module_id,
-            "scenario_count": len(scenarios),
-            "run_ref": None,
-            "skipped": "no agent holds a live grant for this module, so nobody can sit "
-                       "its exam",
-        }
-
+    # NO TAKER IS NOT NO SUBMISSION - corrected 18 September 2026.
+    #
+    # This used to return early and submit nothing, on the argument that "an exam nobody
+    # sits owes a verdict that can never be read." That argument is sound about the RUN
+    # and wrong about the CURRICULUM, and the two were collapsed.
+    #
+    # Submitting the curriculum teaches SimForge the module's instruction set, which is
+    # what its scenarios BIND to. `underwrite_deal` is the live case: SimForge holds no
+    # instruction set for it, so 13 of the 44 drafted split-key scenarios have nothing
+    # to bind to - and they would keep having nothing for as long as Deal Underwriter
+    # stays unfilled, because the seat gates the exam and the exam was gating the
+    # hand-over.
+    #
+    # So the curriculum goes over whether or not anyone can sit it, and the run is what
+    # stays conditional on a taker. Nothing is owed a verdict that cannot arrive: the
+    # loop below opens a run per taker, and with none it opens none.
     payload = _curriculum_payload(
         instruction=instruction, scenarios=scenarios, candidates=takers,
         modules_in_forge=modules_in_forge, modules_uncovered=modules_uncovered,
@@ -1051,6 +1060,24 @@ async def _submit_one_module(
                 rubric_kind=rubric_kind,
                 module_id=module_id,
                 agent_id=str(taker["office_agent_id"]),
+                # BESIDE the office id, never instead of it. The two name the same
+                # agent to two different systems: `agent_id` is The Office's primary
+                # key and means nothing to the Village, and `village_agent_ref` is what
+                # the Village calls the same person - `victor_serath`, `ronan_valek`.
+                # SimForge needs the second to resolve an identity out of village.db
+                # (its ADR-0065); it cannot do that from a uuid.
+                #
+                # WHAT HAPPENS WHEN AN AGENT HAS NONE: it cannot. The column is NOT
+                # NULL on `office_agent_identity`, measured - 0 of 55 identities lack
+                # one - so there is no branch here and none is written. An identity
+                # without a Village ref is not a state this system can be in, because
+                # `sync-roster` is the only writer and it reads the ref first.
+                #
+                # A ref that no longer RESOLVES in the Village is a different thing and
+                # is not The Office's to detect: the ref travels, and SimForge reports
+                # what it found. Guessing here would put an Office opinion in front of
+                # the Village's own answer.
+                village_agent_ref=taker["village_agent_ref"],
                 # Gate 8 submits per module, so every run it opens is unit A. A
                 # department id here would be a unit B assertion on a unit A run.
                 department_id=None,
@@ -1118,11 +1145,23 @@ async def _submit_one_module(
                 instruction_content_hash=instruction.content_hash,
                 run_ref=entry["run_ref"],
             )
+    elif not takers and error is None:
+        # ACCEPTED, AND NOBODY CAN SIT IT. No `curriculum_submission` row, and that is
+        # the original argument kept rather than abandoned: that table means "a verdict
+        # is owed", `overdue_submissions` selects every row whose `result_received_at`
+        # is NULL regardless of its ref, and a row for an exam nobody sat would sit in
+        # the sweep's queue for ever being reported as `no_grant_holders`.
+        #
+        # The instruction set still reached SimForge, which is the whole point of
+        # submitting a module with no taker. What did not happen is a run, so there is
+        # nothing to correlate and nothing to poll.
+        pass
     else:
-        # No run was opened: the curriculum was refused or SimForge was down. The row is
-        # still written, with a NULL ref, because it records that The Office tried - the
-        # shape `test_a_run_that_did_not_open_stores_no_ref` pins. It names no agent
-        # because no agent sat it.
+        # No run was opened and something went wrong: the curriculum was refused, or
+        # SimForge was unreachable. The row IS written, with a NULL ref, because a
+        # verdict was owed and did not open - the shape
+        # `test_a_run_that_did_not_open_stores_no_ref` pins. It names no agent because
+        # no agent sat it.
         await _record_submission(
             ctx,
             forge_id=forge_id,
@@ -1145,7 +1184,9 @@ async def _submit_one_module(
         # about the roster, not about the curriculum, and the two must not be one
         # number. This is what the zero-accepted block below reads.
         "curriculum_accepted": error is None,
-        # Who sat it. Empty and accepted means the module has no live grant holder.
+        # Who sat it. EMPTY AND ACCEPTED is a real, reportable state, not a failure:
+        # the instruction set reached SimForge and no agent holds a grant to be examined
+        # on it. `underwrite_deal` is that today.
         "exam_takers": [
             {"office_agent_id": str(o["office_agent_id"]),
              "agent_name": o["agent_name"], "run_ref": o["run_ref"]}
@@ -1513,6 +1554,15 @@ def _curriculum_payload(
                 # present-but-empty required field, and that refusal is the honest
                 # report that the scenario is unwritten.
                 "expected_escalation": s.expected_escalation,
+                # THE GRADEABLE HALF, and it is spread rather than nested so each key
+                # is a field SimForge can declare on `OperationScenarioSubmission`
+                # rather than an opaque blob it has to reach inside.
+                #
+                # OMITTED WHEN EMPTY, never sent as {}. A scenario written before the
+                # split has no machine-checkable half, and an empty mapping would say
+                # it has one that is blank - the substitution `no silent defaults`
+                # refuses (entry 122).
+                **(s.expected_answer or {}),
             }
             for s in submittable
         ],

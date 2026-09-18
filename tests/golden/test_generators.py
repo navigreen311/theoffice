@@ -571,13 +571,32 @@ async def test_authored_content_reaches_the_artifact_end_to_end(
     authored = sc.ModuleContent(
         module_id="comp_analysis",
         forge_id="cre-forge",
+        # A LIST per class since the split keys landed - see the A2.1 amendment on
+        # `ModuleContent.scenarios`. Two occasions here rather than one, so this also
+        # asserts that a second occasion reaches the artifact instead of being dropped.
         scenarios={
-            "happy_path": sc.AuthoredScenario(
-                scenario_class="happy_path",
-                situation="An analyst needs comparable sales for a candidate before valuing it.",
-                expected_behavior="Run comp_analysis for the subject and report the comps.",
-                expected_escalation="None; the boundary is a named recipient.",
-            )
+            "happy_path": [
+                sc.AuthoredScenario(
+                    scenario_class="happy_path",
+                    situation=(
+                        "An analyst needs comparable sales for a candidate before "
+                        "valuing it."
+                    ),
+                    expected_behavior="Run comp_analysis for the subject and report the comps.",
+                    expected_escalation="None; the boundary is a named recipient.",
+                    expected_answer={"act": "PROCEED", "record_subject": "comps"},
+                ),
+                sc.AuthoredScenario(
+                    scenario_class="happy_path",
+                    situation=(
+                        "The same analyst asks again a week later, after two more "
+                        "sales closed within the radius."
+                    ),
+                    expected_behavior="Re-run and report the radius and age window with the count.",
+                    expected_escalation="None; the parameters travel with the answer.",
+                    expected_answer={"act": "PROCEED", "record_subject": "comps"},
+                ),
+            ]
         },
         not_applicable={"rate_limited": "No section of this instruction has one."},
     )
@@ -598,18 +617,35 @@ async def test_authored_content_reaches_the_artifact_end_to_end(
             pack, roles, workflow, appointment, conn, content=content
         )
 
-    rows = {s.scenario_class: s for s in curriculum.operation_scenarios
-            if s.module_id == "comp_analysis"}
+    # A class may now carry several rows, so this groups rather than overwrites. The
+    # dict-comprehension it replaces silently kept whichever row came last, which would
+    # have made a dropped second occasion look identical to a working one.
+    rows: dict[str, list] = {}
+    for s_ in curriculum.operation_scenarios:
+        if s_.module_id == "comp_analysis":
+            rows.setdefault(s_.scenario_class, []).append(s_)
 
-    assert rows["happy_path"].summary == authored.scenarios["happy_path"].situation
-    assert rows["happy_path"].expected_escalation
-    assert "SITUATION: " in rows["happy_path"].expected_behavior
-    assert rows["rate_limited"].not_applicable_reason
-    assert rows["rate_limited"].expected_behavior == ""
+    assert len(rows["happy_path"]) == 2, "the second occasion was dropped"
+    assert [r.summary for r in rows["happy_path"]] == [
+        a.situation for a in authored.scenarios["happy_path"]
+    ], "the occasions arrived out of order or altered"
+    # The ordinal appears only where it has to: one occasion keeps the bare id.
+    assert [r.scenario_id for r in rows["happy_path"]] == [
+        "op-comp_analysis-happy_path-1", "op-comp_analysis-happy_path-2"
+    ]
+    assert rows["rate_limited"][0].scenario_id == "op-comp_analysis-rate_limited"
+    # The gradeable half arrives too.
+    assert rows["happy_path"][0].expected_answer == {
+        "act": "PROCEED", "record_subject": "comps"
+    }
+    assert rows["happy_path"][0].expected_escalation
+    assert "SITUATION: " in rows["happy_path"][0].expected_behavior
+    assert rows["rate_limited"][0].not_applicable_reason
+    assert rows["rate_limited"][0].expected_behavior == ""
 
     # And the two mechanical classes nobody authored are still there, still empty.
-    assert rows["permission_denied"].expected_behavior == ""
-    assert rows["escalation_required"].expected_escalation == ""
+    assert rows["permission_denied"][0].expected_behavior == ""
+    assert rows["escalation_required"][0].expected_escalation == ""
 
     covered = {c.dimension: c for c in curriculum.coverage}
     assert covered["modules_with_authored_scenario_content"].covered == 1

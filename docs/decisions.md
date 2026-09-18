@@ -10150,3 +10150,134 @@ drafts, never submitted, so they are never echoed and cannot be refused today. T
 comes due at approval, not now, and `test_no_declared_reason_would_be_refused_coming_back`
 is scoped to approved keys for exactly that reason: widening it would block Ivan's review
 on prose length before he has read a word.
+
+## 124. The split keys arrive, and A2.1 is amended to keep the counts equal
+
+Three pieces, and the third needed a contract amendment nobody had asked for.
+
+### 1. The Village ref travels on run start
+
+`run_start` now sends `village_agent_ref` **beside** `agent_id`, never instead. The two
+name one agent to two systems: `agent_id` is The Office's primary key and means nothing
+in the Village; `village_agent_ref` is `victor_serath`. SimForge resolves an identity out
+of `village.db` (its ADR-0065) and cannot do that from a uuid.
+
+**Where it comes from:** `office_agent_identity.village_agent_ref`, written by
+`sync-roster`, which reads the ref before it writes the row.
+
+**What happens when an agent has none: it cannot.** The column is `NOT NULL` - measured,
+and **0 of 55 identities lack one** - so there is no branch and none is written. A ref
+that no longer RESOLVES is a different thing and is not The Office's to detect: the ref
+travels and SimForge reports what it found.
+
+### 2. A module nobody can sit still hands over its curriculum
+
+Gate 8 used to return early when a module had no exam taker, on the argument that *"an
+exam nobody sits owes a verdict that can never be read."* **That is sound about the run
+and wrong about the curriculum, and the two were collapsed.**
+
+Submitting the curriculum teaches SimForge the module's instruction set, which is what
+scenarios BIND to. `underwrite_deal` is the case: SimForge holds no instruction set for
+it, so **13 of the 44 drafted split-key scenarios have nothing to bind to** - and would
+keep having nothing for as long as Deal Underwriter stays unfilled, because the seat gated
+the exam and the exam was gating the hand-over.
+
+So the curriculum goes over regardless; the run stays conditional on a taker. Two
+consequences, both deliberate:
+
+    no correlation row   A module with no taker writes no `curriculum_submission` row.
+                         The original argument is kept, not abandoned: that table means
+                         "a verdict is owed", `overdue_submissions` selects every row
+                         whose `result_received_at` is NULL regardless of its ref, and a
+                         row for an exam nobody sat would sit in the sweep's queue for
+                         ever being reported as `no_grant_holders`.
+    handed over is       `handed_over_to_simforge` now means the curriculum landed, not
+    about the curriculum that a run opened. `underwrite_deal` hands over completely and
+                         opens nothing; calling that a failed hand-over would say
+                         SimForge never got a module it now holds.
+
+### 3. The 44 split keys - and the amendment they force
+
+SimForge's `docs/split-keys-draft/` holds five files, **44 scenarios**, every one
+carrying `supersedes: the approved N-scenario key, 17 September 2026`. They replace the
+five Ivan approved yesterday, and they arrive **unapproved**.
+
+**`expected_answer` is the point of the split.** `expected_behavior` is prose a judge
+reads; this is what a machine can check without one. Measured across the 44: `act` 44,
+`record_subject` 37, `record_claim` 37, `record_claim_options` 25, `record` 7,
+`expected_caveat` 4 - which matches ADR-0082's stated count exactly.
+
+#### The amendment: a class may carry several occasions
+
+`docs/scenario-contract.md` §11 **A2.1** says one row per `(module, class)`. The 44 sit
+across **27 pairs** - 17 beyond one each, four `happy_path` occasions on
+`underwrite_deal` alone. The loader refused the second of any class, by design.
+
+**A2.1's own stated purpose is that *"the Office's count and SimForge's count [are] the
+same count"*.** SimForge moved first. Holding the letter of A2.1 would have kept The
+Office at 27 while SimForge graded 44 - the divergence the clause exists to prevent. So
+the letter is amended to serve the purpose.
+
+The amendment is narrow. **The key is still `(module, class)` everywhere it decides
+anything:** coverage counts classes, `not_applicable` declares classes, and SimForge's
+`classify_certification_level` reads a set of classes. Only the number of occasions per
+class changes. The scenario id gains an ordinal **only where it has to** - a class with
+one occasion keeps `op-<module>-<class>` unchanged, so 27 existing ids and the golden's
+ordering are untouched.
+
+**RATIFIED by Ivan Green, 18 September 2026**, in the terms the amendment was proposed
+on:
+
+> The purpose is that both sides count the same scenarios; SimForge grades 44, so The
+> Office must submit 44. The key stays `(module, class)` everywhere it decides anything;
+> only occasions-per-class changes.
+
+So A2.1 now reads for occasions rather than rows, and the clause keeps the job it was
+written for. `test_a_class_may_carry_several_occasions` is the enforcement, and it says
+in its own docstring which rule it used to assert and why that reversed.
+
+### What changed in the golden
+
+    operation scenarios                              35 -> 15
+    rows carrying expected_behavior                  27 -> 0
+    new key on every row                             expected_answer
+    modules_with_authored_scenario_content          5/5 -> 0/5
+    modules_accounting_for_every_submittable_class  5/5 -> 0/5
+    modules_with_a_draft_answer_key_awaiting_approval 0/0 -> 5/5
+
+**The drop is the ruling working, not a regression.** All five keys are drafts again -
+superseded by keys nobody has read - so `for_module` withholds them and only the
+mechanical classes emit. Greenstone goes back to having no approved answer key, and Gate
+8 blocks on zero accepted, which is where it should be while 44 unreviewed scenarios sit
+in the tree.
+
+**`expected_answer` is emitted on every row and is empty on all 15.** The plumbing is
+proved by `test_authored_content_reaches_the_artifact_end_to_end`, which threads two
+`happy_path` occasions through and asserts both arrive with their answers. Nothing emits
+a real one today because nothing is approved - and an empty mapping contributes no keys
+to the wire at all, rather than travelling as a blank.
+
+### What SimForge must accept before any of this lands anywhere
+
+**Nothing The Office now sends will be refused. It will be silently discarded** - which
+is worse.
+
+`OperationScenarioSubmission` declares `scenario_class`, `module_id`,
+`instruction_section`, `expected_behavior`, `expected_escalation`, `never_do_entry`.
+`OperationRunStartRequest` declares `run_ref`, `unit`, `forge_id`,
+`instruction_content_hash`, `rubric_kind`, `rubric_version`, `module_id`, `agent_id`,
+`department_id`, `scenario_count`, `coverage_denominator`, `window_minutes`.
+
+**Neither carries `extra="forbid"`** - grepped, zero occurrences in the file - so
+Pydantic's default applies and an undeclared field is dropped without a word. So until
+SimForge adds them:
+
+    village_agent_ref       dropped by run_start
+    expected_answer's keys  dropped by submit_curriculum - act, record_subject,
+                            record_claim, record_claim_options, record, expected_caveat
+
+This is the reverse of the failure in entry 123. There, The Office refused SimForge's
+reply and said so loudly. Here, SimForge would accept everything and quietly keep none of
+it, and both sides would report success. **A boundary that refuses is a boundary; one
+that ignores is not.** Worth raising on that side independently of these fields: the
+manifest The Office validates responses against has no counterpart for requests.
