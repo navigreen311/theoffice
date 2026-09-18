@@ -10282,7 +10282,7 @@ it, and both sides would report success. **A boundary that refuses is a boundary
 that ignores is not.** Worth raising on that side independently of these fields: the
 manifest The Office validates responses against has no counterpart for requests.
 
-## NEXT. The names were right and the nesting was wrong
+## 125. The names were right and the nesting was wrong
 
 Entry 124 sent `expected_answer`'s keys **flat** - `act`, `record_subject` and the rest as
 top-level fields on each scenario - on the guess that SimForge would declare each one
