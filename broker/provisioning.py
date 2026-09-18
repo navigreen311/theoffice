@@ -1554,15 +1554,27 @@ def _curriculum_payload(
                 # present-but-empty required field, and that refusal is the honest
                 # report that the scenario is unwritten.
                 "expected_escalation": s.expected_escalation,
-                # THE GRADEABLE HALF, and it is spread rather than nested so each key
-                # is a field SimForge can declare on `OperationScenarioSubmission`
-                # rather than an opaque blob it has to reach inside.
+                # THE GRADEABLE HALF, NESTED - which is the shape SimForge declares.
                 #
-                # OMITTED WHEN EMPTY, never sent as {}. A scenario written before the
-                # split has no machine-checkable half, and an empty mapping would say
-                # it has one that is blank - the substitution `no silent defaults`
-                # refuses (entry 122).
-                **(s.expected_answer or {}),
+                # This spread the keys flat until 18 September 2026, on the guess that
+                # each one would be its own field on `OperationScenarioSubmission`. It
+                # is not: SimForge's ADR-0083 declares a single `expected_answer` of
+                # type `ExpectedAnswer`, and the same ADR set `extra="forbid"` on both
+                # payloads. So the flat keys stopped being ignored and started being
+                # REFUSED - `act` arriving as an undeclared top-level field takes the
+                # whole submission down with it.
+                #
+                # The field NAMES were right; only the nesting was wrong, which is why
+                # nothing caught it while extras were still dropped. That is entry 123's
+                # lesson from the other direction: a boundary that ignores tells you
+                # nothing, and the first honest answer it gave was a refusal.
+                #
+                # OMITTED WHEN EMPTY, never sent as `{}` or `null`. A scenario written
+                # before the split has no machine-checkable half; SimForge declares the
+                # field `ExpectedAnswer | None` precisely so absent means that, and an
+                # empty object would claim a blank one instead (entry 122).
+                **({"expected_answer": dict(s.expected_answer)}
+                   if s.expected_answer else {}),
             }
             for s in submittable
         ],

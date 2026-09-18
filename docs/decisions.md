@@ -10281,3 +10281,49 @@ reply and said so loudly. Here, SimForge would accept everything and quietly kee
 it, and both sides would report success. **A boundary that refuses is a boundary; one
 that ignores is not.** Worth raising on that side independently of these fields: the
 manifest The Office validates responses against has no counterpart for requests.
+
+## NEXT. The names were right and the nesting was wrong
+
+Entry 124 sent `expected_answer`'s keys **flat** - `act`, `record_subject` and the rest as
+top-level fields on each scenario - on the guess that SimForge would declare each one
+separately. It declares a single `expected_answer` of type `ExpectedAnswer`.
+
+While SimForge ignored undeclared fields that guess was invisible. **ADR-0083 closed the
+finding entry 124 raised** - `extra="forbid"` on both payloads, so an undeclared field is
+refused rather than dropped - and the first honest answer the boundary gave was a
+refusal of everything The Office sends.
+
+    old flat shape   44 of 44 scenario rows REFUSED, on `act`
+    nested shape     44 of 44 ACCEPTED
+
+Both measured, by feeding The Office's own rows to SimForge's merged
+`OperationScenarioSubmission` in SimForge's venv. No HTTP, nothing submitted.
+
+### The field names were right the whole time
+
+`act`, `record`, `record_subject`, `record_claim`, `record_claim_options`,
+`expected_caveat` - six for six, matching `ExpectedAnswer` exactly. Only the nesting was
+wrong, which is exactly why nothing caught it: a wrong NAME would have been refused the
+moment `extra="forbid"` landed and read as a typo, while a wrong SHAPE with right names
+looked correct in review on both sides.
+
+**This is entry 123 from the other direction.** There, The Office refused SimForge's
+reply and said so loudly, and the noise is what got it fixed in a day. Here SimForge
+accepted a payload it was keeping nothing from, and the silence is what let the guess
+survive a merge. A boundary that ignores is not a boundary - which is ADR-0083's title,
+arrived at from the other side.
+
+### Absent, never empty
+
+`ExpectedAnswer | None` is declared so that absent means *this scenario has no
+machine-checkable half*. So the field is omitted entirely when there is no answer, never
+sent as `{}` or `null`. `extra="forbid"` would not have caught that one either: the field
+is declared, so a blank object is structurally fine and semantically a lie (entry 122).
+
+### The test
+
+`test_the_answer_arrives_in_simforge_declared_shape` asserts the nesting, asserts each
+flat key is ABSENT - because absence is the shape `extra="forbid"` refuses - and pins the
+six field names against a transcription of `ExpectedAnswer`, with its source named.
+Transcribed rather than imported, for the reason `test_village_seal` exists: a
+cross-import is how the separation between the two applications dies.
