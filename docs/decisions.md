@@ -10328,7 +10328,7 @@ six field names against a transcription of `ExpectedAnswer`, with its source nam
 Transcribed rather than imported, for the reason `test_village_seal` exists: a
 cross-import is how the separation between the two applications dies.
 
-## NEXT. Forty-four read, forty-four approved - and the approval carries a date this time
+## 126. Forty-four read, forty-four approved - and the approval carries a date this time
 
 **Ruled by Ivan Green, 18 September 2026:** *"I approve all 44 Greenstone answer keys.
 Flip them to approved, approved_by 'Ivan Green', dated 2026-09-18. Burkham's 20 stay
