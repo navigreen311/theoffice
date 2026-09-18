@@ -518,6 +518,7 @@ class SimForgeClient:
         rubric_kind: str = "operation",
         module_id: str | None = None,
         agent_id: str | None = None,
+        village_agent_ref: str | None = None,
         department_id: str | None = None,
         scenario_count: int = 0,
         coverage_denominator: int = 0,
@@ -579,6 +580,14 @@ class SimForgeClient:
             "rubric_kind": rubric_kind,
             "module_id": module_id,
             "agent_id": agent_id,
+            # THE SAME AGENT, NAMED TO THE OTHER SYSTEM. `agent_id` is The Office's
+            # primary key and is meaningless in the Village; this is what the Village
+            # calls the same person (`victor_serath`). SimForge resolves an identity out
+            # of village.db and cannot do it from a uuid.
+            #
+            # Sent beside, never instead. Dropping the uuid would break the join on the
+            # only side that owns the grant, and `_grant_holders` keys on it.
+            "village_agent_ref": village_agent_ref,
             "department_id": department_id,
             "scenario_count": scenario_count,
             "coverage_denominator": coverage_denominator,

@@ -13,7 +13,7 @@ both of them are asserted below.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from broker.provisioning import _curriculum_payload
 
@@ -41,6 +41,10 @@ class FakeScenario:
     expected_behavior: str = ""
     expected_escalation: str = ""
     not_applicable_reason: str = ""
+    #: The gradeable half. Empty here because these tests are about the prose fields,
+    #: and an empty mapping is what a scenario written before the split carries - the
+    #: payload spreads it, so empty contributes no keys at all.
+    expected_answer: dict = field(default_factory=dict)
 
 
 AUTHORED = FakeScenario(

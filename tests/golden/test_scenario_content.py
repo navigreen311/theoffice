@@ -105,7 +105,8 @@ def test_the_worked_example_carries_an_occasion_and_not_a_restated_rule():
     """§7 — the manual gives rules, a scenario needs an occasion. A situation that is
     a restated `never` teaches nothing the instruction did not already say."""
     content = sc.load_module(WORKED_EXAMPLE)
-    for authored in content.scenarios.values():
+    for occasions in content.scenarios.values():
+      for authored in occasions:
         assert not authored.situation.lower().startswith("never"), authored.scenario_class
         assert len(authored.situation.split()) >= 20, authored.scenario_class
 
@@ -113,7 +114,8 @@ def test_the_worked_example_carries_an_occasion_and_not_a_restated_rule():
 def test_the_worked_example_escalation_prose_names_a_juncture():
     """§3.2 — a value that restates 'escalation is expected' has not satisfied it."""
     content = sc.load_module(WORKED_EXAMPLE)
-    for authored in content.scenarios.values():
+    for occasions in content.scenarios.values():
+      for authored in occasions:
         prose = authored.expected_escalation.strip().lower()
         assert prose != "escalation is expected"
         assert "the office's generator does not say which" not in prose
@@ -125,7 +127,7 @@ def test_the_wire_behavior_carries_both_halves_labelled():
     `expected_behavior` - separated and labelled, so a later revision can split them
     back out mechanically rather than by reading prose."""
     content = sc.load_module(WORKED_EXAMPLE)
-    happy = content.scenarios["happy_path"]
+    happy = content.scenarios["happy_path"][0]
     wire = happy.wire_behavior()
     assert wire.startswith("SITUATION: ")
     assert "\n\nEXPECTED: " in wire
@@ -183,11 +185,31 @@ def test_a_missing_or_empty_required_field_is_refused(tmp_path, field):
         sc.load_module(tmp_path / "m.yaml")
 
 
-def test_a_class_declared_twice_is_refused(tmp_path):
+def test_a_class_may_carry_several_occasions(tmp_path):
+    """**This asserted the opposite until 18 September 2026**, on contract §11 A2.1's
+    one-row-per-`(module, class)` rule.
+
+    A2.1 was written so that *"the Office's count and SimForge's count [are] the same
+    count"*. SimForge's split keys moved first: 44 scenarios over 27 `(module, class)`
+    pairs, 17 beyond one each - four `happy_path` occasions on `underwrite_deal` alone.
+    Holding the letter of A2.1 would have kept The Office at 27 while SimForge graded
+    44, which is the divergence the clause exists to prevent.
+
+    So the rule is amended rather than broken, and the amendment is narrow: the KEY is
+    still `(module, class)` everywhere it decides anything - coverage counts classes,
+    `not_applicable` declares classes, and SimForge's `classify_certification_level`
+    reads a set of classes. Only the number of occasions per class changes.
+
+    **Needs Ivan's ratification.** Until then this test records a proposal, not a rule.
+    """
     body = MINIMAL.format(module="m")
     write(tmp_path, "m.yaml", body + body.split("scenarios:")[1])
-    with pytest.raises(sc.ScenarioContentError, match="twice"):
-        sc.load_module(tmp_path / "m.yaml")
+    content = sc.load_module(tmp_path / "m.yaml")
+
+    assert list(content.scenarios) == ["happy_path"], "the key is still the class"
+    assert len(content.scenarios["happy_path"]) == 2, (
+        "the second occasion was dropped; a class may carry several since the split keys"
+    )
 
 
 def test_a_class_both_authored_and_declared_absent_is_refused(tmp_path):

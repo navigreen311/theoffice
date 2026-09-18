@@ -248,9 +248,13 @@ async def test_an_accepted_handover_stores_the_run_ref(at_gate_8, operator):
     gate = _gate_8(outcomes)
     assert gate.evidence["handed_over_to_simforge"] is True
     assert gate.evidence["modules_accepted"] == gate.evidence["modules_submitted"]
-    assert {s["module_id"] for s in _attempts(gate)} == {
-        r["module_id"] for r in per_module
+    # A SUBSET since 18 September: a module whose curriculum was accepted and whose
+    # exam nobody can sit hands over completely and writes no correlation row, because
+    # nothing is owed a verdict for it. `underwrite_deal` is that case here.
+    assert {r["module_id"] for r in per_module} <= {
+        s["module_id"] for s in _attempts(gate)
     }
+    assert per_module, "no module produced a correlation row at all"
 
     # The hand-over carried the human who provisioned - never an agent - and a real
     # curriculum rather than a count of one.
@@ -478,14 +482,25 @@ async def test_a_run_that_did_not_open_stores_no_ref(at_gate_8, operator):
     gate = _gate_8(outcomes)
     assert gate.verdict == provisioning.PASSED
     assert gate.evidence["handed_over_to_simforge"] is False
-    assert gate.evidence["modules_accepted"] == 0
+    # NOT zero: `underwrite_deal` has no exam taker, so `run_start` is never reached
+    # for it and this fake never gets to fail on it. Its curriculum is accepted and it
+    # opens no run - the point of submitting a module nobody can sit.
+    assert gate.evidence["modules_accepted"] == 1
+    assert gate.evidence["modules_handed_over"] == 0, (
+        "a run opened despite run_start failing on every module that had a taker"
+    )
 
     rows = await _submissions(conn)
     assert rows, "the submission row is still a thing that happened"
     assert all(r["run_ref"] is None for r in rows)
     # The error names the run, not the curriculum. A reader has to be able to tell
     # "SimForge refused what we sent" from "SimForge took it and would not open a run".
-    assert all("run_start" in s["error"] for s in _attempts(gate))
+    # Only the modules that reached `run_start` carry its error. `underwrite_deal` has
+    # no taker, so the call is never made and there is nothing for it to have failed at
+    # - reporting an error there would invent one.
+    reached = [s for s in _attempts(gate) if s.get("error")]
+    assert reached, "no module reached run_start, so this asserts nothing"
+    assert all("run_start" in s["error"] for s in reached)
 
 
 async def test_the_ref_gate_8_mints_is_derived_from_the_submission(at_gate_8, operator):
@@ -554,7 +569,11 @@ async def test_a_run_that_was_already_open_is_reported_as_such(at_gate_8, operat
 
     gate = _gate_8(outcomes)
     assert gate.evidence["handed_over_to_simforge"] is True
-    assert all(s["already_open"] is True for s in _attempts(gate))
+    # Only attempts that opened a run carry the flag; a module with no taker opens none
+    # and reports none, rather than reporting False about a run that never was.
+    opened = [s for s in _attempts(gate) if s.get("exam_takers")]
+    assert opened, "no run opened at all, so this asserts nothing"
+    assert all(s["already_open"] is True for s in opened)
 
 
 async def test_the_module_certification_level_reaches_the_evidence(at_gate_8, operator):

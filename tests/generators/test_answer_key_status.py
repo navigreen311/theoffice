@@ -137,36 +137,52 @@ GREENSTONE = (
 )
 
 
-def test_greenstones_five_are_approved_and_account_for_every_submittable_class():
-    """The repository's own content, asserted rather than described in a comment.
+def test_greenstones_five_are_superseded_by_the_split_keys_and_are_drafts():
+    """**They were approved on 17 September and are drafts again on the 18th.**
 
-    These five were what SimForge refused on run cb3a47f6 with `missing
-    expected_behavior, expected_escalation` - because no file existed. They were drafted
-    on 17 September 2026 and approved the same day, once Ivan answered the eight open
-    questions the drafts had recorded rather than guessed at.
+    Each of SimForge's five split keys declares `supersedes: the approved N-scenario
+    key, 17 September 2026` - they replace the ones Ivan approved, and they arrive
+    unapproved. So Greenstone has no approved answer key again, and that is the state
+    this records rather than hides.
 
-    **The completeness check is the one that says the refusal is actually addressed.** A
-    file that exists and leaves a class unaccounted for is refused exactly as a missing
-    file is, so "a key exists" proves nothing on its own.
+    **The cost is real and is the point of `status`.** With none approved, Gate 8
+    submits curricula with empty required fields, SimForge refuses them, and entry 119's
+    rule blocks the gate. Greenstone stops where it stopped before - which is correct,
+    because nobody has read these 44 yet.
     """
     loaded = sc.load_all()
     for module_id in GREENSTONE:
         content = loaded.modules.get(module_id)
         assert content is not None, f"{module_id}: no answer key"
-        assert content.status == sc.APPROVED, (
-            f"{module_id} is marked {content.status!r}; Ivan Green approved these five "
-            "on 17 September 2026."
+        assert content.status == sc.DRAFT, (
+            f"{module_id} is {content.status!r}; the split keys supersede the approved "
+            "ones and have not been approved."
         )
-        assert content.approved_by == "Ivan Green"
-        assert loaded.for_module(module_id) is not None, (
-            f"{module_id} is approved and still withheld from the generator"
+        assert loaded.for_module(module_id) is None, (
+            f"{module_id} is a draft and reached the generator"
         )
-
         accounted = set(content.scenarios) | set(content.not_applicable)
         assert accounted == set(sc.SUBMITTABLE_CLASSES), (
             f"{module_id} does not account for every submittable class: missing "
             f"{sorted(set(sc.SUBMITTABLE_CLASSES) - accounted)}"
         )
+
+
+def test_every_split_key_scenario_carries_its_gradeable_half():
+    """44 of 44. The whole reason the keys were split.
+
+    `expected_behavior` is prose a judge reads; `expected_answer` is what a machine can
+    check without one. A split key missing it is a key that has been reformatted rather
+    than split.
+    """
+    loaded = sc.load_all()
+    missing = []
+    for module_id in GREENSTONE:
+        for cls, occasions in loaded.modules[module_id].scenarios.items():
+            for i, a in enumerate(occasions):
+                if not a.expected_answer.get("act"):
+                    missing.append(f"{module_id}/{cls}[{i}]")
+    assert not missing, f"scenarios with no gradeable half: {missing}"
 
 
 def test_no_approved_key_still_asks_an_open_question():
@@ -181,7 +197,7 @@ def test_no_approved_key_still_asks_an_open_question():
     for module_id in GREENSTONE:
         content = loaded.modules[module_id]
         prose = [a.wire_behavior() + " " + a.expected_escalation
-                 for a in content.scenarios.values()]
+                 for v in content.scenarios.values() for a in v]
         prose += list(content.not_applicable.values())
         asking = [p for p in prose if "OPEN" in p]
         assert not asking, (

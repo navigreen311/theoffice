@@ -124,6 +124,13 @@ DEFAULT_SECTIONS: dict[str, str] = {
 #: everybody believes was authored.
 _FILE_KEYS = frozenset({
     "module_id", "forge_id", "scenarios", "not_applicable", "status", "approved_by",
+    # Provenance the split keys carry. `drafted_by` is who wrote it - the counterpart to
+    # `approved_by` and never a substitute for it. `supersedes` and `revised` say which
+    # key this replaces and under which ruling, so a reader meeting the file knows it is
+    # not the first answer to the same question. `withdrawn_as_untestable` records a
+    # scenario measured unexaminable and removed - kept rather than deleted, because a
+    # scenario that silently vanishes reads as one nobody thought of.
+    "drafted_by", "supersedes", "revised", "withdrawn_as_untestable",
 })
 
 #: An answer key is drafted and then approved, and only an approved one is submitted.
@@ -142,7 +149,20 @@ _STATUSES = (DRAFT, APPROVED)
 #: Per-scenario keys. Same rule.
 _SCENARIO_KEYS = frozenset({
     "scenario_class", "situation", "expected_behavior", "expected_escalation",
-    "instruction_section",
+    "instruction_section", "expected_answer", "draft_note",
+})
+
+#: What `expected_answer` may carry. SimForge's ADR-0077 through ADR-0082 designed it;
+#: this is The Office's copy of that vocabulary, in the same relationship as
+#: `ALL_SCENARIO_CLASSES` is to SimForge's `ScenarioClass`. The Office coins none of it.
+#:
+#: Measured across the 44 drafted keys: `act` 44, `record_subject` 37, `record_claim` 37,
+#: `record_claim_options` 25, `record` 7, `expected_caveat` 4. The two shapes are
+#: exclusive - a scenario either expects a record ABOUT something, or expects `record`
+#: to say NONE.
+_ANSWER_KEYS = frozenset({
+    "act", "record", "record_subject", "record_claim", "record_claim_options",
+    "expected_caveat",
 })
 
 _REQUIRED_SCENARIO_KEYS = ("scenario_class", "situation", "expected_behavior",
@@ -182,6 +202,19 @@ class AuthoredScenario:
     inside rather than claiming there is no boundary."""
 
     instruction_section: str = ""
+
+    expected_answer: dict[str, Any] = field(default_factory=dict)
+    """The gradeable half, as SimForge's split-key design defines it.
+
+    `expected_behavior` is prose a judge reads. THIS is the part a machine can check
+    without one: the act, the subject a record is about, the claim made, the options
+    that claim was chosen from, and any caveat required alongside it.
+
+    Empty when a key predates the split - every one of The Office's own five did, until
+    SimForge's 44 drafted keys arrived. Empty is not a default that means anything; it
+    means this scenario has no machine-checkable half yet, and the generator emits
+    nothing rather than emitting a blank.
+    """
     """Overrides the class's default section. Empty means "use the default"."""
 
     def wire_behavior(self) -> str:
@@ -220,18 +253,30 @@ class ModuleContent:
     """Who approved it. Required on an approved file, refused on a draft: a name
     beside `status: draft` is a signature on something nobody signed."""
 
-    scenarios: dict[str, AuthoredScenario] = field(default_factory=dict)
-    """Keyed by scenario class. One per class, because the operation key is
-    `(module, class)` - `docs/scenario-contract.md` §11 A2.1."""
+    scenarios: dict[str, list[AuthoredScenario]] = field(default_factory=dict)
+    """Class -> the scenarios probing it, in file order.
+
+    **A LIST, AND THAT IS A PROPOSED AMENDMENT TO §11 A2.1.** The contract says one row
+    per `(module, class)`, and this now allows several.
+
+    The reason is A2.1's own: it was written so that *"the Office's count and SimForge's
+    count [are] the same count"*. SimForge's split keys have already moved - 44 scenarios
+    across 27 `(module, class)` pairs, 17 beyond one each - so holding the letter of A2.1
+    is what would now BREAK the parity it exists to protect. Measured, not inferred.
+
+    Keying stays `(module, class)` everywhere it decides anything: coverage counts
+    classes, `not_applicable` declares classes, and SimForge's `classify_certification_
+    level` reads a set of classes. What changes is only how many occasions may probe one
+    class. **Needs Ivan's ratification before it is more than a proposal.**"""
 
     not_applicable: dict[str, str] = field(default_factory=dict)
     """class -> reason, in prose. ADR-0049: the absence is stated rather than
     inferred, and a declaration without a sentence is refused."""
 
     def section_for(self, scenario_class: str) -> str:
-        authored = self.scenarios.get(scenario_class)
-        if authored is not None and authored.instruction_section:
-            return authored.instruction_section
+        found = self.scenarios.get(scenario_class) or []
+        if found and found[0].instruction_section:
+            return found[0].instruction_section
         return MECHANICAL_SECTIONS.get(
             scenario_class, DEFAULT_SECTIONS.get(scenario_class, "")
         )
@@ -358,16 +403,15 @@ def load_module(path: Path | str) -> ModuleContent:
             "another."
         )
 
-    scenarios: dict[str, AuthoredScenario] = {}
+    scenarios: dict[str, list[AuthoredScenario]] = {}
     for entry in _require_list(p.name, raw, "scenarios"):
         authored = _scenario(p.name, entry)
-        if authored.scenario_class in scenarios:
-            raise ScenarioContentError(
-                f"{p.name} declares {authored.scenario_class!r} twice. An operation "
-                "scenario is keyed on (module, class), so a second one has nowhere "
-                "to go and would silently replace the first."
-            )
-        scenarios[authored.scenario_class] = authored
+        # SEVERAL OCCASIONS MAY PROBE ONE CLASS. This used to refuse the second, on
+        # A2.1's one-row-per-(module, class) rule. SimForge's split keys put four
+        # `happy_path` occasions on `underwrite_deal` alone, and refusing them here
+        # would have kept The Office at 27 scenarios while SimForge graded 44 - which
+        # is the count divergence A2.1 was written to prevent. See `ModuleContent`.
+        scenarios.setdefault(authored.scenario_class, []).append(authored)
 
     not_applicable: dict[str, str] = {}
     for cls, reason in (raw.get("not_applicable") or {}).items():
@@ -418,7 +462,47 @@ def _scenario(filename: str, entry: Any) -> AuthoredScenario:
         expected_behavior=entry["expected_behavior"].strip(),
         expected_escalation=entry["expected_escalation"].strip(),
         instruction_section=section,
+        expected_answer=_answer(filename, scenario_class, entry.get("expected_answer")),
     )
+
+
+def _answer(filename: str, scenario_class: str, raw: Any) -> dict[str, Any]:
+    """`expected_answer`, refused rather than coerced.
+
+    **Absent is allowed and empty is not.** A key written before SimForge split the
+    answer out has no `expected_answer` at all, and that is a true statement about it.
+    A key that carries the block and leaves it blank is claiming a machine-checkable
+    half it does not have, which is the substitution `no silent defaults` refuses.
+
+    `act` is required when the block exists, because it is the one thing every one of
+    the 44 drafted keys carries and the one thing a grader cannot infer. The rest are
+    optional and measured that way: 37 of 44 name a subject, 25 carry options, 4 carry
+    a caveat, 7 say `record: NONE` instead.
+    """
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ScenarioContentError(
+            f"{filename}: expected_answer on {scenario_class!r} is not a mapping. It "
+            "carries the gradeable half - act, record subject, claim, options - and a "
+            "bare string is prose, which is what expected_behavior is already for."
+        )
+    _refuse_unknown(filename, f"expected_answer on {scenario_class!r}",
+                    set(raw), _ANSWER_KEYS)
+    if not str(raw.get("act") or "").strip():
+        raise ScenarioContentError(
+            f"{filename}: expected_answer on {scenario_class!r} names no `act`. Every "
+            "one of the 44 drafted keys carries one, and it is the single thing a "
+            "grader cannot recover from the prose."
+        )
+    if "record" in raw and "record_subject" in raw:
+        raise ScenarioContentError(
+            f"{filename}: expected_answer on {scenario_class!r} carries both `record` "
+            "and `record_subject`. They are the two exclusive shapes - a record about "
+            "something, or `record: NONE` - and a scenario expecting both expects "
+            "nothing checkable."
+        )
+    return {k: v for k, v in raw.items()}
 
 
 def _check_class(filename: str, scenario_class: Any) -> None:

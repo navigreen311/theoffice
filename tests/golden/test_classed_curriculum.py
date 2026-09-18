@@ -49,7 +49,7 @@ def test_an_authored_class_carries_the_occasion_the_act_and_the_escalation(recor
     authored = rows["escalation_required"]
 
     assert authored.summary, "the precipitating situation is missing"
-    assert authored.summary == record_consent.scenarios["escalation_required"].situation
+    assert authored.summary == record_consent.scenarios["escalation_required"][0].situation
     assert authored.expected_behavior.startswith("SITUATION: ")
     assert "\n\nEXPECTED: " in authored.expected_behavior
     assert authored.expected_escalation

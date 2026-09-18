@@ -384,7 +384,9 @@ def test_no_scenario_restates_that_escalation_is_expected(module_id: str):
     short enough that it cannot be naming three things.
     """
     content = load_module(SCENARIOS / f"{module_id}.yaml")
-    for cls, scenario in sorted(content.scenarios.items()):
+    for cls, occasions in sorted(content.scenarios.items()):
+      # One class may carry several occasions; each owes its own escalation prose.
+      for scenario in occasions:
         prose = scenario.expected_escalation.strip()
         assert len(prose) >= 200, (
             f"scenarios/{module_id}.yaml [{cls}] has an expected_escalation of "
@@ -409,12 +411,15 @@ def test_every_authored_scenario_carries_a_situation_distinct_from_its_behaviour
     (`wire_behavior`), so nothing downstream would separate them again.
     """
     content = load_module(SCENARIOS / f"{module_id}.yaml")
-    for cls, scenario in sorted(content.scenarios.items()):
-        assert len(scenario.situation.strip()) >= 120, (
-            f"scenarios/{module_id}.yaml [{cls}] has a situation too short to be an "
-            "occasion. What is in front of the agent when the scenario starts?"
-        )
-        assert scenario.situation.strip() != scenario.expected_behavior.strip()
+    for cls, occasions in sorted(content.scenarios.items()):
+        # A class may carry several occasions since the split keys landed; every one of
+        # them owes its own situation.
+        for scenario in occasions:
+            assert len(scenario.situation.strip()) >= 120, (
+                f"scenarios/{module_id}.yaml [{cls}] has a situation too short to be "
+                "an occasion. What is in front of the agent when the scenario starts?"
+            )
+            assert scenario.situation.strip() != scenario.expected_behavior.strip()
 
 
 # --------------------------------------------------- the gap, asserted not implied

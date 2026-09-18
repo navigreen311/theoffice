@@ -443,6 +443,15 @@ class CurriculumScenario:
     """
 
     not_applicable_reason: str = ""
+
+    expected_answer: dict[str, Any] = field(default_factory=dict)
+    """The machine-checkable half of the answer, from SimForge's split-key design:
+    the act, the subject a record is about, the claim, the options it was chosen from,
+    and any required caveat.
+
+    Empty for every scenario written before the split, and emitted as ABSENT rather
+    than as a blank mapping - a scenario claiming an empty answer would be claiming a
+    gradeable half it does not have."""
     """Prose saying why a class this module cannot have is absent (ADR-0049).
 
     A declared absence, never an inferred one. A class neither supplied nor declared
