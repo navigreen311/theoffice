@@ -80,9 +80,11 @@ if [ "$BUILD" -eq 1 ]; then
   # reports a commit that never existed and the second reports that nobody said.
   OFFICE_GIT_COMMIT="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)"
   export OFFICE_GIT_COMMIT
-  [ -n "$OFFICE_GIT_COMMIT" ] \
-    && say "stamping ${OFFICE_GIT_COMMIT:0:12}" \
-    || say "NOT a git checkout: the image will report its build as unknown"
+  if [ -n "$OFFICE_GIT_COMMIT" ]; then
+    say "stamping ${OFFICE_GIT_COMMIT:0:12}"
+  else
+    say "NOT a git checkout: the image will report its build as unknown"
+  fi
   "${COMPOSE[@]}" build
   say "built"
 fi
