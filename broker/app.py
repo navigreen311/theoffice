@@ -31,12 +31,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
@@ -51,6 +49,7 @@ from broker import (
     audit_events,
     audit_view,
     budget,
+    build,
     certification,
     curriculum_quality,
     departments,
@@ -196,42 +195,11 @@ async def _audit_human_action(
 # text, no schema revision. `/api/health` stays authenticated, because control freshness
 # is exactly what an attacker would like to know is stale.
 
-def _build_commit() -> str:
-    """Which commit this process is running, or "unknown".
-
-    **Read once, at import, because the answer cannot change while the process lives** -
-    and a value that could change under a caller would be worse than none.
-
-    `OFFICE_GIT_COMMIT` first, because an image has no `.git` and the build stamps it. A
-    working tree falls back to asking git, which is what makes this useful in development:
-    the case it exists for is a server left running across a merge, answering `/api/live`
-    with 200 while serving code from before the pull. That happened on 16 September and
-    cost a confused ten minutes - a route that was in the file, not in the process, and a
-    404 that looked like a routing bug.
-
-    Never raises. A version endpoint that can fail is a health check that reports the
-    health of itself.
-    """
-    stamped = os.environ.get("OFFICE_GIT_COMMIT", "").strip()
-    if stamped:
-        return stamped
-    try:
-        import subprocess
-
-        root = Path(__file__).resolve().parent.parent
-        if not (root / ".git").exists():
-            return "unknown"
-        out = subprocess.run(
-            ["git", "-C", str(root), "rev-parse", "HEAD"],
-            capture_output=True, text=True, timeout=5, check=False,
-        )
-        return out.stdout.strip() or "unknown"
-    except Exception:
-        return "unknown"
-
-
-#: Read at import. See `_build_commit`.
-BUILD_COMMIT = _build_commit()
+#: What this process is running. Resolved by `broker.build`, which owns the one
+#: implementation: the provisioning ladder needs the identical answer and must not
+#: import this module to get it. See `broker/build.py` for why, and for the two shapes
+#: a stale build comes in.
+BUILD_COMMIT = build.PROCESS_COMMIT
 
 
 @app.get("/api/live")
