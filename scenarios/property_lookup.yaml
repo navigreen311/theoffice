@@ -26,9 +26,15 @@
 # said "3/3"; that was a miscount on Claude's side - it dropped the module's original
 # partial_failure. The re-class ruling is unaffected.)
 
+# APPROVED by Ivan Green, 18 September 2026, after review of all 44 scenarios across
+# the five keys. `drafted_by` stays: who wrote it and who approved it are two facts and
+# the file records both. See docs/decisions.md.
+
 module_id: property_lookup
 forge_id: cre-forge
-status: draft
+status: approved
+approved_by: "Ivan Green"
+approved_on: "2026-09-18"
 drafted_by: "Claude"
 supersedes: "the approved 5-scenario key, 17 September 2026"
 

@@ -82,6 +82,49 @@ def test_an_approval_with_no_name_on_it_is_refused(tmp_path):
     assert "approved_by" in str(refused.value)
 
 
+def test_an_approval_with_no_date_on_it_is_refused(tmp_path):
+    """**When** is half of an approval, and the half that goes stale.
+
+    A key approved before its scenarios were rewritten is a different approval from one
+    approved after, and `approved_by` alone cannot tell the two apart. Greenstone's five
+    were approved on 17 September, superseded by SimForge's split keys, and approved
+    again on the 18th. Without a date the second approval is indistinguishable from the
+    first still sitting there.
+    """
+    path = _write(
+        tmp_path, "thing",
+        'module_id: thing\nforge_id: cre-forge\nstatus: approved\n'
+        'approved_by: "Ivan Green"',
+    )
+    with pytest.raises(sc.ScenarioContentError) as refused:
+        sc.load_module(path)
+    assert "approved_on" in str(refused.value)
+
+
+def test_an_approval_dated_in_prose_is_refused(tmp_path):
+    """One format, so no reader has to parse two. `18 September 2026` is refused."""
+    path = _write(
+        tmp_path, "thing",
+        'module_id: thing\nforge_id: cre-forge\nstatus: approved\n'
+        'approved_by: "Ivan Green"\napproved_on: "18 September 2026"',
+    )
+    with pytest.raises(sc.ScenarioContentError) as refused:
+        sc.load_module(path)
+    assert "18 September 2026" in str(refused.value)
+
+
+def test_a_draft_that_carries_a_date_is_refused(tmp_path):
+    """The same rule as the name, on the other half of the signature."""
+    path = _write(
+        tmp_path, "thing",
+        'module_id: thing\nforge_id: cre-forge\nstatus: draft\n'
+        'approved_on: "2026-09-18"',
+    )
+    with pytest.raises(sc.ScenarioContentError) as refused:
+        sc.load_module(path)
+    assert "draft" in str(refused.value)
+
+
 def test_a_draft_that_names_an_approver_is_refused(tmp_path):
     """A name beside a draft is a signature on something nobody signed."""
     path = _write(
@@ -119,7 +162,7 @@ def test_an_approved_key_is_still_submitted(tmp_path):
     _write(
         tmp_path, "thing",
         'module_id: thing\nforge_id: cre-forge\nstatus: approved\n'
-        'approved_by: "Ivan Green"',
+        'approved_by: "Ivan Green"\napproved_on: "2026-09-18"',
     )
     loaded = sc.load_all(tmp_path)
 
@@ -137,35 +180,49 @@ GREENSTONE = (
 )
 
 
-def test_greenstones_five_are_superseded_by_the_split_keys_and_are_drafts():
-    """**They were approved on 17 September and are drafts again on the 18th.**
+def test_greenstones_five_are_approved_and_carry_all_44_scenarios():
+    """**Approved by Ivan Green on 18 September 2026**, after review of all 44.
 
-    Each of SimForge's five split keys declares `supersedes: the approved N-scenario
-    key, 17 September 2026` - they replace the ones Ivan approved, and they arrive
-    unapproved. So Greenstone has no approved answer key again, and that is the state
-    this records rather than hides.
+    They were approved on the 17th, superseded by SimForge's split keys the same week,
+    and drafts again until he had read the replacements. That round trip is the reason
+    `status` exists: nothing about the first approval carried forward to prose nobody
+    had seen, and nothing here is grandfathered.
 
-    **The cost is real and is the point of `status`.** With none approved, Gate 8
-    submits curricula with empty required fields, SimForge refuses them, and entry 119's
-    rule blocks the gate. Greenstone stops where it stopped before - which is correct,
-    because nobody has read these 44 yet.
+    44 across 27 `(module, class)` pairs - the count SimForge grades, which is what the
+    A2.1 amendment (entry 124) was ratified to keep equal.
     """
     loaded = sc.load_all()
+    total = 0
     for module_id in GREENSTONE:
-        content = loaded.modules.get(module_id)
-        assert content is not None, f"{module_id}: no answer key"
-        assert content.status == sc.DRAFT, (
-            f"{module_id} is {content.status!r}; the split keys supersede the approved "
-            "ones and have not been approved."
-        )
-        assert loaded.for_module(module_id) is None, (
-            f"{module_id} is a draft and reached the generator"
-        )
+        content = loaded.for_module(module_id)
+        assert content is not None, f"{module_id} is approved and still withheld"
+        assert content.status == sc.APPROVED
+        assert content.approved_by == "Ivan Green"
+        assert content.approved_on == "2026-09-18"
+        total += sum(len(v) for v in content.scenarios.values())
+
         accounted = set(content.scenarios) | set(content.not_applicable)
         assert accounted == set(sc.SUBMITTABLE_CLASSES), (
             f"{module_id} does not account for every submittable class: missing "
             f"{sorted(set(sc.SUBMITTABLE_CLASSES) - accounted)}"
         )
+
+    assert total == 44, f"expected the 44 reviewed scenarios, found {total}"
+
+
+def test_burkhams_twenty_are_untouched_by_greenstones_approval():
+    """**An approval covers what was read, and nothing else.**
+
+    Ivan approved Greenstone's 44. Burkham's 20 were not in front of him, so they stay
+    drafts - which is the same rule that threw out the grandfathering on 17 September,
+    applied to the opposite direction: an approval does not spread by adjacency any more
+    than use becomes review.
+    """
+    loaded = sc.load_all()
+    drafts = loaded.drafts()
+    assert len(drafts) == 20, f"expected Burkham's 20 still drafted, found {len(drafts)}"
+    assert not (set(drafts) & set(GREENSTONE))
+    assert all(c.approved_by == "" and c.approved_on == "" for c in drafts.values())
 
 
 def test_every_split_key_scenario_carries_its_gradeable_half():

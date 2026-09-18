@@ -37,6 +37,7 @@ module_id: {module}
 forge_id: capitalforge
 status: approved
 approved_by: "test fixture"
+approved_on: "2026-09-18"
 scenarios:
   - scenario_class: happy_path
     situation: A human forwards a note and asks for it to be filed.
