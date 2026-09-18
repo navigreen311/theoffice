@@ -53,6 +53,16 @@ COPY packs/ packs/
 # and not of the repository.
 COPY scenarios/ scenarios/
 
+# WHICH COMMIT THIS IMAGE IS. An image carries no `.git`, so a build that does not
+# stamp this produces a process that cannot say what it is running - and Gate 8 now
+# refuses to submit a curriculum from one, on `dev-all.sh`'s rule that "a build nobody
+# could identify is not a build that was checked" (decisions entry 123).
+#
+# Empty by default and NOT defaulted to a placeholder: "unknown" reaching a gate is a
+# build somebody forgot to stamp, which is a finding, and a fake value would hide it.
+ARG OFFICE_GIT_COMMIT=""
+ENV OFFICE_GIT_COMMIT=${OFFICE_GIT_COMMIT}
+
 # Non-root from here down. The API needs no write access to anything in the image; it
 # writes to Postgres and to stdout.
 USER office

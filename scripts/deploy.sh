@@ -70,6 +70,19 @@ say "valid"
 
 if [ "$BUILD" -eq 1 ]; then
   step "Build"
+  # STAMP THE IMAGE WITH THE COMMIT IT IS BUILT FROM. An image carries no `.git`, so
+  # without this the deployed process cannot answer /api/version with anything but
+  # "unknown" - and Gate 8 refuses to submit a curriculum from a build that cannot name
+  # itself. Exported rather than passed inline so compose.yaml's `args:` picks it up.
+  #
+  # Empty when this is not a git checkout, and deliberately not defaulted: an image
+  # stamped with a placeholder is worse than one honestly unstamped, because the first
+  # reports a commit that never existed and the second reports that nobody said.
+  OFFICE_GIT_COMMIT="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)"
+  export OFFICE_GIT_COMMIT
+  [ -n "$OFFICE_GIT_COMMIT" ] \
+    && say "stamping ${OFFICE_GIT_COMMIT:0:12}" \
+    || say "NOT a git checkout: the image will report its build as unknown"
   "${COMPOSE[@]}" build
   say "built"
 fi

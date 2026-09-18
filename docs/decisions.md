@@ -10432,3 +10432,108 @@ reading of the threshold: `>= 200 characters` alone gives 46, and the full
 that reason: widening it would block Ivan's review on prose length before he has read a
 word. **The debt comes due at their approval, and this entry is where it was last
 counted.**
+
+## NEXT. The gate recorded what it sent, and never what sent it
+
+Twice in two days a provisioning run reached Gate 8 on code older than the checkout,
+submitted a superseded curriculum, and reported success. Both took forensics, days and
+hours later respectively, and the second proves the first taught nothing - because there
+was nothing recorded to learn from.
+
+    17 Sep 17:00:53   run c4edc85a   "41 scenario(s) ... across 4 module(s)"
+    18 Sep 15:52:15   run b8ca7dec   "41 scenario(s) ... across 4 module(s)"
+
+The same sentence. The second was recorded **hours after** 44 approved scenarios landed
+on main (entry 126). The API was serving from `C:/Users/ivann/Projects/wt-run`, a
+worktree detached at `7ac49b9`, which holds the keys those 44 replaced.
+
+**What eventually found it was arithmetic.** `scenario_count` read 7 on every module and
+the approved keys carry 8, 8, 5, 10 and 13. A coincidence a reader happens to notice is
+not a control.
+
+### Why this gate and no other
+
+Gate 8's output is generated from **files beside the code** - the Pack, the instructions,
+`scenarios/*.yaml`. Every other gate reads the database, where a stale process and a
+current one see identical rows and disagree about nothing.
+
+So Gate 8 is the one gate that can submit the wrong curriculum and be **truthful about
+every number it reports**, because it is reporting truthfully about the wrong tree. It is
+also the gate whose output an agent is then certified against.
+
+### What is recorded
+
+`submitting_build`, on every Gate 8 outcome including the refusals:
+
+    commit          what the process is running, read once at import
+    checkout_head   what its own tree says HEAD is, read now
+    checkout_root   the directory the code was imported from
+    scenario_root   where `default_root()` resolved the answer keys
+    stamped         the commit came from OFFICE_GIT_COMMIT, not from git
+    current         the tree has not moved past the process
+
+**`checkout_root` is the field that would have closed the second incident on sight.**
+Nothing else distinguishes a checkout from a worktree of it, and the process reports a
+worktree's commit perfectly faithfully. `scenario_root` is recorded beside it rather than
+derived from it: the two sharing one anchor is the claim, and printing one while asserting
+the other is how a reader ends up trusting a derivation.
+
+### What is refused
+
+`broker/build.py::refusal` decides, and Gate 8 asks it **before the client is built and
+before the first submission**. A gate that refuses after sending four modules has not
+refused: SimForge would hold a curriculum nobody approved, a `curriculum_submission` row
+would be owed a verdict, and the sweep would ingest a result earned on superseded
+scenarios.
+
+    not current      the process holds one commit and its tree holds another. This is
+                     the 16 September case - a server left running across a merge in its
+                     own checkout, answering /api/live with 200 while a route that had
+                     just landed 404ed.
+    not identified   neither OFFICE_GIT_COMMIT nor a git tree could say. `dev-all.sh`'s
+                     rule, not a new one: entry 123 changed that script from reporting
+                     `ok "live (build unverified)"` to calling it bad, because "a build
+                     nobody could identify is not a build that was checked". A gate that
+                     submitted on `unknown` while the shell script refused to call the
+                     same process healthy would be two controls disagreeing about a fact.
+
+BLOCKED, not PASSED-with-a-note, and the distinction is the one this gate already draws.
+A Forge being down is a fact about the world and the ladder may carry on past it. A
+submitter that cannot say what it is running is a fact about **us**, and the run has no
+business writing an exam somebody will be certified against.
+
+### What it does NOT catch, said plainly
+
+**The worktree case is not detectable from inside, and pretending otherwise would be
+worse than recording it.** A process running `wt-run`'s code faithfully reports
+`wt-run`'s commit; `commit` and `checkout_head` agree, because they are the same tree.
+Nothing inside that process knows another checkout exists.
+
+So the control is split honestly: the comparison catches the drift case, and
+`checkout_root` turns the other one from an investigation into a line. `dev-all.sh` still
+owns the external comparison, which is the only place it can live.
+
+### The image had to be stamped for the refusal to be fair
+
+An image carries no `.git`, and **nothing stamped `OFFICE_GIT_COMMIT`** - not the
+Dockerfile, not CI, not `deploy.sh`. Measured before the refusal was written: a
+containerised process would have reported `unknown` and now been refused for a
+configuration nobody had been asked to set.
+
+    Dockerfile        ARG + ENV OFFICE_GIT_COMMIT, empty by default
+    ci.yml            build-args OFFICE_GIT_COMMIT=${{ github.sha }}
+    compose.yaml      args: OFFICE_GIT_COMMIT: ${OFFICE_GIT_COMMIT:-}
+    scripts/deploy.sh exports `git rev-parse HEAD`, and says so when it cannot
+
+**Empty by default, never a placeholder.** An image stamped with a fake commit reports one
+that never existed; one honestly unstamped reports that nobody said. The first hides the
+defect and the second is the defect, visible.
+
+Smoke is unaffected: `console-smoke.sh` stops the ladder at Gate 4 and never reaches 8.
+
+### `_build_commit` moved, and that is the substance of the app.py diff
+
+It was private to `broker/app.py`, serving `/api/version` alone. The ladder needs the
+identical answer and **must not import the API to get it** - a gate importing a FastAPI
+app to learn its own commit would make the ladder unrunnable from the CLI, which is how
+the sweeps and the smoke script run it. `/api/version` answers exactly as before.

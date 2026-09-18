@@ -45,6 +45,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # The commit the image is built from. An image has no `.git`, so this is the
+        # only thing that can tell the running process what it is - and Gate 8 refuses
+        # to submit a curriculum from a build that cannot say. `scripts/deploy.sh`
+        # exports it; an unset value leaves the image honestly unstamped rather than
+        # stamped with a lie.
+        OFFICE_GIT_COMMIT: ${OFFICE_GIT_COMMIT:-}
     image: theoffice-api:${IMAGE_TAG:-local}
     restart: unless-stopped
     depends_on:
