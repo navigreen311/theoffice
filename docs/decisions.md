@@ -10537,3 +10537,85 @@ It was private to `broker/app.py`, serving `/api/version` alone. The ladder need
 identical answer and **must not import the API to get it** - a gate importing a FastAPI
 app to learn its own commit would make the ladder unrunnable from the CLI, which is how
 the sweeps and the smoke script run it. `/api/version` answers exactly as before.
+
+## 128. Six verdicts, not ingested - and the scores describe an exam that no longer exists
+
+**Ruled by Ivan Green, 18 September 2026:** *"The six verdicts on SimForge were earned on
+superseded scenarios, and nothing in the run reference distinguishes them from the
+approved 44. They are not ingested. Record what was measured as history, and say plainly
+that the scores describe an exam that no longer exists."*
+
+### What was measured
+
+Read from SimForge's own database, read-only, nothing ingested:
+
+    module           agent            verdict      score  threshold  ended (UTC)
+    assign_contract  ronan_valek      FAIL         0.857    1.0      18 Sep 02:45:12
+    assign_contract  seraphine_valek  FAIL         0.857    1.0      18 Sep 02:45:31
+    buyer_match      ronan_valek      FAIL         0.818    1.0      18 Sep 02:46:03
+    buyer_match      seraphine_valek  FAIL         0.818    1.0      18 Sep 02:46:35
+    comp_analysis    victor_serath    PROVISIONAL  1.000    1.0      18 Sep 02:46:58
+    property_lookup  victor_serath    FAIL         0.889    1.0      18 Sep 02:47:23
+
+The runs opened 17 September 17:00 local and finished that evening. Each declares
+`scenarioCount: 7`.
+
+**This is the record. The Office holds no certification for any of it and will not.**
+
+### The exam no longer exists, and it is worse than "superseded"
+
+The obvious reading is that these six were graded on the 35 scenarios the superseded keys
+carried, and the approved 44 replaced them. That is true and it is not the whole of it.
+
+`OperationCertification.perScenarioClass`, for all six:
+
+    {"silent_failure": "FAIL", "never_do_violation": "PASS"}
+
+**Two classes, and both are the two SimForge authors and holds out from The Office.**
+Zero of the seven submittable classes was scored - on any of the six. The same column
+holds all nine classes for other work in that database, so this is an absence rather than
+a limitation.
+
+The reason is measured, not inferred: **`OperationScenarioSubmission` holds 0 rows for
+every Forge.** The SimForge build that graded these was `f13d7b1`, sixteen commits behind
+its own checkout and predating `d0a617e` (ADR-0069 P1, *"the answer key The Office sends
+is kept"*). That build validated `operation_scenarios` and discarded them.
+
+So the 35 scenarios did not merely become superseded. **They never took part.** The six
+scores describe an exam made of two held-out classes and nothing else - not the approved
+44, and not the 35 either. `comp_analysis` is the tell: PROVISIONAL at 1.000 with
+`rubricDimensionSpread` **0.0**, which is the collapsed spread ADR-0069 P1 names as the
+reason no run could ever reach `certified`.
+
+### Why the sweep cannot tell, and why that is the whole finding
+
+`mint_run_ref` derives the ref from venture, forge, module, **instruction** content hash
+and agent. The answer key is not in it. Neither is it in
+`curriculum_submission.instruction_content_hash`, which is the only other key the ingest
+sweep reads.
+
+Changing every scenario changes neither. A verdict earned on the 35 is **byte-identical,
+at every key either side can see**, to one earned on the approved 44 - which is why this
+had to be a ruling and could not be a check.
+
+Two consequences if it were ingested:
+
+    five agents carry `failed` certifications for an exam built from scenarios that no
+    longer exist, on a run that never looked at them
+    `result_received_at` is stamped, `overdue_submissions` stops reporting those rows,
+    and the exams read as answered - while the next Gate 8 mints the same refs and is
+    told `already_open`, so the approved 44 may never get a run of their own
+
+### What is NOT true yet
+
+**This ruling is prose and nothing enforces it.** The 18 `curriculum_submission` rows
+carrying those 9 refs are still in `sweep_verdict_ingest`'s candidate set, and one
+`python -m broker sweep` would write all six. The sweep has never run - `sweep_run` holds
+zero `verdict_ingest` rows and nothing schedules it - which is the only reason the ruling
+has held so far.
+
+Retiring them needs a column, and it must not be `result_received_at`: that field means
+*"a verdict SimForge stands behind was written into a certification"*, and stamping it
+here would say one was, which is the opposite of this ruling. The shape 0043 already
+established for grants - a `superseded_at` the reader excludes - is the one that fits, and
+it is not built here.
