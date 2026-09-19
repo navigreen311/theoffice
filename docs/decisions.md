@@ -10938,3 +10938,100 @@ recorded was the recovery from the incident that motivated it.
 SimForge alone, so SimForge is the only counterpart it has - but the general question
 ("does the thing on the other end know what it is") now has one answer and three
 absences. Worth naming rather than leaving to be discovered.
+
+## NEXT. Equality is a stronger control than length
+
+**Ruled by Ivan Green, 19 September 2026:** *"A field SimForge echoes back is exempt from
+the prose check when its value is byte-identical to what The Office sent in the same
+call. Anything else in that field is refused as before. Equality is a stronger control
+than length, and an operating instruction is never shortened to satisfy a wire guard."*
+
+### The same bug twice, and the second remedy could not be the first
+
+`submit_curriculum` echoes `module_declared_absences` and `never_do_obligations` - The
+Office's own `not_applicable` reasons and its own never-do lists. Both tripped
+`_looks_like_prose` on their first real use, and neither was a leak:
+
+    entry 123   module_declared_absences.property_lookup.rate_limited   1800 chars
+    entry 132   never_do_obligations.underwrite_deal[6]                  232 chars
+
+**Entry 123's fix was right for entry 123's field.** That prose carried an ARGUMENT for a
+declaration - the ruling, the measured middleware evidence - and an argument belongs in
+the ledger with a sentence on the wire.
+
+**It was the wrong remedy the second time.** A never-do entry is operating instruction
+text that agents read:
+
+    Never infer that a deal is good, bad, over- or under-priced from `deal_score` or
+    `deal_grade` alone. The score consumes `arv_confidence`; a grade computed at 0.10
+    confidence is a grade about the confidence as much as about the deal.
+
+The second clause is the whole value of it. Cutting it to fit a wire guard would degrade
+what an agent is told in order to satisfy a check about what comes back - and the
+guard's own message asks for the opposite: *"if this field is legitimate, narrow it
+rather than widening the check."*
+
+Measured across the five modules before choosing: **exactly one never-do entry of
+twenty-eight is over the threshold.** The others run 5, 6, 5, 5 entries, all under 200
+characters. This is not a class of prose that wants shortening; it is one sentence that
+needed a reason to exist.
+
+### Why this narrows the boundary rather than loosening it
+
+A value The Office sent moments earlier **carries nothing The Office did not already
+have.** That is the whole argument, and it is about provenance rather than about size.
+
+Length says nothing about provenance either way. Today a 199-character reason passes
+whether or not SimForge echoed it faithfully, and **nothing checks the echo at all.**
+This does: an echoed field must now match, byte for byte, or it is refused. The control
+gets stricter about the thing that matters and stops being strict about the thing that
+does not.
+
+### Exact, and on whole values only
+
+`sent_values` walks the request payload and collects **whole strings**. Never a prefix,
+never a substring, never a trimmed, folded or normalised form. The comparison is `in` on
+a `frozenset[str]`, which is equality and not containment.
+
+That is not fastidiousness. A fuzzy comparison here would be a named channel: anything
+returning an approximation of what we sent would be waved through, and *"approximately
+what you sent"* is the exact shape a smuggled payload would take. Six alterations are
+pinned as refusals - one character appended, one removed, a leading space, a trailing
+newline, case folded, inner whitespace collapsed - plus a prefix, because a 300-character
+string that begins with ours carries 200 characters that do not.
+
+### What the exemption does NOT touch
+
+    the manifest        An undeclared field is refused whatever it carries. The
+                        field-set check asks which fields may EXIST; the prose check
+                        asks what a declared field may CARRY. An echo answers the
+                        second and says nothing about the first.
+    forbidden names     The NAME check runs first and nothing exempts it. A field
+                        called `held_out_prompt` is refused for what it is called,
+                        before its value is read - otherwise a leak could be laundered
+                        by echoing one line of ours beside it.
+    a call with no      `get_gate_result` sends no payload, so `echoed` is None and the
+    payload             guard behaves exactly as it did before this existed. An empty
+                        payload exempts nothing, which is asserted rather than assumed.
+
+The exemption is keyed on the **call**, not on the field name. A string The Office sent
+carries nothing new wherever it is returned, and keying on the field as well would refuse
+a faithful echo SimForge happened to group differently.
+
+### Proved against the real refusal
+
+The live `underwrite_deal` instruction set, its seven never-do entries, and the body that
+refused on 18 September:
+
+    the 18 Sep refusal now passes
+    the same body with one sentence appended to entry [6]: still refused, 281 characters
+
+`run_start` passes its payload too, though nothing it returns is prose today. The rule
+belongs to the pair of calls that echo, not to the field that happened to trip first.
+
+### Left undone, and named
+
+`_rejection` runs the same guard over a 422's violations, and those are format strings
+built over module ids, class names and never-do entries - things The Office sent, but
+**wrapped**, so whole-value equality will not match them. If a violation list ever trips
+the check, that is a separate decision and not this rule stretched to cover it.

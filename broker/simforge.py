@@ -584,7 +584,13 @@ class SimForgeClient:
         # Unchanged, and deliberately so: a field the manifest does not name still
         # fails here. The manifest became accurate about what arrives; the check did
         # not become lenient about what may.
-        validate_response("submit_curriculum", body)
+        #
+        # `sent=payload` is the echo exemption (entry 132). `submit_curriculum` returns
+        # `module_declared_absences` and `never_do_obligations` - The Office's own
+        # declared reasons and its own never-do lists - and a value byte-identical to
+        # one in this payload carries nothing this side did not already have. The
+        # field-set check above is untouched by it.
+        validate_response("submit_curriculum", body, sent=payload)
         if not body.get("accepted"):
             raise SimForgeError(
                 f"SimForge refused the curriculum: {body.get('rejected_reason')!r}"
@@ -714,7 +720,10 @@ class SimForgeClient:
             raise SimForgeError(
                 f"run_start returned {type(body).__name__}, not an object"
             )
-        validate_response("run_start", body)
+        # `sent=payload` for the same reason as `submit_curriculum`, though nothing
+        # `run_start` returns is prose today: the rule belongs to the pair of calls
+        # that echo, not to the one field that happened to trip first.
+        validate_response("run_start", body, sent=payload)
         return body
 
     async def office_gate_result(self, conn: Any, *, run_ref: str) -> GateResult:
@@ -960,7 +969,32 @@ def manifested_fields(endpoint: str) -> set[str]:
     return set(manifest[endpoint]["fields"])
 
 
-def assert_no_scenario_content(endpoint: str, body: Any, *, path: str = "") -> None:
+def sent_values(payload: Any) -> frozenset[str]:
+    """Every whole string The Office sent in one call.
+
+    The material for the echo exemption - see `assert_no_scenario_content`. Whole
+    values only: a substring, a prefix or a normalised form is never collected, so
+    nothing here can exempt a string The Office did not send in full.
+    """
+    found: set[str] = set()
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+        elif isinstance(node, str):
+            found.add(node)
+
+    walk(payload)
+    return frozenset(found)
+
+
+def assert_no_scenario_content(
+    endpoint: str, body: Any, *, path: str = "", echoed: frozenset[str] | None = None
+) -> None:
     """Recursively assert a response carries no scenario content.
 
     Two independent checks, because either alone is defeatable:
@@ -971,8 +1005,46 @@ def assert_no_scenario_content(endpoint: str, body: Any, *, path: str = "") -> N
 
     Prose shape is a heuristic, and that is acknowledged: a long free-text string is
     not proof of a scenario. It is a tripwire, and a tripwire that occasionally fires
-    on a legitimate field is doing its job — the response to it is to narrow the field,
-    not to widen the check.
+    on a legitimate field is doing its job.
+
+    THE ECHO EXEMPTION - RULED 19 SEPTEMBER 2026 (decisions entry 132)
+    ==================================================================
+
+        *"A field SimForge echoes back is exempt from the prose check when its value
+        is byte-identical to what The Office sent in the same call. Anything else in
+        that field is refused as before. Equality is a stronger control than length,
+        and an operating instruction is never shortened to satisfy a wire guard."*
+
+        `submit_curriculum` echoes `module_declared_absences` and
+        `never_do_obligations` - The Office's own `not_applicable` reasons and its own
+        never-do lists. Both tripped this check on their first real use, five weeks
+        apart, and neither was a leak:
+
+            entry 123  module_declared_absences.property_lookup.rate_limited  1800
+            entry 132  never_do_obligations.underwrite_deal[6]                 232
+
+        Entry 123 was fixed by shortening the prose, which was right for that field:
+        it carried an ARGUMENT for a declaration and the argument belongs in the
+        ledger. **The same remedy was wrong the second time.** A never-do entry is
+        operating instruction text that agents read, and cutting its second clause to
+        fit a wire guard would degrade what an agent is told in order to satisfy a
+        check about what comes back.
+
+    WHY EQUALITY IS STRONGER THAN LENGTH, WHICH IS WHY THIS IS NARROWING
+    ====================================================================
+
+        A value The Office sent moments earlier carries nothing The Office did not
+        already have. Length says nothing about that either way: today a
+        199-character reason passes whether or not SimForge echoed it faithfully, and
+        **nothing checks the echo at all.** This does.
+
+        So the exemption tightens the boundary rather than loosening it. What it costs
+        is that the check becomes payload-aware, and that is why `sent_values`
+        collects WHOLE strings only - never a prefix, never a substring, never a
+        normalised or trimmed form. A fuzzy comparison here would be a named channel.
+
+        The forbidden-NAME check is untouched and runs first. A field whose name
+        matches a forbidden fragment is refused whatever its value, echoed or not.
     """
     if isinstance(body, dict):
         for key, value in body.items():
@@ -985,15 +1057,22 @@ def assert_no_scenario_content(endpoint: str, body: Any, *, path: str = "") -> N
                         f"{fragment!r}. The Office has no read path to scenario "
                         "content; this field must not exist."
                     )
-            assert_no_scenario_content(endpoint, value, path=here)
+            assert_no_scenario_content(endpoint, value, path=here, echoed=echoed)
     elif isinstance(body, list):
         for i, item in enumerate(body):
-            assert_no_scenario_content(endpoint, item, path=f"{path}[{i}]")
+            assert_no_scenario_content(
+                endpoint, item, path=f"{path}[{i}]", echoed=echoed
+            )
     elif isinstance(body, str) and _looks_like_prose(body):
+        # EXACT, AND ON THE WHOLE VALUE. `in` on a frozenset of strings is equality,
+        # never containment - the one comparison this may use.
+        if echoed is not None and body in echoed:
+            return
         raise ResponseRefusedError(
-            f"{endpoint}: field {path!r} carries {len(body)} characters of prose. "
-            "Scenario content must never reach The Office; if this field is "
-            "legitimate, narrow it rather than widening the check."
+            f"{endpoint}: field {path!r} carries {len(body)} characters of prose that "
+            "The Office did not send in this call. Scenario content must never reach "
+            "The Office; if this field is legitimate, narrow it rather than widening "
+            "the check."
         )
 
 
@@ -1010,12 +1089,20 @@ def _looks_like_prose(value: str) -> bool:
     return len(words) >= 30 and value.count(" ") > 20
 
 
-def validate_response(endpoint: str, body: dict[str, Any]) -> None:
+def validate_response(
+    endpoint: str, body: dict[str, Any], *, sent: Any | None = None
+) -> None:
     """The build-failing check: shape, then content.
 
     Field-set equality in the *unexpected* direction only. A response omitting an
     optional field is fine; a response carrying a field nobody enumerated is the
     case this exists to catch.
+
+    `sent` is the request payload of the same call, when there was one. It is the
+    material for the echo exemption and nothing else - **the field-set check above is
+    not affected by it.** An undeclared field is refused whether or not its value was
+    echoed, because the manifest is about which fields may exist and this is about
+    what a declared field may carry. Entry 132.
     """
     allowed = manifested_fields(endpoint)
     actual = set(body)
@@ -1027,7 +1114,9 @@ def validate_response(endpoint: str, body: dict[str, Any]) -> None:
             f"{MANIFEST_PATH.name} with a declared purpose, or remove them. "
             "This check exists so a new field cannot arrive unreviewed."
         )
-    assert_no_scenario_content(endpoint, body)
+    assert_no_scenario_content(
+        endpoint, body, echoed=sent_values(sent) if sent is not None else None
+    )
 
 
 def parse_gate_result(body: dict[str, Any]) -> GateResult:
