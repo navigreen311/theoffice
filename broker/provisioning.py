@@ -642,6 +642,47 @@ async def _gate_8(ctx: _Context) -> GateOutcome:
         BEFORE the client is built and before the first submission, because a gate that
         refuses after sending four modules has not refused.
 
+    AND THE OTHER END OF THE WIRE: `forge_build` WARNS, AND DELIBERATELY DOES NOT BLOCK
+    ====================================================================================
+
+        Ruled 18 September 2026 (entry 131): *"A submitter that vouches for its own
+        build and not its counterpart has checked one end of the wire."* So Gate 8 asks
+        SimForge's `/api/version` once, before submitting, and records the answer.
+
+        **It warns. Four reasons, and the last is the one that decides it.**
+
+        1.  A stale Forge does not change WHAT IS SENT. The block above exists because
+            this gate's output is generated from files beside the submitting code, so a
+            stale Office build sends the wrong curriculum - a fact about us, which we
+            can fix. A stale Forge changes what is done with a correct submission.
+
+        2.  This gate's settled rule is that it does not block on facts about the
+            Forge. It does not block on an outage, and it does not block on a refused
+            response, both on the same ground: *"blocking the ladder on a service that
+            is allowed to be down would be worse."* CI runs no SimForge at all, so a
+            block here would stop every run on every machine that has not got one.
+
+        3.  `differs` CANNOT DECIDE COMPATIBILITY. It answers "has SimForge's checkout
+            moved past its process", which is not "will this payload be understood".
+            A Forge whose two numbers agree can still be a version this curriculum does
+            not fit, and one whose numbers differ can be perfectly able to accept it.
+            Blocking on it would stop the ladder on an inference this side cannot make.
+
+        4.  **The right instrument against a stale GRADER already exists and is a
+            different one.** Entry 129 put the answer key into the exam's identity and
+            entry 128 refused to ingest six verdicts earned under a superseded one. The
+            answer to "this verdict may not be trustworthy" is to not trust the
+            verdict, not to refuse to set the exam. Refusing here would deny an agent
+            an exam over a doubt about the marking.
+
+        **What makes warning load-bearing rather than lazy is the record.** The six
+        verdicts of entry 128 were graded by a build sixteen commits old that discarded
+        every scenario on arrival, and nothing anywhere said so - it took reading a
+        commit SHA out of `openapi.json` by hand, days later. `forge_build` on the gate
+        result is what makes that a lookup instead of an investigation, and the warning
+        in the sentence is what gives somebody the chance to stop before the battery
+        runs.
+
     ONE SUBMISSION PER MODULE, NOT ONE PER VENTURE
     ==============================================
 
@@ -772,6 +813,18 @@ async def _gate_8(ctx: _Context) -> GateOutcome:
 
     submitted: list[dict[str, Any]] = []
     try:
+        # WHICH BUILD IS ON THE OTHER END. Ruled 18 September 2026, entry 131: *"The
+        # Office asks whether the Forge it submits to is current, as it already asks of
+        # itself."*
+        #
+        # ASKED ONCE, BEFORE THE FIRST SUBMISSION, and recorded whatever it says. A
+        # second probe per module would answer the same question five times and could
+        # report two different builds for one run, which is a worse record than one
+        # answer taken at a known moment.
+        #
+        # **RECORDED, NOT ENFORCED - see the `forge_build` section of this gate's
+        # docstring for why a stale Forge warns and does not block.**
+        forge_build = await _forge_build(client, ctx.conn)
         for module_id in sorted(by_module):
             module_forge_id = module_forge.get(module_id)
             if module_forge_id is None:
@@ -823,6 +876,10 @@ async def _gate_8(ctx: _Context) -> GateOutcome:
         "scenario_count": total,
         # First, and on every outcome. See the block at the top of this function.
         "submitting_build": build_block,
+        # Both ends of the wire, side by side and named the same way. A reader
+        # investigating a verdict months later needs one question answered - "what was
+        # running when this exam was set" - and it has two halves.
+        "forge_build": forge_build,
         "submitted": True,
         # True only when every module SimForge was asked about answered with a ref. A
         # row being written is not a hand-over, and neither is three of five landing.
@@ -891,6 +948,13 @@ async def _gate_8(ctx: _Context) -> GateOutcome:
             f"; {len(echoed)} accepted by SimForge and refused by The Office reading "
             "the reply back"
         )
+    forge_warning = _forge_build_warning(forge_build)
+    if forge_warning:
+        # IN THE SENTENCE, not only in the evidence. A verdict graded by a stale Forge
+        # is indistinguishable from any other once it is written down - which is
+        # exactly what the six verdicts of entry 128 proved - so the moment to say so
+        # is the moment the exam is set, where somebody is reading.
+        tail += f"; WARNING: {forge_warning}"
     if department_units:
         # Named in the sentence rather than only in the evidence: unit B gates
         # appointment on its own, and a reader who sees only a module count cannot tell
@@ -959,6 +1023,45 @@ async def _gate_8(ctx: _Context) -> GateOutcome:
         )
 
     return GateOutcome("8", PASSED, reason, detail)
+
+
+async def _forge_build(client: Any, conn: AsyncConnection) -> dict[str, Any]:
+    """Ask the Forge which build it is running. Never raises, never blocks the gate.
+
+    Wrapped rather than called directly because `ctx.simforge` is injectable and a
+    caller's fake - every one in the suite predates this - has no `build` method. A
+    missing method is recorded as "this client could not be asked", which is true, and
+    is not the same finding as a Forge that would not answer.
+    """
+    probe = getattr(client, "build", None)
+    if probe is None:
+        return {"reachable": False, "reason": "this SimForge client cannot be asked"}
+    try:
+        answer = await probe(conn)
+    except Exception as exc:  # the probe owns its failures; this is belt and braces
+        return {"reachable": False, "reason": f"{type(exc).__name__}: {exc}"[:200]}
+    return answer if isinstance(answer, dict) else {
+        "reachable": False, "reason": "the client returned no build record"
+    }
+
+
+def _forge_build_warning(forge_build: dict[str, Any]) -> str | None:
+    """The sentence a reader needs, or None when there is nothing to say.
+
+    Two findings, kept apart because the responses differ: a Forge that would not say
+    is a route to add or a service to look at, and a Forge that says its own checkout
+    has moved past its process is a restart.
+    """
+    if not forge_build.get("reachable"):
+        return "the Forge did not say which build it is running"
+    if forge_build.get("differs") is True:
+        started = str(forge_build.get("started_commit") or "?")[:12]
+        checkout = str(forge_build.get("checkout_commit") or "?")[:12]
+        return (
+            f"the Forge is running {started} and its checkout is at {checkout} - it "
+            "is grading on code its own tree has moved past"
+        )
+    return None
 
 
 async def _exam_takers(
