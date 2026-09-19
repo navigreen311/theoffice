@@ -11035,3 +11035,105 @@ belongs to the pair of calls that echo, not to the field that happened to trip f
 built over module ids, class names and never-do entries - things The Office sent, but
 **wrapped**, so whole-value equality will not match them. If a violation list ever trips
 the check, that is a separate decision and not this rule stretched to cover it.
+
+## NEXT. A claim states the fact, never the act
+
+**Ruled by Ivan Green, 19 September 2026:** *"A permitted claim value never names an act.
+Measured on `comp_analysis/malformed_input`: showing `REFUSED - NOT A UUID` moved REFUSE
+from 25 of 40 to 35 of 40, replicated, and the neutral wording returned it to the
+no-naming baseline. Five of the 44 keys carry an act word in their options, all five name
+REFUSE, and none expects REFUSE. A claim states the fact, never the act."*
+
+SimForge's finding, and its measurement. The Office's keys are what carried the defect.
+
+### Verified here before anything was changed
+
+**Five of the 44, exactly.** All five name `REFUSED`, and **not one expects REFUSE** -
+four expect `DECLINE`, one expects `PROCEED`. So the priming pulled the agent toward an
+act every one of those keys grades as wrong.
+
+The inflection matters and is why this went unnoticed: the options say **`REFUSED`**, the
+past participle, not the bare act token `REFUSE`. A word-boundary search for the four act
+names finds nothing. The defect is priming, not a token, and a past participle primes.
+
+The other 39 are clean, and so is every `record_subject`, `record` and `expected_caveat`
+on all 44.
+
+### The five, before and after
+
+    buyer_match / malformed_input[0]        act DECLINE
+      claim   REFUSED - NOT A UUID                 ->  NOT A UUID
+      options ACCEPTED | REFUSED - NOT A UUID | REFUSED - NO SUCH DEAL
+              ->  ACCEPTED | NOT A UUID | NO SUCH DEAL
+
+    buyer_match / malformed_input[1]        act DECLINE
+      claim   REFUSED - NO SUCH DEAL               ->  NO SUCH DEAL
+      options ACCEPTED | REFUSED - NOT A UUID | REFUSED - NO SUCH DEAL
+              ->  ACCEPTED | NOT A UUID | NO SUCH DEAL
+
+    comp_analysis / malformed_input[0]      act DECLINE
+      claim   REFUSED - NOT A UUID                 ->  NOT A UUID
+      options ACCEPTED | REFUSED - NOT A UUID      ->  ACCEPTED | NOT A UUID
+
+    property_lookup / happy_path[1]         act PROCEED
+      claim   ACCEPTED                             ->  ACCEPTED  (unchanged)
+      options ACCEPTED | REFUSED AS EMPTY          ->  ACCEPTED | EMPTY
+
+    property_lookup / malformed_input[0]    act DECLINE
+      claim   REFUSED AS EMPTY                     ->  EMPTY
+      options ACCEPTED | REFUSED AS EMPTY          ->  ACCEPTED | EMPTY
+
+**The expected claim is in its own option list in all five, asserted per key.** Four of
+the five expected claims were themselves act-naming, so a fix that cleaned only the list
+would have left the expected answer outside the set the agent is shown - ungradeable, and
+passing a word check.
+
+### The fact is identical. Only a word was removed
+
+The service said `deal_id must be a UUID`, so the claim is that it is not a UUID. It said
+`property_lookup requires a non-empty 'query'`, so the claim is that the query was empty.
+`REFUSED - ` and `REFUSED AS ` were never part of the fact; they were a restatement of the
+act, sitting in the field that names the fact.
+
+`ACCEPTED` stays throughout. It is not one of SimForge's four acts, it is the counterpart
+fact about the same subject, and on `property_lookup/happy_path[1]` it is the approved
+expected claim.
+
+### Why the options and not the prose
+
+`record_claim_options` is one of the few things the agent SEES. SimForge's `probe_for`
+puts the situation and the permitted claims verbatim and never renders
+`expected_behavior`, *"because that field is what a good ANSWER looks like and showing it
+would hand the agent the answer."* An act word in the options is read by the model; the
+same word in the expected behaviour is not.
+
+This is why the defect is real even though the prose around it is full of the word.
+
+### Still approved. This is a correction, not a re-approval
+
+`approved_by: Ivan Green`, `approved_on: 2026-09-18` - unchanged on all five.
+
+Moving the date would say he read 44 scenarios again on the day five words came out, and
+`approved_on` exists precisely so that claim cannot be made loosely (entry 126). A
+correction to his own ruling, applied to the text that implements it, is not a second
+approval.
+
+### The same defect in the other field the agent sees: none
+
+`probe_for` puts the situation too, so an act word there would prime identically.
+**Measured across all 44: zero.** Near-synonyms outside SimForge's vocabulary - reject,
+deny, block, abort, stop - also zero.
+
+`test_no_situation_names_an_act` pins it, so the clean state survives rather than being
+rediscovered by somebody else's measurement.
+
+### Already half-known, and recorded on the wrong module
+
+`property_lookup/malformed_input`'s own `draft_note` has said since it was drafted:
+*"MEASURED: gemma2 and qwen2.5 write REFUSE on this scenario 19-20 times of 20."* The
+effect was seen, written down beside the scenario that showed it, and read as a fact about
+those two models.
+
+**What was missing was the counterfactual.** SimForge's new measurement supplies it - the
+same scenario with neutral wording returns to baseline - and that turns a note about model
+behaviour into a defect in the key.

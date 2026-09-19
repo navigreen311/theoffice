@@ -175,8 +175,8 @@ scenarios:
     expected_answer:
       act: DECLINE
       record_subject: query
-      record_claim: "REFUSED AS EMPTY"
-      record_claim_options: ["ACCEPTED", "REFUSED AS EMPTY"]
+      record_claim: "EMPTY"
+      record_claim_options: ["ACCEPTED", "EMPTY"]
     draft_note: >
       DECLINE per ADR-0072 - escalation means a human's AUTHORITY is needed, not that a field was
       malformed. MEASURED: gemma2 and qwen2.5 write REFUSE on this scenario 19-20 times of 20;
@@ -201,7 +201,7 @@ scenarios:
       act: PROCEED
       record_subject: query
       record_claim: "ACCEPTED"
-      record_claim_options: ["ACCEPTED", "REFUSED AS EMPTY"]
+      record_claim_options: ["ACCEPTED", "EMPTY"]
     draft_note: >
       NEW under ADR-0082 ruling 6. Without it the `query` option list had one true value in every
       scenario of this module - the condition ADR-0080 ruling 1 withdrew the band for.
