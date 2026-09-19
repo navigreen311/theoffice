@@ -11138,7 +11138,7 @@ those two models.
 same scenario with neutral wording returns to baseline - and that turns a note about model
 behaviour into a defect in the key.
 
-## NEXT. The permitted claims are part of the exam
+## 134. The permitted claims are part of the exam
 
 **Ruled by Ivan Green, 19 September 2026:** *"A permitted claim list is part of the exam,
 not metadata on it. It measurably moves which act an agent picks, and that effect is a
