@@ -10619,3 +10619,120 @@ Retiring them needs a column, and it must not be `result_received_at`: that fiel
 here would say one was, which is the opposite of this ruling. The shape 0043 already
 established for grants - a `superseded_at` the reader excludes - is the one that fits, and
 it is not built here.
+
+## NEXT. The exam names the answer key it was set from
+
+**Ruled by Ivan Green, 18 September 2026:** *"The exam's identity includes the scenarios
+it was set from. Take the cheap version: the scenario-set hash goes inside
+`mint_run_ref`, Unit A only, so a changed answer key mints a different exam. SimForge
+declares any new field before The Office sends it, since its run-start payload now
+refuses unknown fields."*
+
+Entry 128 had to be a ruling because there was nothing to check. This is the check.
+
+### The cheap version, and why it is not a compromise
+
+`OperationRun.runRef` is **UNIQUE and is the whole of a run's identity on SimForge**.
+So a ref that differs is a different exam over there - with no field to declare, no
+payload to change and no migration on that side. The fix is a segment in a string.
+
+That is not merely cheaper, it is the only version available this week.
+`OperationRunStartRequest` carries `extra="forbid"` as of SimForge's #170, so a field
+The Office invented would be **refused with a 422 and every exam would fail to open**.
+`ForgeOperationCurriculum` has no such config and would drop it silently instead. Two
+payloads, two failure modes, and both say the same thing: **SimForge declares first.**
+That is the inverse of entry 124, where sending early was merely ignored.
+
+### What is in the hash, and the one that is easy to miss
+
+`scenario_set_hash` is taken over the payload that is about to go on the wire, not
+re-derived from the generator - `artifacts_hash`' argument, so the hash cannot drift
+from the thing it names.
+
+    operation_scenarios      the scenarios, in the order sent. Order is part of the
+                             identity: SimForge stores an `ordinal` per row, so a
+                             reordering is a different arrangement of the same exam.
+    module_not_applicable    **a declared absence is a statement about the exam.**
+                             Moving `rate_limited` from "nobody has written one" to
+                             "this module cannot be rate limited" changes what SimForge
+                             grades coverage against while `operation_scenarios` stays
+                             byte-identical - and would otherwise mint the same ref,
+                             which is this entire defect in miniature.
+
+Not `coverage_declaration`, not `certification_units_requested`, not
+`instruction_set_ref`. The first two describe the venture's shape, and folding them in
+would re-open every exam in a venture the moment somebody was appointed. The third is
+the instruction, which the ref already names in its own segment.
+
+The shape, with the last two segments named:
+
+    office:greenstone:cre-forge:assign_contract@cc49a49c:cacf28ef5ba0:kd5221436ac66
+                                                         instruction   answer key
+
+The `k` prefix is so a reader of a log line can tell the two hashes apart without
+counting colons - and so a post-ruling ref is distinguishable at a glance from the
+pre-ruling refs that carry none.
+
+### Unit B has no answer key and must not pretend to
+
+`_open_department_units` opens the run and **submits no curriculum at all**. A hash
+segment there would be either a constant, naming nothing, or the hash of an empty set,
+claiming an answer key exists and is empty. Both are worse than the absence, so a
+department ref is unchanged.
+
+A unit-A ref minted without one also keeps its old shape, under the rule the agent
+segment was added by: a run SimForge is already holding is identified by the string it
+was opened with, and re-deriving it would orphan the run rather than update it.
+
+### 0046, and the two columns
+
+`scenario_set_hash` in full on `curriculum_submission`. The ref carries twelve
+characters because its job is to be recognised in a log; `instruction_content_hash` has
+sat here in full since 0007 for the same reason, and the ingest sweep must not have to
+parse a ref to learn which answer key a verdict belongs to.
+
+`superseded_at` + `superseded_reason`, with a CHECK that they travel together.
+
+**It is not `result_received_at`, and that is the whole point of the column existing.**
+That field's own docstring: *"`result_received_at` means 'a verdict SimForge stands
+behind was written into a certification', NOT 'we stopped asking'."* Stamping it here
+would record that a certification was written when entry 128 rules that none will be.
+The row keeps its verdict-shaped hole, which is the true statement: an exam was set, an
+answer came back, and nobody will act on it.
+
+`overdue_submissions` excludes superseded rows - in the reader rather than in the sweep,
+so everything asking "what is still owed an answer" gets one answer.
+
+### The one-off invariant, and what it deliberately leaves alone
+
+The migration supersedes every open submission carrying a `simforge_run_ref`, because a
+ref minted before 0046 names an exam whose identity does not include its answer key.
+That is entry 128's population stated structurally rather than by listing six uuids.
+
+Measured on the development database before it was written:
+
+    47 open submissions, 0 closed
+    18 carry a ref, over 9 distinct refs - each minted twice, by two runs
+    29 carry none: Burkham's 20, and 9 greenstone rows from runs that never reached
+       `run_start`
+
+**The 29 are untouched on purpose.** No ref means no run was opened, so there is no
+verdict to refuse; `_ingest_one` resolves those to TIMEOUT, which is `in_training` and
+not a certification anybody earned. Superseding them would claim a decision was made
+about exams that were never set - and it would swallow Burkham's twenty, which are
+waiting on an approval rather than on a verdict.
+
+One-off in 0043's sense: it states a fact true at the moment the identity scheme
+changed, and nothing recomputes it. Every ref minted from here on carries its answer
+key, so no later row can fall into this class.
+
+### What this still does not fix
+
+**Nothing on SimForge reads `OperationScenarioSubmission` yet.** Measured across all of
+`apps/api/src`: the only production reference is the write in `routers/operation.py` -
+no `select`, no raw SQL, nothing in `services/`. So the seven submittable classes are
+still not scored, and a fresh run today would return another two-dimension verdict
+(entry 128).
+
+This stops a verdict being carried across a change in the answer key. It does not make
+the 44 count. That half is SimForge's.
