@@ -10737,7 +10737,7 @@ still not scored, and a fresh run today would return another two-dimension verdi
 This stops a verdict being carried across a change in the answer key. It does not make
 the 44 count. That half is SimForge's.
 
-## NEXT. The situation gets its own field, and E-004 closes
+## 130. The situation gets its own field, and E-004 closes
 
 **Instructed by Ivan Green, 18 September 2026:** *"Once SimForge declares `situation`:
 send it on every submitted scenario."*
