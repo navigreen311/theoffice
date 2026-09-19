@@ -10840,7 +10840,7 @@ That is entry 127's control asking the same question from the other side of the 
 Office now refuses to submit on a build it cannot vouch for, and has no equivalent way to
 ask whether the Forge it is submitting *to* is current. A check worth having, and not
 built here.
-## NEXT. The other end of the wire
+## 131. The other end of the wire
 
 **Ruled by Ivan Green, 18 September 2026:** *"The Office asks whether the Forge it
 submits to is current, as it already asks of itself. A submitter that vouches for its
