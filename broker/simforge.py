@@ -186,6 +186,61 @@ def submission_unit(module_id: str | None) -> tuple[str, str]:
     return ("A", "operation") if module_id else ("B", "domain")
 
 
+def scenario_set_hash(payload: dict[str, Any]) -> str:
+    """The identity of the answer key one curriculum submission carries.
+
+    RULED 18 SEPTEMBER 2026 (decisions entry 129)
+    =============================================
+
+        *"The exam's identity includes the scenarios it was set from."*
+
+        Six verdicts were earned on scenarios the approved keys replaced, and nothing
+        in the run reference distinguished them from the approved 44 (entry 128).
+        `mint_run_ref` was keyed on the INSTRUCTION content hash, and an answer key can
+        be rewritten end to end without the instruction changing a byte - so a verdict
+        from the old exam and one from the new were byte-identical at every key either
+        side could see. It had to be a ruling because there was nothing to check.
+
+    TAKEN OVER WHAT GOES ON THE WIRE, NOT A RE-DERIVATION
+    =====================================================
+
+        The argument is `artifacts_hash`': hash the thing itself, so the hash cannot
+        drift from what it names. `_curriculum_payload` has already built the rows by
+        the time this is called, so this hashes those rows rather than re-walking the
+        generator's output to produce a value that is *supposed* to describe them.
+
+    WHAT IS IN IT, AND THE ONE THAT IS EASY TO MISS
+    ===============================================
+
+        `operation_scenarios`    the scenarios themselves, in the order sent. Order is
+                                 part of the identity because SimForge stores an
+                                 `ordinal` per row, so a reordering is a different
+                                 arrangement of the same exam and should be a different
+                                 run rather than a silent landing on the old one.
+        `module_not_applicable`  **a declared absence is a statement about the exam.**
+                                 Changing `rate_limited` from "no scenario yet" to
+                                 "this module cannot be rate limited" changes what
+                                 SimForge grades coverage against while leaving
+                                 `operation_scenarios` untouched - and would otherwise
+                                 mint the same ref, which is this entire defect in
+                                 miniature.
+
+        Not `coverage_declaration`, `certification_units_requested` or
+        `instruction_set_ref`: the first two are facts about the venture's shape and
+        the third is the instruction, which the ref already names in its own segment.
+        Folding them in would make an unrelated appointment change open a new exam.
+    """
+    material = {
+        "operation_scenarios": payload.get("operation_scenarios", []),
+        "module_not_applicable": payload.get("module_not_applicable", {}),
+    }
+    return hashlib.sha256(
+        json.dumps(
+            material, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        ).encode("utf-8")
+    ).hexdigest()
+
+
 def mint_run_ref(
     *,
     venture_id: str,
@@ -194,6 +249,7 @@ def mint_run_ref(
     content_hash: str,
     department: str | None = None,
     office_agent_id: uuid.UUID | None = None,
+    scenario_hash: str | None = None,
 ) -> str:
     """The run reference The Office mints, and SimForge opens a run under.
 
@@ -262,15 +318,44 @@ def mint_run_ref(
         - every unit-A run opened before this ruling - and they keep their old shape
         rather than being re-derived, so a ref that is already open still resolves.
 
-    Carries no scenario content: two ids, a module or department name and a hash
-    prefix. The hash is truncated because the full 64 characters buy nothing a reader
-    wants and make the ref unreadable in a log line, where its only job is to be
-    recognised.
+    A UNIT-A REF NAMES THE ANSWER KEY. A UNIT-B REF CANNOT, AND MUST NOT PRETEND TO
+    ===============================================================================
+
+        Ruled 18 September 2026 (entry 129): *"the exam's identity includes the
+        scenarios it was set from ... Unit A only."*
+
+        `scenario_hash` is `scenario_set_hash` over the curriculum that went with this
+        run, so rewriting an answer key mints a different ref and `open_run` opens a
+        new run instead of returning the old one with the old verdict on it. That is
+        the whole of the fix, and it needs nothing from SimForge: `OperationRun.runRef`
+        is UNIQUE and is the entire run identity, so a ref that differs IS a different
+        exam over there, with no field to declare and no schema to migrate.
+
+        **Unit B is excluded because a department run submits no curriculum.** Gate 8's
+        `_open_department_units` opens the run and sends no scenarios at all - so there
+        is no answer key, and a hash segment there would either be a constant (naming
+        nothing) or the hash of an empty set (claiming an answer key exists and is
+        empty). Both are worse than the absence.
+
+        A ref minted without one keeps its old shape, so every ref already open still
+        resolves - the same rule the agent segment was added under.
+
+    Carries no scenario content: two ids, a module or department name and hash
+    prefixes. The hashes are truncated because the full 64 characters buy nothing a
+    reader wants and make the ref unreadable in a log line, where its only job is to be
+    recognised. The full instruction hash is on the `curriculum_submission` row, and
+    as of 0046 so is the full scenario-set hash.
     """
     target = module_id or (f"dept:{department}" if department else "-")
     if module_id and office_agent_id is not None:
         target = f"{module_id}@{str(office_agent_id)[:8]}"
-    return ":".join(("office", venture_id, forge_id, target, content_hash[:12]))
+    segments = ["office", venture_id, forge_id, target, content_hash[:12]]
+    if module_id and scenario_hash:
+        # Prefixed, so a reader of a log line can tell this segment from the
+        # instruction hash beside it without counting colons - and so a ref that has
+        # one is distinguishable at a glance from the pre-ruling refs that do not.
+        segments.append(f"k{scenario_hash[:12]}")
+    return ":".join(segments)
 
 
 def department_basis_hash(module_hashes: dict[str, str]) -> str:
@@ -971,9 +1056,16 @@ async def overdue_submissions(
             SELECT submission_id, venture_id, forge_id, module_id, department,
                    scenario_pack_ref, simforge_run_ref, submitted_at,
                    instruction_content_hash, office_agent_id,
+                   scenario_set_hash,
                    EXTRACT(EPOCH FROM (now() - submitted_at)) / 3600.0 AS hours_waiting
             FROM curriculum_submission
             WHERE result_received_at IS NULL
+              -- SUPERSEDED IS NOT ANSWERED. 0046's column, and the reason it is not
+              -- `result_received_at`: this row is still owed nothing and will never be
+              -- certified, because its exam's identity did not name the answer key it
+              -- was set from (entries 128 and 129). Excluded here rather than in the
+              -- sweep, so every reader of "still owed an answer" gets the same set.
+              AND superseded_at IS NULL
               AND submitted_at < now() - make_interval(hours => %s)
             ORDER BY submitted_at
             """,

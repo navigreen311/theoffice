@@ -529,7 +529,8 @@ async def test_the_ref_gate_8_mints_is_derived_from_the_submission(at_gate_8, op
         await cur.execute(
             """
             SELECT venture_id, forge_id, module_id, department,
-                   instruction_content_hash, simforge_run_ref, office_agent_id
+                   instruction_content_hash, simforge_run_ref, office_agent_id,
+                   scenario_set_hash
             FROM curriculum_submission WHERE venture_id = %s
             """,
             (VENTURE,),
@@ -544,13 +545,28 @@ async def test_the_ref_gate_8_mints_is_derived_from_the_submission(at_gate_8, op
     # A unit-A ref names the AGENT in that same segment, for the identical reason: two
     # holders of one module would otherwise mint one ref, and `open_run` is idempotent
     # on it, so the second exam would land silently on the first agent's run.
+    #
+    # A unit-A ref also names the ANSWER KEY as of 18 September 2026 (entry 129), and
+    # the row stores the full hash for exactly this: the ref carries twelve characters
+    # of it, and a reader must be able to recompute the ref from the row rather than
+    # from the payload that has long since gone.
     for (venture_id, forge_id, module_id, department, content_hash, stored,
-         agent_id) in rows:
+         agent_id, scenario_hash) in rows:
         assert stored == mint_run_ref(
             venture_id=venture_id, forge_id=forge_id,
             module_id=module_id, department=department, content_hash=content_hash,
-            office_agent_id=agent_id,
+            office_agent_id=agent_id, scenario_hash=scenario_hash,
         ), f"{module_id or department}: the ref is not a function of the submission"
+        if module_id:
+            assert scenario_hash, (
+                f"{module_id}: a unit-A submission stored no scenario-set hash, so "
+                "nothing can tell which answer key its verdict belongs to"
+            )
+        else:
+            assert scenario_hash is None, (
+                f"dept:{department}: a unit-B submission sends no curriculum and must "
+                "not claim an answer key"
+            )
 
 
 async def test_a_run_that_was_already_open_is_reported_as_such(at_gate_8, operator):

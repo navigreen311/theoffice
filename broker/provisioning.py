@@ -46,6 +46,7 @@ from broker.simforge import (
     SimForgeError,
     department_basis_hash,
     mint_run_ref,
+    scenario_set_hash,
     submission_unit,
 )
 from generators import pipeline as generator_pipeline
@@ -1080,6 +1081,11 @@ async def _submit_one_module(
         venture_id=ctx.venture_id,
     )
 
+    # THE ANSWER KEY'S IDENTITY, taken over the payload that is about to go on the
+    # wire rather than re-derived from the generator - so it cannot describe anything
+    # other than what was sent. Ruled 18 September 2026, entry 129.
+    scenario_hash = scenario_set_hash(payload)
+
     unit, rubric_kind = submission_unit(module_id)
     opened: list[dict[str, Any]] = []
     try:
@@ -1112,6 +1118,14 @@ async def _submit_one_module(
                 venture_id=ctx.venture_id, forge_id=forge_id, module_id=module_id,
                 content_hash=instruction.content_hash,
                 office_agent_id=taker["office_agent_id"],
+                # THE EXAM NAMES ITS ANSWER KEY. A rewritten key mints a different ref,
+                # so `open_run` opens a new run instead of returning the old one with
+                # the old verdict on it - which is what let six verdicts earned on
+                # superseded scenarios be indistinguishable from the approved 44
+                # (entries 128, 129). Nothing is sent that SimForge has not declared:
+                # this changes the ref STRING, and `runRef` is already the whole of a
+                # run's identity over there.
+                scenario_hash=scenario_hash,
             )
             started = await client.run_start(
                 ctx.conn,
@@ -1206,6 +1220,7 @@ async def _submit_one_module(
                 coverage_denominator=max(modules_in_forge, 1),
                 instruction_content_hash=instruction.content_hash,
                 run_ref=entry["run_ref"],
+                scenario_hash=scenario_hash,
             )
     elif not takers and error is None:
         # ACCEPTED, AND NOBODY CAN SIT IT. No `curriculum_submission` row, and that is
@@ -1235,6 +1250,10 @@ async def _submit_one_module(
             coverage_denominator=max(modules_in_forge, 1),
             instruction_content_hash=instruction.content_hash,
             run_ref=None,
+            # Recorded even though no run opened: the row says which key WOULD have
+            # been sat, which is what makes a refused submission comparable with the
+            # one that replaces it.
+            scenario_hash=scenario_hash,
         )
 
     outcome: dict[str, Any] = {
@@ -1287,6 +1306,7 @@ async def _record_submission(
     instruction_content_hash: str, run_ref: str | None,
     office_agent_id: Any | None = None,
     members: dict[str, str] | None = None,
+    scenario_hash: str | None = None,
 ) -> None:
     """The one place Gate 8 writes a `curriculum_submission` row, for either unit.
 
@@ -1321,13 +1341,14 @@ async def _record_submission(
               (submission_id, venture_id, forge_id, module_id, department,
                scenario_pack_ref, scenario_count, coverage_denominator,
                instruction_content_hash, submitted_by, simforge_run_ref,
-               office_agent_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               office_agent_id, scenario_set_hash)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 submission_id, ctx.venture_id, forge_id, module_id, department,
                 scenario_pack_ref, scenario_count, coverage_denominator,
                 instruction_content_hash, ctx.actor, run_ref, office_agent_id,
+                scenario_hash,
             ),
         )
         if members:
