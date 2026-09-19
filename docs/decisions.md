@@ -10939,7 +10939,7 @@ SimForge alone, so SimForge is the only counterpart it has - but the general que
 ("does the thing on the other end know what it is") now has one answer and three
 absences. Worth naming rather than leaving to be discovered.
 
-## NEXT. Equality is a stronger control than length
+## 132. Equality is a stronger control than length
 
 **Ruled by Ivan Green, 19 September 2026:** *"A field SimForge echoes back is exempt from
 the prose check when its value is byte-identical to what The Office sent in the same
