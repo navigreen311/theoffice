@@ -11137,3 +11137,86 @@ those two models.
 **What was missing was the counterfactual.** SimForge's new measurement supplies it - the
 same scenario with neutral wording returns to baseline - and that turns a note about model
 behaviour into a defect in the key.
+
+## 134. The permitted claims are part of the exam
+
+**Ruled by Ivan Green, 19 September 2026:** *"A permitted claim list is part of the exam,
+not metadata on it. It measurably moves which act an agent picks, and that effect is a
+property of the specific strings. The 25 keys carrying option lists are reviewed for their
+effect on the act, not only for which claims are permitted."*
+
+Entry 133 removed five act words. This is the rule the removal implies, and it is larger
+than the removal: **the list is a thing the agent reads, so every word in it is exam
+text.** The review question changes from *"are these the claims that may be made"* to
+*"what does showing these strings do to the answer."*
+
+### The 25, and the 12
+
+Measured on main after entry 133:
+
+    scenarios carrying record_claim_options   25 of 44
+    distinct lists                            12
+    of the 25 scenarios                       10 show a two-option list,
+                                              10 show three, 5 show four
+
+    assign_contract   8      buyer_match     2      comp_analysis   1
+    property_lookup   2      underwrite_deal 12
+
+**Twelve lists, not twenty-five.** That is the size of the review, and it is also the
+risk: one list is shared by **five** `underwrite_deal` scenarios spanning three different
+expected acts, so a word changed there changes five exams at once. The reviewable unit is
+the list; the blast radius is the scenarios that share it.
+
+### What "reviewed for its effect on the act" looks like
+
+Two patterns the measurement makes visible, neither of which a "are these the right
+claims" review would have surfaced.
+
+**1. An option that is never the expected claim, on any scenario that shows it.** **Ten
+of the twelve** lists have one - only `property_lookup`'s `ACCEPTED | EMPTY` and
+`underwrite_deal`'s `year_built` pair have every option expected somewhere:
+
+    assign_contract    VERIFIED · NOT CREATED · YES · true
+    buyer_match        ACCEPTED
+    comp_analysis      ACCEPTED
+    underwrite_deal    COMPUTED FROM COMPARABLE SALES (twice) · SUCCEEDED · UNKNOWN
+
+A never-correct option is not automatically wrong - a list with one true value in every
+scenario is the condition ADR-0080 ruling 1 withdrew the band for, and
+`property_lookup/happy_path[1]` exists precisely to give that module a second true value.
+But it is exactly the shape that primed REFUSE: **a plausible wrong answer, shown to the
+agent, that the key always grades as wrong.** Under this ruling each one is a question,
+not a default.
+
+**2. Two wordings of one fact set.** `underwrite_deal` carries both:
+
+    ASKING PRICE RESTATED       | DEFAULT CONSTANT   | COMPUTED FROM COMPARABLE SALES
+    THE SELLER'S ASKING PRICE   | A DEFAULT CONSTANT | COMPUTED FROM COMPARABLE SALES
+
+The same three facts, twice, two scenarios each, all four expecting PROCEED. Under the old
+reading these are interchangeable - the permitted claims are the same. **Under this ruling
+they are two different exams**, because the effect is a property of the specific strings,
+and nobody has measured which one an agent answers differently to. Neither is wrong; what
+is missing is a decision.
+
+### Why this is a rule about the exam and not about tidiness
+
+`probe_for` puts the situation and the permitted claims verbatim and renders
+`expected_behavior` to nobody. So the list is one of exactly two things the agent sees -
+and it was the one nobody was reviewing as text.
+
+The measurement is what makes this more than a style preference: **25 of 40 to 35 of 40 on
+one word**, replicated, reversed by the neutral wording. An effect that large from four
+characters is not an artefact of one model on one scenario. It says the list is doing work
+in the exam, and work in an exam is something a reviewer signs for.
+
+### What this does not require
+
+Not a re-approval of the 44. Entry 133's correction kept `approved_on: 2026-09-18` and so
+does this: a rule about how the next review is conducted does not retroactively unmake the
+last one.
+
+Nor does it require a measurement per list. The Office cannot run a battery - ADR-0050
+puts that on SimForge's side, and SimForge's scheduler is off. What it requires is that
+the twelve lists are read as exam text by somebody, and that a never-correct option
+survives review by being argued for rather than by nobody having asked.
