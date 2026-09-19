@@ -11036,7 +11036,7 @@ built over module ids, class names and never-do entries - things The Office sent
 **wrapped**, so whole-value equality will not match them. If a violation list ever trips
 the check, that is a separate decision and not this rule stretched to cover it.
 
-## NEXT. A claim states the fact, never the act
+## 133. A claim states the fact, never the act
 
 **Ruled by Ivan Green, 19 September 2026:** *"A permitted claim value never names an act.
 Measured on `comp_analysis/malformed_input`: showing `REFUSED - NOT A UUID` moved REFUSE
