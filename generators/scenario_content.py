@@ -192,9 +192,16 @@ class AuthoredScenario:
     """The precipitating occasion. What is in front of the agent when the scenario
     starts - not a restatement of the rule the scenario tests.
 
-    `docs/scenario-contract.md` §6 lists the fields that reach SimForge and there is
-    no field for this one, so it travels inside `expected_behavior` rather than
-    beside it. See `wire_behavior()`, and E-004 in `PARALLEL_BUILD_ESCALATION.md`."""
+    **It has its own field on the wire as of 18 September 2026**, and it travelled
+    inside `expected_behavior` before that - labelled `SITUATION:` / `EXPECTED:`,
+    splittable by design, recorded as E-004 and closed by this change. The second
+    encoding is gone: SimForge declared `OperationScenarioSubmission.situation` in its
+    #172, which is what the ruling of entry 129 required before The Office could send
+    anything new.
+
+    **It is what the agent is asked.** SimForge's `probe_for` puts this verbatim and
+    renders `expected_behavior` to nobody, because that field is what a good answer
+    looks like and showing it would hand over the answer."""
 
     expected_behavior: str
     """What the agent does with the situation."""
@@ -224,26 +231,12 @@ class AuthoredScenario:
     """
     """Overrides the class's default section. Empty means "use the default"."""
 
-    def wire_behavior(self) -> str:
-        """`expected_behavior` as SimForge receives it: the occasion, then the act.
-
-        **THIS IS A SECOND ENCODING INSIDE A FIELD, and it is a recorded workaround.**
-        `docs/scenario-contract.md` §6 lists every field that reaches SimForge and
-        there is none for the occasion - while §7 says a scenario needs one. An
-        expected behaviour stated without its occasion is not gradable: a grader
-        reading "the agent records `sms` and nothing else" cannot tell whether that was
-        right without knowing what it was handed. So both halves travel in the one
-        field that exists.
-
-        The labels are fixed and the separator is a blank line, **so this is
-        splittable by a regular expression rather than by rereading prose** on the day
-        somebody adds a real `situation` field to both sides. Do not vary the labels
-        and do not put a blank line inside either half. **Whoever adds that field
-        should delete this method in the same change** and split the stored prose with
-        it. E-004 in `PARALLEL_BUILD_ESCALATION.md`, and
-        `docs/scenario-generation.md` §7.1.
-        """
-        return f"SITUATION: {self.situation}\n\nEXPECTED: {self.expected_behavior}"
+    # `wire_behavior()` STOOD HERE AND IS DELETED, as its own docstring required:
+    # *"whoever adds that field should delete this method in the same change."* It
+    # packed the occasion and the act into `expected_behavior` as
+    # `SITUATION: ...\n\nEXPECTED: ...` because neither side of the contract had a
+    # field for the occasion. Both sides do now, so the two halves travel as two
+    # fields and nothing has to be split back out. E-004 is closed, not worked around.
 
 
 @dataclass(frozen=True, slots=True)

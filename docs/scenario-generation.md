@@ -298,15 +298,30 @@ has to survive somebody checking it.
    answer names the boundary the happy path stays inside, rather than claiming there is no
    boundary. A value that restates "escalation is expected" has not satisfied it.
 
-### 7.1 A SECOND ENCODING INSIDE A FIELD — read this before authoring anything
+### 7.1 THE SITUATION HAS ITS OWN FIELD — closed 18 September 2026
 
-**The precipitating situation has no field of its own on either side of the contract**,
-and `docs/scenario-contract.md` §6 is the authority on that: it lists every field that
-reaches SimForge, and there is none for the occasion. `CurriculumScenario` has none
-either, and `generators/artifacts.py` is frozen.
+**`situation` is a field on `OperationScenarioSubmission` and The Office sends it.**
+SimForge declared it in its #172 (ADR-0087); The Office sends it from the same day,
+under the ruling of decisions entry 129 that SimForge declares any new field before The
+Office sends it. `docs/scenario-contract.md` §6 is the authority.
 
-**So the situation travels as a second encoding inside `expected_behavior`.** Call it
-what it is. `AuthoredScenario.wire_behavior()` emits:
+Author the two halves as two fields, which is what a content file has always asked for:
+
+```yaml
+- scenario_class: happy_path
+  situation: <the occasion - what is in front of the agent>
+  expected_behavior: <what the agent does with it>
+```
+
+**`situation` is what the agent is asked.** SimForge's `probe_for` puts it verbatim.
+`expected_behavior` is never rendered to the agent, because it is what a good ANSWER
+looks like. So the two are not interchangeable and an occasion written as a restated
+rule produces a probe that gives the answer away.
+
+#### What this replaced, and why it is worth remembering
+
+Until this, neither side had a field for the occasion, so it travelled as a second
+encoding inside `expected_behavior`:
 
 ```
 SITUATION: <the occasion>
@@ -314,24 +329,12 @@ SITUATION: <the occasion>
 EXPECTED: <what the agent does>
 ```
 
-**Three properties, and they are the whole of why this is acceptable rather than merely
-convenient:**
+`AuthoredScenario.wire_behavior()` emitted that, and **it is deleted**, which its own
+docstring required of whoever added the field. The convention survived three authors
+(P-06, P-07, P-08) without drifting because the labels were fixed, the separator was a
+blank line, and the halves stayed separate where they were authored — so the packing
+could be undone mechanically rather than by rereading prose. **That is the whole reason
+a workaround was acceptable, and it is why closing it cost one commit rather than a
+re-authoring pass.**
 
-1. **It is mechanically splittable.** The two labels are fixed strings and the separator
-   is a blank line. When somebody adds a real `situation` field to
-   `OperationScenarioSubmission` and to `CurriculumScenario`, every scenario authored
-   under this convention can be split back out by a regular expression rather than by a
-   human rereading prose. **Do not vary the labels, do not translate them, and do not
-   put a blank line inside either half.**
-2. **The halves stay separate where they are authored.** A content file has `situation`
-   and `expected_behavior` as two required fields. The blending happens once, in one
-   function, on the way out — so an author writes an occasion as an occasion and a
-   reviewer can check that it is not a restated rule.
-3. **It is written down here, in the loader's docstring, and in the escalation file.**
-   That is deliberate. **A convention nobody wrote down drifts by the third author**, and
-   this one will have at least three: P-06, P-07 and P-08 each write into it.
-
-**This is a workaround and it is accepted as one.** It is E-004 in
-`PARALLEL_BUILD_ESCALATION.md`, recorded as a contract gap rather than closed. **The
-thing to fix is the missing field on both sides**, and whoever adds it should delete
-`wire_behavior()` in the same change and split the stored prose with it.
+E-004 in `PARALLEL_BUILD_ESCALATION.md` is closed rather than standing.

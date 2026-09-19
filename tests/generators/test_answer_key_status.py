@@ -253,7 +253,10 @@ def test_no_approved_key_still_asks_an_open_question():
     loaded = sc.load_all()
     for module_id in GREENSTONE:
         content = loaded.modules[module_id]
-        prose = [a.wire_behavior() + " " + a.expected_escalation
+        # All three prose halves, now that the occasion is its own field. It used to
+        # be folded into `wire_behavior()`, so widening this was not a choice - the
+        # situation is where an unanswered question is most likely to have been left.
+        prose = [f"{a.situation} {a.expected_behavior} {a.expected_escalation}"
                  for v in content.scenarios.values() for a in v]
         prose += list(content.not_applicable.values())
         asking = [p for p in prose if "OPEN" in p]

@@ -1619,6 +1619,23 @@ def _curriculum_payload(
                 "scenario_class": s.scenario_class,
                 "instruction_section": s.instruction_section,
                 "module_id": s.module_id,
+                # THE PROBE - what the agent is actually asked. Sent from 18 September
+                # 2026, once SimForge declared the field (its #172, ADR-0087).
+                #
+                # **Without it SimForge holds a key and has nothing to put.** Its
+                # `probe_for` returns this verbatim and renders `expected_behavior` to
+                # nobody, because that field is what a good ANSWER looks like and
+                # showing it would hand the agent the answer. So the grader was
+                # complete and its input did not exist.
+                #
+                # `summary` is where the situation lives on an operation row - see
+                # `curriculum._operation_row`. It is not a second field beside it.
+                #
+                # OMITTED WHEN EMPTY, never sent as "" or null. SimForge declares it
+                # `str | None`, so absent means "this scenario cannot be put to
+                # anybody" - which is true of an unauthored row and is a different
+                # statement from a blank occasion. Entry 122's rule, applied again.
+                **({"situation": s.summary} if s.summary else {}),
                 # `expected_behavior`, not `summary`. P-00 froze the distinction into
                 # CurriculumScenario - "replaces `summary`'s generated boilerplate as
                 # the field SimForge reads" - and P-05 made it load-bearing: `summary`

@@ -123,17 +123,29 @@ def test_the_worked_example_escalation_prose_names_a_juncture():
         assert len(authored.expected_escalation.split()) >= 20, authored.scenario_class
 
 
-def test_the_wire_behavior_carries_both_halves_labelled():
-    """The contract has no `situation` field on the wire, so it travels inside
-    `expected_behavior` - separated and labelled, so a later revision can split them
-    back out mechanically rather than by reading prose."""
+def test_the_two_halves_are_two_fields_and_the_packing_is_gone():
+    """**E-004 closed.** They used to travel in one field, labelled.
+
+    `wire_behavior()` packed `SITUATION: ... EXPECTED: ...` into `expected_behavior`
+    because neither side of the contract had a field for the occasion. SimForge
+    declared one in its #172, so the two halves are two fields now and the method is
+    deleted - which its own docstring required of whoever added the field.
+
+    Asserted by ABSENCE as well as presence: a leftover prefix would put the probe
+    inside the answer key, and SimForge grades against `expected_behavior` while
+    putting `situation` to the agent.
+    """
     content = sc.load_module(WORKED_EXAMPLE)
     happy = content.scenarios["happy_path"][0]
-    wire = happy.wire_behavior()
-    assert wire.startswith("SITUATION: ")
-    assert "\n\nEXPECTED: " in wire
-    assert happy.situation in wire
-    assert happy.expected_behavior in wire
+    assert not hasattr(happy, "wire_behavior"), (
+        "wire_behavior() survived the change that made it unnecessary"
+    )
+    assert happy.situation and happy.expected_behavior
+    assert not happy.expected_behavior.startswith("SITUATION: ")
+    assert happy.situation not in happy.expected_behavior, (
+        "the occasion is restated inside the act; SimForge would grade the answer "
+        "against prose containing the question it asked"
+    )
 
 
 # ------------------------------------------------------------------ refusals

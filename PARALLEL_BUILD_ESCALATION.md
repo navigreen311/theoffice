@@ -158,15 +158,20 @@ telling nobody anything. Recorded in full in `docs/scenario-generation.md` §5.
 
 ---
 
-## E-004 — the situation has no field on either side · **RECORDED, stands as a contract gap**
+## E-004 — the situation has no field on either side · **CLOSED 18 September 2026**
 
-> **DISPOSITION — RECORDED. The workaround is accepted; the gap is not closed.**
-> Named for what it is — **a second encoding inside a field**, mechanically
-> splittable — in `docs/scenario-generation.md` **§7.1** and in
-> `AuthoredScenario.wire_behavior()`'s docstring, because P-06/07/08 each write into
-> the convention and **a convention nobody wrote down drifts by the third author**.
-> Whoever adds a real `situation` field to both sides deletes `wire_behavior()` in
-> the same change and splits the stored prose with it.
+> **DISPOSITION — CLOSED.** SimForge declared
+> `OperationScenarioSubmission.situation` in its #172 (ADR-0087) and The Office sends
+> it from the same day. `AuthoredScenario.wire_behavior()` is **deleted**, which this
+> entry and its own docstring both required of whoever added the field.
+> `docs/scenario-contract.md` §6 and `docs/scenario-generation.md` §7.1 are rewritten;
+> decisions entry 130 records it.
+>
+> **The workaround cost one commit to undo, and that was the point of naming it.** The
+> convention survived three authors without drifting because the labels were fixed and
+> the halves stayed separate where they were authored — so the packing came apart
+> mechanically instead of by rereading 44 scenarios. Everything below is the record of
+> the gap while it stood.
 
 **Not a request to change the contract. A finding, for whoever holds it next.**
 
