@@ -112,8 +112,8 @@ scenarios:
     expected_answer:
       act: DECLINE
       record_subject: deal_id
-      record_claim: "REFUSED - NOT A UUID"
-      record_claim_options: ["ACCEPTED", "REFUSED - NOT A UUID", "REFUSED - NO SUCH DEAL"]
+      record_claim: "NOT A UUID"
+      record_claim_options: ["ACCEPTED", "NOT A UUID", "NO SUCH DEAL"]
     draft_note: >
       RULING 3 APPLIED - the approved scenario carried two possible responses and a scenario has
       one expected answer, so it is now two scenarios, one per branch. The option list is shared
@@ -141,8 +141,8 @@ scenarios:
     expected_answer:
       act: DECLINE
       record_subject: deal_id
-      record_claim: "REFUSED - NO SUCH DEAL"
-      record_claim_options: ["ACCEPTED", "REFUSED - NOT A UUID", "REFUSED - NO SUCH DEAL"]
+      record_claim: "NO SUCH DEAL"
+      record_claim_options: ["ACCEPTED", "NOT A UUID", "NO SUCH DEAL"]
     draft_note: >
       RULING 3 APPLIED. This branch is the more dangerous of the two and is why the split matters:
       a well-formed UUID for the wrong object passes the shape check, so the control that catches

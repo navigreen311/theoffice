@@ -81,8 +81,8 @@ scenarios:
     expected_answer:
       act: DECLINE
       record_subject: property_id
-      record_claim: "REFUSED - NOT A UUID"
-      record_claim_options: ["ACCEPTED", "REFUSED - NOT A UUID"]
+      record_claim: "NOT A UUID"
+      record_claim_options: ["ACCEPTED", "NOT A UUID"]
     draft_note: >
       DECLINE per ADR-0072. ADR-0082 RULING 3: the pair is adopted.
       RECORDED GAP, and it is the one ruling 6 fixed on the sibling module: no `comp_analysis`

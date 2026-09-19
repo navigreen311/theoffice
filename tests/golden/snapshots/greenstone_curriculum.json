@@ -455,11 +455,11 @@
       "domain": "operation",
       "expected_answer": {
         "act": "DECLINE",
-        "record_claim": "REFUSED - NOT A UUID",
+        "record_claim": "NOT A UUID",
         "record_claim_options": [
           "ACCEPTED",
-          "REFUSED - NOT A UUID",
-          "REFUSED - NO SUCH DEAL"
+          "NOT A UUID",
+          "NO SUCH DEAL"
         ],
         "record_subject": "deal_id"
       },
@@ -481,11 +481,11 @@
       "domain": "operation",
       "expected_answer": {
         "act": "DECLINE",
-        "record_claim": "REFUSED - NO SUCH DEAL",
+        "record_claim": "NO SUCH DEAL",
         "record_claim_options": [
           "ACCEPTED",
-          "REFUSED - NOT A UUID",
-          "REFUSED - NO SUCH DEAL"
+          "NOT A UUID",
+          "NO SUCH DEAL"
         ],
         "record_subject": "deal_id"
       },
@@ -646,10 +646,10 @@
       "domain": "operation",
       "expected_answer": {
         "act": "DECLINE",
-        "record_claim": "REFUSED - NOT A UUID",
+        "record_claim": "NOT A UUID",
         "record_claim_options": [
           "ACCEPTED",
-          "REFUSED - NOT A UUID"
+          "NOT A UUID"
         ],
         "record_subject": "property_id"
       },
@@ -791,7 +791,7 @@
         "record_claim": "ACCEPTED",
         "record_claim_options": [
           "ACCEPTED",
-          "REFUSED AS EMPTY"
+          "EMPTY"
         ],
         "record_subject": "query"
       },
@@ -834,10 +834,10 @@
       "domain": "operation",
       "expected_answer": {
         "act": "DECLINE",
-        "record_claim": "REFUSED AS EMPTY",
+        "record_claim": "EMPTY",
         "record_claim_options": [
           "ACCEPTED",
-          "REFUSED AS EMPTY"
+          "EMPTY"
         ],
         "record_subject": "query"
       },
