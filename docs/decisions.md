@@ -10538,7 +10538,7 @@ identical answer and **must not import the API to get it** - a gate importing a 
 app to learn its own commit would make the ladder unrunnable from the CLI, which is how
 the sweeps and the smoke script run it. `/api/version` answers exactly as before.
 
-## NEXT. Six verdicts, not ingested - and the scores describe an exam that no longer exists
+## 128. Six verdicts, not ingested - and the scores describe an exam that no longer exists
 
 **Ruled by Ivan Green, 18 September 2026:** *"The six verdicts on SimForge were earned on
 superseded scenarios, and nothing in the run reference distinguishes them from the
