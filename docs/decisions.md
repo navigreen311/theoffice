@@ -10840,3 +10840,101 @@ That is entry 127's control asking the same question from the other side of the 
 Office now refuses to submit on a build it cannot vouch for, and has no equivalent way to
 ask whether the Forge it is submitting *to* is current. A check worth having, and not
 built here.
+## NEXT. The other end of the wire
+
+**Ruled by Ivan Green, 18 September 2026:** *"The Office asks whether the Forge it
+submits to is current, as it already asks of itself. A submitter that vouches for its
+own build and not its counterpart has checked one end of the wire."*
+
+Entry 127 made Gate 8 refuse to submit on a build The Office cannot vouch for. It asked
+that question of itself and of nobody else, and the omission had already cost six
+verdicts: SimForge served a build sixteen commits old for two days, and every curriculum
+it accepted in that window was kept none of - `OperationScenarioSubmission` held 0 rows
+(entry 128). Finding it meant reading a commit SHA out of `openapi.json` by hand, days
+later.
+
+### What is asked, and where
+
+`SimForgeClient.build` does an unauthenticated GET of `/api/version` and transcribes four
+fields. SimForge added that route in its #171 (ADR-0084) and reports **two numbers** -
+`started_commit`, `checkout_commit`, and `differs` - for the reason its own ADR gives:
+*"a single number can only ever say what it was told"*. `openapi.info.version` had been
+reporting a real commit and the wrong one, because it was `APP_VERSION` exported by hand
+at launch.
+
+Asked **once**, before the first submission. A probe per module would answer the same
+question five times and could report two different builds inside one run, which is a
+worse record than one answer taken at a known moment.
+
+**The URL is the origin, not the adapter mount.** `forge_registry.base_url` is
+`http://127.0.0.1:8110/office`; `/api/version` is SimForge's own route at the host root.
+Appending would 404 and be recorded as *"this Forge has no version route"* - a false
+finding about the Forge, caused by an address this side built wrong.
+
+**Nothing it can hit raises.** Connection error, 404, 500, non-JSON, a list instead of an
+object: every one is `reachable: false` with a bounded reason. A probe that threw would
+turn "the Forge did not say" into "Gate 8 fell over", and the gate would stop for a
+question it asked out of caution.
+
+**Four fields, transcribed by name.** `launch_environment` is dropped rather than stored:
+it carries which credentials are configured, and a gate result is read by more people
+than a Forge's own health page. Transcription also means no field The Office has not
+named can enter a gate result, which is the read-path guard's property arrived at a
+different way.
+
+### It warns. It does not block, and that is the substance of this entry
+
+    1  A stale Forge does not change WHAT IS SENT. Entry 127 blocks because this gate's
+       output is generated from files beside the submitting code, so a stale Office
+       build sends the wrong curriculum - a fact about us, fixable by us. A stale Forge
+       changes what is done with a correct submission.
+
+    2  This gate does not block on facts about the Forge. Not on an outage, not on a
+       refused response, both on the settled ground that "blocking the ladder on a
+       service that is allowed to be down would be worse". CI runs no SimForge at all,
+       so a block here stops every run on every machine that has not got one.
+
+    3  `differs` CANNOT DECIDE COMPATIBILITY. It answers "has SimForge's checkout moved
+       past its process" - not "will this payload be understood". A Forge whose two
+       numbers agree can still be a version this curriculum does not fit, and one whose
+       numbers differ can be perfectly able to accept it. Blocking on it would stop the
+       ladder on an inference this side cannot make.
+
+    4  THE RIGHT INSTRUMENT AGAINST A STALE GRADER ALREADY EXISTS, AND IT IS A DIFFERENT
+       ONE. Entry 129 put the answer key into the exam's identity; entry 128 refused to
+       ingest six verdicts earned under a superseded one. The answer to "this verdict
+       may not be trustworthy" is to not trust the verdict - not to deny an agent an
+       exam over a doubt about the marking.
+
+**What makes warning load-bearing rather than lazy is the record.** Those six verdicts
+were graded by a build nobody could name, and nothing anywhere said so. `forge_build` on
+the gate result makes that a lookup instead of an investigation, and the warning in the
+gate's sentence gives somebody the chance to stop before the battery runs.
+
+Two warnings, kept apart because the responses differ:
+
+    did not say which build      a route to add, or a service to look at
+    running X, checkout at Y     a restart
+
+And `differs: null` is not read as "no difference". SimForge is explicit that it is never
+`false` when one side could not be read, *because a process that cannot say what it is
+running must not report itself up to date*. The Office records the third state and does
+not shout about it, which is the honest middle.
+
+### Measured against the live Forge
+
+    reachable         true
+    started_commit    b1e1712b73bc...
+    checkout_commit   b1e1712b73bc...
+    differs           false
+
+That is SimForge restarted onto its own checkout, minutes after this was written - the
+same process that had been on `0b2fb9e` all evening. The first thing the new control
+recorded was the recovery from the incident that motivated it.
+
+### Still only two of the four Forges
+
+`cre-forge`, `capitalforge` and `voiceforge` are asked nothing. This gate submits to
+SimForge alone, so SimForge is the only counterpart it has - but the general question
+("does the thing on the other end know what it is") now has one answer and three
+absences. Worth naming rather than leaving to be discovered.

@@ -33,6 +33,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from psycopg.rows import dict_row
@@ -858,6 +859,83 @@ class SimForgeClient:
         if row is None:
             raise SimForgeError(f"{self._forge_id!r} is not in forge_registry")
         return str(row[0]), str(row[1])
+
+    async def build(self, conn: Any) -> dict[str, Any]:
+        """Which build the Forge is running, or why that could not be established.
+
+        RULED 18 SEPTEMBER 2026 (decisions entry 131)
+        =============================================
+
+            *"The Office asks whether the Forge it submits to is current, as it already
+            asks of itself. A submitter that vouches for its own build and not its
+            counterpart has checked one end of the wire."*
+
+            Entry 127 made Gate 8 refuse to submit on a build The Office cannot vouch
+            for. This is the other end. It is not hypothetical: SimForge served a build
+            sixteen commits old for two days, and the six verdicts it produced were
+            graded with `operation_scenarios` discarded on arrival - a curriculum
+            accepted and kept none of, by a process every check reported as healthy.
+
+        **NEVER RAISES, AND THAT IS THE POINT OF THE SHAPE.**
+
+            Every failure is a recorded answer: `reachable` false with a `reason`. A
+            probe that threw would turn "the Forge did not say" into "Gate 8 fell over",
+            and the gate would stop for a question it asked out of caution.
+
+        THE URL IS THE ORIGIN, NOT THE ADAPTER PATH
+        ===========================================
+
+            `forge_registry.base_url` is `http://127.0.0.1:8110/office` - the Office
+            adapter's mount. `/api/version` is SimForge's own route at the host root,
+            so the path is stripped rather than appended to. Getting that wrong would
+            404 and be recorded as "no version route", which reads as a Forge that
+            cannot answer rather than as a URL this side built wrong.
+
+        UNAUTHENTICATED, WHICH IS SIMFORGE'S DECISION AND NOT THIS ONE
+        ==============================================================
+
+            Its route is public by stated design (its ADR-0084 names the divergence
+            from The Office, which authenticates the same route). No credential is
+            resolved here: sending the tenant token to a route that does not want it
+            would put it in a log for nothing.
+        """
+        base_url, _api_version = await self._registry(conn)
+        try:
+            parts = urlsplit(base_url)
+            origin = urlunsplit((parts.scheme, parts.netloc, "", "", ""))
+            response = await self._http.get(f"{origin}/api/version", timeout=5.0)
+        except Exception as exc:
+            return {"reachable": False, "reason": f"{type(exc).__name__}: {exc}"[:200]}
+
+        if response.status_code != 200:
+            return {
+                "reachable": False,
+                "reason": (
+                    f"{origin}/api/version answered {response.status_code}. A Forge "
+                    "with no version route cannot say what it is running."
+                ),
+            }
+        try:
+            body = response.json()
+        except Exception:
+            return {"reachable": False, "reason": "the version route did not return JSON"}
+        if not isinstance(body, dict):
+            return {"reachable": False, "reason": "the version route did not return an object"}
+
+        # TRANSCRIBED, NOT PASSED THROUGH. An unrecognised key is dropped rather than
+        # stored: `launch_environment` carries a `configured` map of which credentials
+        # are set, and a gate result is read by more people than a Forge's own health
+        # page. The four fields below are what the question needs.
+        return {
+            "reachable": True,
+            "started_commit": body.get("started_commit"),
+            "checkout_commit": body.get("checkout_commit"),
+            # `None` when at least one side could not be read, and SimForge is explicit
+            # that it is never `False` in that case: a process that cannot say what it
+            # is running must not report itself up to date. Kept as three states.
+            "differs": body.get("differs"),
+            "app_version": body.get("app_version"),
+        }
 
     async def aclose(self) -> None:
         if self._owns_http:
