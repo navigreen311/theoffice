@@ -48,10 +48,14 @@ def test_an_authored_class_carries_the_occasion_the_act_and_the_escalation(recor
             _operation_scenarios("record_consent", record_consent, True, HASHES)}
     authored = rows["escalation_required"]
 
+    written = record_consent.scenarios["escalation_required"][0]
     assert authored.summary, "the precipitating situation is missing"
-    assert authored.summary == record_consent.scenarios["escalation_required"][0].situation
-    assert authored.expected_behavior.startswith("SITUATION: ")
-    assert "\n\nEXPECTED: " in authored.expected_behavior
+    assert authored.summary == written.situation
+    # THE ACT ALONE. `expected_behavior` carried both halves, labelled, until SimForge
+    # declared a `situation` field. It is now what it says it is, and the occasion is
+    # on `summary` - which is what the submission sends as `situation`.
+    assert authored.expected_behavior == written.expected_behavior
+    assert not authored.expected_behavior.startswith("SITUATION: ")
     assert authored.expected_escalation
     assert not authored.not_applicable_reason
     assert authored.instruction_section == "retry_vs_escalate"

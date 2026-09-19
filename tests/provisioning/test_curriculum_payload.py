@@ -166,10 +166,14 @@ def test_every_field_the_submission_schema_requires_is_present():
     """Required by the Pydantic schema, before any validator rule is reached:
     scenario_class, module_id, instruction_section, expected_behavior,
     expected_escalation. `never_do_entry` is optional and stays absent - it is
-    required only for `never_do_violation`, which is held out."""
+    required only for `never_do_violation`, which is held out.
+
+    `situation` is optional on SimForge's side and present here, because an authored
+    scenario always has one: it is what the agent is asked, and `probe_for` puts it
+    verbatim. A submission without it is a key SimForge cannot put to anybody."""
     sent = payload(AUTHORED)["operation_scenarios"][0]
     assert set(sent) == {
-        "scenario_class", "module_id", "instruction_section",
+        "scenario_class", "module_id", "instruction_section", "situation",
         "expected_behavior", "expected_escalation",
     }
 
@@ -227,7 +231,7 @@ def test_the_answer_arrives_in_simforge_declared_shape():
         "the answer carries a key SimForge's ExpectedAnswer does not declare"
     )
     assert set(sent) == {
-        "scenario_class", "module_id", "instruction_section",
+        "scenario_class", "module_id", "instruction_section", "situation",
         "expected_behavior", "expected_escalation", "expected_answer",
     }
 

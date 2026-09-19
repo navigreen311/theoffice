@@ -245,15 +245,28 @@ def _operation_row(
                 # See the module docstring. Empty is the honest value; the union
                 # this replaces was complete by construction.
                 compliance_flags_exercised=[],
-                # The precipitating situation, which is the half of a scenario no
-                # manual contains. `summary` is the only field on this dataclass that
-                # can carry it - there is no `situation` field on either side of the
-                # contract. Empty when unauthored, never a generated sentence.
+                # THE PRECIPITATING SITUATION, and on an operation scenario this
+                # field IS the situation - which is what `_operation_row`'s payload
+                # sends as `situation` now that SimForge declares one.
+                #
+                # No second field was added beside it. `CurriculumScenario.summary`
+                # already carries exactly this on an operation row and says so in its
+                # own docstring; a `situation` field next to it would be two spellings
+                # of one fact, and the first change that updated only one of them would
+                # be invisible. `summary` keeps its other meaning on the Pack-side
+                # domain scenarios, which send no `situation` at all.
+                #
+                # Empty when unauthored, never a generated sentence.
                 summary=authored.situation if authored else "",
                 instruction_content_hash=hashes.get(module),
                 scenario_class=scenario_class,
                 instruction_section=section,
-                expected_behavior=authored.wire_behavior() if authored else "",
+                # THE ACT ALONE. This used to be `wire_behavior()`, which packed the
+                # occasion in front of it because the occasion had no field. It has
+                # one now, so this is what it says it is - and it has to be: SimForge
+                # grades against this and puts `situation` to the agent, so leaving the
+                # occasion in here would duplicate the probe inside the answer key.
+                expected_behavior=authored.expected_behavior if authored else "",
                 expected_escalation=(
                     authored.expected_escalation if authored else ""
                 ),

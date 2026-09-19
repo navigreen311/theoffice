@@ -639,7 +639,10 @@ async def test_authored_content_reaches_the_artifact_end_to_end(
         "act": "PROCEED", "record_subject": "comps"
     }
     assert rows["happy_path"][0].expected_escalation
-    assert "SITUATION: " in rows["happy_path"][0].expected_behavior
+    # Two fields, not one packed field. `summary` carries the occasion and is what the
+    # submission sends as `situation`; `expected_behavior` is the act alone.
+    assert rows["happy_path"][0].summary
+    assert not rows["happy_path"][0].expected_behavior.startswith("SITUATION: ")
     assert rows["rate_limited"][0].not_applicable_reason
     assert rows["rate_limited"][0].expected_behavior == ""
 

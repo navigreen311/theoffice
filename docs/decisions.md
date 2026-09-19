@@ -10736,3 +10736,107 @@ still not scored, and a fresh run today would return another two-dimension verdi
 
 This stops a verdict being carried across a change in the answer key. It does not make
 the 44 count. That half is SimForge's.
+
+## 130. The situation gets its own field, and E-004 closes
+
+**Instructed by Ivan Green, 18 September 2026:** *"Once SimForge declares `situation`:
+send it on every submitted scenario."*
+
+SimForge declared it in its **#172 (ADR-0087)**, `situation: str | None = None` on
+`OperationScenarioSubmission`. That is the order entry 129 ruled: SimForge declares any
+new field before The Office sends it, because `extra="forbid"` makes an undeclared field
+a 422 rather than a silent drop.
+
+### Correcting the premise: it was not dropped
+
+The instruction said the situation *"is dropped before the wire"*. **It was not.** It has
+reached SimForge on every submission for weeks - packed inside `expected_behavior`:
+
+    expected_behavior: "SITUATION: The manager tells you to draw up the assignment and
+    says to \"use the usual buyer details\"...\n\nEXPECTED: Stop before calling..."
+
+Measured on the golden before anything was changed: **44 of 44 rows** carried
+`SITUATION: ` + `\n\nEXPECTED: `. What was dropped was the **separate field**, because
+neither side of the contract had one. `AuthoredScenario.wire_behavior()` did the packing
+and said so in its docstring, `docs/scenario-generation.md` §7.1 described it, and E-004
+recorded it as a contract gap.
+
+The distinction matters, because it changes what this commit is. It is not "start
+sending a thing we were withholding". It is **taking apart a second encoding**, and the
+packing had to come out in the same change: SimForge's `probe_for` puts `situation`
+verbatim to the agent and renders `expected_behavior` to nobody, *"because that field is
+what a good ANSWER looks like and showing it would hand the agent the answer"*. Leaving
+the occasion packed inside the answer key would put the question inside the thing the
+answer is graded against.
+
+So `wire_behavior()` is **deleted**, which its own docstring required of whoever added
+the field, and `expected_behavior` is now the act alone.
+
+### Where it comes from, and no key lacks one
+
+    scenarios/*.yaml   `situation:` - a REQUIRED key. `_REQUIRED_SCENARIO_KEYS` refuses
+                       a scenario without one at load, so this cannot go missing quietly.
+    AuthoredScenario.situation
+    CurriculumScenario.summary   on an operation row this field IS the situation
+    payload["operation_scenarios"][n]["situation"]
+
+Measured across the approved keys:
+
+    assign_contract     8 scenarios, every one with a situation
+    buyer_match         8
+    comp_analysis       5
+    property_lookup    10
+    underwrite_deal    13
+    TOTAL              44, missing: none
+
+Lengths run 90 to 336 characters, median 179 - prose, not a label. Burkham's 94 drafted
+scenarios also all carry one, so nothing is waiting on authoring.
+
+### No second field beside `summary`
+
+`docs/scenario-generation.md` §7.1 anticipated adding `situation` *"to
+`OperationScenarioSubmission` and to `CurriculumScenario`"*. Only the first was done.
+
+`CurriculumScenario.summary` already carries exactly this on an operation row and its
+docstring has said so since P-05. A `situation` field beside it would be **two spellings
+of one fact**, and the first change that updated one and not the other would be
+invisible. `summary` keeps its other meaning on the Pack-side domain scenarios, which
+send no `situation` at all.
+
+### Omitted when empty, never blank
+
+SimForge declares it `str | None`, so absent means *this scenario cannot be put to
+anybody* - true of an unauthored mechanical row, and a different statement from an
+occasion that is blank. Entry 122's rule, applied a third time.
+
+It is optional on SimForge's side and always present from The Office, and the asymmetry
+is deliberate on both: SimForge made it optional so a required field would not refuse
+every curriculum submitted before the change.
+
+### What moved
+
+    expected_behavior on 44 rows     the SITUATION:/EXPECTED: packing removed
+    situation on the wire            new, 44 of 44 submittable rows
+    scenario_set_hash                changes on all five modules, so Gate 8 mints five
+                                     new sets of refs and SimForge opens new runs
+
+**That last line is entry 129 working on its first real change.** The answer key's prose
+moved between two fields without a single scenario being rewritten - and under the old
+scheme that would have minted the same ref, landed on the runs already open, and been
+graded as the same exam. It now cannot.
+
+Proved against SimForge's own merged model rather than against a reading of it: the 44
+rows fed to `OperationScenarioSubmission` at `7c1ea9c`, **44 accepted, 0 refused**, with
+`situation` round-tripping.
+
+### Still blocked on a restart, and it is the same gotcha for the third time
+
+SimForge's **running process is `0b2fb9e`**; its checkout is `e405f58`. The running build
+does not declare `situation` and does carry `extra="forbid"`, so **this change would 422
+every submission against the process that is up right now**. Nothing may advance to
+Gate 8 until SimForge's process reports a commit that declares the field.
+
+That is entry 127's control asking the same question from the other side of the wire: The
+Office now refuses to submit on a build it cannot vouch for, and has no equivalent way to
+ask whether the Forge it is submitting *to* is current. A check worth having, and not
+built here.

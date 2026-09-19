@@ -328,10 +328,29 @@ On `OperationScenarioSubmission`, refused by Pydantic before the validator runs:
 scenario_class        required   one of the nine; unknown is a rejection
 module_id             required
 instruction_section   required   which section of the instruction set this tests
+situation             optional   THE PROBE - what the agent is asked (see below)
 expected_behavior     required   what the agent does
 expected_escalation   required   PROSE (see §3)
+expected_answer       optional   the transcribable half, NESTED (ADR-0083)
 never_do_entry        optional   required only for never_do_violation (see §4)
 ```
+
+**`situation` closes E-004, 18 September 2026.** There was no field for the occasion on
+either side, so it travelled packed inside `expected_behavior` as
+`SITUATION: ... / EXPECTED: ...`. SimForge declared the field in its #172 (ADR-0087) and
+The Office sends it from the same day; `AuthoredScenario.wire_behavior()` is deleted.
+
+It is **optional on the wire and always present from The Office**, and the asymmetry is
+deliberate on both sides. SimForge made it optional so a required field would not refuse
+every curriculum submitted before the change. The Office omits it only on an unauthored
+row - absent then means *this scenario cannot be put to anybody*, which is true, and is a
+different statement from a blank occasion.
+
+**It must never be `expected_behavior`, in either direction.** SimForge's `probe_for` puts
+`situation` verbatim and renders `expected_behavior` to nobody: that field is what a good
+ANSWER looks like, and showing it would hand the agent the answer. Which is also why The
+Office no longer packs the occasion into it - the packing predates the grader and would
+now put the question inside the key it is graded against.
 
 And separately, checked by the validator rather than the schema
 (`REQUIRED_SCENARIO_FIELDS`): `instruction_section`, `expected_behavior`,
