@@ -11620,7 +11620,7 @@ That is CRE Forge's to fix - the module has to distinguish the two before any ke
 teach the difference. Raised there; The Office's key cannot describe a distinction the
 response does not carry.
 
-## NEXT. A zero that means three things, one of them a compliance outcome
+## 138. A zero that means three things, one of them a compliance outcome
 
 **Ruled by Ivan Green, 20 September 2026**, amending the first form of this ruling before
 it merged:
@@ -11703,43 +11703,53 @@ repository to know the rule existed. That is not a compliance failure today - no
 Forge module records a call - but it is the mechanism by which one arrives: the first
 person to add a call feature has no way to learn the constraint.
 
-### The Pack change: one line, and one figure only Ivan can supply
+### No Pack edit. The rule binds at Gate 11
 
-    positions_required[Buyer Network Manager].module_trust_tiers
-      cre-forge/buyer_match: auto_execute   ->   propose
+**`buyer_match` stays at `auto_execute` and the Pack is not touched.** The general rule
+above stands exactly as ruled; what changes is where it is enforced. **CRE Forge #87
+closes before any Greenstone grant activates**, and Gate 11 is the moment that matters
+because it is the moment a grant becomes usable.
 
-`forge_modules_operated`, `module_stages` and `lifecycle_stages_owned` are **unchanged**.
-The Assign stage keeps its module. Nothing is removed from `modules_expected`, so no V25
-warning appears.
+An earlier form of this entry proposed capping the tier at `propose`. **Ivan held it, and
+the reasons are worth keeping** - the cap looked like the cautious option and was the
+expensive one.
 
-**But the cap is not free, and the Pack said so before this ruling existed:**
+**It protects nothing today.** Measured on the live database:
 
-> *"No `expected_weekly_volume`: every module here is auto_execute, so none of it reaches
-> a reviewer and a rate would multiply by zero. **Lowering either tier makes a volume
-> newly required, and V13 names the module.**"*
+    greenstone ladder grants      6, and activated_at is NULL on all six
+    buyer_match calls, ever       0 rows in agent_call_ledger
 
-Measured in `generators/approval_projection.py`: `modules_needing_volume` collects every
-module below `auto_execute` with no declared volume, and `demand_from_the_pack` **raises
-`VolumeNotDeclaredError` rather than answering from a default**. So capping the tier adds
-`Buyer Network Manager/cre-forge/buyer_match` to that list and **Gate 2 fails** until a
-rate is declared.
+No agent is operating any module - the ladder is blocked at Gate 9. A tier cap on a module
+nobody can call trades a real Gate 2 block for a protection that has nothing to protect
+until Gate 11, which is exactly where the rule now binds instead.
 
-And the Pack has already recorded that this particular figure was withdrawn:
+**And it would have cost an invented figure.** Lowering the tier makes an
+`expected_weekly_volume` newly required - the Pack says so itself, and
+`demand_from_the_pack` raises `VolumeNotDeclaredError` rather than defaulting, so **Gate 2
+fails until a rate is declared**. `assign_contract`'s rate works because it runs once per
+closing and the closing rate is declared. `buyer_match` runs **per deal**, and no Pack
+declares a deal rate. The multiplier was withdrawn in entry 108:
 
-> *"Every other figure that was offered for this Pack - **buyer-match runs per deal**, an
-> MAO cycle time - was an assumption made while planning and was withdrawn. None of them
-> is in this file."*
+> *"**Withdrawn, and in no Pack:** '1-3 buyer-match runs per deal' ... All three were
+> assumptions made while planning this batch and **none is Ivan's**."*
 
-**So the Pack edit is two things, and only one of them is mechanical.** The tier is one
-word. The volume is a business fact about how often a buyer match runs, which nobody has
-established and which this ledger will not invent. Until Ivan declares it, the cap cannot
-be applied without failing Gate 2.
+So the figure would have had to be re-derived from a denominator nobody established, to
+satisfy a gate that is not close to failing. Computed against the live Pack - supply
+36 review-minutes a day each, Ivan at 4 minutes a review, and `buyer_match` at `propose`
+routing to the **venture operator** because the position carries no flags:
 
-Second-order, worth knowing before the figure is chosen: at `propose` the approval routes
-by flags, Buyer Network Manager carries none, so it lands on the **venture operator** -
-Ivan - unless `module_reviewer_roles` says otherwise, the way `assign_contract`'s does.
-Review hours are budgeted at Ivan 8h x 5 and Ira Green 6h x 5, and V13 passes only at
-demand <= capacity x 0.6.
+    weekly  3 -> 0.6 approvals/day   PASS
+    weekly 27 -> 5.6                 PASS
+    weekly 45 -> 9.2                 PASS   <- the ceiling
+    weekly 46                        FAIL
+
+**V13 passes up to 45 runs a week.** The number would not have bitten - which makes it
+worse rather than better. A Pack carrying a figure invented to satisfy a gate it was never
+going to fail is a Pack asserting a business fact nobody measured, which is the defect
+this ledger has caught most often.
+
+**The rule is not weakened by any of this.** It is recorded, general, and binds at the
+first moment a module could run unattended.
 
 ### What closes this
 
