@@ -11619,3 +11619,142 @@ mentioning the consent filter.
 That is CRE Forge's to fix - the module has to distinguish the two before any key can
 teach the difference. Raised there; The Office's key cannot describe a distinction the
 response does not carry.
+
+## 138. A zero that means three things, one of them a compliance outcome
+
+**Ruled by Ivan Green, 20 September 2026**, amending the first form of this ruling before
+it merged:
+
+> *"`buyer_match` stays with Buyer Network Manager. Reading `do_not_contact` and honoring
+> it is correct behaviour, not a consent dependency that disqualifies the module.*
+>
+> *What is disqualifying is the reporting gap: the module cannot distinguish a compliance
+> suppression from an ordinary miss, so a zero means three unrelated things and one of
+> them is a compliance outcome. **No module operates at `auto_execute` while its result
+> cannot distinguish a compliance suppression from an ordinary non-match.** `buyer_match`
+> is capped at `propose` until CRE Forge #87 is closed."*
+
+**The first draft of this entry had it backwards**, and the correction is worth keeping
+rather than tidying away. It reasoned from "the module's correctness depends on consent
+state" to "no position may operate it" - and the premise was true while the conclusion
+was wrong. Honouring a suppression list IS the correct behaviour; a module that ignored
+`do_not_contact` would be worse in every respect. **The defect is not in what the module
+does. It is in what it can say.**
+
+### The three things a zero means
+
+`buyer_matching.py:127-150`, in order:
+
+    Buyer.status.in_([ACTIVE, VIP])        1. nobody on the roster is active
+    Buyer.do_not_contact.is_(False)        2. everyone who would match is SUPPRESSED
+    price range overlap +/-50%             3. nobody overlaps the deal's price
+    ...scored, sorted, sliced to `limit`   4. and then len() of what survives
+
+`total: 0` is returned for every one of them, identically. One is a roster fact, one is a
+price fact, **and one is a compliance outcome** - and the response carries nothing that
+separates them.
+
+That is the whole of it. A `propose` tier puts a person in front of every result, and a
+person reading "no buyers matched" can ask. At `auto_execute` nobody reads it, and the
+sentence that reaches a human downstream is "there were no buyers" when the truth may be
+"there were buyers and every one of them has told us not to contact them."
+
+### The rule, stated generally
+
+**No module operates at `auto_execute` while its result cannot distinguish a compliance
+suppression from an ordinary non-match.**
+
+Not "while it depends on consent state" - dependence is fine and usually right. The test
+is whether the RESULT can carry the difference. A module that suppresses and says so may
+run unattended; one that suppresses silently may not.
+
+### CRE Forge cannot record consent
+
+    DNC_REQUEST  2 writers · DNC_CHECK  1 · OPT_OUT  1
+    ---------------------------------------------------------------
+    DNC_VIOLATION · CONSENT_OBTAINED · CONSENT_REVOKED ·
+    CALLING_HOURS_VIOLATION · RECORDING_CONSENT · TCPA_VIOLATION ·
+    OPT_IN · COMPLAINT · AUDIT                              0 writers
+
+**Nine of twelve**, grepped across `backend/app` excluding the enum's own declaration.
+The three that write are all about the DNC list - a suppression register, not a consent
+record.
+
+`CONSENT_OBTAINED` and `RECORDING_CONSENT` are both among the nine, and that is the
+sharper half: **a revocation with no grant is a delta against nothing.** The only live
+flag, `Buyer.do_not_contact`, is a boolean with no timestamp of its own, no reason, no
+subject beyond the buyer row and no event.
+
+### The Nevada ruling governs a Forge from outside it, and nothing inside names it
+
+Greenstone's Pack carries `TWO_PARTY_CONSENT_RECORDING` for NV against
+`compliance/nv-two-party-consent-v1`. Searched the whole CRE Forge repository for
+`nevada`, `all-party`, `two-party` and `NRS 200`, case-insensitive, across code,
+markdown, YAML and JSON:
+
+    backend/tests/test_property_import.py:27    "789 Blvd,Las Vegas,Nevada,89115,..."
+    backend/tests/test_property_import.py:175   "444 State Test,Las Vegas,Nevada,89101"
+
+**Two CSV fixtures, using Nevada as a state name.** The ruling itself is nowhere.
+
+**A ruling that governs a Forge from outside it, with nothing inside naming it, is a
+ruling a developer there cannot follow.** They would have to read a Pack in another
+repository to know the rule existed. That is not a compliance failure today - no CRE
+Forge module records a call - but it is the mechanism by which one arrives: the first
+person to add a call feature has no way to learn the constraint.
+
+### No Pack edit. The rule binds at Gate 11
+
+**`buyer_match` stays at `auto_execute` and the Pack is not touched.** The general rule
+above stands exactly as ruled; what changes is where it is enforced. **CRE Forge #87
+closes before any Greenstone grant activates**, and Gate 11 is the moment that matters
+because it is the moment a grant becomes usable.
+
+An earlier form of this entry proposed capping the tier at `propose`. **Ivan held it, and
+the reasons are worth keeping** - the cap looked like the cautious option and was the
+expensive one.
+
+**It protects nothing today.** Measured on the live database:
+
+    greenstone ladder grants      6, and activated_at is NULL on all six
+    buyer_match calls, ever       0 rows in agent_call_ledger
+
+No agent is operating any module - the ladder is blocked at Gate 9. A tier cap on a module
+nobody can call trades a real Gate 2 block for a protection that has nothing to protect
+until Gate 11, which is exactly where the rule now binds instead.
+
+**And it would have cost an invented figure.** Lowering the tier makes an
+`expected_weekly_volume` newly required - the Pack says so itself, and
+`demand_from_the_pack` raises `VolumeNotDeclaredError` rather than defaulting, so **Gate 2
+fails until a rate is declared**. `assign_contract`'s rate works because it runs once per
+closing and the closing rate is declared. `buyer_match` runs **per deal**, and no Pack
+declares a deal rate. The multiplier was withdrawn in entry 108:
+
+> *"**Withdrawn, and in no Pack:** '1-3 buyer-match runs per deal' ... All three were
+> assumptions made while planning this batch and **none is Ivan's**."*
+
+So the figure would have had to be re-derived from a denominator nobody established, to
+satisfy a gate that is not close to failing. Computed against the live Pack - supply
+36 review-minutes a day each, Ivan at 4 minutes a review, and `buyer_match` at `propose`
+routing to the **venture operator** because the position carries no flags:
+
+    weekly  3 -> 0.6 approvals/day   PASS
+    weekly 27 -> 5.6                 PASS
+    weekly 45 -> 9.2                 PASS   <- the ceiling
+    weekly 46                        FAIL
+
+**V13 passes up to 45 runs a week.** The number would not have bitten - which makes it
+worse rather than better. A Pack carrying a figure invented to satisfy a gate it was never
+going to fail is a Pack asserting a business fact nobody measured, which is the defect
+this ledger has caught most often.
+
+**The rule is not weakened by any of this.** It is recorded, general, and binds at the
+first moment a module could run unattended.
+
+### What closes this
+
+**CRE Forge #87**, open, titled *"Consent revocation has no writer and no state to
+revoke, and `buyer_match`'s `do_not_contact` exclusion is indistinguishable from an empty
+result."* The issue names both halves. The cap lifts when the second half closes - when
+the result can carry the difference - and the first half is what the consent model is
+for.
