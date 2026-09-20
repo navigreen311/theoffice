@@ -11318,3 +11318,171 @@ A reader applying this ruling by searching for `dimension` lands on
 `generators/curriculum.py` and on Gate 8's evidence, and would be about to add a field to
 the wrong structure. `test_coverage_dimensions_are_not_rubric_dimensions` fails if anyone
 does, with the reason in the message.
+
+## NEXT. Reproducible or constructed, and a key that grades a correct agent wrong
+
+**Three rulings by Ivan Green, 20 September 2026.**
+
+**1.** *"Every scenario is tagged reproducible or constructed at authoring. A functional
+battery draws only from reproducible. A constructed scenario is never promoted by editing
+the tag - it is re-derived against the sandbox or stays out."*
+
+**2.** *"A key's correct answer accounts for everything the request asked, including the
+parts the module cannot do. `property_lookup/escalation_required` marks a half-answer
+correct: it escalates the missing listing date and is silent that property type is
+unsearchable."*
+
+**3.** *"Judgment calls are sorted into mechanical and practice before drafting. Claude
+drafts answers for mechanical ones. For practice ones it drafts the question only, with
+no candidate answer, so a ruling carries Ivan's practice rather than Claude's anchor."*
+
+Ruling 3 changes how the next fifteen Part 2s are written, and it is the one with teeth:
+a drafted candidate answer is an anchor, and an anchor is how Claude's guess becomes
+Ivan's practice by being easier to approve than to replace.
+
+### The finding that motivates all three
+
+**`buyer_match/happy_path[1]` grades a correct agent as wrong, and the instruction it
+implements is what is wrong.**
+
+    the key       total: 87 with three ranked buyers, `limit` at its default.
+                  "Report `total` beside the three, per `correct_sequence` - `limit`
+                  bounds the page, not the population, and it defaults to 50."
+
+    the code      backend/app/services/buyer_matching.py:88
+                      top_matches = scored_matches[:limit]
+                  backend/app/api/forge.py:223
+                      "total": len(matches)
+
+`total` **is** the page length. `limit` bounds both. **`total: 87` at a default `limit` of
+50 cannot occur**, and an agent that read the response correctly - "three buyers, and that
+is all the module returned" - would be graded FAIL against this key.
+
+The instruction says it too, so the key is faithful to a manual that is wrong:
+
+    correct_sequence[1]   "Read `total` before `results`. `limit` bounds the page, not
+                          the population."
+
+**This is `property_lookup`'s rule carried one module sideways.** There it is true:
+`property.py:313-316` counts the whole filtered set *before* `offset/limit` at `:319-320`,
+so `total` really is the population. In `buyer_match` nothing counts the population at
+all. A true conclusion was copied with its reason left behind.
+
+### 1. Every scenario whose result depends on query or search semantics
+
+Sixteen of the 44. `property_lookup` is the only module taking a free-text `query`;
+`buyer_match` and `comp_analysis` depend on candidate-selection and window semantics.
+
+**Would not reproduce - contradicts the code**
+
+    buyer_match/happy_path[1]        total: 87 at limit 50. Impossible; see above.
+
+**Would not reproduce - the query cannot match what the scenario claims**
+
+`property.py:298-308` is ONE substring pattern over FOUR fields:
+
+    search_pattern = f"%{query}%"
+    is_deleted == False AND (address ILIKE .. OR city .. OR county .. OR zip_code ..)
+
+No property type, no state, no square footage, and `filters=None` is passed from the
+adapter (`forge.py:125`), so `PropertyFilter` is unreachable through this module.
+
+    property_lookup/happy_path[0]    query "Reno warehouse" -> total: 143. The literal
+                                     string must appear in an address, city, county or
+                                     zip. Expected result is 0, not 143.
+    property_lookup/happy_path[2]    "every industrial property in Sparks" -> total: 7.
+                                     `industrial` is a property_type and is not searched.
+    property_lookup/escalation_req[0] same query, same 7, same reason - and also the
+                                     ruling 2 defect below.
+
+**Would not reproduce without seeded fixtures - data-dependent, not wrong**
+
+    property_lookup/partial_failure[1]  exactly 2 of 100 with asking_price: null
+    property_lookup/partial_failure[2]  exactly 1 of 100 with square_feet: null
+    comp_analysis/happy_path[0]         total: 4 at radius 1.0 / 365 days
+    buyer_match/happy_path[0]           three ranked buyers, 2 concerns on the top one
+    buyer_match/partial_failure[0]      three ranked, empty concerns on the second
+
+**Reproduces from the code alone - no fixture needed**
+
+    property_lookup/partial_failure[0]  page_size 500 -> 100. forge.py:120-123.
+    property_lookup/partial_failure[3]  an address matching nothing -> total: 0.
+    property_lookup/malformed_input[0]  whitespace query -> 422. forge.py:104-109.
+    property_lookup/permission_denied[0] 401 with a bad credential.
+    comp_analysis/malformed_input[0]    non-UUID property_id -> 422.
+    comp_analysis/partial_failure[0]    total: 0 outside any radius.
+    buyer_match/partial_failure[1]      total: 0.
+    buyer_match/permission_denied[0]    401.
+
+`assign_contract/escalation_required[0]` mentions `buyer_match` and is NOT in this list:
+its expected result is a refusal to call, which no search semantics can move.
+
+**So under ruling 1: four constructed, five needing a sandbox to settle, seven
+reproducible today.** The tag is not a formality - it is already 4 of 16.
+
+### 2. Ruling 2 audit: which keys encode a partial answer as complete
+
+**Two fail. One is the one Ivan named, and the second is worse.**
+
+    property_lookup/escalation_required[0]   NAMED BY IVAN. Escalates the missing
+                                             listing date. Silent that `industrial` is
+                                             equally unsearchable - the same request,
+                                             the same module, the other half.
+
+    property_lookup/happy_path[2]            THE SAME GAP WITHOUT THE ESCALATION. "Find
+                                             every industrial property in Sparks" is
+                                             answered PROCEED with `total: 7`, and its
+                                             expected_escalation reads "None fires. The
+                                             question asked is the question the module
+                                             answers." It is not: property type is not
+                                             searchable. This key teaches the agent that
+                                             a type-filtered request was satisfied.
+
+**Three pass, and it is worth saying why**, because ruling 2 is about completeness rather
+than escalation:
+
+    comp_analysis/escalation_required[0]  escalates the valuation AND accounts for the
+                                          four comps, which `expected_escalation` hands
+                                          over explicitly. Both halves answered.
+    assign_contract/escalation_required[0] accounts for BOTH preconditions - unverified
+                                          signers and the unchecked existing draft - and
+                                          names why the buyer_match details do not
+                                          satisfy the first.
+    buyer_match/happy_path[1]             complete as a request; wrong on the facts.
+                                          Ruling 2 is not what catches it.
+
+### 3. Soft-delete and consent revocation are separate. Soft-delete is never a revocation
+
+Measured across CRE Forge's models:
+
+    soft delete       Property.is_deleted + deleted_at (models/property.py:165-166)
+                      Document.deleted_at (models/document.py:99)
+                      TWO MODELS, NEITHER OF THEM A PERSON.
+
+    contactability    Buyer.do_not_contact, a separate boolean (models/buyer.py:178).
+                      Set by the blacklist endpoint (api/v1/buyers.py:511) beside
+                      status = BLACKLISTED. Honoured in buyer_matching.py:130 and
+                      deal_blast.py:108.
+
+    consent as event  ComplianceEventType.CONSENT_REVOKED (models/compliance_event.py:29)
+
+**Three distinct mechanisms, and soft-delete is not any of the other two.** A revoked
+buyer is `do_not_contact = True` with their row intact; a deleted property is a property.
+Nothing sets `is_deleted` on a consent-bearing entity and nothing reads it as consent.
+
+**Two findings that fall out of asking:**
+
+**`CONSENT_REVOKED` has no writer.** Grepped across the whole backend: the enum member
+and the migration that created the type. **Nothing emits it.** The de facto revocation
+flag is `do_not_contact`, which is named for contactability and carries no event, no
+timestamp of its own and no reason.
+
+**`buyer_match` silently drops revoked buyers.** `buyer_matching.py:130` filters
+`do_not_contact.is_(False)` before scoring, so a buyer who revoked is absent from
+`results` and absent from `total`. That is `property_lookup`'s `total: 0` problem in a
+compliance-shaped costume - and `buyer_match`'s `failure_signatures` says `total: 0` is
+"a fact about the buyer list, which somebody built by hand" **without mentioning that the
+list is also filtered by a consent flag at query time.**
+
+Not fixed here. Recorded as the question: does a buyer excluded for `do_not_contact` need
+to be distinguishable, to an agent, from a buyer who simply did not match?
