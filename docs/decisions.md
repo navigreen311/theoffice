@@ -11487,7 +11487,7 @@ list is also filtered by a consent flag at query time.**
 Not fixed here. Recorded as the question: does a buyer excluded for `do_not_contact` need
 to be distinguishable, to an agent, from a buyer who simply did not match?
 
-## NEXT. Tagged, corrected, and two keys back to draft
+## 137. Tagged, corrected, and two keys back to draft
 
 **Three rulings by Ivan Green, 20 September 2026.** Rulings 1 and 3 are built here;
 ruling 2 is a CRE Forge defect and is raised there.
