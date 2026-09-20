@@ -11220,3 +11220,101 @@ Nor does it require a measurement per list. The Office cannot run a battery - AD
 puts that on SimForge's side, and SimForge's scheduler is off. What it requires is that
 the twelve lists are read as exam text by somebody, and that a never-correct option
 survives review by being argued for rather than by nobody having asked.
+
+## NEXT. Two channels, and the tier is what crosses
+
+**Ruled by Ivan Green, 19 September 2026:** *"SimForge grades the refusal acts as two
+channels - restraint (did not carry out what it should not have) and disposition (routed
+the refusal correctly). Measured over 1,760 probes: restraint 82%, disposition 25%.
+`propose` requires restraint; `auto_execute` requires both. No verdict is read without
+naming its channel."*
+
+SimForge's ADR-0096, and its measurement. Merging the two channels reports an agent that
+withheld correctly nine times in ten as **5%**.
+
+### The four build items, measured against this side
+
+Three have no target here, and the fourth is already the case. **Measured before
+concluding it, because "we already do that" is the sentence a defect hides behind:**
+
+    key the rubric store by (dimension, channel)
+        THERE IS NO RUBRIC STORE. No table, no column, no row. `information_schema`
+        holds nothing matching rubric or dimension or channel on this side, and
+        `rubric_dimension_detail` has been in the response manifest's
+        `_deliberately_absent` list since the manifest was written.
+
+    read the tier, not the dimensions, for a grant decision
+        ALREADY THE CASE, and only ever has been. The tier arrives as `certified_tier`
+        on `get_gate_result`, is stored on `certification`, is read by
+        `appointment._certified_tiers` and caps `agent_forge_grant.trust_tier` at Gate 5
+        through `runtime_config._lower`. No decision on this side has ever seen a
+        dimension.
+
+    send channel on any rubric row The Office authors
+        IT AUTHORS NONE. The curriculum artifact carries `coverage`,
+        `domain_scenarios`, `operation_scenarios` and `venture_id`. No rubric row is
+        constructed, sent or stored anywhere in the broker.
+
+    expect operation_rubric_version 0.3.0 where 0.2.0 was pinned
+        NOTHING IS PINNED. The Office's 26 certifications carry
+        `rubric_version = 'phase0.8'`, and the column is passthrough - stored, never
+        compared, never parsed. The two CHECK constraints on that table are about
+        `rubric_kind` and the unit. 0.2.0 appears nowhere in this repository except as
+        a Pack version in a coordination document.
+
+**That is not luck. It is the read-path control doing its job**: dimension-level detail
+was ruled scenario-adjacent and kept out, so the row that could be misread never arrives.
+The urgent item was urgent on the side that holds the rows.
+
+### What each gate reading a certification does, today and after
+
+    Gate 4.5   reads `state` and `certified_tier` per (agent, forge, module) through
+    Gate 5     `appointment._certified_tiers`, and caps the Pack's declared tier at the
+               certified one. UNCHANGED - the tier's NAME is the same and its MEANING
+               is now "the channels this tier requires passed", which is SimForge's to
+               enforce and this side's to respect.
+
+    Gate 9     reads `state`, `simforge_verdict` and `model_digest` per grant per unit.
+               Never a tier, never a dimension. UNCHANGED.
+
+    Gate 9.5   reads the held-out partition's verdict. No rubric row. UNCHANGED.
+
+    Gate 11    activates grants against revocations. No rubric row. UNCHANGED.
+
+    the sweep  writes `certified_tier` from `GateResult.certified_tier`. UNCHANGED, and
+               this is the one place a channel could have leaked in - it does not,
+               because the manifest does not admit one.
+
+**Every gate does the same thing after as before.** That is the finding, and it is worth
+a ledger entry precisely because it could have been otherwise: the same ruling on the
+other side of the wire required a schema change, a version bump and three new reason
+codes.
+
+### What was built, and why it is not nothing
+
+    simforge_contract.json    declares `rubric_channels` - the two channels, the
+    -> 2.1.0                  measurement, which channels each tier requires, and that
+                              they do NOT cross. `rubric_result_verdicts` gains
+                              `keyed_by: [dimension, channel]`.
+
+The contract file is where The Office writes down what it believes about SimForge. **A
+reader of `certified_tier = propose` now needs to know it means restraint passed and
+disposition was not required** - the field did not change and what it asserts did. That
+belongs on this side, written down, whether or not any code moves.
+
+Four tests pin the four sentences above, so they are true tomorrow rather than today:
+the manifest still refuses dimension detail; `certified_tier` is what a tier decision
+reads; every tier has a stated channel requirement; and no rubric version is hardcoded in
+the broker.
+
+### One collision worth naming, because it is a trap
+
+**`dimension` means two different things and only one of them is graded.** The Office's
+is a curriculum COVERAGE dimension - `roles_with_domain_scenarios`,
+`modules_with_authored_scenario_content`, nine of them. It carries no channel, is scored
+by nobody, and has nothing to do with ADR-0096.
+
+A reader applying this ruling by searching for `dimension` lands on
+`generators/curriculum.py` and on Gate 8's evidence, and would be about to add a field to
+the wrong structure. `test_coverage_dimensions_are_not_rubric_dimensions` fails if anyone
+does, with the reason in the message.
