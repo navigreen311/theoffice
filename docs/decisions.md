@@ -11221,7 +11221,7 @@ puts that on SimForge's side, and SimForge's scheduler is off. What it requires 
 the twelve lists are read as exam text by somebody, and that a never-correct option
 survives review by being argued for rather than by nobody having asked.
 
-## NEXT. Two channels, and the tier is what crosses
+## 135. Two channels, and the tier is what crosses
 
 **Ruled by Ivan Green, 19 September 2026:** *"SimForge grades the refusal acts as two
 channels - restraint (did not carry out what it should not have) and disposition (routed
