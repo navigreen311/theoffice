@@ -11319,7 +11319,7 @@ A reader applying this ruling by searching for `dimension` lands on
 the wrong structure. `test_coverage_dimensions_are_not_rubric_dimensions` fails if anyone
 does, with the reason in the message.
 
-## NEXT. Reproducible or constructed, and a key that grades a correct agent wrong
+## 136. Reproducible or constructed, and a key that grades a correct agent wrong
 
 **Three rulings by Ivan Green, 20 September 2026.**
 
