@@ -11619,3 +11619,136 @@ mentioning the consent filter.
 That is CRE Forge's to fix - the module has to distinguish the two before any key can
 teach the difference. Raised there; The Office's key cannot describe a distinction the
 response does not carry.
+
+## NEXT. CRE Forge cannot record consent
+
+**Ruled by Ivan Green, 20 September 2026:** *"CRE Forge cannot record consent. Nine of
+twelve compliance event types have no writer, no person carries a consent state, and a
+revocation is a delta against a grant that does not exist. Greenstone's Nevada all-party
+ruling requires a per-person consent record with a grant and a revocation. Until that
+exists, no Greenstone position may operate a module whose correctness depends on consent
+state."*
+
+### The nine, confirmed independently
+
+Grepped across `backend/app` for a writer of each `ComplianceEventType`, excluding the
+enum's own declaration:
+
+    DNC_REQUEST               2 writers
+    DNC_CHECK                 1
+    OPT_OUT                   1
+    -----------------------------------
+    DNC_VIOLATION             0
+    CONSENT_OBTAINED          0
+    CONSENT_REVOKED           0
+    CALLING_HOURS_VIOLATION   0
+    RECORDING_CONSENT         0
+    TCPA_VIOLATION            0
+    OPT_IN                    0
+    COMPLAINT                 0
+    AUDIT                     0
+
+**Nine of twelve. Three write, and the three that write are all about the DNC list** -
+a suppression register, not a consent record.
+
+**`CONSENT_OBTAINED` has no writer either**, and that is the sharper half of the ruling:
+a revocation with no grant is a delta against nothing. The one flag that does exist -
+`Buyer.do_not_contact` - is a boolean with no timestamp of its own, no reason, no
+subject beyond the buyer row, and no event. It cannot say when consent was given, by
+whom, for what, or when it stopped.
+
+### What depends on consent state today: one module, one position
+
+Measured across the five services behind Greenstone's modules - occurrences of
+`do_not_contact`, `consent`, `dnc` or `opt_out`:
+
+    property.py          0      property_lookup
+    sales_comp.py        0      comp_analysis
+    deal_analysis.py     0      underwrite_deal
+    contract_service.py  0      assign_contract
+    buyer_matching.py    1      buyer_match      <- line 130
+
+    buyer_matching.py:129-130
+        Buyer.status.in_([BuyerStatus.ACTIVE, BuyerStatus.VIP]),
+        Buyer.do_not_contact.is_(False),
+
+The filter runs **before scoring**, so a buyer who revoked is absent from `results` and
+absent from `total`, and nothing in the response distinguishes that from not matching.
+That is entry 136's ruling 2 stated as a dependency rather than a defect.
+
+    module     buyer_match
+    position   Buyer Network Manager     headcount 2, ceiling propose,
+                                         buyer_match at auto_execute
+    grants     2 of greenstone's 6 ladder grants are on this module
+
+**The other four modules and the other two positions carry no consent dependency at
+all.** Acquisition Analyst (`property_lookup`, `comp_analysis`) and Deal Underwriter
+(`comp_analysis`, `underwrite_deal`) are untouched by this ruling.
+
+### The Pack already ruled the neighbouring question, and differently
+
+`market.compliance_surface` carries `TWO_PARTY_CONSENT_RECORDING` for NV, and it is
+**human_held**, with this reason:
+
+> *"No position here holds a duty that touches a recorded call, and no agent could ...
+> Buyer Network Manager operates buyer_match and assign_contract - neither of which calls
+> anybody."*
+
+And on 16 September Ivan ruled `buyer_match` runs at `auto_execute`, because:
+
+> *"it ranks buyers with `save_matches=False`, and **filtering a suppression list is not
+> contact**."*
+
+**Both statements are true and neither answers this ruling.** The question there was
+whether an agent CONTACTS anyone. The question here is whether the module's correctness
+DEPENDS on a consent state - and it does, in the one line above, whether or not a call is
+placed. A suppression list that silently removes people is a consent mechanism being read
+by a module that cannot say it read it.
+
+### What the Pack would have to say
+
+If no position may operate `buyer_match` until consent is modelled, five things move and
+one of them is a hole:
+
+    positions_required[Buyer Network Manager]
+      forge_modules_operated   drop cre-forge/buyer_match, keep assign_contract
+      module_trust_tiers       drop `cre-forge/buyer_match: auto_execute` - which
+                               retires Ivan's 16 September ruling and the reason under it
+      module_stages            drop `cre-forge/buyer_match: Assign`
+      lifecycle_stages_owned   ASSIGN IS NOW EMPTY. The position owns the stage and
+                               operates no module in it. Either the stage loses its
+                               owner or it keeps an owner who does nothing in it, and
+                               the Pack has no third option today.
+
+    forge_dependencies.forge_bindings[cre-forge].modules_expected
+      leave buyer_match declared and it becomes V25's
+      "declared and paid for, used by nothing" - the client_read_credit shape,
+      a module instructed, registered and operated by nobody.
+      remove it and the Forge binding stops asserting a capability the venture
+      still intends to use once consent exists.
+
+**The honest form is the first: declare it and carry the V25 warning**, because the
+warning is true and the removal would be a claim that Greenstone does not need buyer
+matching. A warning that says "this is waiting on something" is a better record than a
+silence that says nothing is missing.
+
+### What it costs, measured
+
+    ladder grants          6 -> 4     (Ronan and Seraphine lose buyer_match)
+    exam takers            6 -> 4     buyer_match opens no run; post-#177 it still
+                                      hands its curriculum over
+    positions with a module in every stage they own   falls, because Assign empties
+
+Gate 8 does not block. `buyer_match`'s key is already a draft as of entry 137, so the
+curriculum change is in the same direction the correction already sent it.
+
+### The question this does not answer
+
+`buyer_match` reading `do_not_contact` is not wrong - suppressing a suppressed buyer is
+the right behaviour. **What is wrong is that the module cannot say it did.** So the
+remedy might be a consent model on CRE Forge, or it might be a response field that
+distinguishes suppressed from unmatched, and those are different pieces of work with
+different owners.
+
+Ivan's ruling names the first. Entry 136's ruling 2 names the second. Both are open, and
+until either lands the position stands down from the module.
