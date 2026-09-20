@@ -11486,3 +11486,136 @@ list is also filtered by a consent flag at query time.**
 
 Not fixed here. Recorded as the question: does a buyer excluded for `do_not_contact` need
 to be distinguishable, to an agent, from a buyer who simply did not match?
+
+## NEXT. Tagged, corrected, and two keys back to draft
+
+**Three rulings by Ivan Green, 20 September 2026.** Rulings 1 and 3 are built here;
+ruling 2 is a CRE Forge defect and is raised there.
+
+**1.** *"`buyer_match`'s manual is wrong, and the key is faithful to it. `total` is the
+page, not the population: `buyer_matching.py:88` slices before `forge.py:223` counts.
+`total: 87` at limit 50 cannot occur. Correct the manual's `correct_sequence[1]` and the
+key together - a key cannot be right while its manual is wrong."*
+
+**2.** *"A buyer excluded for `do_not_contact` is distinguishable from one that did not
+match. 'Nobody matched' and 'someone matched and may not be contacted' are different
+facts, and the second has a compliance shape. Raise the silent filter as a CRE Forge
+defect."*
+
+**3.** *"The four scenarios that cannot reproduce are tagged constructed, per ruling 1.
+The two keys marking a half-answer complete are corrected."*
+
+### The tag
+
+`derivation: reproducible | constructed`, on every scenario. **Required on an approved
+key; a draft may be part-tagged.**
+
+The asymmetry is deliberate and it is the load-bearing decision in this change.
+Demanding the tag everywhere would refuse all twenty Burkham keys - 94 scenarios nobody
+has classified against their Forge - to enforce a rule about approval. A draft is never
+submitted, so it can never be drawn into a battery, which is the only thing the tag
+decides.
+
+    reproducible  the probe can be put against a sandbox and the stated response
+                  follows from the code path for any adequately seeded tenant: an error
+                  code, a cap, a refusal, a timeout, `total: 0` on a query that matches
+                  nothing, a basis determined by whether a field is null.
+    constructed   the stated response asserts a count or value only a particular fixture
+                  produces, or the request cannot produce it at all.
+
+**It is not sent.** `OperationScenarioSubmission` declares no `derivation` and carries
+`extra="forbid"`, so sending one would 422 every submission rather than be ignored. Entry
+135's ordering rule holds: SimForge declares first. A test pins the payload against it.
+
+### The classification: 33 reproducible, 11 constructed
+
+Ivan's ruling names four. Ruling 1 from entry 136 requires **every** scenario tagged, so
+all 44 were classified against CRE Forge at `3e48d5d`. The eleven:
+
+    buyer_match/happy_path[0]           three ranked buyers, 2 concerns on the top one
+    buyer_match/happy_path[1]           total: 87 at limit 50 - IMPOSSIBLE
+    buyer_match/partial_failure[0]      three ranked, empty concerns on the second
+    comp_analysis/happy_path[0]         total: 4 at radius 1.0 / 365 days
+    comp_analysis/escalation_required[0] "you run them and get four"
+    property_lookup/happy_path[0]       "Reno warehouse" -> 143 - CANNOT MATCH
+    property_lookup/happy_path[2]       "industrial ... Sparks" -> 7 - CANNOT MATCH
+    property_lookup/escalation_req[0]   same query, same 7 - CANNOT MATCH
+    property_lookup/partial_failure[1]  exactly 2 of 100 with a null asking_price
+    property_lookup/partial_failure[2]  exactly 1 of 100 with a null square_feet
+    underwrite_deal/happy_path[0]       arv: 480000 quoted
+
+Four cannot reproduce at all. Seven need a seeded fixture and become reproducible **when
+re-derived against it, not when the word is edited.**
+
+**No test can stop the word being edited** - the file is the only record of either
+claim. What `test_the_eleven_constructed_are_exactly_these` does is make it visible: a
+promotion that was not a re-derivation moves that set and leaves the prose still.
+
+### The three content corrections
+
+**`buyer_match/happy_path[1]` and the manual, together.**
+
+    was    total: 87, limit at its default. "`limit` bounds the page, not the
+           population, and it defaults to 50."
+    now    total: 3 with three ranked buyers. "three is how many the module RETURNED -
+           not how many were considered, matched or exist."
+
+    scripts/author_cre_forge_instructions.py correct_sequence[1]
+    was    "Read `total` before `results`. `limit` bounds the page, not the population."
+    now    "`total` IS THE PAGE ... nothing in this response counts the buyer list."
+
+The corrected manual is not a new claim - the module's own `failure_signatures` already
+said it about the score: *"`match_score` IS RELATIVE TO THE BUYERS ON FILE ... the number
+does not say how many it beat."* The count carries exactly that limitation and the
+manual said the opposite two lines above.
+
+**`property_lookup/happy_path[2]`** claimed the question asked was the question the
+module answers. It is not: the search is one substring over address, city, county and zip
+(`property.py:298-308`) and the adapter passes `filters=None` (`forge.py:125`), so
+`property_type` is unreachable. Seven rows matched the TEXT and nothing checked that any
+of them is industrial. It now says so and escalates.
+
+**`property_lookup/escalation_required[0]`** - the one Ivan named. It accounted for the
+missing listing date and was silent on the unsearchable type. Both gaps are named now,
+and the situation says the question has three parts rather than two.
+
+### Two keys return to draft, and three keep their approval
+
+    assign_contract   approved   Ivan Green, 18 September   unchanged
+    comp_analysis     approved   Ivan Green, 18 September   unchanged
+    underwrite_deal   approved   Ivan Green, 18 September   unchanged
+    buyer_match       DRAFT      approved_by/on removed
+    property_lookup   DRAFT      approved_by/on removed
+
+**This is not entry 133's bookkeeping, and the distinction is the whole of why `status`
+exists.** There, five act words came out of option lists, the fact was identical, and the
+approval stood. Here **what a correct answer IS has changed** on three scenarios, and
+Ivan has not read the new prose. An approval that survived that would be the rubber stamp
+entry 126 was written to prevent.
+
+Tagging alone moved nobody: the three untouched keys gained 26 `derivation:` lines and
+kept their approval, because a tag is a fact about how a scenario was derived and not
+about what it grades.
+
+**Re-approval is a reading, not a flag flip.** 18 scenarios are withheld until then.
+
+### What that costs, measured
+
+    operation rows in the curriculum          52 -> 36   (26 authored + 10 absent)
+    modules_with_authored_scenario_content    5/5 -> 3/5
+    modules_accounting_for_every_class        5/5 -> 3/5
+    modules_with_a_draft_key_awaiting_approval 0/0 -> 2/2
+
+Gate 8 does not block: three modules still carry approved content, and it blocks only on
+zero accepted. Two modules go back to submitting their mechanical rows alone.
+
+### Ruling 2 is not built here
+
+`buyer_matching.py:130` filters `do_not_contact.is_(False)` before scoring, so a buyer
+who revoked is absent from `results` **and** from `total`, and `buyer_match`'s
+`failure_signatures` explains `total: 0` as a fact about a hand-built list without
+mentioning the consent filter.
+
+That is CRE Forge's to fix - the module has to distinguish the two before any key can
+teach the difference. Raised there; The Office's key cannot describe a distinction the
+response does not carry.

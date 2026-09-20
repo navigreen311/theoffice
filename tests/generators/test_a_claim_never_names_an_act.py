@@ -59,10 +59,16 @@ _ACT_WORD = re.compile(rf"\b({'|'.join(ACTS)})(S|D|ED|ING)?\b", re.IGNORECASE)
 
 
 def _answers():
+    """Every Greenstone scenario, DRAFT OR APPROVED.
+
+    `.modules` rather than `for_module`: entry 137 returned `buyer_match` and
+    `property_lookup` to draft when their content was corrected, and a draft is
+    withheld from submission - not from this rule. An act word in a draft's option list
+    is a defect waiting to be approved.
+    """
     loaded = sc.load_all()
     for module_id in GREENSTONE:
-        content = loaded.for_module(module_id)
-        assert content is not None, f"{module_id} is withheld"
+        content = loaded.modules[module_id]
         for scenario_class, occasions in content.scenarios.items():
             for i, authored in enumerate(occasions):
                 yield f"{module_id}/{scenario_class}[{i}]", authored.expected_answer
@@ -125,7 +131,7 @@ def test_no_situation_names_an_act():
     naming = []
     loaded = sc.load_all()
     for module_id in GREENSTONE:
-        for scenario_class, occasions in loaded.for_module(module_id).scenarios.items():
+        for scenario_class, occasions in loaded.modules[module_id].scenarios.items():
             for i, authored in enumerate(occasions):
                 found = sorted({m.group(0) for m in _ACT_WORD.finditer(authored.situation)})
                 if found:
@@ -157,21 +163,34 @@ def test_the_five_corrected_keys_carry_exactly_this(
     be a UUID`, so the claim is that it is not a UUID. The act it prompted for was
     never the act the key expects.
     """
-    answer = sc.load_all().for_module(module_id).scenarios[scenario_class][ordinal]
+    answer = sc.load_all().modules[module_id].scenarios[scenario_class][ordinal]
     assert answer.expected_answer["record_claim"] == claim
     assert answer.expected_answer["record_claim_options"] == options
 
 
-def test_the_five_are_still_approved_and_not_re_approved():
-    """**A correction to Ivan's own ruling is not a new approval.**
+def test_the_act_correction_did_not_move_anyone_s_approval():
+    """**A correction to Ivan's own ruling is not a new approval** - entry 133's rule.
 
-    The keys keep `approved_by` and `approved_on` from 18 September. Moving the date
-    would say he read 44 scenarios again on the day five words were removed, and
-    `approved_on` exists precisely so that claim cannot be made loosely (entry 126).
+    Three of the five still carry his 18 September approval, unmoved: removing a word
+    that named an act changed no fact.
+
+    The other two are drafts, and NOT because of this correction. Entry 137 returned
+    `buyer_match` and `property_lookup` to draft when what a CORRECT ANSWER IS changed
+    under them - a different kind of edit, and the one `status` exists to catch. Their
+    names are listed here rather than skipped, so a reader can see the distinction the
+    two entries draw between an edit that keeps an approval and one that cannot.
     """
     loaded = sc.load_all()
+    corrected_content = {"buyer_match", "property_lookup"}
     for module_id in GREENSTONE:
         content = loaded.modules[module_id]
-        assert content.status == sc.APPROVED
-        assert content.approved_by == "Ivan Green"
-        assert content.approved_on == "2026-09-18"
+        if module_id in corrected_content:
+            assert content.status == sc.DRAFT, (
+                f"{module_id} had its content corrected in entry 137 and must not be "
+                "approved until Ivan has read the new prose"
+            )
+            assert content.approved_by == "" and content.approved_on == ""
+        else:
+            assert content.status == sc.APPROVED
+            assert content.approved_by == "Ivan Green"
+            assert content.approved_on == "2026-09-18"

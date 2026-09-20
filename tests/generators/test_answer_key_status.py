@@ -32,6 +32,7 @@ from generators import scenario_content as sc
 _BODY = """
 scenarios:
   - scenario_class: happy_path
+    derivation: reproducible
     situation: A caller asks for a thing and the module returns it.
     expected_behavior: Report what came back and nothing further.
     expected_escalation: None fires; the call answered completely.
@@ -180,20 +181,20 @@ GREENSTONE = (
 )
 
 
-def test_greenstones_five_are_approved_and_carry_all_44_scenarios():
-    """**Approved by Ivan Green on 18 September 2026**, after review of all 44.
+def test_greenstones_three_remaining_approvals_stand():
+    """**Approved by Ivan Green on 18 September 2026**, and three of the five still are.
 
-    They were approved on the 17th, superseded by SimForge's split keys the same week,
-    and drafts again until he had read the replacements. That round trip is the reason
-    `status` exists: nothing about the first approval carried forward to prose nobody
-    had seen, and nothing here is grandfathered.
+    All five were approved on the 17th, superseded by SimForge's split keys the same
+    week, drafted again until he had read the replacements, and approved on the 18th.
+    Entry 137 then returned `buyer_match` and `property_lookup` to draft, because
+    correcting what a right answer IS is not the bookkeeping entry 133 did.
 
-    44 across 27 `(module, class)` pairs - the count SimForge grades, which is what the
-    A2.1 amendment (entry 124) was ratified to keep equal.
+    That round trip is the whole reason `status` exists: no approval here has ever
+    carried forward to prose nobody had read.
     """
     loaded = sc.load_all()
     total = 0
-    for module_id in GREENSTONE:
+    for module_id in ("assign_contract", "comp_analysis", "underwrite_deal"):
         content = loaded.for_module(module_id)
         assert content is not None, f"{module_id} is approved and still withheld"
         assert content.status == sc.APPROVED
@@ -207,10 +208,13 @@ def test_greenstones_five_are_approved_and_carry_all_44_scenarios():
             f"{sorted(set(sc.SUBMITTABLE_CLASSES) - accounted)}"
         )
 
-    assert total == 44, f"expected the 44 reviewed scenarios, found {total}"
+    assert total == 26, (
+        f"expected the 26 scenarios still approved, found {total}. The other 18 are "
+        "buyer_match's 8 and property_lookup's 10, drafted by entry 137."
+    )
 
 
-def test_burkhams_twenty_are_untouched_by_greenstones_approval():
+def test_burkhams_twenty_are_still_drafts_of_their_own():
     """**An approval covers what was read, and nothing else.**
 
     Ivan approved Greenstone's 44. Burkham's 20 were not in front of him, so they stay
@@ -220,8 +224,12 @@ def test_burkhams_twenty_are_untouched_by_greenstones_approval():
     """
     loaded = sc.load_all()
     drafts = loaded.drafts()
-    assert len(drafts) == 20, f"expected Burkham's 20 still drafted, found {len(drafts)}"
-    assert not (set(drafts) & set(GREENSTONE))
+    burkham = set(drafts) - set(GREENSTONE)
+    assert len(burkham) == 20, f"expected Burkham's 20, found {len(burkham)}"
+    # Greenstone's two are drafts for a different reason - corrected content awaiting a
+    # reading (entry 137) rather than an approval never given. Counted apart so a change
+    # to either population cannot be hidden by the other moving the opposite way.
+    assert set(drafts) & set(GREENSTONE) == {"buyer_match", "property_lookup"}
     assert all(c.approved_by == "" and c.approved_on == "" for c in drafts.values())
 
 

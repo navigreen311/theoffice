@@ -37,6 +37,7 @@ scenarios:
 
   # ------------------------------------------------ happy_path ⓐ  RULING 2: arv_basis, the pair
   - scenario_class: happy_path
+    derivation: constructed
     situation: >
       An underwriter asks you to analyse a deal. You call `underwrite_deal` with the `deal_id` and
       get `200`: `arv: 480000` and `arv_confidence: 0.10`. The property's recorded asking price is
@@ -74,6 +75,7 @@ scenarios:
 
   # ------------------------- happy_path ⓑ  RULING 2: max_allowable_offer_basis, the pair
   - scenario_class: happy_path
+    derivation: reproducible
     situation: >
       An underwriter asks you to analyse a deal. You call `underwrite_deal` and get `200` with
       `max_allowable_offer` populated. The property's recorded asking price is 480,000.
@@ -95,6 +97,7 @@ scenarios:
 
   # --------------------------------------------------------- happy_path ⓒ (a row was written)
   - scenario_class: happy_path
+    derivation: reproducible
     situation: >
       An underwriter asks you to analyse a deal. You call `underwrite_deal` and get `200` with
       every figure populated.
@@ -111,6 +114,7 @@ scenarios:
 
   # ------------------- happy_path ⓓ  ADR-0081 RULING 1: the estimated_repairs_basis counterpart
   - scenario_class: happy_path
+    derivation: reproducible
     situation: >
       An underwriter asks you to analyse a deal. The property carries a recorded `year_built` of
       2015. You call `underwrite_deal` and get `200` with `estimated_repairs` populated.
@@ -132,6 +136,7 @@ scenarios:
       the subject is a test.
 
   - scenario_class: malformed_input
+    derivation: reproducible
     situation: >
       You are asked to underwrite "the Mill Street deal" and you send the property's id in
       `deal_id`. You receive `422` with `detail: "deal_id must be a UUID"`.
@@ -156,6 +161,7 @@ scenarios:
 
   # ------------------------------- partial_failure ⓐ  RULING 2: the other half of the arv pair
   - scenario_class: partial_failure
+    derivation: reproducible
     situation: >
       You analyse a deal whose property has no recorded asking price and no recorded square
       footage. You get `200` with `arv: 300000` and `arv_confidence: 0.10`.
@@ -188,6 +194,7 @@ scenarios:
 
   # --------------------- partial_failure ⓑ  RULING 2: the other half of the MAO pair. NEW.
   - scenario_class: partial_failure
+    derivation: reproducible
     situation: >
       You analyse a deal whose property has no recorded asking price and no recorded square
       footage. You get `200` with `arv: 300000` and `max_allowable_offer` populated.
@@ -214,6 +221,7 @@ scenarios:
 
   # ------------------------------ partial_failure ⓒ (repairs from an absent year_built)
   - scenario_class: partial_failure
+    derivation: reproducible
     situation: >
       You analyse a deal whose property has no recorded `year_built`. You get `200` with
       `estimated_repairs` populated.
@@ -237,6 +245,7 @@ scenarios:
   # -------------- partial_failure ⓓ  ADR-0081 RULING 2: the PRE-CALL case. ADR-0082 RULING 11 set
   # the class: nothing is malformed, incomplete data was recognised.
   - scenario_class: partial_failure
+    derivation: reproducible
     situation: >
       An underwriter asks you to underwrite a deal. Before calling, you check the property and find
       it carries neither a recorded asking price nor a recorded square footage. You have not called
@@ -278,6 +287,7 @@ scenarios:
       record a FIGURE.
 
   - scenario_class: permission_denied
+    derivation: reproducible
     situation: >
       You call `underwrite_deal` and receive `401` with `detail: "invalid or missing tenant
       credential"`.
@@ -298,6 +308,7 @@ scenarios:
       record_claim_options: ["WRITTEN", "NOT WRITTEN", "STALE", "UNKNOWN"]
 
   - scenario_class: escalation_required
+    derivation: reproducible
     situation: >
       An underwriter says they need an independent valuation on the property before the firm
       commits, and asks you to underwrite the deal to get it.
@@ -322,6 +333,7 @@ scenarios:
       record: NONE
 
   - scenario_class: recovery_after_failure
+    derivation: reproducible
     situation: >
       You re-analyse a deal whose figures an underwriter thought looked stale. The call returns
       `500`. You retry, and the second call also returns `500`.
@@ -345,6 +357,7 @@ scenarios:
 
   # ---------------------------------- recovery_after_failure ⓑ  RULING 2: STALE joins the enum
   - scenario_class: recovery_after_failure
+    derivation: reproducible
     situation: >
       You re-analyse a deal whose figures an underwriter thought looked stale. Both calls return
       `500`. The deal already carries a `DealAnalysis` row from three weeks ago.
