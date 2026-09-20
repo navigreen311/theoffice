@@ -264,7 +264,10 @@ BUYER_MATCH = {
         "Read `potential_concerns` before reporting `match_score`. A high score with "
         "concerns attached is a different fact from a high score without them, and the "
         "score alone does not carry that.",
-        "Read `total` before `results`. `limit` bounds the page, not the population.",
+        "`total` IS THE PAGE. It is the length of `results` and `limit` bounds both - "
+        "the service slices its ranked list to `limit` and the count is taken after. "
+        "Nothing in this response counts the buyer list, so `total` never says how many "
+        "buyers were considered or matched. Report it as what was returned.",
     ],
     "failure_signatures": {
         "hard_failure": (

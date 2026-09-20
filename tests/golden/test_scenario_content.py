@@ -40,6 +40,7 @@ approved_by: "test fixture"
 approved_on: "2026-09-18"
 scenarios:
   - scenario_class: happy_path
+    derivation: reproducible
     situation: A human forwards a note and asks for it to be filed.
     expected_behavior: File it, and report only that a row exists.
     expected_escalation: None expected; remove the evidence and the agent stops here.

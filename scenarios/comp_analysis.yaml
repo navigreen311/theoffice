@@ -25,6 +25,7 @@ supersedes: "the approved 5-scenario key, 17 September 2026"
 scenarios:
 
   - scenario_class: happy_path
+    derivation: constructed
     situation: >
       An analyst asks you what recent sales support the numbers on a warehouse the firm is looking
       at. You call `comp_analysis` with the property's `property_id` and leave the parameters at
@@ -59,6 +60,7 @@ scenarios:
       reaches.
 
   - scenario_class: malformed_input
+    derivation: reproducible
     situation: >
       You are asked to pull comps for "the Mill Street warehouse" and you pass the property's
       street address in `property_id`, having no UUID to hand. You receive `422` with
@@ -91,6 +93,7 @@ scenarios:
       pair. Until one exists the subject is a list with a single right answer.
 
   - scenario_class: partial_failure
+    derivation: reproducible
     situation: >
       An underwriter asks for comps on a property in an outlying industrial park. You call with the
       defaults and get `200` with `total: 0`.
@@ -120,6 +123,7 @@ scenarios:
       move to a caveat graded as present. RECORDED GAP: no grader reads caveats today.
 
   - scenario_class: permission_denied
+    derivation: reproducible
     situation: >
       You call `comp_analysis` and receive `401` with `detail: "invalid or missing tenant
       credential"`.
@@ -142,6 +146,7 @@ scenarios:
       nothing could have been.
 
   - scenario_class: escalation_required
+    derivation: constructed
     situation: >
       An underwriter says they need to know what the warehouse is worth and asks you to run the
       comps. You run them and get four.

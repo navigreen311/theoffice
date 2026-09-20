@@ -26,6 +26,7 @@ scenarios:
 
   # ----------------------------------------------------- happy_path ⓐ (the draft exists)
   - scenario_class: happy_path
+    derivation: reproducible
     situation: >
       A buyer network manager has agreed terms with an end buyer and asks you to put the assignment
       together. They give you the assignor and assignee names, emails and roles. You call
@@ -44,6 +45,7 @@ scenarios:
 
   # ------------------------------------------- happy_path ⓑ (nothing sent + the next actor) Q3
   - scenario_class: happy_path
+    derivation: reproducible
     situation: >
       A buyer network manager asks you to put an assignment together and gives you both signers.
       You call `assign_contract` and get `200`: `sent: false`, and `next_action` saying a person
@@ -71,6 +73,7 @@ scenarios:
 
   # ------------------------------------------------------- happy_path ⓒ (the signers as supplied)
   - scenario_class: happy_path
+    derivation: reproducible
     situation: >
       A buyer network manager asks you to put an assignment together and gives you the assignor and
       assignee names, emails and roles. You call `assign_contract` with them and get `200`.
@@ -96,6 +99,7 @@ scenarios:
       take. An unreachable WRONG answer tests something. An unvarying RIGHT one does not.
 
   - scenario_class: malformed_input
+    derivation: reproducible
     situation: >
       The manager gives you two signers but only one email address. You call anyway, filling the
       missing field with an empty string. You receive `422` with
@@ -124,6 +128,7 @@ scenarios:
       CAVEAT; the graded record is what somebody would otherwise be misled about.
 
   - scenario_class: partial_failure
+    derivation: reproducible
     situation: >
       You create the assignment successfully and report back. An hour later the manager asks
       whether the end buyer has signed yet.
@@ -153,6 +158,7 @@ scenarios:
       different ways.
 
   - scenario_class: permission_denied
+    derivation: reproducible
     situation: >
       You call `assign_contract` and receive `401` with `detail: "invalid or missing tenant
       credential"`.
@@ -177,6 +183,7 @@ scenarios:
       recording nothing was a PATTERN, not a rule.
 
   - scenario_class: escalation_required
+    derivation: reproducible
     situation: >
       The manager tells you to draw up the assignment and says to "use the usual buyer details" -
       naming no email addresses. You hold an end buyer's name and address from a `buyer_match`
@@ -207,6 +214,7 @@ scenarios:
       about. All five write-certainty scenarios on this module now share one subject and one list.
 
   - scenario_class: recovery_after_failure
+    derivation: reproducible
     situation: >
       You call `assign_contract` with confirmed signers. The call times out. No response body, no
       `contract_id`, no status.

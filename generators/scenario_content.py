@@ -156,8 +156,26 @@ _ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 #: Per-scenario keys. Same rule.
 _SCENARIO_KEYS = frozenset({
     "scenario_class", "situation", "expected_behavior", "expected_escalation",
-    "instruction_section", "expected_answer", "draft_note",
+    "instruction_section", "expected_answer", "draft_note", "derivation",
 })
+
+#: RULED 20 SEPTEMBER 2026 (entry 137): every scenario is tagged at authoring.
+#:
+#:   reproducible  the probe can be put against a sandbox and the stated response
+#:                 follows from the code path for any adequately seeded tenant -
+#:                 an error code, a cap, a refusal, a timeout, `total: 0` on a query
+#:                 that matches nothing, or a basis determined by whether a field
+#:                 is null.
+#:   constructed   the stated response asserts a specific count or value that only a
+#:                 particular fixture produces, or the request cannot produce it at
+#:                 all.
+#:
+#: **A functional battery draws only from reproducible.** A constructed scenario is
+#: never promoted by editing this tag - it is re-derived against the sandbox, or it
+#: stays out. Editing the word is the one thing that must not be how it moves.
+REPRODUCIBLE = "reproducible"
+CONSTRUCTED = "constructed"
+_DERIVATIONS = (REPRODUCIBLE, CONSTRUCTED)
 
 #: What `expected_answer` may carry. SimForge's ADR-0077 through ADR-0082 designed it;
 #: this is The Office's copy of that vocabulary, in the same relationship as
@@ -216,6 +234,19 @@ class AuthoredScenario:
     inside rather than claiming there is no boundary."""
 
     instruction_section: str = ""
+
+    derivation: str = ""
+    """`reproducible` or `constructed`. Ruled 20 September 2026, entry 137.
+
+    **Required on an approved key, on every scenario.** Empty is only legal on a draft,
+    which is never submitted and so can never be drawn into a battery - the same shape
+    `approved_by` and `approved_on` take, and for the same reason: the tag is part of
+    what an approval is an approval OF.
+
+    It is NOT sent to SimForge. Entry 135's ordering rule holds - SimForge declares a
+    field before The Office sends it, and `OperationScenarioSubmission` declares no
+    `derivation` today. So the tag lives here, and the battery rule it exists for lands
+    when the far side has somewhere to put it."""
 
     expected_answer: dict[str, Any] = field(default_factory=dict)
     """The gradeable half, as SimForge's split-key design defines it.
@@ -458,6 +489,27 @@ def load_module(path: Path | str) -> ModuleContent:
             )
         not_applicable[cls] = reason.strip()
 
+    # EVERY SCENARIO ON AN APPROVED KEY IS TAGGED. Ruled 20 September 2026, entry 137.
+    #
+    # Checked here rather than per scenario because the rule is about the KEY: a draft
+    # may be part-tagged while somebody works through it, and an approval is a statement
+    # about the whole file. The message names the untagged ones, because "this key is
+    # not tagged" sends an author to read forty scenarios looking for which.
+    if status == APPROVED:
+        untagged = sorted(
+            f"{cls}[{i}]"
+            for cls, occasions in scenarios.items()
+            for i, authored in enumerate(occasions)
+            if not authored.derivation
+        )
+        if untagged:
+            raise ScenarioContentError(
+                f"{p.name} is approved and {len(untagged)} scenario(s) carry no "
+                f"derivation: {untagged}. Every scenario is tagged {REPRODUCIBLE!r} or "
+                f"{CONSTRUCTED!r} at authoring, because a functional battery draws only "
+                "from the first and an untagged scenario cannot be told from either."
+            )
+
     return ModuleContent(
         module_id=module_id, forge_id=forge_id,
         status=status, approved_by=approved_by, approved_on=approved_on,
@@ -483,12 +535,20 @@ def _scenario(filename: str, entry: Any) -> AuthoredScenario:
     _check_class(filename, scenario_class)
 
     section = (entry.get("instruction_section") or "").strip()
+    derivation = (entry.get("derivation") or "").strip()
+    if derivation and derivation not in _DERIVATIONS:
+        raise ScenarioContentError(
+            f"{filename}: scenario {scenario_class!r} carries derivation "
+            f"{derivation!r}, which is neither {REPRODUCIBLE!r} nor {CONSTRUCTED!r}. "
+            "A third word would be a third meaning nobody ruled on."
+        )
     return AuthoredScenario(
         scenario_class=scenario_class,
         situation=entry["situation"].strip(),
         expected_behavior=entry["expected_behavior"].strip(),
         expected_escalation=entry["expected_escalation"].strip(),
         instruction_section=section,
+        derivation=derivation,
         expected_answer=_answer(filename, scenario_class, entry.get("expected_answer")),
     )
 

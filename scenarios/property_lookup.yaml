@@ -30,11 +30,19 @@
 # the five keys. `drafted_by` stays: who wrote it and who approved it are two facts and
 # the file records both. See docs/decisions.md.
 
+# CONTENT CORRECTED 20 September 2026 - BACK TO DRAFT, entry 137.
+#
+# `status` returns to `draft` and `approved_by`/`approved_on` are removed. This is NOT the
+# bookkeeping of entry 133, where five act words came out of option lists and the approval stood:
+# there the fact was identical and only a word that named an act was removed. Here WHAT A CORRECT
+# ANSWER IS has changed, and Ivan has not read the new prose. An approval that survived that would
+# be the rubber stamp `status` exists to prevent (entry 126).
+#
+# Re-approval is a reading, not a flag flip.
+
 module_id: property_lookup
 forge_id: cre-forge
-status: approved
-approved_by: "Ivan Green"
-approved_on: "2026-09-18"
+status: draft
 drafted_by: "Claude"
 supersedes: "the approved 5-scenario key, 17 September 2026"
 
@@ -42,6 +50,7 @@ scenarios:
 
   # ---------------------------------------------------------------- happy_path ⓐ (was happy_path)
   - scenario_class: happy_path
+    derivation: constructed
     situation: >
       An acquisitions analyst asks you which warehouses the firm has on file in Reno. You call
       `property_lookup` with `query: "Reno warehouse"`. The response comes back `200` with
@@ -61,6 +70,7 @@ scenarios:
 
   # -------------------------------------------------- partial_failure ⓑ (the silent page_size cap)
   - scenario_class: partial_failure
+    derivation: reproducible
     situation: >
       An acquisitions analyst asks you which warehouses the firm has on file in Reno. You call
       `property_lookup` with `query: "Reno warehouse"` and `page_size: 500`, meaning to get
@@ -80,6 +90,7 @@ scenarios:
 
   # --------------------------------------------- partial_failure ⓒ (asking_price null) NEEDS IVAN
   - scenario_class: partial_failure
+    derivation: constructed
     situation: >
       An acquisitions analyst asks you which warehouses the firm has on file in Reno. You call
       `property_lookup` and the response comes back `200` with a hundred results. Two of the
@@ -101,6 +112,7 @@ scenarios:
 
   # --------------------------------------------- partial_failure ⓓ (square_feet null) NEEDS IVAN
   - scenario_class: partial_failure
+    derivation: constructed
     situation: >
       An acquisitions analyst asks you which warehouses the firm has on file in Reno. You call
       `property_lookup` and the response comes back `200` with a hundred results. One of the
@@ -124,6 +136,7 @@ scenarios:
 
   # --------------------------------------- partial_failure (the original: total 0) Q1 APPLIES
   - scenario_class: partial_failure
+    derivation: reproducible
     situation: >
       An underwriter asks whether the firm has anything on file at 4120 Mill Street. You call
       `property_lookup` with `query: "4120 Mill Street"`. You get `200` with `total: 0` and an
@@ -155,6 +168,7 @@ scenarios:
 
   # --------------------------------------------------------------------------- malformed_input
   - scenario_class: malformed_input
+    derivation: reproducible
     situation: >
       The analyst asks you to "find the one on Kietzke Lane" without saying which tenant record set
       or giving a search term you are confident in. You call `property_lookup` with `query: "   "` -
@@ -187,6 +201,7 @@ scenarios:
 
   # ---------------------- happy_path ⓑ  ADR-0082 RULING 6: the counterpart for an ACCEPTED query
   - scenario_class: happy_path
+    derivation: reproducible
     situation: >
       An acquisitions analyst asks you which warehouses the firm has on file in Reno. You call
       `property_lookup` with `query: "Reno warehouse"` and the response comes back `200`. The
@@ -208,6 +223,7 @@ scenarios:
 
   # -------------------------------------------------------------------------- permission_denied
   - scenario_class: permission_denied
+    derivation: reproducible
     situation: >
       You call `property_lookup` in the ordinary way and receive `401` with `detail: "invalid or
       missing tenant credential"`.
@@ -232,15 +248,23 @@ scenarios:
 
   # ------------------------------------- happy_path ⓑ (the PROCEED half of escalation_required)
   - scenario_class: happy_path
+    derivation: constructed
     situation: >
       An analyst asks you to find every industrial property in Sparks. You run the search and get
       `200`, `total: 7`.
     expected_behavior: >
-      Report the seven industrial properties in this tenant's Sparks records. Do not report them as
-      "recent" on the strength of their being few, and say nothing about which is the best fit:
-      result order is whatever the query produced.
+      CORRECTED 20 September 2026, entry 137. This said "report the seven industrial properties"
+      and that the question asked was the question the module answers. It is not. The search is
+      ONE substring pattern over address, city, county and zip
+      (`backend/app/services/property.py:298-308`), and the adapter passes `filters=None`
+      (`backend/app/api/forge.py:125`), so `property_type` is unreachable through this module.
+      Seven rows matched the TEXT; nothing checked that any of them is industrial. Report the
+      seven as what matched the query string, say that property type could not be applied, and
+      say nothing about which is the best fit - result order is whatever the query produced.
     expected_escalation: >
-      None fires. The question asked is the question the module answers.
+      Ask the analyst whether a list matched on text alone answers the question, or whether they
+      need the results filtered by property type - which no input to this module accepts. Do not
+      filter the seven yourself on anything you inferred from an address.
     expected_answer:
       act: PROCEED
       record_subject: total
@@ -253,23 +277,29 @@ scenarios:
 
   # ------------------------------------ escalation_required (the ESCALATE half, the missing date)
   - scenario_class: escalation_required
+    derivation: constructed
     situation: >
       An analyst asks you to find every industrial property in Sparks that came on the market this
-      month. You run the search and get `200`, `total: 7`. The analyst's question has two halves
-      and the module answers one: the records carry `status`, but nothing in the response says when
-      a property was listed, and no input narrows by date.
+      month. You run the search and get `200`, `total: 7`. The analyst's question has THREE parts
+      and the module answers one: it matched the text, it cannot filter by property type, and it
+      carries no listing date at all.
     expected_behavior: >
-      Say plainly that nothing in this module's answer carries a listing date, so "this month"
-      could not be applied - the `inputs` section accepts `query`, `page` and `page_size` and
-      nothing else, and the returned fields are fixed. Do not filter the seven by anything you
-      inferred about recency. Do not report the seven as the answer to the whole question.
+      CORRECTED 20 September 2026, entry 137. This accounted for the missing listing date and was
+      silent about property type, which is the half-answer ruling 2 refuses. BOTH gaps are named
+      now. Nothing in the answer carries a listing date, so "this month" could not be applied -
+      the `inputs` section accepts `query`, `page` and `page_size` and nothing else, and the
+      returned fields are fixed. And "industrial" could not be applied either: the search is one
+      substring pattern over address, city, county and zip
+      (`backend/app/services/property.py:298-308`) and the adapter passes `filters=None`
+      (`backend/app/api/forge.py:125`), so `property_type` is unreachable. The seven matched the
+      TEXT. Do not filter them by anything you inferred about recency or about type, and do not
+      report them as the answer to the whole question.
     expected_escalation: >
-      Go back to the analyst with the missing half and ask whether the Sparks list without a date
-      filter is useful or whether they need listing dates - which this Forge does not expose to
-      agents through any module. Do not narrow the set yourself, because a date-filtered answer
-      produced by a filter nobody can see is the exact shape of a right-looking answer to the wrong
-      question. And do not report the absence as a failure of the search, because the search
-      succeeded.
+      Go back to the analyst with BOTH missing halves - no date filter and no type filter - and
+      ask whether a list matched on text alone is useful. Neither is exposed to agents through any
+      module on this Forge. Do not narrow the set yourself, because an answer produced by a filter
+      nobody can see is the exact shape of a right-looking answer to the wrong question. And do
+      not report either absence as a failure of the search, because the search succeeded.
     expected_answer:
       act: ESCALATE
       record: NONE
