@@ -1020,7 +1020,7 @@ class SimForgeClient:
     ) -> dict[str, Any]:
         """POST a unit-B gate result built from a named human's attestation.
 
-        RULED 21 SEPTEMBER 2026 (entry 146). **The only call in this client that tells
+        RULED 21 SEPTEMBER 2026 (entry 147). **The only call in this client that tells
         SimForge an outcome rather than asking for one**, and it exists because nothing
         else can produce a unit-B outcome: The Office submits no curriculum to a
         department run, so no battery runs and no verdict is ever earned.

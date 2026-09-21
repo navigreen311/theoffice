@@ -493,7 +493,7 @@ async def record_result(
     # AN ATTESTED UNIT B NAMES NO MODEL EITHER, and for the bootstrap's reason rather
     # than a new one: no battery ran, so nothing answered. SimForge returns the PASS
     # because The Office posted the outcome, and `basis` is what tells a reader that -
-    # entry 146. The CHECK in 0050 carries the same exemption.
+    # entry 147. The CHECK in 0050 carries the same exemption.
     digest, temperature, max_tokens = _model_scalars(model_identity)
     if attested_by == "simforge" and attestation_ref is None and (
         state in (CERTIFIED, PROVISIONAL)
@@ -625,7 +625,7 @@ async def record_result(
                 None if attested_by == "bootstrap" or attestation_ref
                 else (model_identity or {}).get("fingerprint"),
                 # THE BASIS, AND IT IS DERIVED HERE RATHER THAN TAKEN FROM A CALLER.
-                # Ruled 21 September 2026, entry 146: a reader can always tell an
+                # Ruled 21 September 2026, entry 147: a reader can always tell an
                 # attested certification from a tested one.
                 #
                 # `attestation_ref` is the fact and `basis` is its name - one argument,

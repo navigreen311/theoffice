@@ -58,7 +58,7 @@ WHO ATTESTS, MEASURED RATHER THAN INVENTED
     founder and it is the role the Forge-scope revocation already requires.
 
     The fixture holding it is a real finding and is not this migration's to fix. It is
-    recorded in decisions entry 146.
+    recorded in decisions entry 147.
 """
 
 from __future__ import annotations
@@ -121,7 +121,7 @@ def upgrade() -> None:
         'A named human with founder authority attesting, per department and Forge, that '
         'the escalation path and the compliance coupling are verified - with reasons. '
         'APPEND-ONLY: a correction is a new row, and the latest row for a pair is the '
-        'one in force. A STOP-GAP until a real hand-over test ships (entry 146).'
+        'one in force. A STOP-GAP until a real hand-over test ships (entry 147).'
     """)
     # Read by `current_attestation`, which takes the latest row per pair.
     op.create_index(
@@ -223,14 +223,14 @@ def upgrade() -> None:
         COMMENT ON CONSTRAINT certification_names_its_model ON certification IS
         'A tested certification names the model it was earned on, or it cannot expire '
         'when the model moves (0044). An attested one is exempt because none answered '
-        'it - the same exemption a bootstrap has, stated against basis (entry 146).'
+        'it - the same exemption a bootstrap has, stated against basis (entry 147).'
     """)
 
     op.execute("""
         COMMENT ON COLUMN certification.basis IS
         'tested: SimForge ran something. attested: a named human with founder authority '
         'said so, and attestation_ref names who and why. bootstrap: Phase 0.8, no '
-        'battery. A reader can always tell them apart (entry 146).'
+        'battery. A reader can always tell them apart (entry 147).'
     """)
 
     # SELECT AND INSERT, AND NOTHING ELSE. The trigger above refuses UPDATE and DELETE
@@ -259,7 +259,7 @@ def upgrade() -> None:
         'The attestation Gate 8 posted as this department unit''s outcome, or NULL. It '
         'is what lets the verdict sweep record the certification it produces as '
         'attested rather than tested - the verdict SimForge returns is identical '
-        'either way (entry 146).'
+        'either way (entry 147).'
     """)
 
 

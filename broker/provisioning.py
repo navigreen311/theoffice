@@ -1713,7 +1713,7 @@ async def _open_department_units(
             # that is allowed to be down.
             entry["error"] = str(exc)
 
-        # THE ATTESTATION IN FORCE, OR NONE. Ruled 21 September 2026, entry 146.
+        # THE ATTESTATION IN FORCE, OR NONE. Ruled 21 September 2026, entry 147.
         #
         # A department run submits no curriculum, so nothing runs and no verdict is ever
         # earned. Until a hand-over test exists, a named human with founder authority
@@ -1802,7 +1802,7 @@ async def _open_department_units(
             # WHICH ATTESTATION THIS UNIT WAS POSTED WITH, and it is the only thing that
             # will distinguish the verdict when it comes back. SimForge returns a PASS
             # that is byte-identical whether a battery earned it or a person attested it,
-            # so the sweep reads this column to know which it is holding (entry 146).
+            # so the sweep reads this column to know which it is holding (entry 147).
             #
             # Written only when the outcome actually went over the wire. An attestation
             # that existed and was not posted did not produce the verdict, and a row
@@ -2113,7 +2113,7 @@ async def _gate_9(ctx: _Context) -> GateOutcome:
             {"grants": 0, "withheld_revoked": len(withheld)},
         )
 
-    # WHAT ENDS THE STOP-GAP. Ruled 21 September 2026, entry 146: when a real
+    # WHAT ENDS THE STOP-GAP. Ruled 21 September 2026, entry 147: when a real
     # hand-over test ships, attested unit-B certifications stop counting here and must
     # be re-earned.
     #

@@ -756,7 +756,7 @@ async def _ingest_one(
                 # sends 0 instead of inventing a denominator.
                 agent_model=result.agent_model,
                 # THE BASIS, CARRIED FROM THE SUBMISSION. Ruled 21 September 2026,
-                # entry 146: a certification records whether it was attested or tested,
+                # entry 147: a certification records whether it was attested or tested,
                 # and a reader can always tell them apart.
                 #
                 # Read off the row rather than off the verdict, because the verdict

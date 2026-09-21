@@ -1,6 +1,6 @@
 """Unit B by named-human attestation: the basis, the authority, and what ends it.
 
-RULED 21 SEPTEMBER 2026 (entry 146)
+RULED 21 SEPTEMBER 2026 (entry 147)
 ===================================
 
     *"A certification records its basis: attested or tested, the attester by name, and
@@ -72,7 +72,7 @@ async def conn(operator) -> AsyncIterator:
 async def founder(world) -> humans.Human:
     """A human holding `ivan` - founder authority, unscoped.
 
-    NOT A NEW ROLE, and that is the measurement entry 146 rests on: `office_human_role`
+    NOT A NEW ROLE, and that is the measurement entry 147 rests on: `office_human_role`
     has held `('venture_operator', 'compliance_officer', 'ivan')` since 0010, and `ivan`
     is top of `ROLE_RANK`. It is named for the founder and it is what a Forge-scope
     revocation already requires.

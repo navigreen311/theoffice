@@ -182,13 +182,13 @@ EVENTS: tuple[Event, ...] = (
           "that the escalation path and the compliance coupling are verified - with a "
           "reason for each. A STOP-GAP standing in for a hand-over test that does not "
           "exist yet, and the subject carries both reasons so this event and the "
-          "append-only table disagree if either is altered (entry 146).",
+          "append-only table disagree if either is altered (entry 147).",
           "broker.attestation", PROVISIONING),
     Event("department_outcomes_posted", "Department outcomes posted to SimForge",
           "Gate 8 sent a unit-B outcome built from an attestation. It is the only call "
           "that tells SimForge a result rather than asking for one, and it exists "
           "because a department run submits no curriculum, so nothing runs and no "
-          "verdict is ever earned (entry 146).",
+          "verdict is ever earned (entry 147).",
           "broker.simforge", PROVISIONING),
     Event("provisioning_run_rejected", "Run rejected",
           "A reviewer refused the run at a gate.",

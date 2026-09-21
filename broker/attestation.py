@@ -1,6 +1,6 @@
 """Unit B by named-human attestation — the stop-gap, and the thing that ends it.
 
-RULED 21 SEPTEMBER 2026 (decisions entry 146)
+RULED 21 SEPTEMBER 2026 (decisions entry 147)
 =============================================
 
     *"A certification records its basis: attested or tested, the attester by name, and

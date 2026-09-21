@@ -168,7 +168,7 @@ def wipe_venture(conn: psycopg.Connection, venture_id: str) -> None:
 
         # `department_attestation` LAST, and with its guard down.
         #
-        # Append-only by trigger for everyone including the owner (entry 146), so a test
+        # Append-only by trigger for everyone including the owner (entry 147), so a test
         # venture could never be reset and rows from one suite would be in force for
         # every later one - which is how `post_gate_result` came to be called from a
         # suite that has no attestations in it.
