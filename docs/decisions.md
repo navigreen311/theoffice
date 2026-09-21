@@ -11759,7 +11759,7 @@ result."* The issue names both halves. The cap lifts when the second half closes
 the result can carry the difference - and the first half is what the consent model is
 for.
 
-## NEXT. Read, and approved again — two dates on one set of keys
+## 139. Read, and approved again — two dates on one set of keys
 
 **Ruled by Ivan Green, 20 September 2026:** *"I approve both keys. Flip `buyer_match` and
 `property_lookup` to approved, `approved_by` 'Ivan Green', dated today."*
