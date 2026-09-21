@@ -13,19 +13,21 @@
 # the five keys. `drafted_by` stays: who wrote it and who approved it are two facts and
 # the file records both. See docs/decisions.md.
 
-# CONTENT CORRECTED 20 September 2026 - BACK TO DRAFT, entry 137.
+# RE-APPROVED by Ivan Green, 20 September 2026, after reading the corrected scenarios.
 #
-# `status` returns to `draft` and `approved_by`/`approved_on` are removed. This is NOT the
-# bookkeeping of entry 133, where five act words came out of option lists and the approval stood:
-# there the fact was identical and only a word that named an act was removed. Here WHAT A CORRECT
-# ANSWER IS has changed, and Ivan has not read the new prose. An approval that survived that would
-# be the rubber stamp `status` exists to prevent (entry 126).
+# This key was returned to draft on the same day (entry 137) because WHAT A CORRECT ANSWER IS
+# had changed under it, and an approval that survived that would be the rubber stamp `status`
+# exists to prevent. Re-approval is a reading, not a flag flip, and this is the reading.
 #
-# Re-approval is a reading, not a flag flip.
+# `approved_on` is 20 September and NOT 18, which is the field doing its job: the other three
+# Greenstone keys still carry 18 September, and an approval dated then would claim Ivan read
+# prose that did not exist yet (entry 126).
 
 module_id: buyer_match
 forge_id: cre-forge
-status: draft
+status: approved
+approved_by: "Ivan Green"
+approved_on: "2026-09-20"
 drafted_by: "Claude"
 supersedes: "the approved 5-scenario key, 17 September 2026"
 revised: "18 September 2026, ADR-0080 ruling 3"
