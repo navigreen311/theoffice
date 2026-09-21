@@ -180,29 +180,52 @@ def test_a_draft_note_does_not_move_the_hash(tmp_path):
 
 # ------------------------------------------------------------ the five, as they stand
 
-def test_all_five_greenstone_approvals_match_their_text():
-    """Backfilled 20 September from the text each one covers now."""
+def test_every_greenstone_approval_matches_its_text():
+    """Backfilled 20 September from the text each one covers now.
+
+    Three keys, not five: `comp_analysis` and `property_lookup` returned to draft on 21
+    September, and a draft records no hash. **Their absence is asserted rather than
+    skipped** - a draft carrying an approval hash is exactly the stale approval entry
+    141 exists to refuse, and it would be invisible to a loop that only checked the
+    approved ones.
+    """
     loaded = sc.load_all()
+    checked = 0
     for module_id in GREENSTONE:
-        content = loaded.for_module(module_id)
-        assert content is not None
+        content = loaded.modules[module_id]
+        if content.status != sc.APPROVED:
+            assert not content.approved_content_hash, (
+                f"{module_id} is a draft and records an approval hash"
+            )
+            continue
         assert content.approved_content_hash, f"{module_id} records no hash"
         assert content.approved_content_hash == sc.approved_content_hash(
             content.scenarios, content.not_applicable
         )
+        checked += 1
+    assert checked == 3, f"expected three approved Greenstone keys, checked {checked}"
 
 
-def test_the_two_approvals_of_20_september_no_longer_read_alike():
-    """**The case that produced the ruling.**
+def test_no_two_approvals_read_alike():
+    """**The case that produced the ruling, asserted over whatever is approved now.**
 
-    `buyer_match` and `property_lookup` were both approved on 20 September. The date
-    cannot tell them apart and never could; the hash does, and so would two approvals of
-    one key on one day - which is what entry 140 found the date could not do.
+    `buyer_match` and `property_lookup` were both approved on 20 September, and the date
+    could not tell them apart - which is what entry 140 found and what the hash answers.
+    `property_lookup` went back to draft on the 21st, so that exact pair no longer
+    exists; pinning the test to it would have made it pass by having nothing to compare.
+
+    So it asserts the property rather than the incident: **no two approved keys share a
+    hash**, on any date. That is the claim the ruling makes, and it survives the next key
+    going to draft as well as this one did not.
     """
     loaded = sc.load_all()
-    same_day = [
-        loaded.for_module(m) for m in GREENSTONE
-        if loaded.for_module(m).approved_on == "2026-09-20"
+    approved = [
+        loaded.modules[m] for m in GREENSTONE
+        if loaded.modules[m].status == sc.APPROVED
     ]
-    assert len(same_day) == 2
-    assert same_day[0].approved_content_hash != same_day[1].approved_content_hash
+    assert len(approved) >= 2, "fewer than two approvals; nothing to compare"
+    hashes = [c.approved_content_hash for c in approved]
+    assert len(set(hashes)) == len(hashes), (
+        "two approved keys carry the same content hash: "
+        f"{sorted(c.module_id for c in approved)}"
+    )

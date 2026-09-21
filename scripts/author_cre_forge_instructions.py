@@ -128,8 +128,20 @@ PROPERTY_LOOKUP = {
         "Never treat result order as ranking, relevance or recommendation.",
         "Never report `asking_price` as a value, an appraisal or a fair price. It is a "
         "listing figure entered by a person.",
-        "Never widen a search by raising `page_size` past 100 and assuming it worked. "
-        "The cap is silent.",
+        # SPLIT INTO ITS ACT AND ITS ASSUMPTION - ruled by Ivan Green, 21 September
+        # 2026. The old wording prohibited both halves in one sentence and the act is
+        # not the offence: `page_size` is agent-supplied and the adapter caps it at 100
+        # (`forge.py:120-123`), so asking for 500 is a legitimate way to ask for as much
+        # as the Forge will give. What is forbidden is believing the number you sent.
+        #
+        # The `inputs` section already said this in its own words - "ALWAYS READ
+        # page_size BACK from the response rather than assuming the request was
+        # honoured" - and the prohibition contradicted it by naming the raise as the
+        # thing never to do.
+        "Never assume the `page_size` you sent is the one that ran. Raising it past 100 "
+        "is permitted and is not the error: the adapter caps it at 100 silently and "
+        "answers 200 with no warning, so read `page_size` back from the response before "
+        "reporting anything about the size of the set.",
     ],
     "retry_vs_escalate": (
         "RETRY FREELY. It is a pure read: nothing is written, nothing is sent, and a "

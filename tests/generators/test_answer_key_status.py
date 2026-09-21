@@ -182,22 +182,52 @@ GREENSTONE = (
 )
 
 
-def test_greenstones_five_are_approved_and_carry_all_44_scenarios():
-    """**Approved by Ivan Green on 18 September 2026**, and three of the five still are.
+#: Returned to draft on 21 September 2026 so Ivan can read three rewrites: an escalation
+#: on each that asked for something no person could authorise, and `property_lookup`'s
+#: prohibition 5 split into its act and its assumption. Nothing in that change is
+#: approved, and entry 141 refuses an approval whose hash does not match its own body -
+#: so the header came off rather than being recomputed.
+DRAFTED_21_SEPTEMBER = ("comp_analysis", "property_lookup")
+
+#: What is left approved, with the date each one was read.
+STILL_APPROVED = {
+    "assign_contract": "2026-09-18",
+    "buyer_match": "2026-09-20",
+    "underwrite_deal": "2026-09-18",
+}
+
+def test_greenstones_three_approved_keys_carry_their_own_dates():
+    """**Three of the five, and the round trip is the point.**
 
     All five were approved on the 17th, superseded by SimForge's split keys the same
-    week, drafted again until he had read the replacements, and approved on the 18th.
-    Entry 137 then returned `buyer_match` and `property_lookup` to draft, because
-    correcting what a right answer IS is not the bookkeeping entry 133 did.
+    week, drafted again until he had read the replacements, approved on the 18th, two of
+    them corrected and re-approved on the 20th - and on the 21st two went back to draft
+    again for three rewrites nobody has read.
 
-    That round trip is the whole reason `status` exists: no approval here has ever
-    carried forward to prose nobody had read.
+    That round trip is the whole reason `status` exists: **no approval here has ever
+    carried forward to prose nobody had read**, and this test is the record of which way
+    each key is facing today rather than an assertion that they all face one way.
+
+    `total` is still 44. The rewrites replaced text inside scenarios; they added none
+    and removed none.
     """
     loaded = sc.load_all()
     total = 0
     for module_id in GREENSTONE:
-        content = loaded.for_module(module_id)
-        assert content is not None, f"{module_id} is approved and still withheld"
+        content = loaded.modules[module_id]
+        if module_id in DRAFTED_21_SEPTEMBER:
+            assert content.status == sc.DRAFT
+            # WITHHELD FROM `for_module`, which is the accessor's whole job: a draft is
+            # not offered to anything that asks for a usable key.
+            assert loaded.for_module(module_id) is None
+            assert content.approved_by == "" and content.approved_on == ""
+            assert not content.approved_content_hash, (
+                f"{module_id} is a draft and still records an approval hash; entry 141 "
+                "refuses a hash over text nobody approved"
+            )
+            total += sum(len(v) for v in content.scenarios.values())
+            continue
+        assert loaded.for_module(module_id) is content
         assert content.status == sc.APPROVED
         assert content.approved_by == "Ivan Green"
         # Two dates, because there were two readings. `buyer_match` and
@@ -205,11 +235,7 @@ def test_greenstones_five_are_approved_and_carry_all_44_scenarios():
         # 139); the other three have stood since the 18th. The date is asserted per
         # key rather than as one constant, which is what stops a re-approval being
         # backdated onto prose that did not exist when it was given.
-        expected_on = (
-            "2026-09-20" if module_id in ("buyer_match", "property_lookup")
-            else "2026-09-18"
-        )
-        assert content.approved_on == expected_on
+        assert content.approved_on == STILL_APPROVED[module_id]
         total += sum(len(v) for v in content.scenarios.values())
 
         accounted = set(content.scenarios) | set(content.not_applicable)
@@ -231,10 +257,13 @@ def test_burkhams_twenty_are_still_drafts_of_their_own():
     """
     loaded = sc.load_all()
     drafts = loaded.drafts()
-    assert len(drafts) == 20, f"expected Burkham's 20 still drafted, found {len(drafts)}"
-    # Asserted by exclusion, so a Greenstone key slipping back to draft cannot hide inside
-    # Burkham's total. All five are approved again as of 20 September.
-    assert not (set(drafts) & set(GREENSTONE))
+    burkham = set(drafts) - set(GREENSTONE)
+    assert len(burkham) == 20, f"expected Burkham's 20, found {len(burkham)}"
+    # NAMED, not counted by subtraction. A bare total would let a third Greenstone key
+    # slip back to draft and hide inside it - which is what the old `not (drafts &
+    # GREENSTONE)` was guarding against when every Greenstone key was approved. Two are
+    # drafts now, so the guard has to name which two rather than forbid the set.
+    assert set(drafts) & set(GREENSTONE) == set(DRAFTED_21_SEPTEMBER)
     assert all(c.approved_by == "" and c.approved_on == "" for c in drafts.values())
 
 

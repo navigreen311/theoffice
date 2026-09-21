@@ -46,7 +46,12 @@ from tests.approval import approved_header
 
 #: A real Greenstone module with an approved key, so the fixtures are not the only
 #: thing this file has ever seen. Its hash is read, never written here.
-LIVE_MODULE = "property_lookup"
+#:
+#: **Was `property_lookup` until 21 September**, when that key went back to draft for
+#: three rewrites - and a draft has no approved hash to compare a ref against, which is
+#: `_stale_key`'s third answer rather than a failure. `buyer_match` is the approved key
+#: whose live ref segment (`k0049a8e5ddab`) is on the submissions of 21 September.
+LIVE_MODULE = "buyer_match"
 
 _BODY = """
 scenarios:

@@ -176,27 +176,37 @@ def test_every_greenstone_key_is_approved_and_carries_its_own_date():
     and `property_lookup` to draft, because what a CORRECT ANSWER IS had changed under
     them - and Ivan re-approved those two on 20 September after reading the new prose.
 
-    So three keys carry the 18th and two carry the 20th. An approval dated the 18th on
-    the corrected pair would claim he read prose that did not exist yet, which is the
-    whole reason `approved_on` is a separate required field (entry 126).
+    An approval dated the 18th on a key corrected afterwards would claim he read prose
+    that did not exist yet, which is the whole reason `approved_on` is a separate
+    required field (entry 126).
+
+    **Two of the five carry no date at all now**, and that is the same field working
+    from the other side: `comp_analysis` and `property_lookup` went back to draft on 21
+    September for rewrites nobody has read, so there is nothing for a date to be about.
     """
     loaded = sc.load_all()
-    # Three keys carry the 18th; `buyer_match` and `property_lookup` carry the 20th,
-    # having each been corrected and read again. `property_lookup` was corrected TWICE
-    # on the 20th (entries 139 and 140) and both approvals carry that one date - the
-    # field has day resolution and the ledger is what separates those two readings.
+    # `assign_contract` and `underwrite_deal` have stood since the 18th. `buyer_match`
+    # carries the 20th, having been corrected and read again. The two empty strings are
+    # drafts - an unread key records no reader and no date.
     dated = {
         "assign_contract": "2026-09-18",
-        "comp_analysis": "2026-09-18",
         "underwrite_deal": "2026-09-18",
         "buyer_match": "2026-09-20",
-        "property_lookup": "2026-09-20",
+        "comp_analysis": "",
+        "property_lookup": "",
     }
     for module_id in GREENSTONE:
         content = loaded.modules[module_id]
-        assert content.status == sc.APPROVED
-        assert content.approved_by == "Ivan Green"
+        # An empty date and an empty name travel together, and they travel with
+        # `status: draft`. A key claiming a reader and no date, or a date and no reader,
+        # is the half-recorded approval entry 126 added the field to stop.
+        if not dated[module_id]:
+            assert content.status == sc.DRAFT
+            assert content.approved_by == ""
+        else:
+            assert content.status == sc.APPROVED
+            assert content.approved_by == "Ivan Green"
         assert content.approved_on == dated[module_id], (
-            f"{module_id} is approved on {content.approved_on}, "
-            f"expected {dated[module_id]}"
+            f"{module_id} is approved on {content.approved_on!r}, "
+            f"expected {dated[module_id]!r}"
         )
