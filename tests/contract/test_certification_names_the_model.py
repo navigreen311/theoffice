@@ -124,9 +124,9 @@ async def test_the_database_refuses_it_too_when_nothing_goes_through_record_resu
             INSERT INTO certification
               (cert_id, unit, office_agent_id, forge_id, module_id, state,
                certified_tier, instruction_content_hash, forge_api_version,
-               rubric_kind, rubric_version, simforge_verdict, agent_model)
+               rubric_kind, rubric_version, simforge_verdict, basis, agent_model)
             VALUES (%s, 'A', %s, %s, %s, 'certified', 'auto_execute', %s, %s,
-                    'operation', '1.4.0', 'PASS', %s)
+                    'operation', '1.4.0', 'PASS', 'tested', %s)
             """,
             (uuid.uuid4(), seed_agent, FORGE, MODULE, "a" * 64, "1.4.0", MODEL),
         )

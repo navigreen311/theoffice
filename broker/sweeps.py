@@ -755,6 +755,16 @@ async def _ingest_one(
                 # a fact - the same rule `functions_in_module` follows when The Office
                 # sends 0 instead of inventing a denominator.
                 agent_model=result.agent_model,
+                # THE BASIS, CARRIED FROM THE SUBMISSION. Ruled 21 September 2026,
+                # entry 146: a certification records whether it was attested or tested,
+                # and a reader can always tell them apart.
+                #
+                # Read off the row rather than off the verdict, because the verdict
+                # cannot say: SimForge returns the same PASS whether a battery produced
+                # it or The Office posted a named human's attestation as the outcome.
+                # `attestation_id` is written by Gate 8 only when the outcome actually
+                # went over the wire.
+                attestation_ref=sub.get("attestation_id"),
                 # The candidate in full, straight from the verdict and never
                 # defaulted - same rule as `agent_model` on the line above. A model
                 # identity this sweep assembled would be a guess about what answered,

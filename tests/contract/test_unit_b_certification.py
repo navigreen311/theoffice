@@ -324,8 +324,9 @@ def test_the_two_unit_constraints_are_live_in_this_database(
 
     insert = """
         INSERT INTO certification
-          (cert_id, unit, department, forge_id, state, rubric_kind, rubric_version)
-        VALUES (%s, 'B', %s, %s, 'failed', %s, '3.2.0')
+          (cert_id, unit, department, forge_id, state, rubric_kind, rubric_version,
+           basis)
+        VALUES (%s, 'B', %s, %s, 'failed', %s, '3.2.0', 'bootstrap')
     """
     # B with no department: `unit_targets_match` reads `B -> department NOT NULL`.
     with (

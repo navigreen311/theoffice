@@ -42,6 +42,15 @@
       "already_open": "True when this ref was already open and the clock was NOT restarted. The signal that a retried hand-over did not extend a hanging run's window."
     }
   },
+  "post_gate_result": {
+    "purpose": "Acknowledge a gate result The Office POSTED. Unit B only, and a stop-gap: The Office sends department_outcomes built from a named human's attestation because no hand-over test exists to produce one (entry 147). The Office reads the verdict back through the ordinary sweep, so nothing here is a certification.",
+    "fields": {
+      "run_ref": "Echo of the ref The Office minted for the department unit. Correlation only.",
+      "accepted": "Boolean. Whether SimForge recorded the outcome. A refusal is a non-200 carrying its own reason.",
+      "recorded": "How many outcomes were written. A count, never content.",
+      "status": "Short enum-like acknowledgement. Never scenario text and never a verdict - the verdict is read back through get_gate_result, on the same path every other verdict travels."
+    }
+  },
   "get_gate_result": {
     "purpose": "The verdict of a certification run.",
     "fields": {
@@ -57,7 +66,7 @@
       "coverage_denominator": "How many there were. Report the denominator.",
       "completed_at": "When the run finished. A timestamp carries no scenario content.",
       "agent_model": "provider/model that answered the battery, e.g. ollama/llama3.1:8b. Provenance, never content: it names the candidate, not what it said. Required in the record by certified_records_its_basis whenever a real verdict arrives.",
-   "model_identity": "The candidate in FULL, where agent_model is only its label: {provider, model, file_digest, file_size_bytes, parameter_size, quantization, settings, fingerprint}. Village agents run on local models, and a certification counts only if it was earned on the exact model the agent runs in production - the same tag re-pulled at a different quantization, or served at a different temperature, produces the identical agent_model string and a different candidate. Provenance, never content: a sha256 of a weights file, a byte count, a quantization code like Q4_K_M, and the generation settings SimForge sent (temperature, token cap, seed). It names what answered and carries nothing it said. The fingerprint is a hash over the whole record, so re-certification on drift is a string comparison. See SimForge ADR-0060."
+      "model_identity": "The candidate in FULL, where agent_model is only its label: {provider, model, file_digest, file_size_bytes, parameter_size, quantization, settings, fingerprint}. Village agents run on local models, and a certification counts only if it was earned on the exact model the agent runs in production - the same tag re-pulled at a different quantization, or served at a different temperature, produces the identical agent_model string and a different candidate. Provenance, never content: a sha256 of a weights file, a byte count, a quantization code like Q4_K_M, and the generation settings SimForge sent (temperature, token cap, seed). It names what answered and carries nothing it said. The fingerprint is a hash over the whole record, so re-certification on drift is a string comparison. See SimForge ADR-0060."
     }
   },
   "get_certification_status": {
