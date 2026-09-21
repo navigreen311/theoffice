@@ -52,6 +52,7 @@ from broker.errors import (
     NotAuthorized,
     NotCertified,
     NotGranted,
+    NoTierPlanned,
     UnknownForge,
 )
 
@@ -331,6 +332,15 @@ async def resolve_grant(
     # Part 10.1: "The Pack declares a ceiling; SimForge sets the actual." Applied
     # live rather than at grant issuance, so a cert downgraded after the grant was
     # written takes effect on the next call - same reason revocation is not cached.
+    if row["trust_tier"] is None:
+        # Entry 145 / 0049. See `NoTierPlanned`: this is an exam ticket, and there is no
+        # planned authority for `cap_tier` to cap.
+        raise NoTierPlanned(
+            "grant plans no trust tier; it was issued for an exam and confers nothing",
+            grant_id=str(row["grant_id"]),
+            module_id=module_id,
+        )
+
     certified_tier = row["unit_a_tier"]
     effective_tier = cap_tier(row["trust_tier"], certified_tier)
 

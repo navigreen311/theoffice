@@ -667,10 +667,24 @@ async def test_gate_11_does_not_activate_a_revoked_grant(
     """**The defect.** A revoked grant must not come back active.
 
     The call path would refuse it either way - `check_revocations` runs first in
-    `resolve_grant` - so this is not about authority. It is about the record: without
-    the fix the row carries a documented revocation AND `activated_by = <the signer>`,
-    with no ordering visible in either, and the signer is recorded as having activated
-    what they revoked.
+    `resolve_grant` - so this is not about authority. It is about the record: the row
+    must not carry a documented revocation AND `activated_by = <the signer>`, with no
+    ordering visible in either, so that the signer is recorded as having activated what
+    they revoked.
+
+    **THE REFUSAL MOVED EARLIER ON 21 SEPTEMBER, AND GOT STRONGER.** Entry 145 made
+    revocation part of eligibility, so revoking now changes appointment output; the
+    artifacts hash moves with it and the Gate 10 signature that covered the old set goes
+    VOID. The run stops at 10 and never reaches 11.
+
+    That is the correct answer and not an evasion: a signature attests to a set of
+    artifacts, and the set this one attested to no longer describes who holds which
+    seat. Gate 11's own revocation predicate is still there and still right - it is now
+    belt to the signature's braces, and `covered_grants` remains its one spelling of
+    "covered".
+
+    `test_gate_11_refuses_a_grant_whose_certification_is_not_current` is what exercises
+    Gate 11's predicates directly, by changing something appointment does not read.
     """
     async with connection() as conn:
         run_id = await _to_gate_10(conn, operator, signer)
@@ -708,27 +722,127 @@ async def test_gate_11_does_not_activate_a_revoked_grant(
             )
             activated_total = (await cur.fetchone())[0]
 
-    gate_11 = next(o for o in outcomes if o.gate == "11")
-    assert gate_11.verdict == provisioning.PASSED, (
-        "a revoked grant is not a reason to block the venture - the other grants are "
-        "fine and the run should complete"
+    assert [o.gate for o in outcomes] == ["10"], (
+        "a revocation changes who is eligible, so the artifacts changed and the Gate 10 "
+        "signature is void. The run must stop there rather than reaching activation "
+        f"with a signature over a different set: {[(o.gate, o.verdict) for o in outcomes]}"
     )
+    gate_10 = outcomes[0]
+    assert gate_10.verdict != provisioning.PASSED
+    assert "VOID" in gate_10.reason or "void" in gate_10.reason
 
     assert revoked_row is not None
     assert revoked_row[0] is None, (
-        "Gate 11 activated a grant covered by a live revocation. The call path still "
-        "refuses it, so nothing is exercisable - but the row now says this human both "
-        "revoked and activated it, and the audit trail cannot say which came first."
+        "the revoked grant was activated. The call path still refuses it, so nothing is "
+        "exercisable - but the row now says this human both revoked and activated it"
     )
-    assert revoked_row[1] is None, "and nobody should be recorded as its activator"
+    assert revoked_row[1] is None
+    assert activated_total == 0, (
+        "no grant may be activated on this run at all: the signature covering them "
+        "describes an appointment that no longer holds"
+    )
 
-    assert activated_total == len(grants) - 1
-    assert gate_11.evidence["withheld_revoked"] == 1
-    assert gate_11.evidence["activated"] == len(grants) - 1
-    # The reason line, not only the evidence: "N activated" reads the same to somebody
-    # who does not know one was withheld.
-    assert "NOT activated" in gate_11.reason
-    assert "agent_module" in gate_11.reason
+async def test_gate_11_refuses_a_grant_whose_certification_is_not_current(
+    feasible_pack, operator, signer, admin: psycopg.Connection
+):
+    """**Certification is required at Gate 11, where authority is granted** - entry 145.
+
+    Gate 11 never asked. It did not need to: Gate 4.5 seated only certified agents, so
+    an uncertified grant could not exist by the time a run got here, and Gate 9 blocks a
+    run whose units are not certified anyway. Entry 145 made such a grant reachable -
+    4.5 now seats a candidate who can sit the exam, and Gate 5 issues its grant inactive
+    - so the test moved to where the ruling puts it.
+
+    THE GRANT IS REPOINTED, NOT THE CERTIFICATION
+    =============================================
+
+        `appointment.generate` reads `certification` and never reads
+        `agent_forge_grant`. So demoting the certification an appointment rests on would
+        change the artifacts, move the hash and void the signature, and the run would
+        stop at Gate 10 for a different reason - which is what
+        `test_gate_11_does_not_activate_a_revoked_grant` now demonstrates.
+
+        Repointing a GRANT at a `failed` certification changes nothing appointment
+        reads. The artifacts are byte-identical, the signature stands, Gate 11 runs, and
+        the only question left is the one this test is about.
+    """
+    failed_cert = uuid.uuid4()
+    async with connection() as conn:
+        run_id = await _to_gate_10(conn, operator, signer)
+
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "SELECT grant_id, office_agent_id, forge_id, module_id "
+                "  FROM agent_forge_grant WHERE venture_id = %s ORDER BY granted_at",
+                (VENTURE,),
+            )
+            grants = list(await cur.fetchall())
+        assert len(grants) >= 2, "this test needs a grant to spoil and one to spare"
+        target, agent_id, forge_id, module_id = grants[0]
+
+        async with conn.cursor() as cur:
+            # A unit-A certification in a state nobody may act on. `failed` rather than
+            # `in_training` because it is the one a reader is most likely to mistake for
+            # settled: the exam ran, and it said no.
+            await cur.execute(
+                # `agent_model` because `certified_records_its_basis` requires a
+                # terminal verdict to name what answered - a FAIL is still a claim
+                # about a model that sat the exam.
+                "INSERT INTO certification "
+                "  (cert_id, unit, office_agent_id, forge_id, module_id, state, "
+                "   rubric_kind, rubric_version, simforge_verdict, agent_model) "
+                "VALUES (%s, 'A', %s, %s, %s, 'failed', 'operation', '0.4.0', 'FAIL', "
+                "        'ollama/phi4:latest') "
+                "ON CONFLICT (office_agent_id, forge_id, module_id) WHERE unit = 'A' "
+                "  DO UPDATE SET state = 'failed', simforge_verdict = 'FAIL' "
+                "RETURNING cert_id",
+                (failed_cert, agent_id, forge_id, f"{module_id}_spoiled"),
+            )
+            row = await cur.fetchone()
+            assert row is not None
+            await cur.execute(
+                "UPDATE agent_forge_grant SET operation_cert_ref = %s "
+                " WHERE grant_id = %s",
+                (str(row[0]), target),
+            )
+        await conn.commit()
+
+        outcomes = await provisioning.advance(
+            conn, run_id=run_id, actor=operator.human_id, held_out=HeldOutPasses()
+        )
+
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "SELECT activated_at, activated_by FROM agent_forge_grant "
+                " WHERE grant_id = %s", (target,),
+            )
+            spoiled = await cur.fetchone()
+            await cur.execute(
+                "SELECT count(*) FROM agent_forge_grant "
+                " WHERE venture_id = %s AND activated_at IS NOT NULL", (VENTURE,),
+            )
+            activated_total = (await cur.fetchone())[0]
+
+    gate_11 = next((o for o in outcomes if o.gate == "11"), None)
+    assert gate_11 is not None, (
+        "the run did not reach Gate 11, so this test asserted nothing about it: "
+        f"{[(o.gate, o.verdict) for o in outcomes]}"
+    )
+
+    assert spoiled is not None
+    assert spoiled[0] is None, (
+        "Gate 11 activated a grant whose unit-A certification reads `failed`. The call "
+        "path still refuses it - `resolve_grant` checks the STATE - but the row now "
+        "asserts a named human granted production authority over an exam that was sat "
+        "and not passed"
+    )
+    assert spoiled[1] is None
+
+    # THE TEST THAT KEEPS THIS A REFUSAL RATHER THAN A STOP. A predicate that activated
+    # nothing would satisfy the assertion above and end provisioning on the platform.
+    assert activated_total > 0, (
+        "no grant was activated at all; the certified ones must still be"
+    )
 
 
 async def test_gate_11_still_activates_everything_when_nothing_is_revoked(

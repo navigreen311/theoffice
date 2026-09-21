@@ -2299,6 +2299,12 @@ async def validate_gate_4_5(
 
     V24 also resolves here — unfilled positions are appointment output, so Gate 2
     reported it NOT_RUN.
+
+    **V24 counts eligibility, not certification, since 21 September 2026 (entry 145).**
+    It reads the same field it always has; what a seat may be filled by is decided in
+    `generators.appointment`, and this rule deliberately does not re-derive it. A second
+    definition of "eligible" here would be a second answer to a question that must have
+    one - the same argument `revocation._covers` makes about itself.
     """
     report = ValidationReport()
 
@@ -2307,6 +2313,34 @@ async def validate_gate_4_5(
         for a in appointment.appointments
         if a.unfilled and not a.pending
     ]
+    # WHAT THIS RULE COUNTS, AND WHAT IT STOPPED COUNTING. Ruled 21 September 2026,
+    # entry 145: Gate 4.5 checks that every seat has a candidate ELIGIBLE TO SIT THE
+    # EXAM. `unfilled` is still the whole of the test - what changed is upstream, in
+    # what `generators.appointment` is willing to seat.
+    #
+    # The uncertified count is named in the same sentence rather than left to the gap
+    # report, because "every seat has a candidate" and "every seat can operate today"
+    # are different claims and this rule now makes only the first. A reader who sees
+    # a PASS and no second clause would take it for the second.
+    uncertified = sum(
+        1 for a in appointment.appointments for agent in a.appointed
+        if not agent.certified
+    )
+    awaiting = (
+        f" {uncertified} appointed candidate(s) hold an exam ticket and no "
+        "certification; Gate 11 refuses authority until SimForge says otherwise."
+        if uncertified else ""
+    )
+    # THE TIE-BREAK IS REPORTED, NEVER SILENT. Ruled 21 September 2026.
+    #
+    # In the rule's own sentence and not only on the artifact. A seat decided by
+    # alphabetical order is a decision about who operates a venture, and a reader of a
+    # PASS has no other place to find out that one was taken.
+    ties = [
+        f"{a.position_title}: {a.tie_break}"
+        for a in appointment.appointments if a.tie_break
+    ]
+    broke = f" TIE-BREAK - {'; '.join(ties)}." if ties else ""
     # NAMED, NOT SILENTLY SKIPPED.
     #
     # A pending position is not a shortfall - it is a decision - so it does not fail this
@@ -2326,8 +2360,9 @@ async def validate_gate_4_5(
             "V24", Severity.FAIL,
             Verdict.FAIL if unfilled else Verdict.PASS,
             (f"unfilled positions: {_join(unfilled)}" if unfilled
-             else "every position is filled by a certified agent or declared pending")
-            + deferred,
+             else "every position has a candidate eligible to sit its exam, or is "
+                  "declared pending")
+            + deferred + awaiting + broke,
         )
     )
 

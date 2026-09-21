@@ -78,7 +78,17 @@ def generate(
         for position in appointment.appointments:
             ceiling = tier_by_title.get(position.position_title, "suggest")
             for agent in position.appointed:
-                for module in agent.certified_modules:
+                # EVERY MODULE THE POSITION OPERATES, not the certified subset. Ruled
+                # 21 September 2026, entry 145: the grant is the exam ticket, and
+                # issuing one only for modules already certified is what closed the
+                # loop - `_exam_takers` reads grants, so an uncertified agent was never
+                # examined and could never stop being uncertified.
+                #
+                # The grant is written INACTIVE either way. `resolve_grant` refuses it
+                # on certification state on every call, and Gate 11 refuses to activate
+                # it - so what this hands an uncertified agent is a seat at the exam and
+                # nothing else.
+                for module in agent.modules:
                     forge = module_forge.get(module, "UNREGISTERED")
                     # The declared ceiling FOR THIS MODULE. Absent from the map means the
                     # position's single ceiling, which is every Pack authored before
@@ -89,6 +99,13 @@ def generate(
                     declared = overrides_by_title.get(
                         position.position_title, {}
                     ).get(f"{forge}/{module}", ceiling)
+                    # NO CERTIFIED TIER MEANS NO PLANNED TIER. Ruled 21 September 2026.
+                    # `certified_tiers` omits a module the agent is not certified on, so
+                    # this is None for an exam ticket and the grant is written with a
+                    # NULL `trust_tier` (0049). A plan that claims authority nothing
+                    # earned reads as authority, and this column is what `resolve_grant`
+                    # caps a live call against.
+                    earned = agent.certified_tiers.get(f"{forge}/{module}")
                     grants.append(
                         PlannedGrant(
                             grant_id=str(
@@ -114,9 +131,8 @@ def generate(
                             #
                             # `_lower` rather than `min()` because these are ranked names, not
                             # numbers, and the ranking lives in one place.
-                            trust_tier=_lower(
-                                declared,
-                                agent.certified_tiers.get(f"{forge}/{module}", declared),
+                            trust_tier=(
+                                _lower(declared, earned) if earned is not None else None
                             ),
                         )
                     )

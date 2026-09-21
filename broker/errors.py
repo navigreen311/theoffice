@@ -43,6 +43,21 @@ class NotCertified(OfficeError):
     audit_event = "call_refused_not_certified"
 
 
+class NoTierPlanned(OfficeError):
+    """The grant plans no trust tier, so there is no authority to cap a call against.
+
+    **Its own type, for the reason `CertificationNamesNoModel` has one.** `NotCertified`
+    would say the certification is not current, and that is a different fact with a
+    different fix: this grant is an exam ticket issued to an agent who is not certified
+    for the module (entry 145), and it carries NULL rather than the declared ceiling
+    because a plan that claims authority nothing earned reads as authority.
+
+    Unreachable through a provisioned venture - Gate 11 will not activate such a grant
+    and `GrantNotActivated` fires first - and raised anyway, because "unreachable" is a
+    claim about two other controls staying correct.
+    """
+
+
 class CertificationNamesNoModel(OfficeError):
     """The certification passed, and nothing can say which model passed it.
 

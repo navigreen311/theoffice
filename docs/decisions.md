@@ -12313,3 +12313,236 @@ service being down where there is a missing field.
 The shape `build()` returns, so `_forge_build_warning`, Gate 8 and `mint_run_ref` are
 untouched. This is a transcription fix at one boundary, and the eleven tests that assert
 on the returned shape are the reason it could stay one.
+## 145. An exam ticket is not authority
+
+**Ruled by Ivan Green, 21 September 2026, superseding the blueprint's §5.2 as applied at
+Gate 4.5:** *"Gate 4.5 checks that every seat has a candidate eligible to sit the exam.
+Certification is required at Gate 11, where authority is granted. An appointment at 4.5
+issues an inactive grant and confers no authority; it is an exam ticket. 'Never
+auto-appoint uncertified agents' stands, meaning production authority. Measured: this
+circularity was recorded as entry 30 on 13 September and hidden by bootstrap
+certifications until real verdicts replaced them."*
+
+### The loop, and the day it became visible
+
+    4.5          V24 fails on any unfilled position
+    appointment  seats only an agent whose every module reads `certified`
+    5            grants are built from `position.appointed`
+    8            `_exam_takers` returns holders of a live grant, nobody else
+    sweep        writes a certification only for a `curriculum_submission` row
+    _record_submission   written only by Gate 8
+
+`certification.record_result` still has exactly two non-test callers, `bootstrap_phase0`
+and `sweeps`. So **no agent could ever become certified through the ladder without an
+off-ladder bootstrap certification.**
+
+Entry 30 recorded this on 13 September and called it a structural fact rather than a
+ruling. It stayed a paragraph for eight days because Greenstone's bootstrap rows made
+every seat look filled. On 20 September the first verdict-ingest sweep replaced them
+with what SimForge actually said — `record_result` upserts on
+`(office_agent_id, forge_id, module_id)`, so it overwrote rather than added — and three
+positions emptied at once:
+
+    Victor Serath     comp_analysis     certified -> in_training   IN_PROGRESS
+    Victor Serath     property_lookup   certified -> in_training   IN_PROGRESS
+    Ronan Valek       buyer_match       certified -> in_training   IN_PROGRESS
+    Ronan Valek       assign_contract   certified -> failed        FAIL
+    Seraphine Valek   buyer_match       certified -> in_training   IN_PROGRESS
+    Seraphine Valek   assign_contract   certified -> failed        FAIL
+
+Run `484f7f87` blocked at 4.5 with `certified and free: 0`. The Pack had not changed in
+any of the four runs either side of it.
+
+### Which "appointed", and why the test was at the wrong end
+
+The blueprint means production staffing. §5.2 is *"named agent appointed to each
+position"*, the output is a gap report for hiring decisions, and §7.2's three numbers
+are a staffing instrument.
+
+The code makes it the exam ticket. An appointment's only mechanical consequence is Gate
+5, and that gate says what it issues: *"`runtime_config.apply` writes them with
+`activated_at IS NULL`, so `is_assignable` is false and the call path refuses them.
+'Sandbox provisioning' that handed agents live authority would be production
+provisioning with a different label."*
+
+So an appointment confers no authority. What it confers is membership of `_exam_takers`.
+Authority arrives at Gate 11, when grants are activated — seven gates later, behind a
+Gate 10 signature and behind Gate 9's refusal to pass a unit that carries no SimForge
+PASS. **The certification test guarded the exam ticket; the thing it was written to
+guard was already guarded elsewhere.**
+
+### Eligible, precisely, and where each part is read from
+
+A candidate is eligible when all three hold. Each is something Gate 8 requires before it
+can open a run for that agent, and nothing else is:
+
+1. **`office_agent_identity.status = 'active'`, `department` = the position's
+   `source_department`.** Read by `appointment._candidates`. The same predicate
+   `_exam_takers` joins and Gate 11 requires.
+2. **Every module the position operates resolves to a Forge in
+   `forge_module_registry`.** Read by `appointment.module_forge_map`. Gate 8 skips a
+   module no Forge registers, by name, so nobody can sit it.
+3. **No live revocation covers `(agent, forge, module)` for any of those modules.** Read
+   by the new `revocation.covered_targets`. `_exam_takers` drops a revoked holder, so a
+   revoked candidate would fill a seat whose exam nobody ever sits.
+
+Certification is not in the list; that is the ruling. A live operating instruction is
+not in it either — Gate 6 blocks a module that has none, and restating it here would
+report a Gate 6 finding as an empty seat.
+
+`covered_targets` is `_covers` at a third cardinality, not a second spelling.
+`covered_grants` starts `FROM agent_forge_grant` and a candidate holds no grant yet, so
+it would have answered "uncovered" for every one of them.
+
+### What the gap report still says
+
+`AppointedAgent` gains two fields and gives up nothing:
+
+    modules            every module the position operates - the exam roster, and what
+                       Gate 5 issues a grant for
+    certified_modules  the subset already earned
+    certified          unit A on every module AND unit B on every Forge. Both.
+
+These were one list, and that is what closed the loop: grants built from
+`certified_modules` meant an uncertified appointee got **no grant at all**, so
+`_exam_takers` found nobody and the exam that would have certified them was never set.
+
+`requires_certification` still names every uncertified candidate with the specific state
+that explains it — `never_certified`, `in_training`, `failed`, `missing_unit_b` — and an
+appointed agent now appears in both lists at once. `CapacityNumbers.certified_and_free`
+counts `certified`, not `len(appointed)`, so the number that says who can operate today
+cannot be moved by seating somebody who cannot.
+
+**`shortfall` still means "this venture cannot fully operate."** It is now true when a
+seat is empty *or* when a seated candidate is uncertified. Reading it off `unfilled`
+alone would have switched the §7.3 governance escalation off on the day seats stopped
+emptying — a loosening nobody ruled. The escalation sentence names the two separately.
+
+### Gate 11 did not check, and now does
+
+The activation UPDATE tested the agent's status, the grant's supersession, a live
+revocation, and a model digest. **It never tested that the certification behind the
+grant was current.** It did not need to: 4.5 seated only certified agents, so no
+uncertified grant could reach here.
+
+This ruling makes one reachable. Not a hole in the authority — `resolve_grant` refuses
+every call on certification state, and Gate 9 still blocks the run — **a hole in the
+record**, and B53's exact shape: a grant asserting a named human granted authority over
+an exam that was sat and not passed. So both units are now tested, on
+`state = 'certified'` rather than on a ref existing: `runtime_config.apply` writes the
+ref as a **pointer** at whatever certification exists, a `failed` one included.
+
+### What the revocation test proved on the way
+
+`test_gate_11_does_not_activate_a_revoked_grant` stopped reaching Gate 11. Revocation is
+part of eligibility now, so revoking changes the appointment, the artifacts hash moves
+and the Gate 10 signature goes **void**. The run stops at 10.
+
+That is the correct answer and a stronger one: a signature attests to a set of artifacts,
+and the set this one attested to no longer describes who holds which seat. Gate 11's
+revocation predicate is now belt to that braces. The test asserts the new path, and
+Gate 11's own predicates are exercised by repointing a *grant* at a `failed`
+certification — something `appointment.generate` does not read, so the artifacts stay
+byte-identical and the signature stands.
+
+### Measured against the live database
+
+    artifacts hash   a1a2e64e...  ->  e8a6354d...
+    Acquisition Analyst     unfilled 0   Victor Serath (uncertified)
+    Buyer Network Manager   unfilled 0   Elara Solen, Evander Zephar (both uncertified)
+    certified_and_free 0   certified_but_allocated 0   produced_not_yet_certified 25
+    shortfall True
+
+### Both open questions were ruled the same day
+
+**Ruled by Ivan Green, 21 September 2026, amending this entry before it merged:**
+
+> *"Eligibility prefers an existing live grant holder for the seat. Roster order is a
+> tie-break only when no candidate holds a grant, and the tie-break is reported, never
+> silent. A seat does not change hands because of list order."*
+>
+> *"An uncertified module's planned tier reads as none, not the declared tier. A plan
+> that claims authority nothing earned reads as authority."*
+
+#### Incumbency, counted rather than flagged
+
+The first draft seated candidates by `(certified, roster order)`, and measured against
+the dev database it passed `buyer_match`'s two seats from Ronan and Seraphine Valek —
+both holding live grants, both with an exam IN_PROGRESS, one carrying a recorded FAIL —
+to two candidates who came earlier in the alphabet and had never been examined.
+
+The ranking is now `(live grants held DESC, certified, roster order)`. Counted rather
+than reduced to a flag: a candidate holding a grant for both of a position's modules is
+more the incumbent than one holding a grant for one of them, and a threshold would have
+meant picking a number nobody ruled.
+
+A grant is what an exam is opened against — `_exam_takers` reads exactly that table — so
+moving a seat away from a holder discards an exam in flight.
+
+#### The tie-break is reported, and where
+
+`_tie_break` fires when the candidate seated and the candidate passed over are
+indistinguishable on **every key that is a reason** — grants held and certification — so
+that nothing but the alphabet separated them. V24 puts it in the Gate 4.5 sentence:
+
+    TIE-BREAK - Acquisition Analyst: roster order decided the last seat: Ada Sourcing
+    over Bram Records - neither holds a grant for this position and neither certified,
+    so nothing but the alphabet separated them
+
+`None` when a reason decided, because a reason is reported by the field it is read from.
+
+#### The loop this opened, and how it is closed
+
+Appointment now reads `agent_forge_grant`. **Gate 5 writes it.** The first build put
+`live_grants` and `tie_break` on the artifact, and twelve suites went red with `Gate 10
+awaiting_human`: Gate 5 issued grants for the agents it had seated, the next
+regeneration saw them, `artifacts_hash` moved, and every signature bound to the old hash
+went void — on a run where nothing about the appointment had changed.
+
+Both fields are now dropped by `omit_from_serialisation`, the mechanism
+`CurriculumScenario` already uses. What makes the ordering safe to read at all is that
+it is a **fixed point**: Gate 5 grants to exactly the agents already seated, so
+preferring holders re-seats the same people. The counts move; the seating does not; and
+the hash must not. `test_issuing_grants_does_not_move_the_artifacts_hash` is what holds
+that.
+
+Dropped rather than zeroed, for entry 122's reason: a `0` where a real count used to sit
+reads as "this agent holds nothing", which is false for every agent after Gate 5.
+
+#### An unearned plan carries no tier
+
+`certified_tiers` now **omits** a module the agent is not certified on, and
+`PlannedGrant.trust_tier` is `None` for it. 0049 makes
+`agent_forge_grant.trust_tier` nullable and keeps its three-word CHECK, so the column
+cannot acquire a fourth value by accident.
+
+The old `.get(key, declared)` fallback was only ever reached for a module the agent WAS
+certified on with a NULL `certified_tier`. Once a seat could be held by an uncertified
+agent, the same line started writing the Pack's declared ceiling — `auto_execute` for
+Greenstone's `buyer_match` — into the column `resolve_grant` caps a live call against.
+
+**`suggest` was the tempting placeholder and it is still an authority level.** Absent is
+the honest value, and it is the value the ruling names. Same argument
+`TIMEOUT_RUBRIC_VERSION` makes against a plausible semver, and `timeout_gate_result`
+against a score of 0.0.
+
+Refused in two more places, both behind Gate 11's certification test rather than instead
+of it: Gate 11 will not activate a grant with no planned tier, and `resolve_grant` raises
+the new `NoTierPlanned` before reaching `cap_tier`. A tierless grant is always also an
+uncertified one today, and a control resting on that staying true is one that expires
+without saying so.
+
+### Measured against the live database, after both amendments
+
+    artifacts hash   a1a2e64e...  ->  d9bac50b...
+
+    Acquisition Analyst     Victor Serath      2 grants, uncertified, no planned tier
+    Buyer Network Manager   Ronan Valek        2 grants, uncertified, no planned tier
+                            Seraphine Valek    2 grants, uncertified, no planned tier
+    Deal Underwriter        pending
+    no tie-break: incumbency decided every seat
+    every planned grant tier: None
+
+**The seats stayed where they were.** That is the whole of the first ruling: the three
+agents who hold grants and have been examined keep the positions they held, and the
+first draft's reshuffle to Elara Solen and Evander Zephar does not happen.

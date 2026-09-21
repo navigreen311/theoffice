@@ -187,10 +187,25 @@ class AppointedAgent:
     office_agent_id: str
     agent_name: str
     department: str
+
+    #: Every module the position operates - **the exam roster**, and what Gate 5 issues a
+    #: grant for.
+    #:
+    #: Ruled 21 September 2026 (entry 145). Grants were built from `certified_modules`,
+    #: which made the ladder circular: an uncertified appointee got no grant, so
+    #: `_exam_takers` found nobody, so no exam was set, so no verdict could ever be
+    #: written. The two lists were one until the circle had to be cut, and this is the
+    #: half that says what an agent may be EXAMINED on.
+    modules: list[str]
+
+    #: The subset of `modules` this agent already holds a current unit-A certification
+    #: for. What an agent may be TRUSTED with, and still the only list `certified` and
+    #: the capacity numbers are computed from.
     certified_modules: list[str]
 
     #: The tier this agent operates each module at, keyed `forge_id/module_id`. The lower of
-    #: what the Pack declares for that module and what the agent is certified to.
+    #: what the Pack declares for that module and what the agent is certified to, for the
+    #: modules it IS certified on.
     #:
     #: **This replaced a single `certified_tier` on 13 September 2026, and the property given up
     #: is worth naming.** That field was the WEAKEST certified tier across every module the
@@ -210,7 +225,51 @@ class AppointedAgent:
     #: current. A module that should be restrained is restrained by its own tier rather than by
     #: the weakest of its neighbours - and a module that should not be is no longer dragged down
     #: by one.
+    #:
+    #: **A module the agent is not certified on is ABSENT from this map**, ruled
+    #: 21 September 2026: *"an uncertified module's planned tier reads as none, not the
+    #: declared tier. A plan that claims authority nothing earned reads as authority."*
+    #: Never blanked and never floored to `suggest`, which is still an authority level.
     certified_tiers: dict[str, str]
+
+    #: How many of this position's modules the agent already holds a live grant for.
+    #:
+    #: The first ranking key, ruled 21 September 2026. A grant is what an exam is opened
+    #: against, so a seat moving away from a holder discards an exam in flight. Counted
+    #: rather than flagged: full incumbency outranks partial, and partial outranks none,
+    #: without anybody having to pick a threshold.
+    live_grants: int = 0
+
+    def omit_from_serialisation(self) -> tuple[str, ...]:
+        """`live_grants` is a ranking input, not a fact about the appointment.
+
+        **AND IT MUST NOT REACH `artifacts_hash`.** Appointment now reads
+        `agent_forge_grant`, and Gate 5 WRITES it. A grant-derived field in the artifact
+        is a feedback loop: Gate 5 issues grants for the agents it seated, the next
+        regeneration sees them, the hash moves, and every Gate 10 signature bound to the
+        old hash goes void. Measured the first time this was built - twelve tests went
+        red with `Gate 10 awaiting_human`, on a run where nothing about the appointment
+        had changed.
+
+        The ORDERING it feeds is stable under that loop, which is why it can be used at
+        all: Gate 5 grants to exactly the agents already seated, so preferring grant
+        holders re-seats the same agents. The number changes; the seating does not.
+
+        Dropped, not zeroed. A `0` sitting where a real count used to sit reads as "this
+        agent holds nothing", which would be false for every agent after Gate 5.
+        """
+        return ("live_grants",)
+
+    #: Unit A current on every module in `modules` **and** unit B current on every Forge
+    #: they touch. Both, exactly as 5.2 requires - what entry 145 moved is where that
+    #: test is enforced, not what it means.
+    #:
+    #: **This is the field that keeps the gap report honest.** An appointment may now
+    #: contain an uncertified agent, so a reader counting `len(appointed)` would be
+    #: reading a staffing level that cannot operate. `CapacityNumbers.certified_and_free`
+    #: counts this flag, and `requires_certification` still names every uncertified
+    #: candidate with the specific state that explains it.
+    certified: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -219,7 +278,14 @@ class CandidateShortfall:
     agent_name: str
     reason: str
     """`never_certified` | `in_training` | `stale_instructions` | `stale_forge` |
-    `failed` | `revoked` | `wrong_department` | `missing_unit_b`.
+    `failed` | `revoked` | `wrong_department` | `missing_unit_b` |
+    `module_not_registered`.
+
+    **Two of these mean "not eligible" and the rest mean "not certified", and after
+    entry 145 that difference decides whether the candidate can fill a seat.**
+    `revoked` and `module_not_registered` say the agent cannot sit the exam at all;
+    every other value says the exam has not been passed yet, which is what Gate 4.5
+    stopped refusing a seat for.
 
     Named, never collapsed to "not eligible" - Part 10.1, and because the fix for
     `in_training` is to wait while the fix for `wrong_department` is to look elsewhere.
@@ -233,6 +299,30 @@ class PositionAppointment:
     appointed: list[AppointedAgent]
     unfilled: int
     requires_certification: list[CandidateShortfall]
+
+    #: Set when the last seat was decided by roster order - that is, when the candidate
+    #: seated and the candidate passed over were indistinguishable on grants held and on
+    #: certification, so nothing but the alphabet separated them.
+    #:
+    #: Ruled 21 September 2026: *"the tie-break is reported, never silent."* `None` when
+    #: the boundary was decided by a reason, because a reason is reported by the field it
+    #: is read from.
+    tie_break: str | None = None
+
+    def omit_from_serialisation(self) -> tuple[str, ...]:
+        """Reported at Gate 4.5, not carried in the hashed artifact.
+
+        Same reason as `AppointedAgent.live_grants`, one level up: whether the boundary
+        was a tie depends on who holds a grant, and Gate 5 writes grants. Left in the
+        artifact it would flip from a sentence to `null` the first time a venture's
+        grants were issued, and void the Gate 10 signature for it.
+
+        **It is still never silent.** V24 puts it in the Gate 4.5 result's own sentence,
+        which is what an operator reads and what the Provisioning Console renders - and
+        that is where a decision about who operates a venture belongs, rather than in a
+        file whose job is to be signed.
+        """
+        return ("tie_break",)
 
     #: Declared, unfilled, pending activation. Emitted rather than omitted so V24 can NAME
     #: it: a position that vanished from the appointment would be a position nobody could
@@ -547,7 +637,14 @@ class PlannedGrant:
     office_agent_id: str
     forge_id: str
     module_id: str
-    trust_tier: str
+
+    #: The tier this grant plans, or **None when the holder is not certified for this
+    #: module** - ruled 21 September 2026, carried by 0049.
+    #:
+    #: The grant is still issued: it is the exam ticket `_exam_takers` reads. What it
+    #: does not carry is an authority-shaped number nothing earned, in the column
+    #: `resolve_grant` caps a live call against.
+    trust_tier: str | None
 
 
 @dataclass(frozen=True, slots=True)

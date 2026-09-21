@@ -2184,6 +2184,31 @@ async def _gate_11(ctx: _Context) -> GateOutcome:
         second spelling of "covered" is a second thing to keep in step, and the module's
         own docstring says why it cannot be a column: a venture-scope revocation must
         cover grants issued after it was declared.
+
+    CERTIFIED, ON BOTH UNITS - ENTRY 145
+    ====================================
+
+        *"Certification is required at Gate 11, where authority is granted."*
+
+        This gate did not check it, and until 21 September nothing needed it to: Gate
+        4.5 seated only certified agents, so an uncertified grant could not exist by the
+        time a run got here, and Gate 9 blocks a run whose units are not certified
+        anyway.
+
+        **Entry 145 made uncertified grants reachable.** 4.5 now seats a candidate who
+        can sit the exam, Gate 5 issues its grant inactive, and that grant arrives here
+        pointing at a certification reading `in_training` or `failed`. The predicate
+        above would have stamped `activated_at` and `activated_by` on it.
+
+        Not a hole in the authority - `resolve_grant` refuses every call on
+        certification state, and Gate 9 still blocks the run. **A hole in the record**,
+        and the same shape as B53's: a grant asserting a named human activated it, when
+        nothing it rests on was ever earned. So the test moved to where the ruling puts
+        it, rather than being left to two gates either side.
+
+        Both units, and `state = 'certified'` rather than "a ref exists". A ref is
+        written by `runtime_config.apply` as a POINTER at whatever certification exists
+        - a `failed` one included - so a NOT NULL test would pass on a recorded failure.
     """
     artifacts = ctx.require_artifacts()
     current = artifacts_hash(artifacts)
@@ -2226,6 +2251,22 @@ async def _gate_11(ctx: _Context) -> GateOutcome:
             "        WHERE ca.cert_id::text = g.operation_cert_ref "
             "          AND ca.simforge_verdict IS NOT NULL "
             "          AND ca.model_digest IS NULL) "
+            # CERTIFIED, ON BOTH UNITS, AT THE MOMENT AUTHORITY IS GRANTED.
+            # Ruled 21 September 2026, entry 145. See this gate's docstring.
+            "   AND EXISTS ("
+            "       SELECT 1 FROM certification ca "
+            "        WHERE ca.unit = 'A' AND ca.cert_id::text = g.operation_cert_ref "
+            "          AND ca.state = 'certified') "
+            "   AND EXISTS ("
+            "       SELECT 1 FROM certification cb "
+            "        WHERE cb.unit = 'B' AND cb.cert_id::text = g.dept_context_cert_ref "
+            "          AND cb.state = 'certified') "
+            # A GRANT WITH NO PLANNED TIER CONFERS NOTHING, so there is nothing here to
+            # switch on. Ruled 21 September 2026 and carried by 0049. Behind the
+            # certification test rather than instead of it: a tierless grant is also an
+            # uncertified one today, and a control that rests on that staying true is a
+            # control that expires without saying so.
+            "   AND g.trust_tier IS NOT NULL "
             "   AND NOT (g.grant_id = ANY(%s))",
             (ctx.actor, ctx.venture_id, list(covered)),
         )
