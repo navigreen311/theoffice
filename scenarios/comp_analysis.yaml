@@ -16,12 +16,10 @@
 
 module_id: comp_analysis
 forge_id: cre-forge
-status: draft
-# RETURNED TO DRAFT 21 SEPTEMBER 2026. The approval that stood here -
-# Ivan Green, 2026-09-18 - covered text this file no longer holds, and entry 141
-# refuses an approval whose hash does not match its own body. It is removed
-# rather than recomputed: recomputing a hash over text nobody read is the one
-# move that ruling exists to stop.
+status: approved
+approved_by: "Ivan Green"
+approved_on: "2026-09-21"
+approved_content_hash: "c5609ff4434844b7e3f52df83ac183758b3526aee1136946e030ea4c0ff974a5"
 drafted_by: "Claude"
 supersedes: "the approved 5-scenario key, 17 September 2026"
 

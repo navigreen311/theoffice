@@ -182,31 +182,35 @@ GREENSTONE = (
 )
 
 
-#: Returned to draft on 21 September 2026 so Ivan can read three rewrites: an escalation
-#: on each that asked for something no person could authorise, and `property_lookup`'s
-#: prohibition 5 split into its act and its assumption. Nothing in that change is
-#: approved, and entry 141 refuses an approval whose hash does not match its own body -
-#: so the header came off rather than being recomputed.
-DRAFTED_21_SEPTEMBER = ("comp_analysis", "property_lookup")
+#: Returned to draft on 21 September 2026 so Ivan could read three rewrites, and
+#: **approved again the same day once he had.** The tuple is kept, empty, rather than
+#: deleted: it is the shape this file needs the first time a key goes back to draft, and
+#: the assertions below read it rather than assuming every key faces one way.
+DRAFTED_21_SEPTEMBER: tuple[str, ...] = ()
 
-#: What is left approved, with the date each one was read.
+#: Every Greenstone key, with the date each one was read. THREE DATES, because there were
+#: three readings: the 18th, the 20th for the two entry 137 corrected, and the 21st for
+#: the two whose escalations were rewritten.
 STILL_APPROVED = {
     "assign_contract": "2026-09-18",
     "buyer_match": "2026-09-20",
+    "comp_analysis": "2026-09-21",
+    "property_lookup": "2026-09-21",
     "underwrite_deal": "2026-09-18",
 }
 
 def test_greenstones_three_approved_keys_carry_their_own_dates():
-    """**Three of the five, and the round trip is the point.**
+    """**All five, and the round trip is the point.**
 
     All five were approved on the 17th, superseded by SimForge's split keys the same
     week, drafted again until he had read the replacements, approved on the 18th, two of
-    them corrected and re-approved on the 20th - and on the 21st two went back to draft
-    again for three rewrites nobody has read.
+    them corrected and re-approved on the 20th, two more returned to draft on the 21st
+    for rewritten escalations - and approved again the same day once he had read them.
 
     That round trip is the whole reason `status` exists: **no approval here has ever
-    carried forward to prose nobody had read**, and this test is the record of which way
-    each key is facing today rather than an assertion that they all face one way.
+    carried forward to prose nobody had read**. This test stays written as a record of
+    which way each key is facing rather than an assertion that they all face one way -
+    the two lists above are empty and full today, and neither is a permanent fact.
 
     `total` is still 44. The rewrites replaced text inside scenarios; they added none
     and removed none.

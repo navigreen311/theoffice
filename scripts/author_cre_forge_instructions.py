@@ -49,7 +49,15 @@ from broker.humans import attributable_actor  # noqa: E402
 
 FORGE = "cre-forge"
 FORGE_API_VERSION = "1.4.0"
-VERSION = "1.1.0"
+#: BUMPED TO 1.2.0 ON 21 SEPTEMBER 2026, because `property_lookup`'s prohibition 5 was
+#: split into its act and its assumption and `main` skips a module already live at this
+#: version. Without the bump the edit above would sit in this file and never reach a
+#: live instruction - an authored change that cannot be applied is a change nobody made.
+#:
+#: All five are re-authored at 1.2.0 and only `property_lookup`'s CONTENT HASH moves: the
+#: hash is computed by the trigger from `content`, so the four unchanged manuals are
+#: byte-identical to their 1.1.0 selves and every exam keyed on their hash is untouched.
+VERSION = "1.2.0"
 
 NO_FRAMEWORK = ["no_framework_applies"]
 

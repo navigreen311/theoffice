@@ -183,11 +183,11 @@ def test_a_draft_note_does_not_move_the_hash(tmp_path):
 def test_every_greenstone_approval_matches_its_text():
     """Backfilled 20 September from the text each one covers now.
 
-    Three keys, not five: `comp_analysis` and `property_lookup` returned to draft on 21
-    September, and a draft records no hash. **Their absence is asserted rather than
-    skipped** - a draft carrying an approval hash is exactly the stale approval entry
-    141 exists to refuse, and it would be invisible to a loop that only checked the
-    approved ones.
+    All five, and **a draft's absence of a hash is asserted rather than skipped** - a
+    draft carrying an approval hash is exactly the stale approval entry 141 exists to
+    refuse, and it would be invisible to a loop that only checked the approved ones. The
+    branch is unreachable today and stays, because it was reachable on 21 September and
+    will be again.
     """
     loaded = sc.load_all()
     checked = 0
@@ -203,7 +203,7 @@ def test_every_greenstone_approval_matches_its_text():
             content.scenarios, content.not_applicable
         )
         checked += 1
-    assert checked == 3, f"expected three approved Greenstone keys, checked {checked}"
+    assert checked == 5, f"expected five approved Greenstone keys, checked {checked}"
 
 
 def test_no_two_approvals_read_alike():

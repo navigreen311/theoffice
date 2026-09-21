@@ -12656,6 +12656,41 @@ share a hash**, on any date — which is what the ruling actually claims.
 `property_lookup` to `buyer_match`, because a draft has no approved hash for a ref to be
 compared against. That is `_stale_key`'s third answer, not a failure.
 
+### Approved the same day, once Ivan had read them
+
+**Approved by Ivan Green, 21 September 2026**, both keys, with the hashes entry 141
+requires:
+
+    comp_analysis     c5609ff44348...
+    property_lookup   986ff243e72f...
+
+So the coverage that fell to 3 of 5 above is 5 of 5 again, and the tests that record
+which way each key is facing say `DRAFTED_21_SEPTEMBER = ()` rather than losing the
+shape: the tuple is empty today and was not this morning.
+
+### The authoring script had to be versioned before it could be applied
+
+`main` skips a module already live at `VERSION`, and all five were live at `1.1.0` — so
+the split above would have sat in the file and never reached a live instruction. **An
+authored change that cannot be applied is a change nobody made.** `VERSION` is `1.2.0`,
+all five are re-authored, and the content hash moves only where the content did: the
+trigger computes it from `content`, so an unchanged manual is byte-identical to itself.
+
+Run against the dev database, and it moved **two** hashes, not one:
+
+    property_lookup   5aab8992fefb -> cb7fb9daa37a   prohibition 5, split
+    buyer_match       648e494d6026 -> 9fdc2096d73a   correct_sequence, entry 137
+
+**The second was a surprise and is the finding.** Entry 137 corrected `buyer_match`'s
+`correct_sequence` — *"`limit` bounds the page, not the population"* replaced by
+*"`total` IS THE PAGE"* — in this script, in a PR that merged. Nobody ran the script.
+**The live manual has carried the false claim ever since, and every `buyer_match` exam
+since the 18th was set against it.** The corrected text is live now.
+
+The lesson is the one entry 144 taught at a different boundary: a change committed to a
+file that something else has to apply is not applied. Nothing in CI could have caught
+this, because the script and the database are not compared anywhere.
+
 ### Sized, not built: Unit B by named-human attestation
 
 Read-only, at Ivan's request. **Nothing below is a decision.**

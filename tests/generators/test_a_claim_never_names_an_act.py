@@ -180,20 +180,20 @@ def test_every_greenstone_key_is_approved_and_carries_its_own_date():
     that did not exist yet, which is the whole reason `approved_on` is a separate
     required field (entry 126).
 
-    **Two of the five carry no date at all now**, and that is the same field working
-    from the other side: `comp_analysis` and `property_lookup` went back to draft on 21
-    September for rewrites nobody has read, so there is nothing for a date to be about.
+    **Three dates now**, and each one is a reading: the 18th, the 20th for the two entry
+    137 corrected, and the 21st for the two whose escalations were rewritten, returned to
+    draft, and read again the same day.
     """
     loaded = sc.load_all()
-    # `assign_contract` and `underwrite_deal` have stood since the 18th. `buyer_match`
-    # carries the 20th, having been corrected and read again. The two empty strings are
-    # drafts - an unread key records no reader and no date.
+    # An empty string here would be a draft, and the branch below still handles one -
+    # `comp_analysis` and `property_lookup` were drafts for part of 21 September, and a
+    # test that could not express that would have had to be rewritten to record it.
     dated = {
         "assign_contract": "2026-09-18",
         "underwrite_deal": "2026-09-18",
         "buyer_match": "2026-09-20",
-        "comp_analysis": "",
-        "property_lookup": "",
+        "comp_analysis": "2026-09-21",
+        "property_lookup": "2026-09-21",
     }
     for module_id in GREENSTONE:
         content = loaded.modules[module_id]
