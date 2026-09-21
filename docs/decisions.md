@@ -12153,3 +12153,117 @@ A submission refused for a stale key **stays open**. Every later sweep will read
 refuse it again, and report it again. Superseding it would be the honest end state and
 nobody has ruled that a stale hash is grounds for retiring a row on a run still live -
 abandoning is the act that supersedes, and that act has an author. Left as a question.
+
+## 143. An exam names the versions it is set under
+
+**Ruled by Ivan Green, 21 September 2026:** *"An exam's identity carries the protocol
+version and the rubric version it is set under, beside the instruction and scenario
+hashes. Measured: `assign_contract`'s standing verdict was graded under protocol 4.0.0
+and rubric 0.2.0, two protocol majors ago, and could not be re-examined because its ref
+never changed. A stale-key refusal on a live run is not auto-superseded; the finding
+tells the operator the run is stale, and abandoning it is the authored act."*
+
+### The mechanism, read off both sides
+
+`mint_run_ref` is deterministic and `open_run` is idempotent on the ref. That pair is
+the whole feature and the whole defect: a re-run of Gate 8 against an unchanged
+submission lands on the run already open rather than starting a second window, which is
+what keeps a hanging run from having its deadline quietly extended.
+
+`assign_contract`'s answer key did not change between 18 and 20 September, so both runs
+minted `...:cacf28ef5ba0:k5c5e41247e52` — the identical ref — and the 20 September exam
+landed on the 18th's run. SimForge stamps the rubric when a run **opens**
+(`body.rubric_version or OPERATION_RUBRIC_VERSION`), so it was graded under the rubric
+in force two days earlier.
+
+Measured on the dev database and on Gate 8's own evidence for run `0c051b0a`:
+
+    assign_contract   rubric 0.2.0   already_open True    ref unchanged
+    buyer_match       rubric 0.3.0   already_open False   ref re-minted
+    comp_analysis     rubric 0.3.0   already_open False
+    property_lookup   rubric 0.3.0   already_open False
+
+One module of four, and the one whose ref did not move.
+
+### Why this is entry 129 again and not a new kind of thing
+
+Entry 129 put the answer key into the exam's identity because a key can be rewritten end
+to end without the instruction changing a byte. A rubric moves for the same reason from
+the other end: **what is asked stayed the same and how it is graded changed.** A
+protocol rewording is a third — SimForge's own ADR-0064 says a reworded protocol is a
+different exam and that prior baselines do not cross the line.
+
+So the ref gains `p<protocol>` and `r<rubric>`, prefixed like `k` so a reader tells them
+apart without counting colons. **On both units**, unlike the scenario hash: a department
+run submits no curriculum and names no answer key, but it is graded under a rubric
+exactly as unit A is, and the collision does not care which unit it happens on.
+
+### Where The Office learns them
+
+**SimForge's `/api/version`** — the route `SimForgeClient.build` already reads,
+unauthenticated by SimForge's own decision, once per Gate 8 before the first submission.
+Asked once and carried into the loop, so two modules of one run cannot mint refs naming
+two different rubrics because the Forge was restarted mid-gate.
+
+**Neither field is published there today.** Measured 21 September against SimForge's
+checkout:
+
+    RESPONSE_PROTOCOL_VERSION = "6.0.0"    services/operation/battery.py:244
+    OPERATION_RUBRIC_VERSION  = "0.4.0"    services/operation/rubric.py:31
+
+The rubric reaches two routes — `/api/operation/certs` and
+`/api/operation/agents/{id}` — which sit outside the adapter The Office is brokered
+onto and are not in the response manifest. **The protocol version reaches no route at
+all.** `response_protocol_versions` on a battery result is a list of what past *attempts*
+ran under, which is the answer after the exam rather than before it.
+
+So SimForge has to declare both on `/api/version`. That is entry 135's ordering rule in
+mirror: The Office does not send a field the far side has not declared, and it does not
+mint an identity out of one it cannot read.
+
+### What happens if it cannot
+
+The probe returns `None`, `mint_run_ref` **omits the segment rather than defaulting it**
+— entry 122's rule, and here a constant would be the defect with a placeholder in it:
+every ref would agree while the runs behind them did not — and Gate 8 **warns in its own
+sentence and does not block.**
+
+    ...; WARNING: the Forge does not publish its protocol or its rubric version, so
+    the exam's identity cannot name what it is graded under and a rubric change will
+    land on the run already open (entry 143)
+
+Warning rather than blocking is entry 131's rule, not a new judgement: this gate blocks
+on facts about **us** — a build The Office cannot vouch for refuses in the same function
+— and reports facts about the counterpart. This ruling's own second half says the same
+thing about the live-run case.
+
+The consequence is real and is stated rather than hidden. Until SimForge publishes the
+fields, `assign_contract`'s defect stays open.
+
+The warnings are joined rather than returned first-match. A stale Forge that also
+publishes neither has two things wrong with it, and reporting one would send somebody to
+restart a service and conclude the gate was then clean.
+
+### The columns, and what they answer that nothing else does
+
+0048 puts `protocol_version` and `rubric_version` on `curriculum_submission`. They
+answer **which rubric the exam was SET under**, beside `certification.rubric_version`,
+which is the one it was **GRADED under**. A difference between those two is exactly the
+defect above, visible without reconstructing anything.
+
+Not backfilled, and there is nothing to backfill from: every existing row was written
+before The Office read either version. Writing today's constants onto exams set weeks
+ago would record the opposite of the truth for `assign_contract`, the one row this is
+about.
+
+### The second half, which closes entry 142's open question
+
+Entry 142 left it open: a submission refused for a stale key stays open, every sweep
+reads it again, and superseding it would be the honest end state that nobody had ruled.
+
+Ruled now: **not auto-superseded.** The finding tells the operator the run is stale, and
+abandoning it is the authored act. So the `scenario_set_stale` finding gained the
+`run_id` — the run somebody would have to abandon — and a sentence saying so, rather
+than leaving a reader to join two tables to find out which run to act on.
+
+This is the same posture as the paragraph above: report, and let the act have an author.

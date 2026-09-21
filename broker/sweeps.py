@@ -650,6 +650,23 @@ async def _ingest_one(
                 "verdict": result.verdict,
                 "submitted_hash": sub.get("scenario_set_hash"),
                 "approved_hash": stale,
+                # THE RUN, AND WHAT THE OPERATOR IS BEING TOLD.
+                #
+                # Ruled 21 September 2026, entry 143, closing the question entry 142
+                # left open: *"A stale-key refusal on a live run is not
+                # auto-superseded; the finding tells the operator the run is stale,
+                # and abandoning it is the authored act."*
+                #
+                # So the row stays open and this sweep will read it again, and the
+                # finding names the run rather than leaving somebody to join
+                # `curriculum_submission` to `provisioning_run` to find out which one
+                # to abandon.
+                "run_id": str(sub["run_id"]) if sub.get("run_id") else None,
+                "tells_the_operator": (
+                    "this exam was set from an answer key that has since changed. It "
+                    "stays open and nothing is written for it. Abandoning the run is "
+                    "the act that retires it, and it has an author."
+                ),
             })
             return
 

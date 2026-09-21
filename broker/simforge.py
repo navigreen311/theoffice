@@ -349,6 +349,8 @@ def mint_run_ref(
     department: str | None = None,
     office_agent_id: uuid.UUID | None = None,
     scenario_hash: str | None = None,
+    protocol_version: str | None = None,
+    rubric_version: str | None = None,
 ) -> str:
     """The run reference The Office mints, and SimForge opens a run under.
 
@@ -439,11 +441,41 @@ def mint_run_ref(
         A ref minted without one keeps its old shape, so every ref already open still
         resolves - the same rule the agent segment was added under.
 
+    THE EXAM NAMES THE VERSIONS IT IS SET UNDER
+    ===========================================
+
+        Ruled 21 September 2026 (entry 143): *"An exam's identity carries the protocol
+        version and the rubric version it is set under, beside the instruction and
+        scenario hashes."*
+
+        Measured, and the mechanism is this function's own idempotence read from the
+        other side. `assign_contract`'s answer key did not change between 18 and 20
+        September, so both runs minted `...:cacf28ef5ba0:k5c5e41247e52` - the identical
+        ref - and `open_run` returned the run already open, clock and rubric untouched.
+        Gate 8 recorded `already_open: True` for that module and False for every other.
+        SimForge stamps the rubric in force when a run OPENS (`body.rubric_version or
+        OPERATION_RUBRIC_VERSION`), so the 20 September exam was graded under the 18th's
+        rubric: `assign_contract` carries `0.2.0` where `buyer_match`, `comp_analysis`
+        and `property_lookup` - each with a re-minted ref - carry `0.3.0`.
+
+        **The verdict could not be re-examined, because nothing about it had changed
+        that a ref could express.** A rubric bump is a change to how an answer is
+        graded, exactly as an answer-key edit is a change to what is asked, and entry
+        129 settled that shape already.
+
+        `p` and `r`, prefixed for the same reason `k` is: a reader of a log line tells
+        the segments apart without counting colons.
+
+        **Both are omitted when unknown, never defaulted.** Entry 122's rule. A
+        constant here would claim an exam was set under a version nobody read, and
+        every ref would agree while the runs behind them did not.
+
     Carries no scenario content: two ids, a module or department name and hash
-    prefixes. The hashes are truncated because the full 64 characters buy nothing a
-    reader wants and make the ref unreadable in a log line, where its only job is to be
-    recognised. The full instruction hash is on the `curriculum_submission` row, and
-    as of 0046 so is the full scenario-set hash.
+    prefixes and two version strings. The hashes are truncated because the full 64
+    characters buy nothing a reader wants and make the ref unreadable in a log line,
+    where its only job is to be recognised. The full instruction hash is on the
+    `curriculum_submission` row, as of 0046 so is the full scenario-set hash, and as of
+    0048 so are both versions.
     """
     target = module_id or (f"dept:{department}" if department else "-")
     if module_id and office_agent_id is not None:
@@ -454,6 +486,14 @@ def mint_run_ref(
         # instruction hash beside it without counting colons - and so a ref that has
         # one is distinguishable at a glance from the pre-ruling refs that do not.
         segments.append(f"k{scenario_hash[:12]}")
+    # ON BOTH UNITS, unlike the scenario hash. A department run submits no curriculum
+    # and so has no answer key, but it IS graded - `rubric_kind` is `domain` and a
+    # rubric version is stamped on it exactly as on unit A. Excluding unit B here would
+    # leave the collision this ruling closes open on half the exams.
+    if protocol_version:
+        segments.append(f"p{protocol_version}")
+    if rubric_version:
+        segments.append(f"r{rubric_version}")
     return ":".join(segments)
 
 
@@ -1032,7 +1072,7 @@ class SimForgeClient:
         # TRANSCRIBED, NOT PASSED THROUGH. An unrecognised key is dropped rather than
         # stored: `launch_environment` carries a `configured` map of which credentials
         # are set, and a gate result is read by more people than a Forge's own health
-        # page. The four fields below are what the question needs.
+        # page. The fields below are what the question needs.
         return {
             "reachable": True,
             "started_commit": body.get("started_commit"),
@@ -1042,6 +1082,31 @@ class SimForgeClient:
             # is running must not report itself up to date. Kept as three states.
             "differs": body.get("differs"),
             "app_version": body.get("app_version"),
+            # WHERE THE OFFICE LEARNS THE TWO VERSIONS AN EXAM IS SET UNDER.
+            # Ruled 21 September 2026, entry 143.
+            #
+            # This route, because it is already the one The Office asks "what are you
+            # running" of, it is unauthenticated by SimForge's own decision (its
+            # ADR-0084), and Gate 8 already calls it once before the first submission.
+            # A second route would be a second thing that can be stale.
+            #
+            # **NEITHER IS PUBLISHED TODAY, measured 21 September.** SimForge holds
+            # them as `RESPONSE_PROTOCOL_VERSION` (`services/operation/battery.py`,
+            # `6.0.0`) and `OPERATION_RUBRIC_VERSION` (`services/operation/rubric.py`,
+            # `0.4.0`), and the only routes that publish either are
+            # `/api/operation/certs` and `/api/operation/agents/{id}`, which carry the
+            # rubric alone, sit outside the adapter The Office is brokered onto, and
+            # are not in the response manifest. The protocol version reaches no route
+            # at all: `response_protocol_versions` on a battery result is a list of
+            # what past ATTEMPTS ran under, which is the answer after the exam rather
+            # than before it.
+            #
+            # So both read `None` until SimForge declares them here. That is entry
+            # 135's ordering rule in mirror - The Office does not send a field the far
+            # side has not declared, and it does not mint an identity out of one it
+            # cannot read.
+            "response_protocol_version": body.get("response_protocol_version"),
+            "operation_rubric_version": body.get("operation_rubric_version"),
         }
 
     async def aclose(self) -> None:
@@ -1322,6 +1387,11 @@ async def overdue_submissions(
                    scenario_pack_ref, simforge_run_ref, submitted_at,
                    instruction_content_hash, office_agent_id,
                    scenario_set_hash,
+                   -- 0047's column, read here so a stale-key finding can name the run
+                   -- the operator would have to abandon. Ruled 21 September 2026:
+                   -- a stale-key refusal on a live run is NOT auto-superseded; the
+                   -- finding tells the operator and abandoning is the authored act.
+                   run_id,
                    EXTRACT(EPOCH FROM (now() - submitted_at)) / 3600.0 AS hours_waiting
             FROM curriculum_submission
             WHERE result_received_at IS NULL

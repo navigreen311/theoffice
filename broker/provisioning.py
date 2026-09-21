@@ -850,6 +850,11 @@ async def _gate_8(ctx: _Context) -> GateOutcome:
                 modules_in_forge=in_forge,
                 modules_uncovered=uncovered,
                 pack_ref=pack_ref,
+                # READ ONCE, BEFORE THE FIRST SUBMISSION, and carried in rather than
+                # re-probed per module. Entry 131's reason for asking once holds twice
+                # over here: two modules of one run must not mint refs naming two
+                # different rubric versions because the Forge was restarted mid-gate.
+                forge_build=forge_build,
             )
             submitted.append(outcome)
 
@@ -859,6 +864,7 @@ async def _gate_8(ctx: _Context) -> GateOutcome:
             positions=artifacts.roles.positions,
             module_forge=module_forge,
             pack_ref=pack_ref,
+            forge_build=forge_build,
         )
     finally:
         if owns_client:
@@ -1051,20 +1057,56 @@ async def _forge_build(client: Any, conn: AsyncConnection) -> dict[str, Any]:
 def _forge_build_warning(forge_build: dict[str, Any]) -> str | None:
     """The sentence a reader needs, or None when there is nothing to say.
 
-    Two findings, kept apart because the responses differ: a Forge that would not say
-    is a route to add or a service to look at, and a Forge that says its own checkout
-    has moved past its process is a restart.
+    Findings kept apart because the responses differ: a Forge that would not say is a
+    route to add or a service to look at, a Forge whose checkout has moved past its
+    process is a restart, and a Forge that does not publish the versions it grades
+    under is a field for its `/api/version` body.
+
+    **JOINED RATHER THAN RETURNED FIRST-MATCH.** A stale Forge that also publishes
+    neither version has two things wrong with it, and reporting one would send somebody
+    to restart a service and conclude the gate was then clean.
     """
+    findings: list[str] = []
     if not forge_build.get("reachable"):
+        # The only early return. Nothing else can be said about a Forge that did not
+        # answer, and listing every field it did not send would read as four faults.
         return "the Forge did not say which build it is running"
     if forge_build.get("differs") is True:
         started = str(forge_build.get("started_commit") or "?")[:12]
         checkout = str(forge_build.get("checkout_commit") or "?")[:12]
-        return (
+        findings.append(
             f"the Forge is running {started} and its checkout is at {checkout} - it "
             "is grading on code its own tree has moved past"
         )
-    return None
+
+    # WHAT HAPPENS WHEN THE TWO VERSIONS CANNOT BE LEARNED. Ruled 21 September 2026,
+    # entry 143, and answered by entry 131's reasoning rather than beside it.
+    #
+    # **It warns; it does not block.** A Forge that does not publish a field is a fact
+    # about the counterpart, and this gate's settled rule is that it does not block on
+    # those - it blocks only on facts about us, which is why a build The Office cannot
+    # vouch for refuses in the same function. The same ruling's second half says the
+    # same thing about the live-run case: the finding tells the operator, and the
+    # authored act is the operator's.
+    #
+    # The consequence is real and is stated rather than hidden: the ref omits the
+    # segment, so two exams set under different rubrics mint the same ref and
+    # `open_run` returns the first - which is precisely `assign_contract`'s defect,
+    # still open until SimForge declares the fields.
+    missing = [
+        name for name, key in (
+            ("protocol", "response_protocol_version"),
+            ("rubric", "operation_rubric_version"),
+        )
+        if not forge_build.get(key)
+    ]
+    if missing:
+        findings.append(
+            f"the Forge does not publish its {' or its '.join(missing)} version, so "
+            "the exam's identity cannot name what it is graded under and a rubric "
+            "change will land on the run already open (entry 143)"
+        )
+    return "; ".join(findings) or None
 
 
 async def _exam_takers(
@@ -1131,6 +1173,7 @@ async def _submit_one_module(
     ctx: _Context, client: Any, *, forge_id: str, module_id: str,
     scenarios: list[Any], candidates: list[dict[str, str]],
     modules_in_forge: int, modules_uncovered: list[str], pack_ref: str,
+    forge_build: dict[str, Any],
 ) -> dict[str, Any]:
     """One module's curriculum, its outcome, and the row that records both."""
     instruction = await instructions.live(ctx.conn, forge_id=forge_id, module_id=module_id)
@@ -1232,6 +1275,11 @@ async def _submit_one_module(
                 # this changes the ref STRING, and `runRef` is already the whole of a
                 # run's identity over there.
                 scenario_hash=scenario_hash,
+                # AND THE TWO VERSIONS IT IS GRADED UNDER. Entry 143. Both are None
+                # until SimForge publishes them on `/api/version`, and `mint_run_ref`
+                # omits an absent segment rather than defaulting it.
+                protocol_version=forge_build.get("response_protocol_version"),
+                rubric_version=forge_build.get("operation_rubric_version"),
             )
             started = await client.run_start(
                 ctx.conn,
@@ -1327,6 +1375,8 @@ async def _submit_one_module(
                 instruction_content_hash=instruction.content_hash,
                 run_ref=entry["run_ref"],
                 scenario_hash=scenario_hash,
+                protocol_version=forge_build.get("response_protocol_version"),
+                rubric_version=forge_build.get("operation_rubric_version"),
             )
     elif not takers and error is None:
         # ACCEPTED, AND NOBODY CAN SIT IT. No `curriculum_submission` row, and that is
@@ -1360,6 +1410,8 @@ async def _submit_one_module(
             # been sat, which is what makes a refused submission comparable with the
             # one that replaces it.
             scenario_hash=scenario_hash,
+            protocol_version=forge_build.get("response_protocol_version"),
+            rubric_version=forge_build.get("operation_rubric_version"),
         )
 
     outcome: dict[str, Any] = {
@@ -1413,6 +1465,8 @@ async def _record_submission(
     office_agent_id: Any | None = None,
     members: dict[str, str] | None = None,
     scenario_hash: str | None = None,
+    protocol_version: str | None = None,
+    rubric_version: str | None = None,
 ) -> None:
     """The one place Gate 8 writes a `curriculum_submission` row, for either unit.
 
@@ -1447,8 +1501,9 @@ async def _record_submission(
               (submission_id, venture_id, forge_id, module_id, department,
                scenario_pack_ref, scenario_count, coverage_denominator,
                instruction_content_hash, submitted_by, simforge_run_ref,
-               office_agent_id, scenario_set_hash, run_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               office_agent_id, scenario_set_hash, run_id,
+               protocol_version, rubric_version)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 submission_id, ctx.venture_id, forge_id, module_id, department,
@@ -1461,6 +1516,13 @@ async def _record_submission(
                 # submissions, and that cannot be done on a prefix of a free-text
                 # column.
                 ctx.run_id,
+                # THE VERSIONS THIS EXAM WAS SET UNDER, in full beside the ref's copy.
+                # `certification.rubric_version` answers which rubric the verdict was
+                # GRADED under; this answers which one it was SET under, and a
+                # difference between them is a run that was already open when the
+                # rubric moved (entry 143). NULL until SimForge publishes them.
+                protocol_version,
+                rubric_version,
             ),
         )
         if members:
@@ -1506,6 +1568,7 @@ def _department_forge_modules(
 async def _open_department_units(
     ctx: _Context, client: Any, *, submitted: list[dict[str, Any]],
     positions: list[Any], module_forge: dict[str, str], pack_ref: str,
+    forge_build: dict[str, Any],
 ) -> list[dict[str, Any]]:
     """The unit-B half. One run per (department, forge). **No curriculum is submitted.**
 
@@ -1597,6 +1660,12 @@ async def _open_department_units(
         minted_ref = mint_run_ref(
             venture_id=ctx.venture_id, forge_id=forge_id, module_id=None,
             department=department, content_hash=basis,
+            # ON UNIT B TOO, unlike the scenario hash. A department run submits no
+            # curriculum and so names no answer key, but it is graded under a rubric
+            # exactly as unit A is - `rubric_kind` is `domain` - and the collision this
+            # closes does not care which unit it happens on.
+            protocol_version=forge_build.get("response_protocol_version"),
+            rubric_version=forge_build.get("operation_rubric_version"),
         )
         entry["instruction_content_hash"] = basis
         entry["scenario_count"] = scenario_count
@@ -1647,6 +1716,8 @@ async def _open_department_units(
             # `department_basis_hash` is one-way, so this is the only record of what the
             # composite was composed of.
             members={m: accepted[m]["instruction_content_hash"] for m in covered},
+            protocol_version=forge_build.get("response_protocol_version"),
+            rubric_version=forge_build.get("operation_rubric_version"),
         )
         entry["run_ref"] = run_ref
         units.append(entry)
