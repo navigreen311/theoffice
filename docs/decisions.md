@@ -11936,7 +11936,7 @@ remaining specs inherit the same answer** and cite the same issue rather than re
 it. A question re-asked per module is a question answered four more times and agreed with
 four more times, which is how one finding becomes four opinions.
 
-## NEXT. The date says when; the hash says what
+## 141. The date says when; the hash says what
 
 **Ruled by Ivan Green, 20 September 2026:** *"An approval records the content hash of the
 text approved, beside `approved_by` and `approved_on`. Two approvals of different text
