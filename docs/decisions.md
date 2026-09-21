@@ -11823,3 +11823,115 @@ promote one.
 Gate 9 still blocks. No certification carries a SimForge PASS, Unit B has never earned one
 by anybody, and SimForge's battery is still not wired to grade submitted scenarios. The
 answer keys were never what Gate 9 was waiting for.
+
+## 140. The first operation spec, and the four scenarios it obliged
+
+**Ruled by Ivan Green, 20 September 2026:** nine practice judgment calls for
+`property_lookup`, recorded verbatim in `docs/operation-specs/property_lookup.md`. They
+are the first operation spec; fifteen modules follow.
+
+The document is the Part 2 shape with its two groups kept apart, which is entry 136's
+ruling 3 working the first time it was used: **ten mechanical calls answered from code
+with a file and a line, nine practice calls drafted as questions only.** No candidate
+answers were offered on the nine, and every word of §B is Ivan's.
+
+### What the spec obliged, the same evening
+
+Four scenarios, and `property_lookup` back to draft.
+
+**Spec 18 forbids the queries two scenarios were sending.** A query must be one the agent
+can name a searched field for, and `property.py:300-308` searches four: address, city,
+county, zip. *"Multi-word conceptual queries - 'Reno warehouse', 'industrial Sparks' - are
+not."* Both named strings were in the key.
+
+    happy_path[0]   query "Reno warehouse" -> "Reno", nameable as `city`
+    happy_path[2]   "industrial in Sparks" -> "Sparks", nameable as `city`
+
+**Both stay `happy_path`, and the class is a judgment worth stating.** The module did the
+happy path: the call succeeded and the response is complete for the string sent. What is
+partial is the answer to the *human*, and spec 11 keeps the agent proceeding rather than
+handing over - *"return the rows, label the set for what it is."* `partial_failure` on
+this Forge means the RESPONSE carries a silent incompleteness (`total: 0`, a null, the
+page cap); a filter that does not exist is not in the response at all. And
+`escalation_required` is stopping, which spec 11 forbids here. The sibling
+`escalation_required[0]` remains the hand-over case, where a second constraint has no
+sendable part.
+
+**The two differ in one way that matters**, and the keys now say so:
+
+    happy_path[0]   one page of 143. Spec 11's client-side filter is NOT available.
+    happy_path[2]   seven of seven. It IS available, and using it must be declared.
+
+**Spec 14 forbids characterizing a whole set from one page.** Two counts were doing it:
+
+    partial_failure[1]   "two of the hundred" with no caveat - and the hundred is one
+                         page of 143, so 43 rows were never seen
+    partial_failure[2]   the same, for one null `square_feet`
+
+Both now carry a caveat naming the page the count was taken over. The mechanism already
+existed - `partial_failure[3]` has used `expected_caveat` for the query string since it
+was drafted - and these two did not use it.
+
+Audited across all five approved keys: **those two were the only violations.**
+`comp_analysis/happy_path[0]` is a near miss worth recording - `total: 4` under a
+`max_comps` default of 10, so four is the whole set and not a page. It complies today and
+would not if the count reached 10.
+
+### To draft, read, and approved again - all in one evening
+
+`property_lookup` went to draft on the correction and Ivan read it the same evening.
+`buyer_match` kept its 20 September approval throughout; nothing in its eight scenarios
+moved.
+
+    assign_contract   approved   18 September
+    buyer_match       approved   20 September
+    comp_analysis     approved   18 September
+    underwrite_deal   approved   18 September
+    property_lookup   approved   20 September   <- corrected and read again the same day
+
+    all five approved · 44 authored scenarios · 52 operation rows (44 + 8 absent)
+    modules_with_authored_scenario_content          5/5
+    modules_accounting_for_every_submittable_class  5/5
+    modules_with_a_draft_answer_key_awaiting_approval 0/0
+
+### `approved_on` could not separate these two readings, and that is worth recording
+
+**`property_lookup` was approved twice on 20 September** - once on the pre-spec text
+(entry 139) and once on the text this entry corrects. Both carry `approved_on:
+"2026-09-20"`, because the field has **day resolution** and both readings happened inside
+one day.
+
+Entry 126 added that field precisely so two approvals could be told apart: *"With only a
+name, the second approval is indistinguishable from the first still sitting there over
+prose that has since been replaced."* **This is the first case where the date could not do
+it unaided.** What separates them is the ledger - 139 approved one text, 140 corrected it
+and 140 approved the next - and the key's own header now says so.
+
+Not fixed here. A timestamp would separate them and would also invite the reading that an
+approval is an instant rather than an act, and that trade is Ivan's to make rather than a
+consequence of this entry.
+
+**This is the spec doing what a spec is for.** It was written to make the next fifteen
+modules cheaper, and the first thing it did was find four defects in a key approved six
+hours earlier. Two of them - the forbidden queries - were already tagged `constructed` and
+awaiting re-derivation; **spec 18 decided what the re-derivation must produce**, which the
+tag alone could not.
+
+### Two things the spec raises and does not settle
+
+**Spec 19's second audience has nowhere to go.** *"A recurring gap belongs in the weekday
+digest as a capability gap with a count. Property type is the first entry."* **No weekday
+digest exists in The Office.** The ruling is recorded and the destination is not built.
+
+**Mechanical 9 is already filed, and the spec now points at it.** A non-numeric `page` or
+`page_size` raises an uncaught `ValueError` at `forge.py:121-122` and returns 500 rather
+than 422, while `query` is validated at `:104-109`. That is **CRE Forge #86** - *"Unguarded
+coercion of untyped input returns 500 where 422 belongs: 15 sites, 6 of them on the Forge
+surface Greenstone calls."*
+
+**It is not an open question on this side and the spec should not read like one.** Two of
+those six sites are this module's; the other four are `comp_analysis`'s `radius_miles`,
+`max_comps` and `max_age_days` and `buyer_match`'s `limit`, so **four of the fifteen
+remaining specs inherit the same answer** and cite the same issue rather than re-deriving
+it. A question re-asked per module is a question answered four more times and agreed with
+four more times, which is how one finding becomes four opinions.

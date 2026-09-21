@@ -231,9 +231,8 @@ def test_burkhams_twenty_are_still_drafts_of_their_own():
     loaded = sc.load_all()
     drafts = loaded.drafts()
     assert len(drafts) == 20, f"expected Burkham's 20 still drafted, found {len(drafts)}"
-    # Greenstone's five are all approved again as of 20 September, so the two that spent
-    # two days in draft (entry 137) are back out of this set. Asserted by exclusion so a
-    # Greenstone key slipping back to draft cannot hide inside Burkham's count.
+    # Asserted by exclusion, so a Greenstone key slipping back to draft cannot hide inside
+    # Burkham's total. All five are approved again as of 20 September.
     assert not (set(drafts) & set(GREENSTONE))
     assert all(c.approved_by == "" and c.approved_on == "" for c in drafts.values())
 

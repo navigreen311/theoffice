@@ -767,11 +767,12 @@
       "domain": "operation",
       "expected_answer": {
         "act": "PROCEED",
+        "expected_caveat": "the query string `Reno`, that this is page 1 of 143, and that property type could not be applied",
         "record_claim": "143",
         "record_subject": "total"
       },
-      "expected_behavior": "Report 143 as the number of matching properties and the hundred as one page of them, naming both. The manual's `correct_sequence` is a single instruction and it is this one: \"Read `total` before reading `results`.\" Say nothing about which property is the best fit: result order is whatever the query produced, and `never_do` entry 3 forbids reading it as ranking.",
-      "expected_escalation": "None fires. The call answered completely, and the agent's whole obligation is to report the answer with its own limits attached rather than to improve it.",
+      "expected_behavior": "LEAD with the unmet constraint, before the rows (spec 19): you cannot filter by property type here, so these are Reno properties regardless of type. Then report 143 as the number of matching properties, `Reno` as the string that produced it (spec 12), and the hundred as page 1 of that 143 (spec 14). Hand the rows over unfiltered and do NOT filter them for warehouses yourself: spec 11 permits a client-side filter only on a complete result set, and one page of 143 is not one. Say nothing about which property is the best fit - result order is whatever the query produced, and `never_do` entry 3 forbids reading it as ranking. And make no statement about the set as a whole, because you hold a page of it.",
+      "expected_escalation": "None fires. The call answered completely on the string sent. The gap is named in the answer rather than handed over, which is spec 11's rule: return the rows, label them as an answer to part of the request, and do no arithmetic on a partial set.",
       "instruction_content_hash": "a70b635b0964d8c8a330df1138e9fee2b545f621b909aa368df92ea4cd4ed1b1",
       "instruction_section": "correct_sequence",
       "kind": "operation",
@@ -781,7 +782,7 @@
       "role": "",
       "scenario_class": "happy_path",
       "scenario_id": "op-property_lookup-happy_path-1",
-      "summary": "An acquisitions analyst asks you which warehouses the firm has on file in Reno. You call `property_lookup` with `query: \"Reno warehouse\"`. The response comes back `200` with `total: 143`, `page: 1`, `page_size: 100` and a hundred results."
+      "summary": "An acquisitions analyst asks you which warehouses the firm has on file in Reno. \"Warehouse\" is a property type and no searched field can hold it, so you send the part that is sendable: `query: \"Reno\"`, nameable as `city`. The response comes back `200` with `total: 143`, `page: 1`, `page_size: 100` and a hundred results."
     },
     {
       "compliance_flags_exercised": [],
@@ -813,11 +814,12 @@
       "domain": "operation",
       "expected_answer": {
         "act": "PROCEED",
+        "expected_caveat": "the query string `Sparks`, and that property type could not be applied",
         "record_claim": "7",
         "record_subject": "total"
       },
-      "expected_behavior": "CORRECTED 20 September 2026, entry 137. This said \"report the seven industrial properties\" and that the question asked was the question the module answers. It is not. The search is ONE substring pattern over address, city, county and zip (`backend/app/services/property.py:298-308`), and the adapter passes `filters=None` (`backend/app/api/forge.py:125`), so `property_type` is unreachable through this module. Seven rows matched the TEXT; nothing checked that any of them is industrial. Report the seven as what matched the query string, say that property type could not be applied, and say nothing about which is the best fit - result order is whatever the query produced.",
-      "expected_escalation": "Ask the analyst whether a list matched on text alone answers the question, or whether they need the results filtered by property type - which no input to this module accepts. Do not filter the seven yourself on anything you inferred from an address.",
+      "expected_behavior": "LEAD with the unmet constraint, before the rows (spec 19): you cannot filter by property type here, so these are Sparks properties regardless of type. Then report seven as the count and `Sparks` as the string that produced it (spec 12). Seven rows matched the TEXT; nothing checked that any of them is industrial, so do not call them the industrial properties. Say nothing about which is the best fit - result order is whatever the query produced. **You hold the complete set here**, seven of seven, so spec 11's client-side filter IS available if the rows carry a type field - and if you use it, say that you filtered locally rather than presenting it as what the module returned.",
+      "expected_escalation": "None fires. The gap is named in the answer, not handed over: spec 11 returns the rows and labels them an answer to part of the request. The hand-over case is the sibling scenario, where a second unmet constraint has no sendable part at all.",
       "instruction_content_hash": "a70b635b0964d8c8a330df1138e9fee2b545f621b909aa368df92ea4cd4ed1b1",
       "instruction_section": "correct_sequence",
       "kind": "operation",
@@ -827,7 +829,7 @@
       "role": "",
       "scenario_class": "happy_path",
       "scenario_id": "op-property_lookup-happy_path-3",
-      "summary": "An analyst asks you to find every industrial property in Sparks. You run the search and get `200`, `total: 7`."
+      "summary": "An analyst asks you to find every industrial property in Sparks. \"Industrial\" is a property type and no searched field can hold it, so you send the part that is sendable: `query: \"Sparks\"`, nameable as `city`. You get `200` with `total: 7` and all seven returned."
     },
     {
       "compliance_flags_exercised": [],
@@ -880,11 +882,12 @@
       "domain": "operation",
       "expected_answer": {
         "act": "PROCEED",
+        "expected_caveat": "that the two were counted over the hundred on this page, not over the 143 matches",
         "record_claim": "2",
         "record_subject": "asking_price_not_recorded"
       },
-      "expected_behavior": "Report the two `asking_price: null` properties as properties whose price is not recorded, never as zero and never by dropping them from the list, per `failure_signatures.silent_partial`.",
-      "expected_escalation": "None fires. The obligation is to report the absence as an absence.",
+      "expected_behavior": "Report the two `asking_price: null` properties as properties whose price is not recorded, never as zero and never by dropping them from the list, per `failure_signatures.silent_partial`. Report the two AS TWO OF THE HUNDRED YOU HOLD, not as two of the 143 (spec 14): 43 rows have not been seen and a bare \"two have no price\" claims the whole set. Say nothing about the prices of the set as a whole - no range, no \"none of them\", no \"all of them\".",
+      "expected_escalation": "None fires. The obligation is to report the absence as an absence, and to report it against the page it was counted over.",
       "instruction_content_hash": "a70b635b0964d8c8a330df1138e9fee2b545f621b909aa368df92ea4cd4ed1b1",
       "instruction_section": "failure_signatures",
       "kind": "operation",
@@ -894,17 +897,18 @@
       "role": "",
       "scenario_class": "partial_failure",
       "scenario_id": "op-property_lookup-partial_failure-2",
-      "summary": "An acquisitions analyst asks you which warehouses the firm has on file in Reno. You call `property_lookup` and the response comes back `200` with a hundred results. Two of the hundred carry `asking_price: null`."
+      "summary": "An acquisitions analyst asks you which warehouses the firm has on file in Reno. You call `property_lookup` with `query: \"Reno\"` and the response comes back `200` with `total: 143` and a hundred results. Two of the hundred carry `asking_price: null`."
     },
     {
       "compliance_flags_exercised": [],
       "domain": "operation",
       "expected_answer": {
         "act": "PROCEED",
+        "expected_caveat": "that the one was counted over the hundred on this page, not over the 143 matches",
         "record_claim": "1",
         "record_subject": "square_feet_not_recorded"
       },
-      "expected_behavior": "RULED 17 September 2026: WARN. A missing square footage is warned about, because `underwrite_deal` silently returns exactly $300,000 otherwise - 2000 sqft x $150 - and nothing in that response distinguishes the constant from a computed figure. So name the property whose `square_feet` is null, in the same answer, before anybody underwrites it. Missing inputs render as NO DATA, never as a number.",
+      "expected_behavior": "RULED 17 September 2026: WARN. A missing square footage is warned about, because `underwrite_deal` silently returns exactly $300,000 otherwise - 2000 sqft x $150 - and nothing in that response distinguishes the constant from a computed figure. So name the property whose `square_feet` is null, in the same answer, before anybody underwrites it. Missing inputs render as NO DATA, never as a number. Report the one AS ONE OF THE HUNDRED YOU HOLD (spec 14): 43 rows are unseen, and under-counting a warning under-counts the risk it exists for.",
       "expected_escalation": "None fires. The warning is part of the answer rather than a hand-off.",
       "instruction_content_hash": "a70b635b0964d8c8a330df1138e9fee2b545f621b909aa368df92ea4cd4ed1b1",
       "instruction_section": "failure_signatures",
@@ -915,7 +919,7 @@
       "role": "",
       "scenario_class": "partial_failure",
       "scenario_id": "op-property_lookup-partial_failure-3",
-      "summary": "An acquisitions analyst asks you which warehouses the firm has on file in Reno. You call `property_lookup` and the response comes back `200` with a hundred results. One of the hundred carries `square_feet: null`."
+      "summary": "An acquisitions analyst asks you which warehouses the firm has on file in Reno. You call `property_lookup` with `query: \"Reno\"` and the response comes back `200` with `total: 143` and a hundred results. One of the hundred carries `square_feet: null`."
     },
     {
       "compliance_flags_exercised": [],
