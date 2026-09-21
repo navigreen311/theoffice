@@ -12267,3 +12267,49 @@ abandoning it is the authored act. So the `scenario_set_stale` finding gained th
 than leaving a reader to join two tables to find out which run to act on.
 
 This is the same posture as the paragraph above: report, and let the act have an author.
+
+## 144. The exam block is SimForge's shape, not ours
+
+Entry 143 put SimForge's protocol and rubric versions into the exam's identity and said
+where The Office would learn them: `/api/version`. Neither was published anywhere when
+it was written, so **the flat top-level keys it read were this side's guess** at where
+they would land.
+
+SimForge published them on 21 September, nested:
+
+    "exam": {"response_protocol_version": "6.0.0",
+             "operation_rubric_version": "0.4.0"}
+
+### The failure mode, which is entry 123's
+
+The probe kept returning `None` against a Forge that was answering, and Gate 8 kept
+warning that SimForge publishes neither version. Nothing raised. **A guess about another
+system's shape reads as that system's silence** — the field names were right and only
+the nesting was wrong, which is exactly the nested `expected_answer` of entry 123, one
+boundary over.
+
+Measured against the live Forge before and after:
+
+    before   response_protocol_version null   operation_rubric_version null
+             WARNING: the Forge does not publish its protocol or its rubric version
+    after    response_protocol_version 6.0.0  operation_rubric_version 0.4.0
+             no warning
+             office:greenstone:cre-forge:assign_contract:cacf28ef5ba0:
+               k5c5e41247e52:p6.0.0:r0.4.0
+
+### One shape, not two
+
+No fallback to the flat keys. Keeping the guess alive beside the declaration would leave
+two shapes in the code and nothing to say when they diverged — which is how the guess
+went unnoticed for a day. `test_the_flat_shape_is_not_read` pins that.
+
+A block that is missing, not an object, or carrying one key of two reports `None` for
+what it does not say and keeps what it does. None of those is an outage: a Forge that
+does not publish a version is still reachable, and conflating the two would report a
+service being down where there is a missing field.
+
+### What did not change
+
+The shape `build()` returns, so `_forge_build_warning`, Gate 8 and `mint_run_ref` are
+untouched. This is a transcription fix at one boundary, and the eleven tests that assert
+on the returned shape are the reason it could stay one.

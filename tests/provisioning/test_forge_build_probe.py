@@ -27,11 +27,13 @@ ANSWER = {
     "checkout_commit": "b" * 40,
     "differs": True,
     "app_version": "1.0.0",
-    # Entry 143's two. SimForge does not publish either today; this fixture is the
-    # shape after it does, and `test_versions_it_does_not_publish_come_back_none` is
-    # the shape it has now.
-    "response_protocol_version": "6.0.0",
-    "operation_rubric_version": "0.4.0",
+    # Entry 143's two, NESTED - which is the shape SimForge declared when it published
+    # them, and not the flat one entry 143 guessed at while neither existed. Read live
+    # from `http://127.0.0.1:8110/api/version` on 21 September 2026.
+    "exam": {
+        "response_protocol_version": "6.0.0",
+        "operation_rubric_version": "0.4.0",
+    },
     # Reported by SimForge and deliberately NOT carried into the gate result.
     "launch_environment": {"modes": {}, "configured": {"office_tenant_token": True}},
 }
@@ -96,27 +98,75 @@ async def test_the_answer_is_transcribed_and_the_environment_is_dropped():
     assert "launch_environment" not in found
 
 
-async def test_versions_it_does_not_publish_come_back_none():
-    """**The state SimForge is actually in, measured 21 September 2026.**
+async def test_a_forge_with_no_exam_block_reports_neither_version():
+    """The state SimForge was in until 21 September, and any older Forge still is.
 
-    Neither field is on `/api/version` today: SimForge holds them as
-    `RESPONSE_PROTOCOL_VERSION` and `OPERATION_RUBRIC_VERSION`, and the only routes
-    publishing either carry the rubric alone, outside the adapter The Office is
-    brokered onto. So this is the answer the live probe gives, and `None` has to be it
-    - a default here would put a version in a ref that nobody read (entry 143).
+    `None` has to be the answer - a default here would put a version in a ref that
+    nobody read (entry 143) - and it is not an outage: a Forge that does not publish a
+    version is still reachable, and conflating the two would report a service being
+    down where there is a missing field.
     """
-    body = {k: v for k, v in ANSWER.items()
-            if k not in ("response_protocol_version", "operation_rubric_version")}
+    body = {k: v for k, v in ANSWER.items() if k != "exam"}
     client = _client(lambda r: httpx.Response(200, json=body))
     found = await client.build(FakeConn())
     await client.aclose()
 
     assert found["response_protocol_version"] is None
     assert found["operation_rubric_version"] is None
-    assert found["reachable"] is True, (
-        "a Forge that does not publish a version is still reachable; conflating the "
-        "two would report an outage where there is a missing field"
-    )
+    assert found["reachable"] is True
+
+
+@pytest.mark.parametrize(
+    "exam",
+    [
+        pytest.param("6.0.0", id="a string where an object was declared"),
+        pytest.param(["6.0.0"], id="a list"),
+        pytest.param(None, id="an explicit null"),
+        pytest.param({}, id="an empty object"),
+        pytest.param({"operation_rubric_version": "0.4.0"}, id="one key of two"),
+    ],
+)
+async def test_a_block_that_is_not_the_declared_shape_reports_none(exam):
+    """**Never raises, and never half-reads.**
+
+    `build`'s whole contract is that every failure is a recorded answer. A block of the
+    wrong type must produce the same `None` a missing one does rather than an
+    AttributeError inside a gate that asked the question out of caution.
+
+    The last case is the one worth keeping: one key of two is not a reason to drop the
+    other, and not a reason to invent the missing one.
+    """
+    body = dict(ANSWER, exam=exam)
+    client = _client(lambda r: httpx.Response(200, json=body))
+    found = await client.build(FakeConn())
+    await client.aclose()
+
+    assert found["reachable"] is True
+    assert found["response_protocol_version"] is None
+    if isinstance(exam, dict) and "operation_rubric_version" in exam:
+        assert found["operation_rubric_version"] == "0.4.0"
+    else:
+        assert found["operation_rubric_version"] is None
+
+
+async def test_the_flat_shape_is_not_read():
+    """**The load-bearing test of this change.** One shape, not two.
+
+    Entry 143 guessed the versions would arrive as top-level keys, because neither was
+    published when it was written. SimForge nested them. Keeping a fallback to the
+    guess would leave two shapes in the code, and the first time they disagreed nothing
+    would say so - which is exactly how the flat guess went unnoticed in the first
+    place: the probe returned None against a Forge that was answering.
+    """
+    body = {k: v for k, v in ANSWER.items() if k != "exam"}
+    body["response_protocol_version"] = "6.0.0"
+    body["operation_rubric_version"] = "0.4.0"
+    client = _client(lambda r: httpx.Response(200, json=body))
+    found = await client.build(FakeConn())
+    await client.aclose()
+
+    assert found["response_protocol_version"] is None
+    assert found["operation_rubric_version"] is None
 
 
 @pytest.mark.parametrize(

@@ -1090,28 +1090,48 @@ class SimForgeClient:
             # ADR-0084), and Gate 8 already calls it once before the first submission.
             # A second route would be a second thing that can be stale.
             #
-            # **NEITHER IS PUBLISHED TODAY, measured 21 September.** SimForge holds
-            # them as `RESPONSE_PROTOCOL_VERSION` (`services/operation/battery.py`,
-            # `6.0.0`) and `OPERATION_RUBRIC_VERSION` (`services/operation/rubric.py`,
-            # `0.4.0`), and the only routes that publish either are
-            # `/api/operation/certs` and `/api/operation/agents/{id}`, which carry the
-            # rubric alone, sit outside the adapter The Office is brokered onto, and
-            # are not in the response manifest. The protocol version reaches no route
-            # at all: `response_protocol_versions` on a battery result is a list of
-            # what past ATTEMPTS ran under, which is the answer after the exam rather
-            # than before it.
+            # **READ OUT OF THE `exam` BLOCK, WHICH IS THE SHAPE SIMFORGE DECLARED.**
+            # Entry 143 read them as top-level keys, because neither was published at
+            # all when it was written and the flat shape was this side's guess at where
+            # they would land. SimForge published them nested:
             #
-            # So both read `None` until SimForge declares them here. That is entry
-            # 135's ordering rule in mirror - The Office does not send a field the far
-            # side has not declared, and it does not mint an identity out of one it
-            # cannot read.
-            "response_protocol_version": body.get("response_protocol_version"),
-            "operation_rubric_version": body.get("operation_rubric_version"),
+            #     "exam": {"response_protocol_version": "6.0.0",
+            #              "operation_rubric_version": "0.4.0"}
+            #
+            # So the probe kept returning None against a Forge that was answering, and
+            # Gate 8 kept warning that it published neither. That is the same defect
+            # the nested `expected_answer` was (entry 123's lesson): the field NAMES
+            # were right and only the nesting was wrong, and nothing failed loudly -
+            # a guess about another system's shape reads as that system's silence.
+            #
+            # ONE SHAPE, NOT TWO. A fallback to the flat keys would keep this side's
+            # guess alive beside the declaration, and the first divergence between them
+            # would be invisible.
+            **_exam_versions(body.get("exam")),
         }
 
     async def aclose(self) -> None:
         if self._owns_http:
             await self._http.aclose()
+
+def _exam_versions(block: Any) -> dict[str, Any]:
+    """The two versions out of `/api/version`'s `exam` block, or None for each.
+
+    Split out so the shape is in one place and testable without an HTTP call. `None` is
+    returned for a block that is missing, not an object, or missing a key - all three
+    are "SimForge did not say", which is what `mint_run_ref` omits a segment for and
+    what Gate 8 warns about. None of them is an error: a Forge that does not publish a
+    version is still reachable, and conflating the two would report an outage where
+    there is a missing field.
+    """
+    if not isinstance(block, dict):
+        return {"response_protocol_version": None, "operation_rubric_version": None}
+    return {
+        "response_protocol_version": block.get("response_protocol_version"),
+        "operation_rubric_version": block.get("operation_rubric_version"),
+    }
+
+
 
 
 def load_manifest() -> dict[str, dict[str, Any]]:
