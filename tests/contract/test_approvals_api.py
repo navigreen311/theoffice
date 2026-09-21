@@ -85,6 +85,20 @@ async def world(admin: psycopg.Connection):
             conn, human_id=human_id, role="venture_operator", venture_id=None,
             granted_by=SEED,
         )
+        # A PERSON, not a fixture. Ruled 21 September 2026 (entry 148): only a named
+        # human may decide a proposal, and `account_origin.origin_of` classifies every
+        # `.invalid` email as a test fixture - so nothing reachable through
+        # `create_human` can stand for Ivan in a suite about the approval queue.
+        #
+        # Promoted here rather than by weakening the classifier: the classifier is
+        # right, and this account is the one thing in this file that is meant to be a
+        # person. `test_a_fixture_is_refused_at_the_route` below is the other half.
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "UPDATE office_human SET origin = 'human' WHERE human_id = %s",
+                (human_id,),
+            )
+        await conn.commit()
         await packs.store(
             conn, yaml_source=PACK_PATH.read_text(encoding="utf-8"),
             pack_version="1.0.0", authored_by=human_id,
@@ -255,6 +269,47 @@ async def test_no_route_approves_in_bulk():
                 "copy says a trust tier that is really a click-through is worse than no "
                 "tier at all."
             )
+
+
+async def test_a_fixture_is_refused_at_the_route(api, world):
+    """**The four decisions of 16 September, refused.** Ruled 21 September 2026.
+
+    `smoke-28e7bea5` and three like it decided every proposal this system has ever
+    decided. They held `venture_operator` honestly; what they were not is somebody who
+    can be held to the decision.
+
+    Asserted at the ROUTE and not only at `assert_named_human`, because the ordering is
+    the control: the refusal has to come before `proposals.decide` writes anything.
+    """
+    async with connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "UPDATE office_human SET origin = 'test_fixture' WHERE human_id = %s",
+                (world.human_id,),
+            )
+        await conn.commit()
+
+    agent = await _agent(world.admin)
+    async with connection() as conn:
+        proposal_id = await _submit(
+            conn, agent, task_id="t-fixture", key="k-fixture", payload={"to": "+1555"}
+        )
+
+    response = await api.post(
+        f"/api/proposals/{proposal_id}/decide",
+        headers=auth(world.token), json={"approve": True, "reason": "a fixture tried"},
+    )
+    assert response.status_code == 403
+    assert "may not decide a proposal" in response.text
+
+    async with connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            "SELECT status FROM proposal WHERE proposal_id = %s", (proposal_id,)
+        )
+        row = await cur.fetchone()
+    assert row is not None and row[0] == "pending", (
+        "the proposal was decided and then the caller was refused"
+    )
 
 
 async def test_a_decision_records_how_long_it_took(api, world):

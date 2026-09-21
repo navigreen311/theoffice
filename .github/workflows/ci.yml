@@ -166,6 +166,28 @@ jobs:
       - name: Pytest
         run: python -m pytest -q --junitxml=pytest-results.xml
 
+      # THE LIVE INSTRUCTIONS MUST MATCH THE AUTHORING SCRIPT - ruled 21 September 2026,
+      # decisions entry 148.
+      #
+      # `buyer_match` carried a correction entry 137 proved necessary from 20 to 21
+      # September, because the script was edited, merged, and never run: `main` skips a
+      # module already live at `VERSION` and `VERSION` had not moved. Every exam set in
+      # between was bound to text that said the opposite of what the code does.
+      #
+      # TWO CONTROLS, and only the first one can live in a test. `pytest` above holds
+      # the digest-against-version pairing, which is what makes an unapplied edit
+      # impossible to merge. This step holds the comparator itself: it authors from the
+      # script into this runner's database and then asks whether the two agree, so the
+      # tool an operator runs against a REAL database is one CI has exercised.
+      #
+      # It cannot tell you whether somebody ran the script against production. Nothing
+      # in CI can - the answer is in that database, and `check_instructions_match.py` is
+      # what asks it there.
+      - name: The manuals match the script
+        run: |
+          python scripts/author_cre_forge_instructions.py
+          python scripts/check_instructions_match.py
+
       - name: Refuse a green run that skipped the database suite
         # THE POINT OF THIS JOB. `requires_db` skips every database test when the DSNs
         # are unset or wrong, and a skipped test is reported as a pass by every summary

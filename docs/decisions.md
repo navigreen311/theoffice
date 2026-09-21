@@ -12898,3 +12898,94 @@ append-only means.
   * **SimForge declares nothing yet**, so nothing ends the stop-gap. The key is proposed
     here and has to be agreed.
   * **The `dev-all build check` account still holds `ivan`.**
+
+## 148. A manual nobody applied, and a decision nobody made
+
+**Three rulings by Ivan Green, 21 September 2026:**
+
+> *"The live operating instructions must match the authoring script. CI fails when they
+> differ. Measured: `buyer_match` carried a correction entry 137 proved necessary until
+> 21 September, because nobody ran the script, and every exam in between was set against
+> the false text."*
+>
+> *"Only a named human may decide a proposal. Smoke fixtures decided four; nothing
+> stopped them."*
+>
+> *"Add `department_handover_test` to the version probe, read from SimForge's exam
+> block."*
+
+### The third was already built
+
+Entry 147 put it in `_exam_versions` the same day: the probe reads
+`department_handover_test` out of `/api/version`'s `exam` block, as a boolean or
+nothing, and Gate 9 reads it off the `forge_build` this run's Gate 8 recorded.
+**Nothing was built for this ruling** — it is confirmed and recorded so the ruling has an
+entry, not a second implementation.
+
+### What happened to `buyer_match`
+
+Entry 137 proved the manual wrong: `correct_sequence` said *"`limit` bounds the page,
+not the population"*, and `buyer_matching.py:88` slices the ranked list to `limit`
+before `forge.py:223` counts it — so `total` **is** the page. The correction went into
+`scripts/author_cre_forge_instructions.py` and merged on 20 September.
+
+**Nobody ran the script.** `main` skips a module already live at `VERSION`, `VERSION`
+stayed at `1.1.0`, and the edit was a no-op for the one module it was written for. The
+live row kept the false claim until 21 September, and every `buyer_match` exam in
+between — including the ones that produced the FAIL at 0.600 and the FAIL at 0.200 — was
+bound to an instruction that said the opposite of the code.
+
+It surfaced by accident: bumping `VERSION` to apply the `property_lookup` split moved
+**two** hashes, and the second was not expected.
+
+### Two controls, because two things went wrong
+
+**The edit never landed.** `test_the_manual_digest_matches_its_version` pins a digest of
+`MANUALS` against the `VERSION` that carries it. Edit a manual and CI fails until
+`VERSION` moves — and a moved `VERSION` is one the script cannot skip. That is the part a
+test can hold, and it is the part that failed.
+
+**Nobody ran the script.** No test can hold that: CI's database is empty, so the manuals
+always match whatever the test itself authored. `scripts/check_instructions_match.py`
+answers it against a database that has been run against, and CI's job is to exercise the
+comparator — it authors, compares, and a test drives it both ways, once matching and once
+against a row somebody altered.
+
+**The comparison is on `content`, never on hashes.** `content_hash` is computed by a
+database function in a trigger; reproducing it in Python would be a second spelling of
+the one thing both sides must agree on, which is this defect one level down.
+
+What CI still cannot tell you is whether anybody ran the script against a real database.
+That answer is in that database, and the comparator is what asks it there.
+
+### A fixture is not somebody who can be held to a decision
+
+Four `place_call` proposals were decided on 16 September by `smoke-28e7bea5`,
+`smoke-25e8ed8f`, `smoke-a961648a` and `smoke-3e94169f`. **They are the only proposal
+decisions this system has ever made.** The module was one a founder decision forbids, so
+the outcome was right; the record of who decided it is a record of nobody.
+
+**A role check could not see it.** 239 of the 242 accounts on the development database
+are fixtures and most hold `ivan`; every role check they met, they met honestly.
+
+`attributable_actor` has asked this question since it was written — *"an escalation
+delivered to `smoke-1a2b3c4d` is not delivered"* — of an account it goes and **finds**.
+Nothing asked it of the account that turned up with a token, because `Human` did not
+carry `origin`. It does now, read straight off the row, and `assert_named_human` refuses
+with the name and the act in the message.
+
+**Before `proposals.decide`, not after**, and a test asserts that ordering on the source:
+a refusal after the write leaves the proposal decided by a fixture and no audit entry
+saying so.
+
+### What this does not cover, written rather than fixed
+
+`assert_named_human` is called at one route, because one was ruled. Every other route
+that takes `me` from a token still accepts a fixture holding a sufficient role —
+disposition resolution, Gate 4 review, Gate 10 signature, role administration. Whether
+the rule generalises, and to which acts, is not settled here.
+
+`account_origin.origin_of` classifies **every `.invalid` email as a fixture**, so nothing
+reachable through `humans.create_human` can stand for a person in a test. The approvals
+suite promotes its own account with a comment rather than weakening the classifier, and
+that is a seam worth knowing about before somebody writes a test that cannot pass.
