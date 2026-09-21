@@ -49,7 +49,15 @@ from broker.humans import attributable_actor  # noqa: E402
 
 FORGE = "cre-forge"
 FORGE_API_VERSION = "1.4.0"
-VERSION = "1.1.0"
+#: BUMPED TO 1.2.0 ON 21 SEPTEMBER 2026, because `property_lookup`'s prohibition 5 was
+#: split into its act and its assumption and `main` skips a module already live at this
+#: version. Without the bump the edit above would sit in this file and never reach a
+#: live instruction - an authored change that cannot be applied is a change nobody made.
+#:
+#: All five are re-authored at 1.2.0 and only `property_lookup`'s CONTENT HASH moves: the
+#: hash is computed by the trigger from `content`, so the four unchanged manuals are
+#: byte-identical to their 1.1.0 selves and every exam keyed on their hash is untouched.
+VERSION = "1.2.0"
 
 NO_FRAMEWORK = ["no_framework_applies"]
 
@@ -128,8 +136,20 @@ PROPERTY_LOOKUP = {
         "Never treat result order as ranking, relevance or recommendation.",
         "Never report `asking_price` as a value, an appraisal or a fair price. It is a "
         "listing figure entered by a person.",
-        "Never widen a search by raising `page_size` past 100 and assuming it worked. "
-        "The cap is silent.",
+        # SPLIT INTO ITS ACT AND ITS ASSUMPTION - ruled by Ivan Green, 21 September
+        # 2026. The old wording prohibited both halves in one sentence and the act is
+        # not the offence: `page_size` is agent-supplied and the adapter caps it at 100
+        # (`forge.py:120-123`), so asking for 500 is a legitimate way to ask for as much
+        # as the Forge will give. What is forbidden is believing the number you sent.
+        #
+        # The `inputs` section already said this in its own words - "ALWAYS READ
+        # page_size BACK from the response rather than assuming the request was
+        # honoured" - and the prohibition contradicted it by naming the raise as the
+        # thing never to do.
+        "Never assume the `page_size` you sent is the one that ran. Raising it past 100 "
+        "is permitted and is not the error: the adapter caps it at 100 silently and "
+        "answers 200 with no warning, so read `page_size` back from the response before "
+        "reporting anything about the size of the set.",
     ],
     "retry_vs_escalate": (
         "RETRY FREELY. It is a pure read: nothing is written, nothing is sent, and a "

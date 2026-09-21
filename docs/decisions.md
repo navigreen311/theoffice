@@ -12546,3 +12546,199 @@ without saying so.
 **The seats stayed where they were.** That is the whole of the first ruling: the three
 agents who hold grants and have been examined keep the positions they held, and the
 first draft's reshuffle to Elara Solen and Evander Zephar does not happen.
+
+## 146. Three drafts, and two keys back to draft to hold them
+
+**Rulings by Ivan Green, 21 September 2026. Drafted for reading; nothing here is
+approved.**
+
+> *"`comp_analysis/escalation_required[0]` is still un-split. It says the comps were run
+> and returned four, then expects ESCALATE with RECORD: NONE. Rewrite so the agent has
+> not run them and a person's authority is genuinely needed. Five models scored 0 on
+> it."*
+>
+> *"`property_lookup/escalation_required[0]` contradicts spec rulings 11, 18 and 19: a
+> request with one sendable part is sent, with the gaps named first — PROCEED. Replace it
+> with a situation where a person's authority is genuinely needed."*
+>
+> *"`property_lookup` prohibition 5 is split into its act and its assumption. Raising
+> `page_size` past 100 is permitted; assuming it worked is not — the agent reads
+> `page_size` back."*
+
+### What was wrong with the two escalations, and it was the same thing twice
+
+Both asked for ESCALATE where nobody's permission was needed.
+
+`comp_analysis` had the agent run the comps, get four, and hand over a `RECORD: NONE` —
+so the graded record was empty for a call that had succeeded. What it escalated was the
+Forge's own capability gap: no module here turns comparables into a value. That is a fact
+about the platform, and no human can authorise around it. **Five models scored 0.**
+
+`property_lookup` asked for *"every industrial property in Sparks that came on the market
+this month"* — which decomposes into a sendable part and two unsendable ones, and spec
+rulings 18, 11 and 19 say exactly what to do with that: send `Sparks`, return the rows
+labelled for what they are, name the unmet constraints in the opening sentence.
+**PROCEED.** The key graded the opposite of its own spec.
+
+### What replaces them
+
+`comp_analysis`: an underwriter asks for comps on a rural warehouse and says *use
+whatever radius and go back however far you need to get five*. The agent has not called
+the module. What it has been handed is not parameters but permission to keep changing
+them until the answer has five rows in it, which `failure_signatures` names in its own
+words — *"WIDENING THE PARAMETERS UNTIL COMPS APPEAR IS NOT RESEARCH"* — and `never_do` 5
+forbids. `radius_miles` is **UNCAPPED**, so nothing on the Forge stops it.
+`correct_sequence` step 1 puts the choice before the call, so it cannot be deferred until
+the results are in. The authority needed is a person's: **how wide is still comparable is
+a judgement about this property's market, and the module records no trace of who made
+it.** `RECORD: NONE` is now the true answer rather than a discarded one.
+
+`property_lookup`: an analyst asks for a joint-venture partner's Reno holdings — not
+Greenstone's. `tenant` is *"NOT CALLER-SUPPLIED. Read from the token... an agent that
+thinks it can set one is wrong about the module."* **There is no sendable part**, which is
+what separates this from every other gap in the key: no query widens a credential, so
+there is nothing to partially answer and nothing a caveat could carry. Searching `Reno`
+and handing back Greenstone's rows is not a partial answer, it is a different one.
+
+### Prohibition 5, split
+
+    was   Never widen a search by raising `page_size` past 100 and assuming it
+          worked. The cap is silent.
+
+    now   Never assume the `page_size` you sent is the one that ran. Raising it past
+          100 is permitted and is not the error: the adapter caps it at 100 silently
+          and answers 200 with no warning, so read `page_size` back from the response
+          before reporting anything about the size of the set.
+
+The `inputs` section had already said this — *"ALWAYS READ page_size BACK from the
+response rather than assuming the request was honoured"* — and the prohibition
+contradicted it by naming the raise as the thing never to do. The key's
+`partial_failure` ⓑ has always graded the read-back and not the raise, so the split makes
+the manual agree with the scenario rather than the other way round.
+
+**Changed in `scripts/author_cre_forge_instructions.py`, which is where the manuals are
+written. The live row is unchanged until somebody runs it**, and running it mints a new
+`content_hash` — a new exam identity, and every certification bound to the old hash goes
+stale. That is a separate act with a separate consequence, and this PR does not take it.
+
+### Both keys returned to draft, and what that costs
+
+Entry 141 refuses an approval whose hash does not match its own body, so the header came
+off rather than being recomputed: **recomputing a hash over text nobody read is the one
+move that ruling exists to stop.**
+
+The cost is visible in the golden and is not a side effect to be tidied away:
+
+    modules_accounting_for_every_submittable_class   5 of 5  ->  3 of 5
+    uncovered                                        comp_analysis, property_lookup
+
+`curriculum.generate` reads `authored.for_module`, which withholds a draft. So both
+modules lose their authored scenarios entirely and fall back to the mechanical rows, with
+empty required fields — which SimForge refuses. **Gate 8 would go from 5 of 5 accepted to
+3 of 5** until Ivan approves. That is the same thing that happened under entry 137, and it
+is the design: an unapproved key is not submitted.
+
+### Seven tests recorded "all five approved" and now record three and two
+
+Each was updated to the new truth rather than relaxed, and two changed shape:
+
+**`test_burkhams_twenty_are_still_drafts_of_their_own`** asserted `not (drafts &
+GREENSTONE)`. That guard was right while every Greenstone key was approved and is wrong
+now, so it names the two rather than forbidding the set — otherwise a third key could
+slip to draft and hide inside Burkham's total.
+
+**`test_the_two_approvals_of_20_september_no_longer_read_alike`** was pinned to the exact
+pair that produced entry 141, and one of them is a draft now. Pinned, it would have passed
+by having nothing to compare. It asserts the property instead — **no two approved keys
+share a hash**, on any date — which is what the ruling actually claims.
+
+`test_a_live_greenstone_key_produces_the_hash_its_run_ref_carries` moved from
+`property_lookup` to `buyer_match`, because a draft has no approved hash for a ref to be
+compared against. That is `_stale_key`'s third answer, not a failure.
+
+### Approved the same day, once Ivan had read them
+
+**Approved by Ivan Green, 21 September 2026**, both keys, with the hashes entry 141
+requires:
+
+    comp_analysis     c5609ff44348...
+    property_lookup   986ff243e72f...
+
+So the coverage that fell to 3 of 5 above is 5 of 5 again, and the tests that record
+which way each key is facing say `DRAFTED_21_SEPTEMBER = ()` rather than losing the
+shape: the tuple is empty today and was not this morning.
+
+### The authoring script had to be versioned before it could be applied
+
+`main` skips a module already live at `VERSION`, and all five were live at `1.1.0` — so
+the split above would have sat in the file and never reached a live instruction. **An
+authored change that cannot be applied is a change nobody made.** `VERSION` is `1.2.0`,
+all five are re-authored, and the content hash moves only where the content did: the
+trigger computes it from `content`, so an unchanged manual is byte-identical to itself.
+
+Run against the dev database, and it moved **two** hashes, not one:
+
+    property_lookup   5aab8992fefb -> cb7fb9daa37a   prohibition 5, split
+    buyer_match       648e494d6026 -> 9fdc2096d73a   correct_sequence, entry 137
+
+**The second was a surprise and is the finding.** Entry 137 corrected `buyer_match`'s
+`correct_sequence` — *"`limit` bounds the page, not the population"* replaced by
+*"`total` IS THE PAGE"* — in this script, in a PR that merged. Nobody ran the script.
+**The live manual has carried the false claim ever since, and every `buyer_match` exam
+since the 18th was set against it.** The corrected text is live now.
+
+The lesson is the one entry 144 taught at a different boundary: a change committed to a
+file that something else has to apply is not applied. Nothing in CI could have caught
+this, because the script and the database are not compared anywhere.
+
+### Sized, not built: Unit B by named-human attestation
+
+Read-only, at Ivan's request. **Nothing below is a decision.**
+
+The shape: Ivan or Ira attests, per department and Forge, that the escalation path and
+the compliance coupling are verified, with reasons, append-only. The Office posts
+`department_outcomes` from it, labelled a stop-gap until a real hand-over test exists.
+
+Measured against SimForge at `93eac59`:
+
+    POST /api/operation/gate-result     exists; The Office has no method that calls it
+    DepartmentRunOutcome                department_id, forge_id (required)
+                                        passed, escalation_path_verified,
+                                        compliance_coupling_verified  (booleans)
+    the writer                          that callback writes OperationCertification
+                                        (unitType="department_context") - which IS the
+                                        unit-B row Gate 9 reads
+
+**The two booleans are exactly the two things ruled.** What the schema has no field for is
+the reason, the attester, or that this is an attestation at all.
+
+What it would take:
+
+    migration            `department_attestation`, append-only by trigger, with a CHECK
+                         that a verdict travels with a reason      ~1 file
+    broker/attestation.py  the writer: named human, authorisation, reasons, audit event
+    SimForgeClient       a `post_gate_result` method, plus its entry in the response
+                         manifest - `validate_response` refuses an endpoint nobody
+                         enumerated
+    Gate 8               `_open_department_units` posts the outcomes it has and reports
+                         the departments it has none for
+    tests                append-only, authorisation, reason-required, the per-department
+                         mapping, and a department with no attestation not posted
+    the attestations     6 for Greenstone and 6 for Burkham - 3 (department, forge)
+                         pairs each, two reasons apiece, written by a person
+
+One PR, about the size of entry 142. The writing is the part that is not engineering.
+
+**Three questions it cannot answer on its own, and the first is the one that matters:**
+
+1. **How does a reader of a unit-B certification tell one attested from one tested?**
+   `DepartmentRunOutcome` has no field for it, and the certification SimForge writes back
+   carries a `rubric_version` SimForge chose. A stop-gap nobody can identify later is not
+   a stop-gap, it is the permanent state with a note on it. This needs something on
+   SimForge's side, or a rule on ours about what The Office refuses to read back.
+2. **Whose role, not whose name.** This codebase refuses to name a person in code — the
+   escalation path *"refuses to name a test fixture"* for the same reason. `Ivan or Ira`
+   has to become a role, and `venture_operator` already means something else.
+3. **What ends it.** A stop-gap with no stated end is a permanent thing with an apology
+   attached. What the real hand-over test is, and what retires the attestations when it
+   arrives, is unwritten.
