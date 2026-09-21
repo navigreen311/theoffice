@@ -54,8 +54,18 @@ module.
 
 **9. What happens if `page` or `page_size` is non-numeric?**
 An uncaught `ValueError` → 500, not 422. `forge.py:121-122` coerce with bare `int()`.
-`query` is validated at `:104-109`; the pagination arguments are not. **Raised as a Forge
-defect rather than answered here.**
+`query` is validated at `:104-109`; the pagination arguments are not.
+
+**Filed as CRE Forge #86** — *"Unguarded coercion of untyped input returns 500 where 422
+belongs: 15 sites, 6 of them on the Forge surface Greenstone calls."* This module owns two
+of those six. The other four are `comp_analysis`'s `radius_miles`, `max_comps` and
+`max_age_days` (`forge.py:163-165`) and `buyer_match`'s `limit` (`:217`), so four of the
+fifteen remaining specs inherit the same answer and should cite the same issue rather than
+re-deriving it.
+
+**Until it closes, the agent's position is unchanged**: a 500 from this module on a
+well-formed `query` is a malformed pagination argument, and the agent corrects its own
+payload rather than reporting a Forge outage.
 
 **10. Is `total: 0` a failure?**
 No — `200` with an empty `results`. There is no 404 on this module; the instruction's
@@ -155,6 +165,8 @@ draft. See decisions entry 140.
 - **Spec 19's second audience** — *"a recurring gap belongs in the weekday digest as a
   capability gap with a count. Property type is the first entry."* No weekday digest
   exists in The Office today. Raised, not built.
-- **Mechanical 9** — a non-numeric `page` is a 500. A CRE Forge defect.
+- **Mechanical 9** — a non-numeric `page` is a 500. **CRE Forge #86**, open, covering all
+  fifteen unguarded coercion sites. Not an open question on this side: the answer is
+  recorded above and the fix is theirs.
 - **Spec 16's carve-out** is already discharged: soft-delete and consent revocation are
   separate flags, confirmed 20 September and recorded in decisions entry 138.

@@ -11904,7 +11904,15 @@ tag alone could not.
 digest as a capability gap with a count. Property type is the first entry."* **No weekday
 digest exists in The Office.** The ruling is recorded and the destination is not built.
 
-**Mechanical 9 is a Forge defect, not an answer.** A non-numeric `page` or `page_size`
-raises an uncaught `ValueError` at `forge.py:121-122` and returns 500 rather than 422,
-while `query` is validated at `:104-109`. Recorded in the spec as a question for CRE Forge
-rather than resolved on this side.
+**Mechanical 9 is already filed, and the spec now points at it.** A non-numeric `page` or
+`page_size` raises an uncaught `ValueError` at `forge.py:121-122` and returns 500 rather
+than 422, while `query` is validated at `:104-109`. That is **CRE Forge #86** - *"Unguarded
+coercion of untyped input returns 500 where 422 belongs: 15 sites, 6 of them on the Forge
+surface Greenstone calls."*
+
+**It is not an open question on this side and the spec should not read like one.** Two of
+those six sites are this module's; the other four are `comp_analysis`'s `radius_miles`,
+`max_comps` and `max_age_days` and `buyer_match`'s `limit`, so **four of the fifteen
+remaining specs inherit the same answer** and cite the same issue rather than re-deriving
+it. A question re-asked per module is a question answered four more times and agreed with
+four more times, which is how one finding becomes four opinions.
