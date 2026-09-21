@@ -83,13 +83,20 @@ class ForgeThrowsOnTheProbe(SimForgeAccepts):
         raise RuntimeError("the version route fell over")
 
 
+#: Entry 143's two, on both fixtures. These tests are about BUILD DRIFT, and a Forge
+#: that published neither version would add a second warning to every assertion here -
+#: `test_a_current_forge_adds_no_noise` would fail for a finding it is not about.
+#: `test_the_exam_names_its_versions` owns the absent case.
+PUBLISHES_VERSIONS = {
+    "response_protocol_version": "6.0.0", "operation_rubric_version": "0.4.0",
+}
 CURRENT_FORGE = {
     "reachable": True, "started_commit": CURRENT, "checkout_commit": CURRENT,
-    "differs": False, "app_version": "1.0.0",
+    "differs": False, "app_version": "1.0.0", **PUBLISHES_VERSIONS,
 }
 STALE_FORGE = {
     "reachable": True, "started_commit": CURRENT, "checkout_commit": MOVED_ON,
-    "differs": True, "app_version": "1.0.0",
+    "differs": True, "app_version": "1.0.0", **PUBLISHES_VERSIONS,
 }
 SILENT_FORGE = {"reachable": False, "reason": "ConnectError: nothing there"}
 

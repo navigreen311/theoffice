@@ -27,6 +27,11 @@ ANSWER = {
     "checkout_commit": "b" * 40,
     "differs": True,
     "app_version": "1.0.0",
+    # Entry 143's two. SimForge does not publish either today; this fixture is the
+    # shape after it does, and `test_versions_it_does_not_publish_come_back_none` is
+    # the shape it has now.
+    "response_protocol_version": "6.0.0",
+    "operation_rubric_version": "0.4.0",
     # Reported by SimForge and deliberately NOT carried into the gate result.
     "launch_environment": {"modes": {}, "configured": {"office_tenant_token": True}},
 }
@@ -72,7 +77,7 @@ async def test_the_answer_is_transcribed_and_the_environment_is_dropped():
     """An unrecognised key is dropped rather than stored.
 
     `launch_environment` carries which credentials are configured, and a gate result is
-    read by more people than a Forge's own health page. Four fields answer the
+    read by more people than a Forge's own health page. Six fields answer the
     question; the rest is somebody else's record.
     """
     client = _client(lambda r: httpx.Response(200, json=ANSWER))
@@ -85,8 +90,33 @@ async def test_the_answer_is_transcribed_and_the_environment_is_dropped():
         "checkout_commit": "b" * 40,
         "differs": True,
         "app_version": "1.0.0",
+        "response_protocol_version": "6.0.0",
+        "operation_rubric_version": "0.4.0",
     }
     assert "launch_environment" not in found
+
+
+async def test_versions_it_does_not_publish_come_back_none():
+    """**The state SimForge is actually in, measured 21 September 2026.**
+
+    Neither field is on `/api/version` today: SimForge holds them as
+    `RESPONSE_PROTOCOL_VERSION` and `OPERATION_RUBRIC_VERSION`, and the only routes
+    publishing either carry the rubric alone, outside the adapter The Office is
+    brokered onto. So this is the answer the live probe gives, and `None` has to be it
+    - a default here would put a version in a ref that nobody read (entry 143).
+    """
+    body = {k: v for k, v in ANSWER.items()
+            if k not in ("response_protocol_version", "operation_rubric_version")}
+    client = _client(lambda r: httpx.Response(200, json=body))
+    found = await client.build(FakeConn())
+    await client.aclose()
+
+    assert found["response_protocol_version"] is None
+    assert found["operation_rubric_version"] is None
+    assert found["reachable"] is True, (
+        "a Forge that does not publish a version is still reachable; conflating the "
+        "two would report an outage where there is a missing field"
+    )
 
 
 @pytest.mark.parametrize(
