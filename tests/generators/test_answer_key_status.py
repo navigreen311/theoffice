@@ -28,6 +28,7 @@ from pathlib import Path
 import pytest
 
 from generators import scenario_content as sc
+from tests.approval import approved_header
 
 _BODY = """
 scenarios:
@@ -160,11 +161,11 @@ def test_an_approved_key_is_still_submitted(tmp_path):
     Every other test here asserts something is withheld. A loader that withheld
     everything would satisfy all of them and stop every venture on the platform.
     """
-    _write(
-        tmp_path, "thing",
-        'module_id: thing\nforge_id: cre-forge\nstatus: approved\n'
-        'approved_by: "Ivan Green"\napproved_on: "2026-09-18"',
-    )
+    # Derived from `_BODY` rather than written out: entry 141 requires an approved key's
+    # hash to match its own text, and a literal would go stale the first time somebody
+    # edited the body above.
+    _write(tmp_path, "thing",
+           approved_header(_BODY, approved_by="Ivan Green", approved_on="2026-09-18"))
     loaded = sc.load_all(tmp_path)
 
     content = loaded.for_module("thing")

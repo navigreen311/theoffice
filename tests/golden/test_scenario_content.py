@@ -28,16 +28,23 @@ def write(tmp_path: Path, name: str, body: str) -> Path:
 
 
 # `status` is required since 17 September 2026 - an answer key is drafted and then
-# approved, and only an approved one is submitted. It is `approved` here because this
-# fixture stands in for a live content file, and the tests below are about the class
-# vocabulary rather than about approval. The approval rule has its own suite,
-# `tests/generators/test_answer_key_status.py`.
+# approved, and only an approved one is submitted. The tests below are about the class
+# vocabulary rather than about approval; the approval rules have their own suites,
+# `test_answer_key_status.py` and `test_an_approval_names_its_text.py`.
+#
+# IT WAS `approved` UNTIL 20 SEPTEMBER, on the ground that it stood in for a live content
+# file. Entry 141 made that impossible: an approved key records a hash of its own text and
+# is refused when the two disagree, and every test here MUTATES this fixture - swapping a
+# class, deleting a field, adding a `not_applicable`. A literal hash could not match more
+# than one of them, and recomputing it per test would have each test assert against a hash
+# it derived from the same code it was testing.
+#
+# A draft is what these tests actually need: everything below the approval rules still
+# loads and still refuses.
 MINIMAL = """
 module_id: {module}
 forge_id: capitalforge
-status: approved
-approved_by: "test fixture"
-approved_on: "2026-09-18"
+status: draft
 scenarios:
   - scenario_class: happy_path
     derivation: reproducible

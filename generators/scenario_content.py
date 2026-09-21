@@ -54,6 +54,8 @@ THE SEVEN THE OFFICE MAY AUTHOR, AND WHY IT IS NOT NINE
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -125,7 +127,7 @@ DEFAULT_SECTIONS: dict[str, str] = {
 #: everybody believes was authored.
 _FILE_KEYS = frozenset({
     "module_id", "forge_id", "scenarios", "not_applicable", "status", "approved_by",
-    "approved_on",
+    "approved_on", "approved_content_hash",
     # Provenance the split keys carry. `drafted_by` is who wrote it - the counterpart to
     # `approved_by` and never a substitute for it. `supersedes` and `revised` say which
     # key this replaces and under which ruling, so a reader meeting the file knows it is
@@ -152,6 +154,75 @@ _STATUSES = (DRAFT, APPROVED)
 #: rather than half-read: one format means no reader of the ledger or of a key has to
 #: parse two, and a date that sorts is a date that can be compared to `revised`.
 _ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+#: The fields an approval is an approval OF. Everything a grader reads and nothing else.
+#:
+#: `derivation` is DELIBERATELY ABSENT, and that is entry 137's precedent rather than an
+#: oversight: tagging the 44 moved nobody's approval, because a tag says how a scenario
+#: was derived and not what it grades. Putting it here would have invalidated three
+#: approvals for a change that altered no answer.
+#:
+#: `draft_note` is absent for the same reason - it is authoring commentary. `status`,
+#: `approved_by` and `approved_on` are absent because they are the approval, not the text.
+_HASHED_SCENARIO_KEYS = (
+    "scenario_class", "situation", "expected_behavior", "expected_escalation",
+    "instruction_section", "expected_answer",
+)
+
+
+def approved_content_hash(
+    scenarios: dict[str, list[AuthoredScenario]], not_applicable: dict[str, str]
+) -> str:
+    """The content hash an approval records. **What was approved, not when.**
+
+    RULED 20 SEPTEMBER 2026 (decisions entry 141)
+    =============================================
+
+        *"An approval records the content hash of the text approved, beside
+        `approved_by` and `approved_on`. Two approvals of different text must never read
+        alike, and an approval whose hash no longer matches its file is stale. The date
+        says when; the hash says what."*
+
+        `approved_on` was added in entry 126 so that two approvals of the same key could
+        be told apart. It has day resolution, and on 20 September it could not: Ivan
+        approved `property_lookup` twice that day - once on the pre-spec text, once on
+        the text the first operation spec obliged - and both approvals read
+        `2026-09-20`. That is entry 140's finding and this is its answer.
+
+    WHY A HASH RATHER THAN A TIMESTAMP
+    ==================================
+
+        A timestamp separates two approvals and says nothing about what changed between
+        them. A hash answers the question a reader actually has - **is this approval
+        still about the text in front of me** - and it is the question `approved_on`
+        cannot answer at any resolution. It also fails LOUDLY: a file edited after
+        approval stops loading rather than quietly carrying a signature for prose nobody
+        read.
+
+    STABLE BY CONSTRUCTION
+    ======================
+
+        Canonical JSON, sorted keys, scenario classes in sorted order and occasions in
+        file order - because the order of occasions is part of the text (entry 129 put it
+        in the exam's identity for the same reason). Whitespace in the YAML, comment
+        changes and key order do not move it. The graded fields do.
+    """
+    material = {
+        "scenarios": {
+            cls: [
+                {k: a.expected_answer if k == "expected_answer" else getattr(a, k)
+                 for k in _HASHED_SCENARIO_KEYS}
+                for a in occasions
+            ]
+            for cls, occasions in sorted(scenarios.items())
+        },
+        "not_applicable": dict(sorted(not_applicable.items())),
+    }
+    return hashlib.sha256(
+        json.dumps(
+            material, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+        ).encode("utf-8")
+    ).hexdigest()
 
 #: Per-scenario keys. Same rule.
 _SCENARIO_KEYS = frozenset({
@@ -283,6 +354,17 @@ class ModuleContent:
     approved_by: str = ""
     """Who approved it. Required on an approved file, refused on a draft: a name
     beside `status: draft` is a signature on something nobody signed."""
+
+    approved_content_hash: str = ""
+    """WHAT was approved: the content hash of the text this approval covers.
+
+    Required on an approved key, refused on a draft, and **checked** - a key whose hash
+    does not match its own scenarios is refused at load rather than carrying a signature
+    for prose nobody read. Ruled 20 September 2026, entry 141.
+
+    `approved_on` says when and this says what. The date has day resolution and on
+    20 September that was not enough: `property_lookup` was approved twice that day over
+    two different texts and both approvals read `2026-09-20`."""
 
     approved_on: str = ""
     """WHEN it was approved, ISO `YYYY-MM-DD`. Required on an approved file, refused on
@@ -430,6 +512,7 @@ def load_module(path: Path | str) -> ModuleContent:
         )
     approved_by = str(raw.get("approved_by") or "").strip()
     approved_on = str(raw.get("approved_on") or "").strip()
+    approved_hash = str(raw.get("approved_content_hash") or "").strip()
     if status == APPROVED and not approved_by:
         raise ScenarioContentError(
             f"{p.name} is approved and names nobody. `approved_by` is who is answerable "
@@ -447,6 +530,17 @@ def load_module(path: Path | str) -> ModuleContent:
         raise ScenarioContentError(
             f"{p.name} is a draft and carries approved_on {approved_on!r}. A date beside "
             "a draft dates an approval nobody gave."
+        )
+    if status == APPROVED and not approved_hash:
+        raise ScenarioContentError(
+            f"{p.name} is approved and records no `approved_content_hash`. The date "
+            "says when an approval was given and the hash says what it was given over; "
+            "without it, two approvals of different text read alike (entry 141)."
+        )
+    if status == DRAFT and approved_hash:
+        raise ScenarioContentError(
+            f"{p.name} is a draft and carries approved_content_hash "
+            f"{approved_hash!r}. A hash beside a draft names text nobody approved."
         )
     if status == DRAFT and approved_by:
         raise ScenarioContentError(
@@ -510,9 +604,24 @@ def load_module(path: Path | str) -> ModuleContent:
                 "from the first and an untagged scenario cannot be told from either."
             )
 
+        # THE HASH IS CHECKED, NOT JUST RECORDED. An approval that no longer matches its
+        # file is stale, and a stale approval is worse than none: it reads as a signature
+        # over text the signer never saw. Refused at load, so nothing downstream has to
+        # decide what a mismatched key means.
+        actual = approved_content_hash(scenarios, not_applicable)
+        if actual != approved_hash:
+            raise ScenarioContentError(
+                f"{p.name} is approved over content hash {approved_hash[:12]}... and its "
+                f"text now hashes to {actual[:12]}.... The file changed after it was "
+                "approved. Either restore the approved text or have it read again and "
+                "record the new hash - editing the hash to match is the one thing that "
+                "is not a re-approval (entry 141)."
+            )
+
     return ModuleContent(
         module_id=module_id, forge_id=forge_id,
         status=status, approved_by=approved_by, approved_on=approved_on,
+        approved_content_hash=approved_hash,
         scenarios=scenarios, not_applicable=not_applicable,
     )
 

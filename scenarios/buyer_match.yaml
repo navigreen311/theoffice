@@ -28,6 +28,7 @@ forge_id: cre-forge
 status: approved
 approved_by: "Ivan Green"
 approved_on: "2026-09-20"
+approved_content_hash: "cc24953856f59d238524a424a2f103843892e62cb3262cb2e78d45a3574387aa"
 drafted_by: "Claude"
 supersedes: "the approved 5-scenario key, 17 September 2026"
 revised: "18 September 2026, ADR-0080 ruling 3"
