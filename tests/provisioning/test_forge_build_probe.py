@@ -33,6 +33,11 @@ ANSWER = {
     "exam": {
         "response_protocol_version": "6.0.0",
         "operation_rubric_version": "0.4.0",
+        # Entry 147's key, and the only one whose ABSENCE is the point: SimForge
+        # publishes nothing under this name today, so `department_handover_test` reads
+        # None and attested unit-B certifications keep counting at Gate 9. This fixture
+        # is the shape after it ships.
+        "department_handover_test": False,
     },
     # Reported by SimForge and deliberately NOT carried into the gate result.
     "launch_environment": {"modes": {}, "configured": {"office_tenant_token": True}},
@@ -94,6 +99,7 @@ async def test_the_answer_is_transcribed_and_the_environment_is_dropped():
         "app_version": "1.0.0",
         "response_protocol_version": "6.0.0",
         "operation_rubric_version": "0.4.0",
+        "department_handover_test": False,
     }
     assert "launch_environment" not in found
 

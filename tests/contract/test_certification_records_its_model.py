@@ -131,9 +131,10 @@ async def test_the_database_refuses_it_even_if_the_guard_is_bypassed(seed_agent)
                     INSERT INTO certification
                       (cert_id, unit, office_agent_id, forge_id, module_id, state,
                        certified_tier, instruction_content_hash, forge_api_version,
-                       rubric_kind, rubric_version, simforge_verdict)
+                       rubric_kind, rubric_version, simforge_verdict, basis)
                     VALUES (%s, 'A', %s, 'cre-forge', 'property_lookup', 'certified',
-                            'auto_execute', %s, '1.4.0', 'operation', '1.4.0', 'PASS')
+                            'auto_execute', %s, '1.4.0', 'operation', '1.4.0', 'PASS',
+                            'tested')
                     """,
                     (str(uuid.uuid4()), seed_agent, "b" * 64),
                 )

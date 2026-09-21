@@ -12742,3 +12742,159 @@ One PR, about the size of entry 142. The writing is the part that is not enginee
 3. **What ends it.** A stop-gap with no stated end is a permanent thing with an apology
    attached. What the real hand-over test is, and what retires the attestations when it
    arrives, is unwritten.
+## 147. A certification records its basis
+
+**Rulings by Ivan Green, 21 September 2026, on Unit B attestation:**
+
+> *"A certification records its basis: attested or tested, the attester by name, and the
+> reasons. A reader can always tell them apart."*
+>
+> *"Who attests: a human holding founder authority, recorded by name."*
+>
+> *"What ends it: when a real hand-over test ships, attested Unit B certifications stop
+> counting at Gate 9 and must be re-earned."*
+
+**No attestation is written by this change.** Ivan and Ira write the twelve.
+
+### Why a basis could not be read off the row before
+
+`attested_by` has always been a *parameter* of `record_result` and never a column. The
+structural expression of "SimForge said so" was `simforge_verdict IS NOT NULL`, which
+separated a bootstrap row from a real verdict and nothing else.
+
+That was enough while there were two kinds. An attested unit B is a third: The Office
+posts `department_outcomes` to SimForge's gate-result callback, SimForge writes an
+`OperationCertification(unitType="department_context")`, and The Office reads back a PASS
+**byte-identical to one a battery earned**. Entry 146 sized this and named it the
+question that mattered.
+
+So `certification.basis` — `tested`, `attested`, `bootstrap` — with `attestation_ref`
+beside it and two CHECKs: an attested row names its attestation, nothing else may, and
+**unit A can never be attested.** An attestation covers a department's escalation path
+and compliance coupling; there is no per-agent, per-module version of that, and allowing
+one would let an agent be certified to operate a module by assertion.
+
+Backfilled from the column that already answered it: `simforge_verdict IS NULL` is
+`bootstrap`, everything else `tested`. No existing row is attested, because the mechanism
+did not exist.
+
+### Founder authority already had a name, and it is `ivan`
+
+**No new role.** `office_human_role` has held
+`('venture_operator','compliance_officer','ivan')` since 0010, `ROLE_RANK` puts `ivan`
+top at 3, and it is what a Forge-scope revocation already requires. It is named for the
+founder and it is founder authority.
+
+Measured on the dev database: three accounts hold it — **Ivan Green, Ira Green, and a
+fixture called `dev-all build check`.** That third one is a real finding and is not this
+change's to fix: a build-check account holding the strongest role in the system can
+attest, revoke at Forge scope, and sign. Recorded here so it is not discovered later.
+
+### What "records the attester and the reasons" means, stated so it can be overruled
+
+`attestation_ref`, not two copied strings. The reasons and the name live on
+`department_attestation`, which is **append-only by trigger** — no UPDATE, DELETE or
+TRUNCATE, for anyone, including the owner — so a pointer to it cannot go stale and cannot
+disagree with a second copy. Same relationship `agent_forge_grant.operation_cert_ref` has
+to the certification it names.
+
+Copying the reasons onto `certification` was the literal reading. It buys a reader one
+less join at the cost of two strings that can drift from the ones somebody wrote. **If
+Ivan meant the columns, the migration says which line to change.**
+
+The *name* is copied, and that is the opposite decision for a reason: a display name
+changes and an account gets closed, and an attestation has to keep saying who made it. So
+`attested_by_name` is captured at the moment of attestation, beside the id.
+
+### Three foreign keys deliberately not taken
+
+`department_attestation` references nothing — not `office_human`, not `forge_registry` —
+and `audit_log.actor_id` is the precedent. **An append-only table with a RESTRICT
+reference is a deadlock**: the row cannot be deleted and neither can the thing it points
+at. Both were tried; both blocked the first teardown that closed a test account or
+de-registered a Forge. A register records what somebody said; it must not become the
+reason something else can never be removed.
+
+The FK in the other direction — `certification.attestation_ref` — stays, because it
+points at the immutable side.
+
+### An attested certification names no model, and `simforge_verdict` stays PASS
+
+0044's `certification_names_its_model` demands a digest and the generation settings
+whenever a SimForge verdict sits on a certified row, and it is right for a *tested* one:
+a certification that cannot name the model it was earned on cannot expire when the model
+moves. An attested one was not earned on a model at all. The exemption is the one
+`simforge_verdict IS NULL` already gives a bootstrap, restated against `basis`.
+
+`simforge_verdict` stays `PASS` on an attested row and that is not a fiction — SimForge
+really returned it, from the outcome The Office posted. **What tells a reader it was not
+a battery is `basis`**, which is the whole of the first ruling. Leaving the verdict NULL
+would have tripped Gate 9's *"certified but carries no SimForge PASS"* branch and blocked
+the thing the ruling says should count.
+
+### What ends it, and how The Office will know
+
+Gate 9 reads `department_handover_test` off the `forge_build` block **this run's Gate 8
+recorded** — never a live call, which is Gate 9's own rule and also the right answer: the
+build that set the exams is the build whose capabilities decide what those exams were
+worth.
+
+    True    the test exists. Attested units stop counting; a run must earn them again.
+            Nothing is deleted and nothing demoted - the gate refuses to count them.
+    False   SimForge says it has none. The stop-gap stands.
+    None    SimForge did not say. Every deployment today.
+
+A boolean or nothing: `bool("no")` is true, and a capability read off a truthy string is
+how a stop-gap ends by accident.
+
+**SimForge publishes nothing under that name.** The key is The Office's proposal and has
+to be agreed on the other side — so Gate 9 records the key it looked for, in
+`handover_test_key`, because entry 144 is what happens when a guess about another
+system's shape reads as that system's silence.
+
+### What Gate 8 sends, and what it deliberately does not
+
+`DepartmentRunOutcome` carries `department_id`, `forge_id`, `passed`,
+`escalation_path_verified`, `compliance_coupling_verified`. **The two booleans are
+exactly the two things ruled**, and there is no field for the reason, the attester, or
+the fact that this is an attestation — so none of those crosses the wire. Sending a field
+SimForge has not declared would 422 the whole call.
+
+`passed` is **derived** from the two facts and never sent bare: the schema defaults
+`passed` to true and both verified flags to false, so an outcome built from `passed` alone
+asserts a pass over two unanswered questions.
+
+`agent_outcomes` is sent empty and not omitted. The Office has never produced a unit-A
+verdict and must not appear to be offering one.
+
+**A department nobody has attested gets nothing posted, and Gate 8 reports which.**
+`curriculum_submission.attestation_id` is written only when the outcome actually went
+over the wire — an attestation that existed and was not posted did not produce the
+verdict.
+
+### A negative attestation is recordable, and that is deliberate
+
+*"I looked at this department's escalation path and it does not work"* is a fact somebody
+should be able to write down. Forcing it to be written as silence produces a register
+where absence means both "nobody looked" and "somebody looked and it failed". Both
+reasons are required whichever way the two verdicts go.
+
+### The append-only table broke the test wipe, which was the design working
+
+`wipe_venture` could not clear it, so rows from one suite were in force for every later
+one — and `post_gate_result` was called from a suite that has no attestations in it. The
+fix is the pattern `audit_log` already uses: `DISABLE TRIGGER`, delete, re-enable, with
+the attested certifications cleared through the attestations they name.
+
+Worth recording because it is a real operational fact and not only a test one: **a
+venture cannot be reset without taking the guard down deliberately**, which is what
+append-only means.
+
+### What is not done
+
+  * **No attestation is written.** Twelve are owed — three `(department, Forge)` pairs
+    for Greenstone and three for Burkham, two reasons apiece — and they are Ivan's and
+    Ira's to write.
+  * **SimForge declares nothing yet**, so nothing ends the stop-gap. The key is proposed
+    here and has to be agreed.
+  * **The `dev-all build check` account still holds `ivan`.**

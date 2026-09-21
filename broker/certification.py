@@ -394,6 +394,7 @@ async def record_result(
     model_identity: dict[str, Any] | None = None,
     attested_by: str = "simforge",
     bootstrap_reason: str | None = None,
+    attestation_ref: uuid.UUID | None = None,
 ) -> CertState:
     """Record a SimForge verdict as a certification state.
 
@@ -489,8 +490,14 @@ async def record_result(
     # docstring says a FAIL "needs no basis". Demanding the digest here would make an
     # older SimForge's failure REFUSED RATHER THAN RECORDED, which loses the finding
     # entirely. Losing a pass is safe; losing a failure is not.
+    # AN ATTESTED UNIT B NAMES NO MODEL EITHER, and for the bootstrap's reason rather
+    # than a new one: no battery ran, so nothing answered. SimForge returns the PASS
+    # because The Office posted the outcome, and `basis` is what tells a reader that -
+    # entry 147. The CHECK in 0050 carries the same exemption.
     digest, temperature, max_tokens = _model_scalars(model_identity)
-    if attested_by == "simforge" and state in (CERTIFIED, PROVISIONAL) and (
+    if attested_by == "simforge" and attestation_ref is None and (
+        state in (CERTIFIED, PROVISIONAL)
+    ) and (
         not digest or temperature is None or max_tokens is None
     ):
         missing = [
@@ -548,9 +555,9 @@ async def record_result(
                state, certified_tier, instruction_content_hash, forge_api_version,
                rubric_kind, rubric_version, score, threshold, scenario_pack_ref, agent_model,
                simforge_verdict, model_digest, model_temperature, model_max_tokens,
-               model_identity, model_fingerprint)
+               model_identity, model_fingerprint, basis, attestation_ref)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s)
+                    %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT {conflict} DO UPDATE SET
               state = EXCLUDED.state,
               certified_tier = EXCLUDED.certified_tier,
@@ -570,6 +577,12 @@ async def record_result(
               model_max_tokens = EXCLUDED.model_max_tokens,
               model_identity = EXCLUDED.model_identity,
               model_fingerprint = EXCLUDED.model_fingerprint,
+              -- REPLACED, like everything else here. A re-certification is a new
+              -- answer to the same question, and the basis of the new answer is the
+              -- new basis: a department that earns a tested PASS stops being attested,
+              -- and one whose test is withdrawn stops claiming it was tested.
+              basis = EXCLUDED.basis,
+              attestation_ref = EXCLUDED.attestation_ref,
               updated_at = now()
             RETURNING cert_id, unit, state, certified_tier
             """,
@@ -595,18 +608,37 @@ async def record_result(
                 # The model, same rule as `agent_model` above: a bootstrap records no
                 # model because none answered. The guard higher up has already refused
                 # a simforge verdict missing any of the three.
-                None if attested_by == "bootstrap" else digest,
-                None if attested_by == "bootstrap" else temperature,
-                None if attested_by == "bootstrap" else max_tokens,
+                # NULL on a bootstrap AND on an attestation: neither had a model
+                # answer it. The `basis` column says which of the two this is.
+                None if attested_by == "bootstrap" or attestation_ref else digest,
+                None if attested_by == "bootstrap" or attestation_ref else temperature,
+                None if attested_by == "bootstrap" or attestation_ref else max_tokens,
                 # Stored whole beside the promoted three, so a field SimForge adds
                 # later is on the row rather than discarded on the way in.
                 (
                     Jsonb(model_identity)
-                    if attested_by != "bootstrap" and model_identity is not None
+                    if attested_by != "bootstrap"
+                    and attestation_ref is None
+                    and model_identity is not None
                     else None
                 ),
-                None if attested_by == "bootstrap"
+                None if attested_by == "bootstrap" or attestation_ref
                 else (model_identity or {}).get("fingerprint"),
+                # THE BASIS, AND IT IS DERIVED HERE RATHER THAN TAKEN FROM A CALLER.
+                # Ruled 21 September 2026, entry 147: a reader can always tell an
+                # attested certification from a tested one.
+                #
+                # `attestation_ref` is the fact and `basis` is its name - one argument,
+                # not two that can disagree. A caller that could pass `basis='attested'`
+                # with no ref, or a ref with `basis='tested'`, would be two ways to say
+                # one thing and the CHECK in 0050 would be the only thing keeping them
+                # in step.
+                (
+                    "bootstrap" if attested_by == "bootstrap"
+                    else "attested" if attestation_ref is not None
+                    else "tested"
+                ),
+                attestation_ref,
             ),
         )
         row = await cur.fetchone()

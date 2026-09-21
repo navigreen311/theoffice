@@ -790,8 +790,10 @@ async def test_gate_11_refuses_a_grant_whose_certification_is_not_current(
                 # about a model that sat the exam.
                 "INSERT INTO certification "
                 "  (cert_id, unit, office_agent_id, forge_id, module_id, state, "
-                "   rubric_kind, rubric_version, simforge_verdict, agent_model) "
+                "   rubric_kind, rubric_version, simforge_verdict, basis, "
+                "   agent_model) "
                 "VALUES (%s, 'A', %s, %s, %s, 'failed', 'operation', '0.4.0', 'FAIL', "
+                "        'tested', "
                 "        'ollama/phi4:latest') "
                 "ON CONFLICT (office_agent_id, forge_id, module_id) WHERE unit = 'A' "
                 "  DO UPDATE SET state = 'failed', simforge_verdict = 'FAIL' "

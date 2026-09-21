@@ -606,10 +606,11 @@ def certify(conn: psycopg.Connection, agent_ids, modules, *, forge=FORGE_ID,
                     INSERT INTO certification
                       (cert_id, unit, office_agent_id, forge_id, module_id, state,
                        certified_tier, instruction_content_hash, forge_api_version,
-                       rubric_kind, rubric_version, simforge_verdict, agent_model,
+                       rubric_kind, rubric_version, simforge_verdict, basis, agent_model,
                        model_digest, model_temperature, model_max_tokens)
                     VALUES (%s, 'A', %s, %s, %s, 'certified', %s, %s, %s,
-                            'operation', '1.4.0', 'PASS', 'ollama/llama3.1:8b',
+                            'operation', '1.4.0', 'PASS', 'tested',
+                            'ollama/llama3.1:8b',
                             %s, %s, %s)
                     ON CONFLICT (office_agent_id, forge_id, module_id)
                       WHERE unit = 'A' DO NOTHING
@@ -624,10 +625,11 @@ def certify(conn: psycopg.Connection, agent_ids, modules, *, forge=FORGE_ID,
                 INSERT INTO certification
                   (cert_id, unit, department, forge_id, state, certified_tier,
                    instruction_content_hash, forge_api_version, rubric_kind,
-                   rubric_version, simforge_verdict, agent_model,
+                   rubric_version, simforge_verdict, basis, agent_model,
                    model_digest, model_temperature, model_max_tokens)
                 VALUES (%s, 'B', %s, %s, 'certified', 'auto_execute', %s, %s,
-                        'domain', '3.2.0', 'PASS', 'ollama/llama3.1:8b', %s, %s, %s)
+                        'domain', '3.2.0', 'PASS', 'tested', 'ollama/llama3.1:8b',
+                        %s, %s, %s)
                 ON CONFLICT (department, forge_id) WHERE unit = 'B' DO NOTHING
                 """,
                 (str(uuid.uuid4()), dept, forge,

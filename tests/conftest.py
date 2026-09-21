@@ -165,6 +165,28 @@ def wipe_venture(conn: psycopg.Connection, venture_id: str) -> None:
             if table == "provisioning_gate_result":
                 continue
             cur.execute(f"DELETE FROM {table} WHERE venture_id = %s", (venture_id,))
+
+        # `department_attestation` LAST, and with its guard down.
+        #
+        # Append-only by trigger for everyone including the owner (entry 147), so a test
+        # venture could never be reset and rows from one suite would be in force for
+        # every later one - which is how `post_gate_result` came to be called from a
+        # suite that has no attestations in it.
+        #
+        # Its dependents go first: `curriculum_submission` above is venture-scoped and
+        # deleted in the loop, and an attested `certification` is not - it carries no
+        # venture_id - so it is cleared through the attestations it names, which is the
+        # only venture this venture's departments belong to.
+        cur.execute("ALTER TABLE department_attestation DISABLE TRIGGER USER")
+        cur.execute(
+            "DELETE FROM certification WHERE attestation_ref IN "
+            "(SELECT attestation_id FROM department_attestation WHERE venture_id = %s)",
+            (venture_id,),
+        )
+        cur.execute(
+            "DELETE FROM department_attestation WHERE venture_id = %s", (venture_id,)
+        )
+        cur.execute("ALTER TABLE department_attestation ENABLE TRIGGER USER")
     conn.commit()
 
 

@@ -1007,6 +1007,93 @@ class SimForgeClient:
             raise SimForgeError(f"{self._forge_id!r} is not in forge_registry")
         return str(row[0]), str(row[1])
 
+    async def post_gate_result(
+        self,
+        conn: Any,
+        *,
+        run_ref: str,
+        instruction_set_ref: dict[str, Any],
+        run_content_hash: str,
+        department_outcomes: list[dict[str, Any]],
+        actor: Any,
+        venture_id: str,
+    ) -> dict[str, Any]:
+        """POST a unit-B gate result built from a named human's attestation.
+
+        RULED 21 SEPTEMBER 2026 (entry 147). **The only call in this client that tells
+        SimForge an outcome rather than asking for one**, and it exists because nothing
+        else can produce a unit-B outcome: The Office submits no curriculum to a
+        department run, so no battery runs and no verdict is ever earned.
+
+        WHAT IS SENT, AND WHAT DELIBERATELY IS NOT
+        ==========================================
+
+            `DepartmentRunOutcome` carries `department_id`, `forge_id`, `passed`,
+            `escalation_path_verified` and `compliance_coupling_verified`. **It has no
+            field for the reason, the attester, or the fact that this is an
+            attestation**, so none of those crosses the wire - sending them under a name
+            SimForge has not declared would 422 the whole call (entry 135), and guessing
+            a name is what entry 144 was about.
+
+            They stay on this side: `department_attestation` holds the human and the two
+            reasons, `certification.basis` says `attested`, and
+            `curriculum_submission.attestation_id` is what lets the sweep put the two
+            together when the verdict comes back looking like any other.
+
+        `agent_outcomes` is sent EMPTY and is not omitted. Unit A verdicts are earned by
+        a battery and read back; The Office has never produced one and must not appear to
+        be offering one here.
+        """
+        credential = await self._tenant_credential(conn)
+        base_url, api_version = await self._registry(conn)
+
+        payload: dict[str, Any] = {
+            "run_ref": run_ref,
+            "instruction_set_ref": instruction_set_ref,
+            "run_content_hash": run_content_hash,
+            "agent_outcomes": [],
+            "department_outcomes": department_outcomes,
+        }
+        url = f"{base_url.rstrip('/')}/gate_result"
+        try:
+            response = await self._http.post(
+                url,
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {credential.reveal()}",
+                    "X-Office-Forge-Api-Version": api_version,
+                    "Content-Type": "application/json",
+                },
+                timeout=self._timeout,
+            )
+        except httpx.HTTPError as exc:
+            raise SimForgeError(
+                f"posting the gate result failed: {type(exc).__name__}"
+            ) from exc
+
+        if response.status_code >= 400:
+            raise SimForgeError(
+                f"SimForge refused the gate result with {response.status_code}"
+            )
+        body = response.json() if response.content else {}
+        if not isinstance(body, dict):
+            body = {}
+        # Through the same validator as every read. A POST's acknowledgement is a
+        # response like any other, and the read-path control does not get an exemption
+        # for being on the end of a write.
+        validate_response("post_gate_result", body)
+
+        await write_event(
+            event_type="department_outcomes_posted",
+            actor_type="human", actor_id=actor, venture_id=venture_id,
+            subject={
+                "run_ref": run_ref,
+                "departments": [o["department_id"] for o in department_outcomes],
+                "basis": "attested",
+            },
+        )
+        return body
+
     async def build(self, conn: Any) -> dict[str, Any]:
         """Which build the Forge is running, or why that could not be established.
 
@@ -1115,7 +1202,7 @@ class SimForgeClient:
             await self._http.aclose()
 
 def _exam_versions(block: Any) -> dict[str, Any]:
-    """The two versions out of `/api/version`'s `exam` block, or None for each.
+    """What `/api/version`'s `exam` block says, or None for each thing it does not say.
 
     Split out so the shape is in one place and testable without an HTTP call. `None` is
     returned for a block that is missing, not an object, or missing a key - all three
@@ -1124,11 +1211,24 @@ def _exam_versions(block: Any) -> dict[str, Any]:
     version is still reachable, and conflating the two would report an outage where
     there is a missing field.
     """
+    # THE THIRD KEY IS THE ONE THAT ENDS A STOP-GAP. Entry 147: when a real department
+    # hand-over test ships, attested unit-B certifications stop counting at Gate 9. The
+    # Forge is the only party that knows whether it has one, so this is where The Office
+    # asks - and `None` means it did not say, which is every deployment today.
+    #
+    # A BOOLEAN OR NOTHING. `bool(value)` on a string would make "no" true, and a
+    # capability read from a truthy string is how a stop-gap ends by accident.
+    handover = block.get("department_handover_test") if isinstance(block, dict) else None
     if not isinstance(block, dict):
-        return {"response_protocol_version": None, "operation_rubric_version": None}
+        return {
+            "response_protocol_version": None,
+            "operation_rubric_version": None,
+            "department_handover_test": None,
+        }
     return {
         "response_protocol_version": block.get("response_protocol_version"),
         "operation_rubric_version": block.get("operation_rubric_version"),
+        "department_handover_test": handover if isinstance(handover, bool) else None,
     }
 
 
@@ -1412,6 +1512,10 @@ async def overdue_submissions(
                    -- a stale-key refusal on a live run is NOT auto-superseded; the
                    -- finding tells the operator and abandoning is the authored act.
                    run_id,
+                   -- 0050's column. The verdict SimForge returns for an attested
+                   -- department unit is byte-identical to one a battery earned, so
+                   -- this is the only thing that tells the sweep which it is holding.
+                   attestation_id,
                    EXTRACT(EPOCH FROM (now() - submitted_at)) / 3600.0 AS hours_waiting
             FROM curriculum_submission
             WHERE result_received_at IS NULL

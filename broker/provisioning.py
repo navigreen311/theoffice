@@ -38,7 +38,16 @@ from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from broker import audit, build, humans, instructions, knowledge, packs, revocation
+from broker import (
+    attestation,
+    audit,
+    build,
+    humans,
+    instructions,
+    knowledge,
+    packs,
+    revocation,
+)
 from broker.simforge import (
     CurriculumRejectedError,
     ResponseRefusedError,
@@ -1467,6 +1476,7 @@ async def _record_submission(
     scenario_hash: str | None = None,
     protocol_version: str | None = None,
     rubric_version: str | None = None,
+    attestation_id: Any | None = None,
 ) -> None:
     """The one place Gate 8 writes a `curriculum_submission` row, for either unit.
 
@@ -1502,8 +1512,8 @@ async def _record_submission(
                scenario_pack_ref, scenario_count, coverage_denominator,
                instruction_content_hash, submitted_by, simforge_run_ref,
                office_agent_id, scenario_set_hash, run_id,
-               protocol_version, rubric_version)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               protocol_version, rubric_version, attestation_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 submission_id, ctx.venture_id, forge_id, module_id, department,
@@ -1523,6 +1533,7 @@ async def _record_submission(
                 # rubric moved (entry 143). NULL until SimForge publishes them.
                 protocol_version,
                 rubric_version,
+                attestation_id,
             ),
         )
         if members:
@@ -1702,6 +1713,76 @@ async def _open_department_units(
             # that is allowed to be down.
             entry["error"] = str(exc)
 
+        # THE ATTESTATION IN FORCE, OR NONE. Ruled 21 September 2026, entry 147.
+        #
+        # A department run submits no curriculum, so nothing runs and no verdict is ever
+        # earned. Until a hand-over test exists, a named human with founder authority
+        # says whether the escalation path and the compliance coupling are verified, and
+        # THIS is where that reaches SimForge - as a `department_outcomes` entry on the
+        # gate-result callback, which is what writes the unit-B certification Gate 9
+        # reads.
+        #
+        # NOTHING IS POSTED FOR A DEPARTMENT NOBODY HAS ATTESTED, and the gate reports
+        # which. An outcome with `passed` defaulted true over two unanswered questions is
+        # exactly the certification-by-assertion this exists to avoid.
+        attested = await attestation.current_attestation(
+            ctx.conn, venture_id=ctx.venture_id, department=department,
+            forge_id=forge_id,
+        )
+        if attested is None:
+            entry["attestation"] = None
+        elif run_ref is None:
+            # No run to post an outcome against. The attestation stands and is recorded
+            # on the row; there is simply nowhere to send it yet.
+            entry["attestation"] = {"posted": False, "reason": "no run was opened"}
+        else:
+            entry["attestation"] = {
+                "attestation_id": str(attested.attestation_id),
+                "attested_by": attested.attested_by_name,
+                "escalation_path_verified": attested.escalation_path_verified,
+                "compliance_coupling_verified": attested.compliance_coupling_verified,
+                "passed": attested.passed,
+                "posted": False,
+            }
+            try:
+                await client.post_gate_result(
+                    ctx.conn,
+                    run_ref=run_ref,
+                    instruction_set_ref={
+                        # The department's composite basis, named the way a unit-A
+                        # submission names its module's instruction. `module_id` is
+                        # required by the schema and a department has none, so the
+                        # first member module stands for the set the composite was
+                        # taken over - and `members` on the submission row is what
+                        # recovers the whole of it.
+                        "forge_id": forge_id,
+                        "module_id": covered[0] if covered else None,
+                        "content_hash": basis,
+                        "instruction_version": None,
+                        "forge_api_version": None,
+                        "authored_by": None,
+                    },
+                    run_content_hash=basis,
+                    department_outcomes=[{
+                        "department_id": department,
+                        "forge_id": forge_id,
+                        # DERIVED FROM THE TWO FACTS, never sent as a bare `passed`.
+                        # The schema defaults `passed` to true and both verified flags
+                        # to false, so a caller sending only the first would assert a
+                        # pass over two questions nobody answered.
+                        "passed": attested.passed,
+                        "escalation_path_verified": attested.escalation_path_verified,
+                        "compliance_coupling_verified":
+                            attested.compliance_coupling_verified,
+                    }],
+                    actor=ctx.actor,
+                    venture_id=ctx.venture_id,
+                )
+                entry["attestation"]["posted"] = True
+            except SimForgeError as exc:
+                # Non-fatal, same as `run_start` above and for the same reason.
+                entry["attestation"]["error"] = str(exc)
+
         await _record_submission(
             ctx,
             forge_id=forge_id,
@@ -1718,6 +1799,19 @@ async def _open_department_units(
             members={m: accepted[m]["instruction_content_hash"] for m in covered},
             protocol_version=forge_build.get("response_protocol_version"),
             rubric_version=forge_build.get("operation_rubric_version"),
+            # WHICH ATTESTATION THIS UNIT WAS POSTED WITH, and it is the only thing that
+            # will distinguish the verdict when it comes back. SimForge returns a PASS
+            # that is byte-identical whether a battery earned it or a person attested it,
+            # so the sweep reads this column to know which it is holding (entry 147).
+            #
+            # Written only when the outcome actually went over the wire. An attestation
+            # that existed and was not posted did not produce the verdict, and a row
+            # saying otherwise would be the false provenance this whole change is about.
+            attestation_id=(
+                attested.attestation_id
+                if attested is not None and (entry.get("attestation") or {}).get("posted")
+                else None
+            ),
         )
         entry["run_ref"] = run_ref
         units.append(entry)
@@ -1911,6 +2005,32 @@ async def _module_coverage(
     }
 
 
+async def _recorded_forge_build(ctx: _Context) -> dict[str, Any] | None:
+    """What Gate 8 recorded about the Forge on THIS run, or None if it never ran.
+
+    Gate 9 does not call SimForge - its own docstring says why, and the reason holds
+    doubly here: whether a department hand-over test exists is a fact about the build
+    that SET these exams, not about whatever is answering the port now. A live probe
+    would let a Forge restarted between Gate 8 and Gate 9 change what this run's
+    certifications are worth.
+
+    `None` when Gate 8 has no result on this run - a venture whose grants were bootstrapped
+    is the case - and `handover_test_available` reads that as "nobody said", which leaves
+    attested units counting and says so.
+    """
+    async with ctx.conn.cursor() as cur:
+        await cur.execute(
+            "SELECT evidence FROM provisioning_gate_result "
+            " WHERE run_id = %s AND gate = '8' ORDER BY recorded_at DESC LIMIT 1",
+            (ctx.run_id,),
+        )
+        row = await cur.fetchone()
+    if row is None or not isinstance(row[0], dict):
+        return None
+    found = row[0].get("forge_build")
+    return found if isinstance(found, dict) else None
+
+
 async def _gate_9(ctx: _Context) -> GateOutcome:
     """Readiness Gate per role per domain - read from the certification record.
 
@@ -1938,12 +2058,17 @@ async def _gate_9(ctx: _Context) -> GateOutcome:
                    ca.simforge_verdict AS unit_a_verdict,
                    cb.simforge_verdict AS unit_b_verdict,
                    ca.model_digest AS unit_a_digest,
-                   cb.model_digest AS unit_b_digest
+                   cb.model_digest AS unit_b_digest,
+                   cb.basis AS unit_b_basis,
+                   at.attested_by AS unit_b_attested_by,
+                   at.attested_by_name AS unit_b_attester
             FROM agent_forge_grant g
             LEFT JOIN certification ca
               ON ca.unit = 'A' AND ca.cert_id::text = g.operation_cert_ref
             LEFT JOIN certification cb
               ON cb.unit = 'B' AND cb.cert_id::text = g.dept_context_cert_ref
+            LEFT JOIN department_attestation at
+              ON at.attestation_id = cb.attestation_ref
             WHERE g.venture_id = %s AND g.superseded_at IS NULL
             ORDER BY g.grant_id
             """,
@@ -1988,13 +2113,36 @@ async def _gate_9(ctx: _Context) -> GateOutcome:
             {"grants": 0, "withheld_revoked": len(withheld)},
         )
 
+    # WHAT ENDS THE STOP-GAP. Ruled 21 September 2026, entry 147: when a real
+    # hand-over test ships, attested unit-B certifications stop counting here and must
+    # be re-earned.
+    #
+    # Read off the `forge_build` THIS RUN's Gate 8 recorded, never by a live call. That
+    # is this gate's own rule - "a Readiness Gate verdict reaches The Office by being
+    # recorded" - and it is also the right answer: the build that set the exams is the
+    # build whose capabilities decide what those exams were worth.
+    handover = attestation.handover_test_available(await _recorded_forge_build(ctx))
     by_state: dict[str, int] = {}
     unattested: list[str] = []
     unpinned: list[str] = []
     failing: list[dict[str, str]] = []
+    attested_units: list[str] = []
     for row in rows:
         for unit in ("a", "b"):
             state = row[f"unit_{unit}_state"]
+            if unit == "b" and row.get("unit_b_basis") == "attested":
+                # NAMED WHEREVER IT COUNTS, which is the whole of the first ruling: a
+                # reader of this gate can always tell an attested unit from a tested
+                # one, and the name of the person who attested it is on the line.
+                attested_units.append(
+                    f"{row['grant_id'][:8]}/unitB attested by "
+                    f"{row['unit_b_attester'] or 'somebody no longer on file'}"
+                )
+                if handover is True:
+                    # RE-EARNED, not demoted. The row is untouched - nothing here edits
+                    # a certification - and this gate refuses to count it, so a run has
+                    # to go and get a real one.
+                    state = "attested_but_a_test_now_exists"
             by_state[state] = by_state.get(state, 0) + 1
             if state != "certified":
                 failing.append({
@@ -2022,7 +2170,25 @@ async def _gate_9(ctx: _Context) -> GateOutcome:
         "withheld_revoked": len(withheld),
         "withheld_revoked_grants": [r["grant_id"] for r in withheld][:20],
         "revocation_scopes": withheld_scopes,
+        # ENTRY 147, ON THE ROW WHETHER OR NOT IT CHANGED THE VERDICT. A reader asking
+        # "what is this venture's readiness resting on" gets the count and the names
+        # without going to another table, and gets it on a PASS as well as a block.
+        "attested_units": attested_units,
+        "handover_test_available": handover,
+        # The key that was looked for, named. Entry 144's lesson: a guess about another
+        # system's shape reads as that system's silence, so the guess is on the record
+        # rather than in somebody's head.
+        "handover_test_key": attestation.HANDOVER_TEST_KEY,
     }
+    attested_note = (
+        f" {len(attested_units)} unit(s) rest on a named human's attestation rather "
+        "than a test"
+        + (
+            "; a hand-over test now exists, so they no longer count and must be "
+            "re-earned." if handover is True else "."
+        )
+        if attested_units else ""
+    )
 
     if failing:
         summary = "; ".join(
@@ -2033,7 +2199,8 @@ async def _gate_9(ctx: _Context) -> GateOutcome:
             "9", BLOCKED,
             f"{len(failing)} of {len(rows) * 2} certification unit(s) are not certified "
             f"({summary}). Every grant needs Unit A on its module and Unit B on its "
-            f"department before the Readiness Gate is passed.{withheld_note}",
+            f"department before the Readiness Gate is passed."
+            f"{withheld_note}{attested_note}",
             evidence,
         )
     if unattested:
@@ -2041,7 +2208,7 @@ async def _gate_9(ctx: _Context) -> GateOutcome:
             "9", BLOCKED,
             f"{len(unattested)} certification(s) read as certified but carry no SimForge "
             "PASS. A certification nothing external attested is a certification The "
-            f"Office wrote for itself.{withheld_note}",
+            f"Office wrote for itself.{withheld_note}{attested_note}",
             evidence,
         )
     # A CERTIFICATION THAT CANNOT NAME THE MODEL CANNOT EXPIRE WHEN THE MODEL MOVES.
@@ -2062,13 +2229,16 @@ async def _gate_9(ctx: _Context) -> GateOutcome:
             f"{len(unpinned)} certification(s) carry a SimForge verdict and no model "
             "digest. A certification that cannot name the model it was earned on cannot "
             "be re-certified when the model changes - `agent_model` is a label and the "
-            f"same label describes different weights.{withheld_note}",
+            f"same label describes different weights.{withheld_note}{attested_note}",
             evidence,
         )
+    # ON THE PASS TOO, and that is the sentence that matters most. A Readiness Gate that
+    # passes without saying what part of it rests on somebody's word is the note-in-a-
+    # document this replaced.
     return GateOutcome(
         "9", PASSED,
         f"{len(rows) * 2} certification unit(s) certified across {len(rows)} grant(s)"
-        f"{withheld_note}",
+        f"{withheld_note}{attested_note}",
         evidence,
     )
 
