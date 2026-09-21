@@ -437,6 +437,25 @@ async def sweep_verdict_ingest(
         `(office_agent_id, forge_id, module_id)` replaces the state rather than adding a
         row. **The arriving verdict wins.**
 
+    A VERDICT SET FROM A KEY THAT HAS SINCE CHANGED
+    ===============================================
+
+        Ruled 21 September 2026, entry 142, and the second half of the same ruling that
+        made `abort_run` supersede a run's open submissions. The first half is a control
+        on the act; this is the control on the read, and it has to be both because the
+        two fail at different moments.
+
+        The first pass of this sweep, on 20 September, ingested four PASS verdicts from
+        an abandoned run, every one graded against keys entries 137 and 140 had since
+        corrected. All four were overwritten inside the same pass by the live run's
+        exams for the same modules, because `overdue_submissions` orders by
+        `submitted_at` and the live rows came last. **That is loop order, not a
+        control** - reverse the arrival times and the four would have stood.
+
+        So a submission whose `scenario_set_hash` disagrees with the approved key's is
+        read, counted, reported in `scenario_set_stale`, and not written. See
+        `_stale_key` for the third case, which is reported and not refused.
+
     WHAT IS REFUSED RATHER THAN GUESSED
     ===================================
 
@@ -474,6 +493,16 @@ async def sweep_verdict_ingest(
         "refused": [],
         "no_grant_holders": [],
         "unreadable": [],
+        # Entry 142's two. `scenario_set_stale` is a verdict this sweep read and would
+        # not write; `scenario_set_unverifiable` is one it could not ask the question
+        # about. Neither is `refused`, which is reserved for a write `record_result`
+        # rejected - this sweep failing at its job rather than doing it.
+        "scenario_set_stale": [],
+        "scenario_set_unverifiable": [],
+        # Not a finding. One approved-key hash per module, so a sweep over forty
+        # submissions loads five YAML files and not forty. Stripped before the row is
+        # written; see `_finish` below.
+        "_approved_hashes": {},
     }
 
     # `deadline_hours=0` makes this "every submission still owed an answer", which is
@@ -505,10 +534,66 @@ async def sweep_verdict_ingest(
     # sweep working and reporting.
     status = "failed" if findings["refused"] else "passed"
     examined = int(findings["examined"])
+    # The cache is scaffolding, not evidence. It is removed rather than left on the row
+    # because a `sweep_run.findings` reader has no way to tell a working value from a
+    # measurement, and this one would read as a per-module result.
+    findings.pop("_approved_hashes", None)
     await _finish(
         conn, run_id, status=status, denominator=examined, findings=findings,
     )
     return SweepResult(run_id, VERDICT_INGEST, status, examined, findings)
+
+
+def _stale_key(sub: dict[str, Any], findings: dict[str, Any]) -> str | None:
+    """The approved key's hash when it differs from this submission's, else None.
+
+    RULED 21 SEPTEMBER 2026 (decisions entry 142)
+    =============================================
+
+        *"Ingest also refuses a verdict whose submission's scenario-set hash differs
+        from the currently approved key's."*
+
+    THE THREE ANSWERS, AND WHY ONLY ONE OF THEM REFUSES
+    ===================================================
+
+        differs          refused. The exam was set from text that is no longer the
+                         approved answer key, so its verdict is about a curriculum
+                         nobody stands behind.
+        agrees           written, as before.
+        cannot be asked  reported and NOT refused. Two ways in: the row carries no
+                         `scenario_set_hash` at all - every submission written before
+                         0046 - or the module's key is a draft or absent, so there is
+                         no approved key for it to differ from.
+
+        The third is a count in `scenario_set_unverifiable` rather than a refusal
+        because refusing would be a rule nobody ruled: an unknown hash is not a
+        mismatch, and treating it as one would strand Burkham's twenty draft-key rows
+        on a ruling about corrected approvals. **It is reported so it cannot be
+        mistaken for a check that passed.**
+    """
+    submitted = sub.get("scenario_set_hash")
+    module_id = sub["module_id"]
+    if not submitted or not module_id:
+        findings["scenario_set_unverifiable"].append({
+            "submission_id": str(sub["submission_id"]),
+            "module_id": module_id,
+            "why": "the submission records no scenario-set hash",
+        })
+        return None
+
+    cache = findings["_approved_hashes"]
+    if module_id not in cache:
+        cache[module_id] = simforge.approved_scenario_set_hash(module_id)
+    approved = cache[module_id]
+
+    if approved is None:
+        findings["scenario_set_unverifiable"].append({
+            "submission_id": str(sub["submission_id"]),
+            "module_id": module_id,
+            "why": "no approved answer key for this module",
+        })
+        return None
+    return None if approved == submitted else approved
 
 
 async def _ingest_one(
@@ -544,6 +629,29 @@ async def _ingest_one(
     by_verdict[result.verdict] = by_verdict.get(result.verdict, 0) + 1
 
     unit, _rubric_kind = simforge.submission_unit(sub["module_id"])
+
+    # THE ANSWER KEY THIS EXAM WAS SET FROM, AGAINST THE ONE APPROVED NOW.
+    # Ruled 21 September 2026, entry 142.
+    #
+    # Read AFTER the verdict rather than before it, deliberately: refusing to ask would
+    # leave no record of what SimForge held, and the finding below is worth more to the
+    # next reader with the verdict in it than without.
+    #
+    # **A TIMEOUT is refused here too.** It is a verdict this sweep synthesised for
+    # this submission, and a submission set from withdrawn text has nothing to say
+    # about an agent - not even that it did not answer. The live exam for the same
+    # module is what should move that certification.
+    if unit == "A":
+        stale = _stale_key(sub, findings)
+        if stale:
+            findings["scenario_set_stale"].append({
+                "submission_id": str(submission_id),
+                "module_id": sub["module_id"],
+                "verdict": result.verdict,
+                "submitted_hash": sub.get("scenario_set_hash"),
+                "approved_hash": stale,
+            })
+            return
 
     # Both units recover it, and they ask different questions. Unit A reconstructs the
     # instruction row in force at `submitted_at` from the module's own content hash.

@@ -242,6 +242,104 @@ def scenario_set_hash(payload: dict[str, Any]) -> str:
     ).hexdigest()
 
 
+def operation_scenario_rows(scenarios: list[Any]) -> list[dict[str, Any]]:
+    """The `operation_scenarios` rows one module's curriculum sends, in order.
+
+    Lifted out of `provisioning._curriculum_payload` so that the answer key's identity
+    can be computed from the key alone. `approved_scenario_set_hash` needs to produce
+    the byte-identical rows Gate 8 would send, and a second spelling of this list would
+    be two implementations that agree until the first field is added to one of them -
+    at which point every submission would read as stale and the sweep would refuse
+    verdicts for a reason that was not true.
+
+    Every omission here is deliberate and documented at the call site in
+    `_curriculum_payload`: `situation` and `expected_answer` are absent rather than
+    blank, which is entry 122's rule.
+    """
+    return [
+        {
+            "scenario_class": s.scenario_class,
+            "instruction_section": s.instruction_section,
+            "module_id": s.module_id,
+            **({"situation": s.summary} if s.summary else {}),
+            "expected_behavior": s.expected_behavior,
+            "expected_escalation": s.expected_escalation,
+            **({"expected_answer": dict(s.expected_answer)} if s.expected_answer else {}),
+        }
+        for s in scenarios
+        if not s.not_applicable_reason
+    ]
+
+
+def declared_absent(scenarios: list[Any]) -> dict[str, str]:
+    """class -> the reason this module cannot have it. Lifted out for the same reason."""
+    return {
+        s.scenario_class: s.not_applicable_reason
+        for s in scenarios
+        if s.not_applicable_reason and s.scenario_class
+    }
+
+
+def approved_scenario_set_hash(module_id: str, *, root: Path | None = None) -> str | None:
+    """The scenario-set hash the currently approved answer key would produce.
+
+    RULED 21 SEPTEMBER 2026 (decisions entry 142)
+    =============================================
+
+        *"Ingest also refuses a verdict whose submission's scenario-set hash differs
+        from the currently approved key's."*
+
+        `curriculum_submission.scenario_set_hash` says which key an exam was set from.
+        Until now nothing could say which key is approved NOW, so the two could not be
+        compared and a verdict earned on withdrawn text was indistinguishable from one
+        earned on the text in the tree.
+
+    HOW IT IS DERIVED, AND WHY NOT FROM THE APPROVAL HEADER
+    =======================================================
+
+        Entry 141 put an `approved_content_hash` on the key itself, and it is the wrong
+        hash for this question: it is taken over the key's own fields - including
+        `expected_answer` sub-keys `derivation` deliberately excludes - not over what
+        goes on the wire. Comparing it with a submission's `scenario_set_hash` would
+        compare two different digests of two different shapes.
+
+        So this walks the same road Gate 8 walks: load the key, build the curriculum
+        rows, hash the rows. `_operation_scenarios` and `operation_scenario_rows` are
+        the SAME functions Gate 8 calls, not copies.
+
+    WHAT NONE MEANS, AND WHY IT IS NOT A MISMATCH
+    =============================================
+
+        `None` is returned when there is no key file for the module, or the key is a
+        draft. Neither is a statement that the exam was set from the wrong text - a
+        module whose key nobody has approved has no approved key to differ from - so
+        the caller reports it and does not refuse on it. That distinction is why this
+        returns `None` rather than a sentinel digest.
+
+    `has_instruction=True` is passed because a module with no live instruction is never
+    submitted: `_submit_one_module` returns before `_curriculum_payload` is reached. The
+    instruction hash is passed empty because it is not in the material this hashes.
+    """
+    # Imported here rather than at module scope. `generators.curriculum` pulls in the
+    # whole artifact pipeline, and `broker.simforge` is imported by the health probes.
+    from generators import curriculum as curriculum_gen
+    from generators import scenario_content
+
+    base = root if root is not None else scenario_content.default_root()
+    path = base / f"{module_id}.yaml"
+    if not path.exists():
+        return None
+    content = scenario_content.load_module(path)
+    if content.status != scenario_content.APPROVED:
+        return None
+
+    rows = curriculum_gen.module_scenarios(module_id, content, has_instruction=True)
+    return scenario_set_hash({
+        "operation_scenarios": operation_scenario_rows(rows),
+        "module_not_applicable": {module_id: declared_absent(rows)},
+    })
+
+
 def mint_run_ref(
     *,
     venture_id: str,
@@ -1311,6 +1409,47 @@ async def mark_result_received(conn: Any, submission_id: uuid.UUID) -> None:
             (submission_id,),
         )
     await conn.commit()
+
+
+async def supersede_run_submissions(
+    conn: Any, *, run_id: uuid.UUID, reason: str
+) -> int:
+    """Retire every open submission this run wrote. Returns how many.
+
+    RULED 21 SEPTEMBER 2026 (decisions entry 142)
+    =============================================
+
+        *"Abandoning a run supersedes its open submissions."*
+
+        Run 50d933e8 was abandoned because its Gate 8 predated the corrected answer
+        keys. Nothing linked its nine rows to it, so they stayed in the sweep's
+        candidate set and the first pass ingested four PASS verdicts graded against
+        text entries 137 and 140 had corrected. They were overwritten in the same pass
+        by loop order, which is luck and not a control.
+
+    NOT `result_received_at`, for 0046's reason restated: that field means a verdict
+    was written into a certification, and here none will be. The row keeps its open
+    shape and carries a reason saying why nobody will act on it.
+
+    A submission already closed is left alone. Its verdict was ingested before the run
+    was abandoned, and marking it superseded now would claim a decision was taken about
+    a certification that already exists - which is a revocation, a different act with
+    different authority.
+    """
+    if not reason.strip():
+        raise ValueError("superseding a submission requires a stated reason")
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "UPDATE curriculum_submission "
+            "   SET superseded_at = now(), superseded_reason = %s "
+            " WHERE run_id = %s "
+            "   AND result_received_at IS NULL "
+            "   AND superseded_at IS NULL",
+            (reason, run_id),
+        )
+        superseded = cur.rowcount
+    await conn.commit()
+    return int(superseded)
 
 
 async def record_submission(

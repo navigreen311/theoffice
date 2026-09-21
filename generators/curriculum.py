@@ -158,6 +158,23 @@ async def generate(
     )
 
 
+def module_scenarios(
+    module: str, content: ModuleContent | None, *, has_instruction: bool = True
+) -> list[CurriculumScenario]:
+    """One module's operation scenarios, from its answer key alone.
+
+    The public door onto `_operation_scenarios` for a caller that holds one key and no
+    Pack. `simforge.approved_scenario_set_hash` needs the rows Gate 8 would send for
+    this module, and building them a second time is the one thing that would make a
+    staleness check refuse verdicts over its own drift (entry 142).
+
+    `hashes` is empty because `instruction_content_hash` is not part of what a
+    scenario-set hash is taken over - it lives on the curriculum row and never reaches
+    `operation_scenarios`.
+    """
+    return _operation_scenarios(module, content, has_instruction, {})
+
+
 def _operation_scenarios(
     module: str,
     content: ModuleContent | None,

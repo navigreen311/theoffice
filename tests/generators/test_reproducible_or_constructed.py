@@ -207,13 +207,26 @@ def test_the_tag_is_not_sent_to_simforge():
     `OperationScenarioSubmission` declares no `derivation`, and it carries
     `extra="forbid"` - so sending one would 422 every submission rather than being
     ignored. The tag lives here until the far side has somewhere to put it.
-    """
-    from broker import provisioning
 
-    source = Path(provisioning.__file__).read_text(encoding="utf-8")
-    payload = source[source.index('"operation_scenarios": ['):]
-    payload = payload[:payload.index("coverage_declaration")]
-    assert "derivation" not in payload, (
-        "`derivation` reaches the curriculum payload. SimForge does not declare it and "
-        "forbids extras, so this would refuse every submission (entry 135)."
-    )
+    ASSERTED ON THE ROWS, NOT ON THE SOURCE TEXT. This read
+    `provisioning._curriculum_payload`'s literal until entry 142 lifted the row builder
+    into `simforge.operation_scenario_rows`, at which point the grep stopped finding
+    its substring - a guard that goes quiet when the code it guards moves. The rows are
+    built from a real tagged key instead, so the check follows the function wherever it
+    lives and would also catch a tag arriving through a field nobody spelled here.
+    """
+    from broker import simforge
+    from generators import curriculum as curriculum_gen
+
+    loaded = sc.load_all()
+    for module_id in GREENSTONE:
+        rows = simforge.operation_scenario_rows(
+            curriculum_gen.module_scenarios(module_id, loaded.modules[module_id])
+        )
+        assert rows, f"{module_id} produced no submittable rows"
+        for row in rows:
+            assert "derivation" not in row, (
+                f"`derivation` reaches {module_id}'s curriculum payload. SimForge does "
+                "not declare it and forbids extras, so this would refuse every "
+                "submission (entry 135)."
+            )
