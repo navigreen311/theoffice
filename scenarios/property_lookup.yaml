@@ -40,16 +40,25 @@
 # Greenstone keys still carry 18 September, and an approval dated then would claim Ivan read
 # prose that did not exist yet (entry 126).
 
-# CONTENT CORRECTED 20 September 2026 - BACK TO DRAFT, entry 140.
+# CORRECTED AND RE-APPROVED 20 September 2026, entry 140.
 #
 # Four scenarios changed under the first operation spec: two queries rewritten to strings the
 # agent can name a searched field for (spec 18), and two counts given the caveat that names the
-# page they were counted over (spec 14). What a correct answer IS has moved again, so the key
-# returns to draft and re-approval is a reading.
+# page they were counted over (spec 14). The key went to draft on that change and Ivan read it
+# the same evening.
+#
+# `approved_on` reads 2026-09-20 and so did the approval this correction superseded. THE DATE
+# ALONE NO LONGER SEPARATES THEM - the field has day resolution and both readings happened on
+# one day. What separates them is the ledger: entry 139 approved the pre-spec text, entry 140
+# corrected it and approved the text below. Noted here because entry 126 added this field
+# precisely so two approvals could be told apart, and this is the first time it could not do
+# it unaided.
 
 module_id: property_lookup
 forge_id: cre-forge
-status: draft
+status: approved
+approved_by: "Ivan Green"
+approved_on: "2026-09-20"
 drafted_by: "Claude"
 supersedes: "the approved 5-scenario key, 17 September 2026"
 

@@ -11877,20 +11877,39 @@ Audited across all five approved keys: **those two were the only violations.**
 `max_comps` default of 10, so four is the whole set and not a page. It complies today and
 would not if the count reached 10.
 
-### Back to draft, a second time in two days
+### To draft, read, and approved again - all in one evening
 
-`property_lookup` returns to draft with `approved_by` and `approved_on` removed.
-`buyer_match` keeps its 20 September approval; nothing in its eight scenarios moved.
+`property_lookup` went to draft on the correction and Ivan read it the same evening.
+`buyer_match` kept its 20 September approval throughout; nothing in its eight scenarios
+moved.
 
     assign_contract   approved   18 September
     buyer_match       approved   20 September
     comp_analysis     approved   18 September
     underwrite_deal   approved   18 September
-    property_lookup   DRAFT
+    property_lookup   approved   20 September   <- corrected and read again the same day
 
-    operation rows                                   52 -> 43  (34 authored + 9 absent)
-    modules_with_authored_scenario_content          5/5 -> 4/5
-    modules_accounting_for_every_submittable_class  5/5 -> 4/5
+    all five approved · 44 authored scenarios · 52 operation rows (44 + 8 absent)
+    modules_with_authored_scenario_content          5/5
+    modules_accounting_for_every_submittable_class  5/5
+    modules_with_a_draft_answer_key_awaiting_approval 0/0
+
+### `approved_on` could not separate these two readings, and that is worth recording
+
+**`property_lookup` was approved twice on 20 September** - once on the pre-spec text
+(entry 139) and once on the text this entry corrects. Both carry `approved_on:
+"2026-09-20"`, because the field has **day resolution** and both readings happened inside
+one day.
+
+Entry 126 added that field precisely so two approvals could be told apart: *"With only a
+name, the second approval is indistinguishable from the first still sitting there over
+prose that has since been replaced."* **This is the first case where the date could not do
+it unaided.** What separates them is the ledger - 139 approved one text, 140 corrected it
+and 140 approved the next - and the key's own header now says so.
+
+Not fixed here. A timestamp would separate them and would also invite the reading that an
+approval is an instant rather than an act, and that trade is Ivan's to make rather than a
+consequence of this entry.
 
 **This is the spec doing what a spec is for.** It was written to make the next fifteen
 modules cheaper, and the first thing it did was find four defects in a key approved six
