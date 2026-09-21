@@ -181,12 +181,24 @@ def test_every_greenstone_key_is_approved_and_carries_its_own_date():
     whole reason `approved_on` is a separate required field (entry 126).
     """
     loaded = sc.load_all()
-    re_approved = {"buyer_match", "property_lookup"}
+    # `property_lookup` went back to draft the same evening under entry 140 - the first
+    # operation spec obliged four of its scenarios - so it is a draft with no date. The
+    # other four are approved, and `buyer_match` carries the later of the two dates.
+    dated = {
+        "assign_contract": "2026-09-18",
+        "comp_analysis": "2026-09-18",
+        "underwrite_deal": "2026-09-18",
+        "buyer_match": "2026-09-20",
+    }
     for module_id in GREENSTONE:
         content = loaded.modules[module_id]
+        if module_id not in dated:
+            assert content.status == sc.DRAFT
+            assert content.approved_by == "" and content.approved_on == ""
+            continue
         assert content.status == sc.APPROVED
         assert content.approved_by == "Ivan Green"
-        expected = "2026-09-20" if module_id in re_approved else "2026-09-18"
-        assert content.approved_on == expected, (
-            f"{module_id} is approved on {content.approved_on}, expected {expected}"
+        assert content.approved_on == dated[module_id], (
+            f"{module_id} is approved on {content.approved_on}, "
+            f"expected {dated[module_id]}"
         )

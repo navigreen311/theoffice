@@ -11823,3 +11823,88 @@ promote one.
 Gate 9 still blocks. No certification carries a SimForge PASS, Unit B has never earned one
 by anybody, and SimForge's battery is still not wired to grade submitted scenarios. The
 answer keys were never what Gate 9 was waiting for.
+
+## NEXT. The first operation spec, and the four scenarios it obliged
+
+**Ruled by Ivan Green, 20 September 2026:** nine practice judgment calls for
+`property_lookup`, recorded verbatim in `docs/operation-specs/property_lookup.md`. They
+are the first operation spec; fifteen modules follow.
+
+The document is the Part 2 shape with its two groups kept apart, which is entry 136's
+ruling 3 working the first time it was used: **ten mechanical calls answered from code
+with a file and a line, nine practice calls drafted as questions only.** No candidate
+answers were offered on the nine, and every word of §B is Ivan's.
+
+### What the spec obliged, the same evening
+
+Four scenarios, and `property_lookup` back to draft.
+
+**Spec 18 forbids the queries two scenarios were sending.** A query must be one the agent
+can name a searched field for, and `property.py:300-308` searches four: address, city,
+county, zip. *"Multi-word conceptual queries - 'Reno warehouse', 'industrial Sparks' - are
+not."* Both named strings were in the key.
+
+    happy_path[0]   query "Reno warehouse" -> "Reno", nameable as `city`
+    happy_path[2]   "industrial in Sparks" -> "Sparks", nameable as `city`
+
+**Both stay `happy_path`, and the class is a judgment worth stating.** The module did the
+happy path: the call succeeded and the response is complete for the string sent. What is
+partial is the answer to the *human*, and spec 11 keeps the agent proceeding rather than
+handing over - *"return the rows, label the set for what it is."* `partial_failure` on
+this Forge means the RESPONSE carries a silent incompleteness (`total: 0`, a null, the
+page cap); a filter that does not exist is not in the response at all. And
+`escalation_required` is stopping, which spec 11 forbids here. The sibling
+`escalation_required[0]` remains the hand-over case, where a second constraint has no
+sendable part.
+
+**The two differ in one way that matters**, and the keys now say so:
+
+    happy_path[0]   one page of 143. Spec 11's client-side filter is NOT available.
+    happy_path[2]   seven of seven. It IS available, and using it must be declared.
+
+**Spec 14 forbids characterizing a whole set from one page.** Two counts were doing it:
+
+    partial_failure[1]   "two of the hundred" with no caveat - and the hundred is one
+                         page of 143, so 43 rows were never seen
+    partial_failure[2]   the same, for one null `square_feet`
+
+Both now carry a caveat naming the page the count was taken over. The mechanism already
+existed - `partial_failure[3]` has used `expected_caveat` for the query string since it
+was drafted - and these two did not use it.
+
+Audited across all five approved keys: **those two were the only violations.**
+`comp_analysis/happy_path[0]` is a near miss worth recording - `total: 4` under a
+`max_comps` default of 10, so four is the whole set and not a page. It complies today and
+would not if the count reached 10.
+
+### Back to draft, a second time in two days
+
+`property_lookup` returns to draft with `approved_by` and `approved_on` removed.
+`buyer_match` keeps its 20 September approval; nothing in its eight scenarios moved.
+
+    assign_contract   approved   18 September
+    buyer_match       approved   20 September
+    comp_analysis     approved   18 September
+    underwrite_deal   approved   18 September
+    property_lookup   DRAFT
+
+    operation rows                                   52 -> 43  (34 authored + 9 absent)
+    modules_with_authored_scenario_content          5/5 -> 4/5
+    modules_accounting_for_every_submittable_class  5/5 -> 4/5
+
+**This is the spec doing what a spec is for.** It was written to make the next fifteen
+modules cheaper, and the first thing it did was find four defects in a key approved six
+hours earlier. Two of them - the forbidden queries - were already tagged `constructed` and
+awaiting re-derivation; **spec 18 decided what the re-derivation must produce**, which the
+tag alone could not.
+
+### Two things the spec raises and does not settle
+
+**Spec 19's second audience has nowhere to go.** *"A recurring gap belongs in the weekday
+digest as a capability gap with a count. Property type is the first entry."* **No weekday
+digest exists in The Office.** The ruling is recorded and the destination is not built.
+
+**Mechanical 9 is a Forge defect, not an answer.** A non-numeric `page` or `page_size`
+raises an uncaught `ValueError` at `forge.py:121-122` and returns 500 rather than 422,
+while `query` is validated at `:104-109`. Recorded in the spec as a question for CRE Forge
+rather than resolved on this side.

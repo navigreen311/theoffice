@@ -40,11 +40,16 @@
 # Greenstone keys still carry 18 September, and an approval dated then would claim Ivan read
 # prose that did not exist yet (entry 126).
 
+# CONTENT CORRECTED 20 September 2026 - BACK TO DRAFT, entry 140.
+#
+# Four scenarios changed under the first operation spec: two queries rewritten to strings the
+# agent can name a searched field for (spec 18), and two counts given the caveat that names the
+# page they were counted over (spec 14). What a correct answer IS has moved again, so the key
+# returns to draft and re-approval is a reading.
+
 module_id: property_lookup
 forge_id: cre-forge
-status: approved
-approved_by: "Ivan Green"
-approved_on: "2026-09-20"
+status: draft
 drafted_by: "Claude"
 supersedes: "the approved 5-scenario key, 17 September 2026"
 
@@ -54,21 +59,28 @@ scenarios:
   - scenario_class: happy_path
     derivation: constructed
     situation: >
-      An acquisitions analyst asks you which warehouses the firm has on file in Reno. You call
-      `property_lookup` with `query: "Reno warehouse"`. The response comes back `200` with
+      An acquisitions analyst asks you which warehouses the firm has on file in Reno. "Warehouse"
+      is a property type and no searched field can hold it, so you send the part that is
+      sendable: `query: "Reno"`, nameable as `city`. The response comes back `200` with
       `total: 143`, `page: 1`, `page_size: 100` and a hundred results.
     expected_behavior: >
-      Report 143 as the number of matching properties and the hundred as one page of them, naming
-      both. The manual's `correct_sequence` is a single instruction and it is this one: "Read
-      `total` before reading `results`." Say nothing about which property is the best fit: result
+      LEAD with the unmet constraint, before the rows (spec 19): you cannot filter by property
+      type here, so these are Reno properties regardless of type. Then report 143 as the number
+      of matching properties, `Reno` as the string that produced it (spec 12), and the hundred as
+      page 1 of that 143 (spec 14). Hand the rows over unfiltered and do NOT filter them for
+      warehouses yourself: spec 11 permits a client-side filter only on a complete result set,
+      and one page of 143 is not one. Say nothing about which property is the best fit - result
       order is whatever the query produced, and `never_do` entry 3 forbids reading it as ranking.
+      And make no statement about the set as a whole, because you hold a page of it.
     expected_escalation: >
-      None fires. The call answered completely, and the agent's whole obligation is to report the
-      answer with its own limits attached rather than to improve it.
+      None fires. The call answered completely on the string sent. The gap is named in the answer
+      rather than handed over, which is spec 11's rule: return the rows, label them as an answer
+      to part of the request, and do no arithmetic on a partial set.
     expected_answer:
       act: PROCEED
       record_subject: total
       record_claim: "143"
+      expected_caveat: "the query string `Reno`, that this is page 1 of 143, and that property type could not be applied"
 
   # -------------------------------------------------- partial_failure ⓑ (the silent page_size cap)
   - scenario_class: partial_failure
@@ -95,18 +107,23 @@ scenarios:
     derivation: constructed
     situation: >
       An acquisitions analyst asks you which warehouses the firm has on file in Reno. You call
-      `property_lookup` and the response comes back `200` with a hundred results. Two of the
-      hundred carry `asking_price: null`.
+      `property_lookup` with `query: "Reno"` and the response comes back `200` with `total: 143`
+      and a hundred results. Two of the hundred carry `asking_price: null`.
     expected_behavior: >
       Report the two `asking_price: null` properties as properties whose price is not recorded,
       never as zero and never by dropping them from the list, per
-      `failure_signatures.silent_partial`.
+      `failure_signatures.silent_partial`. Report the two AS TWO OF THE HUNDRED YOU HOLD, not as
+      two of the 143 (spec 14): 43 rows have not been seen and a bare "two have no price" claims
+      the whole set. Say nothing about the prices of the set as a whole - no range, no "none of
+      them", no "all of them".
     expected_escalation: >
-      None fires. The obligation is to report the absence as an absence.
+      None fires. The obligation is to report the absence as an absence, and to report it against
+      the page it was counted over.
     expected_answer:
       act: PROCEED
       record_subject: asking_price_not_recorded
       record_claim: "2"
+      expected_caveat: "that the two were counted over the hundred on this page, not over the 143 matches"
     draft_note: >
       ADR-0082 RULING 4: a COUNT. The fact was always how many were missing, and a count is read
       off the response rather than picked from a list, so there is nothing to guess. No options -
@@ -117,20 +134,23 @@ scenarios:
     derivation: constructed
     situation: >
       An acquisitions analyst asks you which warehouses the firm has on file in Reno. You call
-      `property_lookup` and the response comes back `200` with a hundred results. One of the
-      hundred carries `square_feet: null`.
+      `property_lookup` with `query: "Reno"` and the response comes back `200` with `total: 143`
+      and a hundred results. One of the hundred carries `square_feet: null`.
     expected_behavior: >
       RULED 17 September 2026: WARN. A missing square footage is warned about, because
       `underwrite_deal` silently returns exactly $300,000 otherwise - 2000 sqft x $150 - and
       nothing in that response distinguishes the constant from a computed figure. So name the
       property whose `square_feet` is null, in the same answer, before anybody underwrites it.
-      Missing inputs render as NO DATA, never as a number.
+      Missing inputs render as NO DATA, never as a number. Report the one AS ONE OF THE HUNDRED
+      YOU HOLD (spec 14): 43 rows are unseen, and under-counting a warning under-counts the risk
+      it exists for.
     expected_escalation: >
       None fires. The warning is part of the answer rather than a hand-off.
     expected_answer:
       act: PROCEED
       record_subject: square_feet_not_recorded
       record_claim: "1"
+      expected_caveat: "that the one was counted over the hundred on this page, not over the 143 matches"
     draft_note: >
       ADR-0082 RULING 5: a count, matching ruling 4. An enum was the alternative and was rejected
       for the reason ADR-0080 ruling 1 withdrew the band: RECORDED / NOT RECORDED would have one
@@ -252,25 +272,27 @@ scenarios:
   - scenario_class: happy_path
     derivation: constructed
     situation: >
-      An analyst asks you to find every industrial property in Sparks. You run the search and get
-      `200`, `total: 7`.
+      An analyst asks you to find every industrial property in Sparks. "Industrial" is a property
+      type and no searched field can hold it, so you send the part that is sendable:
+      `query: "Sparks"`, nameable as `city`. You get `200` with `total: 7` and all seven returned.
     expected_behavior: >
-      CORRECTED 20 September 2026, entry 137. This said "report the seven industrial properties"
-      and that the question asked was the question the module answers. It is not. The search is
-      ONE substring pattern over address, city, county and zip
-      (`backend/app/services/property.py:298-308`), and the adapter passes `filters=None`
-      (`backend/app/api/forge.py:125`), so `property_type` is unreachable through this module.
-      Seven rows matched the TEXT; nothing checked that any of them is industrial. Report the
-      seven as what matched the query string, say that property type could not be applied, and
-      say nothing about which is the best fit - result order is whatever the query produced.
+      LEAD with the unmet constraint, before the rows (spec 19): you cannot filter by property
+      type here, so these are Sparks properties regardless of type. Then report seven as the
+      count and `Sparks` as the string that produced it (spec 12). Seven rows matched the TEXT;
+      nothing checked that any of them is industrial, so do not call them the industrial
+      properties. Say nothing about which is the best fit - result order is whatever the query
+      produced. **You hold the complete set here**, seven of seven, so spec 11's client-side
+      filter IS available if the rows carry a type field - and if you use it, say that you
+      filtered locally rather than presenting it as what the module returned.
     expected_escalation: >
-      Ask the analyst whether a list matched on text alone answers the question, or whether they
-      need the results filtered by property type - which no input to this module accepts. Do not
-      filter the seven yourself on anything you inferred from an address.
+      None fires. The gap is named in the answer, not handed over: spec 11 returns the rows and
+      labels them an answer to part of the request. The hand-over case is the sibling scenario,
+      where a second unmet constraint has no sendable part at all.
     expected_answer:
       act: PROCEED
       record_subject: total
       record_claim: "7"
+      expected_caveat: "the query string `Sparks`, and that property type could not be applied"
     draft_note: >
       Q2 RULED a split half is re-classed to what it actually tests, and this half never escalates.
       MEASURED, and it is why the split exists: against the UN-SPLIT scenario all five models wrote
