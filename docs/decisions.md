@@ -11824,7 +11824,7 @@ Gate 9 still blocks. No certification carries a SimForge PASS, Unit B has never 
 by anybody, and SimForge's battery is still not wired to grade submitted scenarios. The
 answer keys were never what Gate 9 was waiting for.
 
-## NEXT. The first operation spec, and the four scenarios it obliged
+## 140. The first operation spec, and the four scenarios it obliged
 
 **Ruled by Ivan Green, 20 September 2026:** nine practice judgment calls for
 `property_lookup`, recorded verbatim in `docs/operation-specs/property_lookup.md`. They
