@@ -38,6 +38,7 @@ from pathlib import Path
 import pytest
 
 from generators import scenario_content as sc
+from tests.approval import approved_header
 
 GREENSTONE = (
     "assign_contract", "buyer_match", "comp_analysis", "property_lookup",
@@ -86,13 +87,17 @@ def _write(tmp_path: Path, head: str, body: str = _BODY) -> Path:
     return path
 
 
-_APPROVED = (
-    'module_id: thing\nforge_id: cre-forge\nstatus: approved\n'
-    'approved_by: "Ivan Green"\napproved_on: "2026-09-18"'
-)
 _TAGGED = _BODY.replace(
     "  - scenario_class: happy_path\n",
     "  - scenario_class: happy_path\n    derivation: reproducible\n",
+)
+
+#: Entry 141: an approved key's hash must match its own body, so each header is DERIVED
+#: from the body it will sit above. `_APPROVED` sits above the untagged `_BODY` and is
+#: used only where the missing tag is the subject.
+_APPROVED = approved_header(_BODY, approved_by="Ivan Green", approved_on="2026-09-18")
+_APPROVED_TAGGED = approved_header(
+    _TAGGED, approved_by="Ivan Green", approved_on="2026-09-18"
 )
 
 
@@ -130,7 +135,10 @@ def test_a_third_word_is_refused(tmp_path):
         "  - scenario_class: happy_path\n",
         "  - scenario_class: happy_path\n    derivation: probably\n",
     )
-    path = _write(tmp_path, _APPROVED, body)
+    # A DRAFT, deliberately: the value check fires in `_scenario` and the approval rules
+    # run before the scenarios are read, so a draft is what reaches this refusal. The
+    # vocabulary is the subject here, not the status.
+    path = _write(tmp_path, "module_id: thing\nforge_id: cre-forge\nstatus: draft", body)
     with pytest.raises(sc.ScenarioContentError) as refused:
         sc.load_module(path)
     assert "'probably'" in str(refused.value)
@@ -138,7 +146,7 @@ def test_a_third_word_is_refused(tmp_path):
 
 def test_a_tagged_approved_key_loads(tmp_path):
     """The positive case, so none of the above is satisfied by refusing everything."""
-    content = sc.load_module(_write(tmp_path, _APPROVED, _TAGGED))
+    content = sc.load_module(_write(tmp_path, _APPROVED_TAGGED, _TAGGED))
     assert content.status == sc.APPROVED
     assert content.scenarios["happy_path"][0].derivation == sc.REPRODUCIBLE
 

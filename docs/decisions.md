@@ -11935,3 +11935,87 @@ those six sites are this module's; the other four are `comp_analysis`'s `radius_
 remaining specs inherit the same answer** and cite the same issue rather than re-deriving
 it. A question re-asked per module is a question answered four more times and agreed with
 four more times, which is how one finding becomes four opinions.
+
+## NEXT. The date says when; the hash says what
+
+**Ruled by Ivan Green, 20 September 2026:** *"An approval records the content hash of the
+text approved, beside `approved_by` and `approved_on`. Two approvals of different text
+must never read alike, and an approval whose hash no longer matches its file is stale.
+The date says when; the hash says what."*
+
+This is entry 140's finding answered. `approved_on` was added in entry 126 so two
+approvals of one key could be told apart; it has **day resolution**, and on 20 September
+Ivan approved `property_lookup` twice - once on the pre-spec text, once on the text the
+first operation spec obliged - and both read `2026-09-20`.
+
+### Why a hash and not a timestamp
+
+A timestamp separates the two approvals and says **nothing about what changed between
+them**. The hash answers the question a reader actually has - *is this approval still
+about the text in front of me* - which no resolution of a clock can answer.
+
+It also fails loudly. A key edited after approval now **stops loading**, rather than
+quietly carrying a signature over prose nobody read. That is the same choice `status`
+made and the same one `approved_on` made: a control that reports is worth more than one
+that records.
+
+### What is hashed, and the one thing deliberately left out
+
+Canonical JSON over the graded fields - `scenario_class`, `situation`,
+`expected_behavior`, `expected_escalation`, `instruction_section`, `expected_answer` -
+plus `not_applicable`. Classes sorted; occasions in file order, because order is part of
+the text (entry 129 put it in the exam's identity for the same reason).
+
+**`derivation` is absent, and that is entry 137's precedent rather than an oversight.**
+Tagging all 44 scenarios moved nobody's approval, because a tag says how a scenario was
+derived and not what it grades. Hashing it would have invalidated three approvals for a
+change that altered no answer. `draft_note` is out for the same reason, and `status`,
+`approved_by` and `approved_on` are out because they are the approval rather than the
+text.
+
+A hash over the whole file would have been easier and wrong: it would go stale on a
+comment.
+
+### The five, backfilled from the text they cover now
+
+    assign_contract   2026-09-18   7d084dbf0595...
+    buyer_match       2026-09-20   cc24953856f5...
+    comp_analysis     2026-09-18   55cfbd824324...
+    property_lookup   2026-09-20   f194cbd7e408...
+    underwrite_deal   2026-09-18   2a5177f80ecd...
+
+**The two approvals of 20 September no longer read alike**, which is the whole point, and
+a test asserts exactly that rather than asserting five hashes exist.
+
+### What the refusal says, and what it refuses to suggest
+
+    <file> is approved over content hash <old>... and its text now hashes to <new>....
+    The file changed after it was approved. Either restore the approved text or have it
+    read again and record the new hash - editing the hash to match is the one thing that
+    is not a re-approval.
+
+The last clause is the point. The hash is trivially editable, as entry 137's `derivation`
+tag is, and no test can stop either. What a message can do is name the move it will not
+be mistaken for.
+
+### It is checked after the tags, not before
+
+A key that is both untagged and stale reports the tags first. The hash check is about
+staleness and the tag check is about authoring completeness, and an author missing tags is
+better told that than told a hash does not match - which they would then "fix" by
+recomputing it.
+
+### The fixtures this broke, and what that revealed
+
+Nineteen tests failed on the first run, every one of them an inline fixture declaring
+`status: approved` for convenience. Most were **about something else entirely** - the
+class vocabulary, a reasonless declaration, a filename mismatch - and had been approved
+only to "stand in for a live content file".
+
+Those are drafts now. A draft loads and refuses everything except the approval rules,
+which is exactly what a test about the class vocabulary needs.
+
+Where approval IS the subject, `tests/approval.py::approved_header` derives the header
+from the body it will sit above. **A fixture with a literal hash goes stale the first time
+somebody edits the body beside it** - the same defect this ruling exists to catch, one
+level down.

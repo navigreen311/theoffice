@@ -173,9 +173,10 @@ def test_a_reasonless_declaration_is_refused(tmp_path):
     bad = tmp_path / f"{MODULE}.yaml"
     bad.write_text(
         f"module_id: {MODULE}\nforge_id: {FORGE}\n"
-        # `status` is required since 17 September 2026. Approved here because this
-        # fixture's subject is the reasonless declaration below it, not the approval.
-        'status: approved\napproved_by: "test fixture"\napproved_on: "2026-09-18"\n'
+        # A DRAFT since 20 September. The subject here is the reasonless declaration
+        # below, not the approval - and an approved key would first have to carry a
+        # content hash over a body this test exists to make unloadable (entry 141).
+        "status: draft\n"
         "scenarios: []\n"
         "not_applicable:\n  escalation_required: '   '\n",
         encoding="utf-8",
