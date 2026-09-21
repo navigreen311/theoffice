@@ -44,10 +44,13 @@ from broker.simforge import (
     ResponseRefusedError,
     SimForgeClient,
     SimForgeError,
+    declared_absent,
     department_basis_hash,
     mint_run_ref,
+    operation_scenario_rows,
     scenario_set_hash,
     submission_unit,
+    supersede_run_submissions,
 )
 from generators import pipeline as generator_pipeline
 from generators import runtime_config as runtime_gen
@@ -1444,14 +1447,20 @@ async def _record_submission(
               (submission_id, venture_id, forge_id, module_id, department,
                scenario_pack_ref, scenario_count, coverage_denominator,
                instruction_content_hash, submitted_by, simforge_run_ref,
-               office_agent_id, scenario_set_hash)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               office_agent_id, scenario_set_hash, run_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 submission_id, ctx.venture_id, forge_id, module_id, department,
                 scenario_pack_ref, scenario_count, coverage_denominator,
                 instruction_content_hash, ctx.actor, run_ref, office_agent_id,
                 scenario_hash,
+                # WHICH RUN SET THIS EXAM. Gate 8 has always known - `_Context` holds
+                # it, and `scenario_pack_ref` spells it as `run:<uuid>` text - and the
+                # row threw it away. Entry 142: abandoning a run supersedes its open
+                # submissions, and that cannot be done on a prefix of a free-text
+                # column.
+                ctx.run_id,
             ),
         )
         if members:
@@ -1677,11 +1686,7 @@ def _curriculum_payload(
     # structurally parallel to `module_never_do` below. So the rows carrying one are
     # lifted out of `operation_scenarios` here rather than submitted as scenarios that
     # declare they are not scenarios.
-    submittable = [s for s in scenarios if not s.not_applicable_reason]
-    declared_absent = {
-        s.scenario_class: s.not_applicable_reason
-        for s in scenarios if s.not_applicable_reason and s.scenario_class
-    }
+    absent = declared_absent(scenarios)
 
     return {
         "instruction_set_ref": {
@@ -1714,73 +1719,14 @@ def _curriculum_payload(
             }
             for c in candidates
         ],
-        "operation_scenarios": [
-            {
-                # The two the schema requires and the Office has never sent. See this
-                # function's docstring: this pair is what moves a submission from a
-                # Pydantic refusal to a validator one.
-                "scenario_class": s.scenario_class,
-                "instruction_section": s.instruction_section,
-                "module_id": s.module_id,
-                # THE PROBE - what the agent is actually asked. Sent from 18 September
-                # 2026, once SimForge declared the field (its #172, ADR-0087).
-                #
-                # **Without it SimForge holds a key and has nothing to put.** Its
-                # `probe_for` returns this verbatim and renders `expected_behavior` to
-                # nobody, because that field is what a good ANSWER looks like and
-                # showing it would hand the agent the answer. So the grader was
-                # complete and its input did not exist.
-                #
-                # `summary` is where the situation lives on an operation row - see
-                # `curriculum._operation_row`. It is not a second field beside it.
-                #
-                # OMITTED WHEN EMPTY, never sent as "" or null. SimForge declares it
-                # `str | None`, so absent means "this scenario cannot be put to
-                # anybody" - which is true of an unauthored row and is a different
-                # statement from a blank occasion. Entry 122's rule, applied again.
-                **({"situation": s.summary} if s.summary else {}),
-                # `expected_behavior`, not `summary`. P-00 froze the distinction into
-                # CurriculumScenario - "replaces `summary`'s generated boilerplate as
-                # the field SimForge reads" - and P-05 made it load-bearing: `summary`
-                # on an operation scenario now carries the precipitating situation,
-                # and sending that as the expected behaviour would hand SimForge the
-                # occasion in the field it grades the response in.
-                "expected_behavior": s.expected_behavior,
-                # PROSE, straight through. There was a ternary here deriving a fixed
-                # sentence from a bool, and contract A1.3 requires it deleted rather
-                # than adapted: a non-empty prose string is truthy, so an adapted
-                # ternary would have sent the boilerplate placeholder and silently
-                # discarded the real prose. The payload would have got worse while
-                # every test still passed.
-                #
-                # Empty when nobody has authored the scenario yet. SimForge refuses a
-                # present-but-empty required field, and that refusal is the honest
-                # report that the scenario is unwritten.
-                "expected_escalation": s.expected_escalation,
-                # THE GRADEABLE HALF, NESTED - which is the shape SimForge declares.
-                #
-                # This spread the keys flat until 18 September 2026, on the guess that
-                # each one would be its own field on `OperationScenarioSubmission`. It
-                # is not: SimForge's ADR-0083 declares a single `expected_answer` of
-                # type `ExpectedAnswer`, and the same ADR set `extra="forbid"` on both
-                # payloads. So the flat keys stopped being ignored and started being
-                # REFUSED - `act` arriving as an undeclared top-level field takes the
-                # whole submission down with it.
-                #
-                # The field NAMES were right; only the nesting was wrong, which is why
-                # nothing caught it while extras were still dropped. That is entry 123's
-                # lesson from the other direction: a boundary that ignores tells you
-                # nothing, and the first honest answer it gave was a refusal.
-                #
-                # OMITTED WHEN EMPTY, never sent as `{}` or `null`. A scenario written
-                # before the split has no machine-checkable half; SimForge declares the
-                # field `ExpectedAnswer | None` precisely so absent means that, and an
-                # empty object would claim a blank one instead (entry 122).
-                **({"expected_answer": dict(s.expected_answer)}
-                   if s.expected_answer else {}),
-            }
-            for s in submittable
-        ],
+        # THE ROWS, BUILT BY `simforge.operation_scenario_rows`. They were spelled
+        # inline here until entry 142, which needs the identical rows derived from the
+        # approved key alone so a verdict can be refused when the two disagree. Two
+        # spellings would have made that check refuse over its own drift.
+        #
+        # What each field carries, and why `situation` and `expected_answer` are
+        # omitted rather than blanked, is documented on that function.
+        "operation_scenarios": operation_scenario_rows(scenarios),
         "coverage_declaration": {
             "modules_in_forge": modules_in_forge,
             "modules_covered": modules_in_forge - len(modules_uncovered),
@@ -1796,7 +1742,7 @@ def _curriculum_payload(
         # to the cert rather than a zero. An empty map means no class was declared
         # absent for this module, which is a different statement from a class being
         # absent with nothing said about it, and that is the whole point.
-        "module_not_applicable": {instruction.module_id: declared_absent},
+        "module_not_applicable": {instruction.module_id: absent},
     }
 
 
@@ -2554,6 +2500,19 @@ async def abort_run(
     an abort is not a revocation; the two are different acts with different authority,
     and collapsing them here would make abandoning a run a way to silently pull a
     venture's authority with no revocation record.
+
+    IT DOES SUPERSEDE THE RUN'S OPEN SUBMISSIONS - ruled 21 September 2026, entry 142.
+    ================================================================================
+
+        That is not the same concession. A grant is authority somebody holds and an
+        abort has no standing to withdraw it. An open submission is an exam THIS RUN
+        set, on a curriculum this run handed over, and abandoning the run withdraws the
+        curriculum - so a verdict against it is a verdict on text nobody stands behind.
+
+        The case that made it a ruling: 50d933e8 was abandoned for a Gate 8 that
+        predated the corrected keys, its nine rows were not touched, and the verdict
+        sweep ingested four PASS verdicts off them the next day. Nothing was wrong with
+        the sweep. The abort had simply left the exams standing.
     """
     if not reason.strip():
         raise ProvisioningError("aborting a run requires a reason")
@@ -2573,11 +2532,26 @@ async def abort_run(
         )
     await conn.commit()
 
+    # AFTER the status is committed, so a failure here cannot leave a run that reads
+    # active with its exams already retired - the direction that produces a run nobody
+    # can advance and submissions nobody will ingest.
+    superseded = await supersede_run_submissions(
+        conn,
+        run_id=run_id,
+        reason=(
+            f"Provisioning run {str(run_id)[:8]} was abandoned at gate "
+            f"{state.current_gate} by {human.display_name}: {reason}"
+        ),
+    )
+
     await audit.write_event(
         event_type="provisioning_run_aborted",
         actor_type="human", actor_id=human.human_id, venture_id=state.venture_id,
         subject={"run_id": str(run_id), "at_gate": state.current_gate,
-                 "reason": reason},
+                 "reason": reason,
+                 # On the event, because this is the fact a later reader needs when they
+                 # ask why the sweep stopped being owed a verdict on nine exams.
+                 "submissions_superseded": superseded},
     )
     # An abandoned attempt is institutional memory too - arguably more of it than a
     # successful one, because the next person to provision this venture wants to know

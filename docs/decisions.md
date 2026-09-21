@@ -12019,3 +12019,137 @@ Where approval IS the subject, `tests/approval.py::approved_header` derives the 
 from the body it will sit above. **A fixture with a literal hash goes stale the first time
 somebody edits the body beside it** - the same defect this ruling exists to catch, one
 level down.
+
+## 142. An abandoned run takes its exams with it
+
+**Ruled by Ivan Green, 21 September 2026:** *"Abandoning a run supersedes its open
+submissions. Run 50d933e8's nine submissions were never superseded, so the sweep ingested
+four PASS verdicts graded against keys since corrected. They were overwritten in the same
+pass by loop order, which is luck, not a control. Ingest also refuses a verdict whose
+submission's scenario-set hash differs from the currently approved key's."*
+
+### What happened
+
+Run 50d933e8 was abandoned on 20 September, entry 141's second half, because its Gate 8
+predated the corrected keys. The abort marked the run and stopped there. Nothing linked
+its nine `curriculum_submission` rows to it - the table has never named the run that
+wrote it - so they stayed in `overdue_submissions`' candidate set.
+
+The verdict-ingest sweep then ran for the first time, hours later, and read them:
+
+    FAIL   assign_contract  c8afb0e6   0.857/1.0
+    FAIL   assign_contract  cc49a49c   0.857/1.0
+    PASS   buyer_match      c8afb0e6   1.0/1.0   tier propose
+    PASS   buyer_match      cc49a49c   1.0/1.0   tier propose
+    PASS   comp_analysis    e27fc174   1.0/1.0   tier propose
+    PASS   property_lookup  e27fc174   1.0/1.0   tier propose
+
+Every one of the four PASSes was graded against text entries 137 and 140 had already
+corrected. Their refs carry the old answer keys - `buyer_match` at `k3c3944526f3e`
+against today's `k0049a8e5ddab`, `property_lookup` at `kad3baba80974` against
+`k7102df614610` - and `property_lookup` is the key the first operation spec obliged a
+change to.
+
+### Why the four did not stand, and why that is not a defence
+
+They were overwritten inside the same pass. `overdue_submissions` orders by
+`submitted_at`, the live run 0c051b0a had exams open for the same three modules, those
+came back IN_PROGRESS, and the upsert on `(agent, forge, module)` let the later write
+win. Seventy writes collapsed onto twenty-nine rows for that reason.
+
+**Reverse the arrival times and the four would have stood.** The control was the order
+two lists happened to be in.
+
+### Two halves, because they fail at different moments
+
+The first binds the act: `abort_run` supersedes every open submission naming the run.
+The second binds the read: ingest compares the submission's `scenario_set_hash` with the
+approved key's and refuses when they differ. Either alone leaves a hole - a run nobody
+abandons can still go stale under an approval, and a submission from a run abandoned on
+a system that never ran the sweep is still waiting.
+
+`abort_run` has always been careful about what it does **not** do: it leaves grants
+alone, because a grant is authority somebody holds and an abort has no standing to
+withdraw it. The submissions are the other case, and the distinction is real. They are
+exams *this run* set on a curriculum *this run* handed over, and abandoning the run
+withdraws the curriculum.
+
+### The column that had to exist first
+
+`curriculum_submission` has never named its run. Gate 8 knows - `_Context` holds `run_id`
+and `scenario_pack_ref` spells it as `run:<uuid>` text - and the row threw it away.
+0047 adds it, `_record_submission` writes it, and the ruling is applied on it rather
+than on a prefix of a free-text column.
+
+### Not `result_received_at`
+
+0046's distinction, restated. That field means a verdict was written into a
+certification; here none will be. The row keeps its open shape and carries a reason. A
+submission already **closed** is left alone: its verdict was ingested before the run was
+abandoned and a certification exists, so marking it now would claim a decision about that
+certification - which is a revocation, a different act with different authority.
+
+### The backfill, and how each row was attributed
+
+Existing rows carry no run, so 0047 attributes each to the Gate 8 result of the same
+venture nearest in time, within five minutes, and only when that nearest result is
+unique. Measured before writing it: eight Gate 8 results, eight submission batches, one
+batch per result, every batch within 1.1 seconds of its own result and none within five
+minutes of a second. On the dev database **66 of 66 rows attributed, none ambiguous.**
+
+A row failing that test keeps a NULL `run_id` and is not superseded. An unattributable
+row is left alone rather than assigned to the likeliest run: superseding on a guess would
+retire an exam on the strength of a timestamp.
+
+**33 open submissions across six abandoned runs are superseded by the backfill.** Run
+0c051b0a is `blocked`, not aborted, and keeps its seven.
+
+### The third answer the hash check can give, and why it does not refuse
+
+    differs          refused, and reported with the verdict that was read
+    agrees           written, as before
+    cannot be asked  reported in `scenario_set_unverifiable`, NOT refused
+
+The third has two ways in: a row carrying no `scenario_set_hash` at all - every
+submission written before 0046 - or a module whose key is a draft or absent, so there is
+no approved key for it to differ from. Refusing those would be a rule nobody ruled. An
+unknown hash is not a mismatch, and treating it as one would strand Burkham's twenty
+draft-key rows on a ruling about corrected Greenstone approvals. It is counted so it
+cannot be mistaken for a check that passed.
+
+### A TIMEOUT is refused too
+
+A TIMEOUT is a verdict this sweep synthesises, not one SimForge earned, and a submission
+set from withdrawn text has nothing to say about an agent - not even that it did not
+answer. The live exam for that module is what should move the certification.
+
+### The hash is derived, never stored twice
+
+`approved_scenario_set_hash` loads the key, builds the curriculum rows through
+`curriculum.module_scenarios`, and hashes them with `scenario_set_hash` - **the same
+functions Gate 8 calls**, which is why the payload row builder moved out of
+`_curriculum_payload` into `simforge.operation_scenario_rows`. Two spellings would drift,
+every submission would read as stale, and the sweep would refuse every verdict in the
+system over its own arithmetic.
+
+Entry 141's `approved_content_hash` was the tempting value and is the wrong one: it is
+taken over the key's own fields, not over what goes on the wire, so comparing it with a
+submission's `scenario_set_hash` would compare two digests of two different shapes.
+
+Checked against the tree rather than asserted: the derivation reproduces
+`k7102df614610`, `k0049a8e5ddab`, `ke2a8e5bae1e1` and `k5c5e41247e52` - the four `k`
+segments Gate 8 actually minted on 20 September.
+
+### One guard had to be rewritten rather than moved
+
+`test_the_tag_is_not_sent_to_simforge` grepped `provisioning.py` for the literal
+`"operation_scenarios": [`. Lifting the builder out made that substring vanish and the
+test pass by finding nothing. It asserts on the rows now, built from the real tagged
+keys, so it follows the function wherever it lives.
+
+### What is not decided here
+
+A submission refused for a stale key **stays open**. Every later sweep will read it,
+refuse it again, and report it again. Superseding it would be the honest end state and
+nobody has ruled that a stale hash is grounds for retiring a row on a run still live -
+abandoning is the act that supersedes, and that act has an author. Left as a question.
