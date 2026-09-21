@@ -12453,19 +12453,96 @@ byte-identical and the signature stands.
     certified_and_free 0   certified_but_allocated 0   produced_not_yet_certified 25
     shortfall True
 
-### Two open questions, written rather than answered
+### Both open questions were ruled the same day
 
-**The seats changed hands.** Buyer Network Manager was held by Ronan and Seraphine
-Valek, who hold live grants and have been examined — one of them carries a real FAIL.
-With nobody certified, the documented tie-break is roster order, so Elara Solen and
-Evander Zephar take the seats. Their grants are additional rather than replacing, and
-`_exam_takers` returns every holder, so `buyer_match` would open four exams rather than
-two. Whether eligibility should prefer a candidate who already holds a grant is a rule
-nobody has made.
+**Ruled by Ivan Green, 21 September 2026, amending this entry before it merged:**
 
-**An uncertified module's planned tier.** `certified_tiers` falls back to the declared
-tier when there is no certification to cap it — which is what the old
-`.get(key, declared)` already did, now visible. The grant is inactive, `resolve_grant`
-refuses it, and Gate 11 refuses to activate it, and a later run's Gate 5 refreshes the
-tier downward once a certification exists. Whether an unearned plan should read as the
-declared tier at all is not settled here.
+> *"Eligibility prefers an existing live grant holder for the seat. Roster order is a
+> tie-break only when no candidate holds a grant, and the tie-break is reported, never
+> silent. A seat does not change hands because of list order."*
+>
+> *"An uncertified module's planned tier reads as none, not the declared tier. A plan
+> that claims authority nothing earned reads as authority."*
+
+#### Incumbency, counted rather than flagged
+
+The first draft seated candidates by `(certified, roster order)`, and measured against
+the dev database it passed `buyer_match`'s two seats from Ronan and Seraphine Valek —
+both holding live grants, both with an exam IN_PROGRESS, one carrying a recorded FAIL —
+to two candidates who came earlier in the alphabet and had never been examined.
+
+The ranking is now `(live grants held DESC, certified, roster order)`. Counted rather
+than reduced to a flag: a candidate holding a grant for both of a position's modules is
+more the incumbent than one holding a grant for one of them, and a threshold would have
+meant picking a number nobody ruled.
+
+A grant is what an exam is opened against — `_exam_takers` reads exactly that table — so
+moving a seat away from a holder discards an exam in flight.
+
+#### The tie-break is reported, and where
+
+`_tie_break` fires when the candidate seated and the candidate passed over are
+indistinguishable on **every key that is a reason** — grants held and certification — so
+that nothing but the alphabet separated them. V24 puts it in the Gate 4.5 sentence:
+
+    TIE-BREAK - Acquisition Analyst: roster order decided the last seat: Ada Sourcing
+    over Bram Records - neither holds a grant for this position and neither certified,
+    so nothing but the alphabet separated them
+
+`None` when a reason decided, because a reason is reported by the field it is read from.
+
+#### The loop this opened, and how it is closed
+
+Appointment now reads `agent_forge_grant`. **Gate 5 writes it.** The first build put
+`live_grants` and `tie_break` on the artifact, and twelve suites went red with `Gate 10
+awaiting_human`: Gate 5 issued grants for the agents it had seated, the next
+regeneration saw them, `artifacts_hash` moved, and every signature bound to the old hash
+went void — on a run where nothing about the appointment had changed.
+
+Both fields are now dropped by `omit_from_serialisation`, the mechanism
+`CurriculumScenario` already uses. What makes the ordering safe to read at all is that
+it is a **fixed point**: Gate 5 grants to exactly the agents already seated, so
+preferring holders re-seats the same people. The counts move; the seating does not; and
+the hash must not. `test_issuing_grants_does_not_move_the_artifacts_hash` is what holds
+that.
+
+Dropped rather than zeroed, for entry 122's reason: a `0` where a real count used to sit
+reads as "this agent holds nothing", which is false for every agent after Gate 5.
+
+#### An unearned plan carries no tier
+
+`certified_tiers` now **omits** a module the agent is not certified on, and
+`PlannedGrant.trust_tier` is `None` for it. 0049 makes
+`agent_forge_grant.trust_tier` nullable and keeps its three-word CHECK, so the column
+cannot acquire a fourth value by accident.
+
+The old `.get(key, declared)` fallback was only ever reached for a module the agent WAS
+certified on with a NULL `certified_tier`. Once a seat could be held by an uncertified
+agent, the same line started writing the Pack's declared ceiling — `auto_execute` for
+Greenstone's `buyer_match` — into the column `resolve_grant` caps a live call against.
+
+**`suggest` was the tempting placeholder and it is still an authority level.** Absent is
+the honest value, and it is the value the ruling names. Same argument
+`TIMEOUT_RUBRIC_VERSION` makes against a plausible semver, and `timeout_gate_result`
+against a score of 0.0.
+
+Refused in two more places, both behind Gate 11's certification test rather than instead
+of it: Gate 11 will not activate a grant with no planned tier, and `resolve_grant` raises
+the new `NoTierPlanned` before reaching `cap_tier`. A tierless grant is always also an
+uncertified one today, and a control resting on that staying true is one that expires
+without saying so.
+
+### Measured against the live database, after both amendments
+
+    artifacts hash   a1a2e64e...  ->  d9bac50b...
+
+    Acquisition Analyst     Victor Serath      2 grants, uncertified, no planned tier
+    Buyer Network Manager   Ronan Valek        2 grants, uncertified, no planned tier
+                            Seraphine Valek    2 grants, uncertified, no planned tier
+    Deal Underwriter        pending
+    no tie-break: incumbency decided every seat
+    every planned grant tier: None
+
+**The seats stayed where they were.** That is the whole of the first ruling: the three
+agents who hold grants and have been examined keep the positions they held, and the
+first draft's reshuffle to Elara Solen and Evander Zephar does not happen.

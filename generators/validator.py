@@ -2331,6 +2331,16 @@ async def validate_gate_4_5(
         "certification; Gate 11 refuses authority until SimForge says otherwise."
         if uncertified else ""
     )
+    # THE TIE-BREAK IS REPORTED, NEVER SILENT. Ruled 21 September 2026.
+    #
+    # In the rule's own sentence and not only on the artifact. A seat decided by
+    # alphabetical order is a decision about who operates a venture, and a reader of a
+    # PASS has no other place to find out that one was taken.
+    ties = [
+        f"{a.position_title}: {a.tie_break}"
+        for a in appointment.appointments if a.tie_break
+    ]
+    broke = f" TIE-BREAK - {'; '.join(ties)}." if ties else ""
     # NAMED, NOT SILENTLY SKIPPED.
     #
     # A pending position is not a shortfall - it is a decision - so it does not fail this
@@ -2352,7 +2362,7 @@ async def validate_gate_4_5(
             (f"unfilled positions: {_join(unfilled)}" if unfilled
              else "every position has a candidate eligible to sit its exam, or is "
                   "declared pending")
-            + deferred + awaiting,
+            + deferred + awaiting + broke,
         )
     )
 

@@ -111,6 +111,7 @@ async def generate(
     module_forge: dict[str, str] | None = None,
 ) -> Appointment:
     forge_of = module_forge if module_forge is not None else await module_forge_map(conn)
+    live_grants = await _live_grants(conn, venture_id)
 
     appointments: list[PositionAppointment] = []
     certified_free = 0
@@ -204,24 +205,43 @@ async def generate(
             # Keyed `forge_id/module_id`, matching the Pack's `module_trust_tiers`, so the two
             # are looked up the same way and cannot drift in spelling.
             #
-            # AN UNCERTIFIED MODULE TAKES THE DECLARED TIER, which is what the old
-            # `.get(key, declared)` fallback already did for a missing certification -
-            # this only makes it visible. The grant it plans is issued inactive,
-            # `resolve_grant` refuses it on state, and Gate 11 now refuses to activate
-            # it. Whether an unearned plan should read as the declared tier at all is
-            # entry 145's open question; nothing here answers it.
+            # AN UNCERTIFIED MODULE HAS NO PLANNED TIER, AND THE KEY IS ABSENT.
+            #
+            # Ruled 21 September 2026: *"An uncertified module's planned tier reads as
+            # none, not the declared tier. A plan that claims authority nothing earned
+            # reads as authority."*
+            #
+            # The first draft of this took the declared tier, on the argument that the
+            # old `.get(key, declared)` fallback already did. It did - and the fallback
+            # was only ever reached for a module the agent WAS certified on with a NULL
+            # `certified_tier`. Once a seat could be held by an uncertified agent, the
+            # same line started writing `auto_execute` onto a plan nothing had earned,
+            # and `agent_forge_grant.trust_tier` is the column `resolve_grant` caps a
+            # live call against.
+            #
+            # Absent, never blank and never a floor. `suggest` would be the tempting
+            # placeholder and it is still an authority level - entry 122's rule, and the
+            # reason 0049 makes the grant's column nullable rather than defaulting it.
             tiers = {}
             for m in modules:
+                if m in missing:
+                    continue
                 key = f"{forge_of[m]}/{m}"
                 declared = position.module_trust_tiers.get(key, position.trust_tier_ceiling)
-                if m in missing:
-                    tiers[key] = declared
-                    continue
                 tiers[key] = _cap(declared, certs[(forge_of[m], m)][1] or "suggest")
 
             eligible.append(
                 AppointedAgent(
                     office_agent_id=agent_id,
+                    # HOW MUCH OF THIS SEAT THIS CANDIDATE ALREADY HOLDS. Counted rather
+                    # than reduced to a flag: a candidate holding a grant for both of a
+                    # position's modules is more the incumbent than one holding a grant
+                    # for one of them, and a threshold would have had to pick a number
+                    # nobody ruled. Descending, so full incumbency outranks partial and
+                    # partial outranks none.
+                    live_grants=sum(
+                        live_grants.get((agent_id, forge_of[m], m), 0) for m in modules
+                    ),
                     agent_name=row["agent_name"],
                     department=row["department"],
                     # EVERY MODULE THE POSITION OPERATES - the exam roster. `certified_modules`
@@ -239,15 +259,21 @@ async def generate(
                 )
             )
 
-        # Deterministic: candidates arrive ordered by (agent_name, office_agent_id),
-        # so two runs against the same roster appoint the same agents.
+        # THE ORDER SEATS ARE FILLED IN. Three keys, and the first two are the whole of
+        # the rule; the third is a last resort that has to say so.
         #
-        # CERTIFIED FIRST among the eligible, and that is not a preference - it is what
-        # keeps this change from demoting anybody. With more eligible candidates than
-        # seats, seating an uncertified one while a certified one waited would turn a
-        # position that can operate today into one waiting on an exam. `sort` is stable,
-        # so the roster still decides within each half.
-        eligible.sort(key=lambda a: not a.certified)
+        #   1. LIVE GRANTS HELD, descending. Ruled 21 September 2026: eligibility prefers
+        #      an existing live grant holder for the seat, and a seat does not change
+        #      hands because of list order. A grant is what an exam is opened against, so
+        #      moving a seat away from a holder discards an exam in flight.
+        #   2. CERTIFIED, first. With more eligible candidates than seats, seating an
+        #      uncertified one while a certified one waited would turn a position that
+        #      can operate today into one waiting on an exam.
+        #   3. ROSTER ORDER, which `_candidates` already fixed as
+        #      `(agent_name, office_agent_id)`. `sort` is stable, so this needs no key -
+        #      and **when it decides a seat, `_tie_break` says so.**
+        eligible.sort(key=lambda a: (-a.live_grants, not a.certified))
+        tie_break = _tie_break(eligible, position.headcount)
 
         # A PENDING position appoints nobody and reports no shortfall. Its headcount is not
         # a gap to fill - it is a number somebody deferred on purpose, and appointing into
@@ -282,6 +308,7 @@ async def generate(
                 requires_certification=sorted(
                     shortfalls, key=lambda s: (s.agent_name, s.office_agent_id)
                 ),
+                tie_break=tie_break,
             )
         )
 
@@ -314,6 +341,35 @@ async def generate(
         # a shortfall may take, and it is never the one inside the Village.
         escalation_path=escalation.Path.GOVERNANCE.value,
     )
+
+
+async def _live_grants(
+    conn: AsyncConnection, venture_id: str
+) -> dict[tuple[str, str, str], int]:
+    """(agent, forge, module) -> 1 for every live grant this venture holds.
+
+    RULED 21 SEPTEMBER 2026: *"Eligibility prefers an existing live grant holder for the
+    seat. Roster order is a tie-break only when no candidate holds a grant... A seat does
+    not change hands because of list order."*
+
+    **A grant is what an exam is opened against.** `_exam_takers` returns the holders of
+    a live grant, so a candidate holding one either has an exam in flight or has sat one.
+    Moving the seat to somebody else discards that: entry 144's first measurement had
+    `buyer_match`'s two seats pass from Ronan and Seraphine Valek - both with exams
+    IN_PROGRESS and one with a recorded FAIL - to two candidates who came earlier in the
+    roster and had never been examined.
+
+    `superseded_at IS NULL` only. A revoked holder is excluded from eligibility
+    altogether, one test earlier, so it never reaches the ranking - and excluding it here
+    as well would be a second spelling of `covered_targets`.
+    """
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "SELECT office_agent_id, forge_id, module_id FROM agent_forge_grant "
+            " WHERE venture_id = %s AND superseded_at IS NULL",
+            (venture_id,),
+        )
+        return {(str(a), f, m): 1 for a, f, m in await cur.fetchall()}
 
 
 async def _candidates(
@@ -372,6 +428,40 @@ async def _unit_b_certs(
 def _cap(ceiling: str, certified: str) -> str:
     """Part 10.1: certified tier caps declared tier. The lower always wins."""
     return ceiling if TIER_RANK[ceiling] <= TIER_RANK[certified] else certified
+
+
+def _tie_break(eligible: list[AppointedAgent], headcount: int) -> str | None:
+    """The sentence a seat decided by roster order owes its reader, or None.
+
+    RULED 21 SEPTEMBER 2026: *"the tie-break is reported, never silent."*
+
+    A tie-break happened when the last candidate seated and the first left out are
+    **indistinguishable on every key that is a reason** - grants held and certification -
+    so the only thing that separated them was where their names fall in the roster. That
+    is a real decision about who operates a venture, taken on alphabetical order, and it
+    should never be read off a list quietly.
+
+    `None` when the boundary is not a tie: somebody was seated over somebody else because
+    they hold more of the seat already, or because they are certified and the other is
+    not. Those are reasons, and they are reported by the fields they are read from.
+    """
+    if len(eligible) <= headcount or headcount <= 0:
+        return None
+    seated, passed_over = eligible[headcount - 1], eligible[headcount]
+    if (seated.live_grants, seated.certified) != (
+        passed_over.live_grants, passed_over.certified
+    ):
+        return None
+    holding = (
+        f"both hold {seated.live_grants} live grant(s) for this position"
+        if seated.live_grants else "neither holds a grant for this position"
+    )
+    standing = "both certified" if seated.certified else "neither certified"
+    return (
+        f"roster order decided the last seat: {seated.agent_name} over "
+        f"{passed_over.agent_name} - {holding} and {standing}, so nothing but the "
+        "alphabet separated them"
+    )
 
 
 def _escalation(

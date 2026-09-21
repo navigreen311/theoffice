@@ -2261,6 +2261,12 @@ async def _gate_11(ctx: _Context) -> GateOutcome:
             "       SELECT 1 FROM certification cb "
             "        WHERE cb.unit = 'B' AND cb.cert_id::text = g.dept_context_cert_ref "
             "          AND cb.state = 'certified') "
+            # A GRANT WITH NO PLANNED TIER CONFERS NOTHING, so there is nothing here to
+            # switch on. Ruled 21 September 2026 and carried by 0049. Behind the
+            # certification test rather than instead of it: a tierless grant is also an
+            # uncertified one today, and a control that rests on that staying true is a
+            # control that expires without saying so.
+            "   AND g.trust_tier IS NOT NULL "
             "   AND NOT (g.grant_id = ANY(%s))",
             (ctx.actor, ctx.venture_id, list(covered)),
         )
