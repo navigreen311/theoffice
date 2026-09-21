@@ -11758,3 +11758,68 @@ revoke, and `buyer_match`'s `do_not_contact` exclusion is indistinguishable from
 result."* The issue names both halves. The cap lifts when the second half closes - when
 the result can carry the difference - and the first half is what the consent model is
 for.
+
+## 139. Read, and approved again — two dates on one set of keys
+
+**Ruled by Ivan Green, 20 September 2026:** *"I approve both keys. Flip `buyer_match` and
+`property_lookup` to approved, `approved_by` 'Ivan Green', dated today."*
+
+Entry 137 returned those two to draft the same day, because what a correct answer IS had
+changed under them and an approval that survived that would be the rubber stamp `status`
+exists to prevent. **This is the reading that entry said re-approval would require**, and
+it took two days rather than a flag flip.
+
+### Two dates, and that is `approved_on` working
+
+    assign_contract   Ivan Green   2026-09-18
+    comp_analysis     Ivan Green   2026-09-18
+    underwrite_deal   Ivan Green   2026-09-18
+    buyer_match       Ivan Green   2026-09-20
+    property_lookup   Ivan Green   2026-09-20
+
+**An approval dated the 18th on the corrected pair would claim Ivan read prose that did
+not exist yet.** Three scenarios changed in substance between those dates -
+`buyer_match/happy_path[1]`, whose old form was arithmetically impossible, and the two
+`property_lookup` keys that marked a half-answer complete.
+
+This is the first time the two dates have diverged, and it is the case entry 126 added the
+field for: *"With only a name, the second approval is indistinguishable from the first
+still sitting there over prose that has since been replaced."* The test asserts the date
+per key rather than against one constant, so a re-approval cannot be backdated onto the
+older reading.
+
+### Coverage, measured after the flip
+
+    operation rows in the curriculum                    36 -> 52  (44 authored + 8 absent)
+    modules_with_authored_scenario_content             3/5 -> 5/5
+    modules_accounting_for_every_submittable_class     3/5 -> 5/5
+    modules_with_a_draft_answer_key_awaiting_approval  2/2 -> 0/0
+
+Two dimensions do not move, and neither is about this approval:
+
+    roles_with_domain_scenarios              2/3   Deal Underwriter is an unfilled seat
+    scenario_classes_the_office_may_submit   7/9   never_do_violation and silent_failure
+                                                   are held out by contract - the ceiling
+
+### Gate 8, measured against the live grant table
+
+    module             scen  instruction  exams  takers
+    assign_contract     8+1  LIVE           2    Ronan Valek, Seraphine Valek
+    buyer_match         8+2  LIVE           2    Ronan Valek, Seraphine Valek
+    comp_analysis       5+2  LIVE           1    Victor Serath
+    property_lookup    10+2  LIVE           1    Victor Serath
+    underwrite_deal    13+1  LIVE           0    -- nobody --
+
+**Six exams, and all five modules hand over.** `underwrite_deal` opens no run because Deal
+Underwriter is unfilled - #177's correction, which is why its 13 scenarios still reach
+SimForge and bind to an instruction set.
+
+The 20 `derivation` tags ride along unchanged: **11 constructed, 33 reproducible.** Entry
+137's rule holds on an approved key - every scenario is tagged, and approval did not
+promote one.
+
+### What this does not move
+
+Gate 9 still blocks. No certification carries a SimForge PASS, Unit B has never earned one
+by anybody, and SimForge's battery is still not wired to grade submitted scenarios. The
+answer keys were never what Gate 9 was waiting for.

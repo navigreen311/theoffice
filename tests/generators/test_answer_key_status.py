@@ -181,7 +181,7 @@ GREENSTONE = (
 )
 
 
-def test_greenstones_three_remaining_approvals_stand():
+def test_greenstones_five_are_approved_and_carry_all_44_scenarios():
     """**Approved by Ivan Green on 18 September 2026**, and three of the five still are.
 
     All five were approved on the 17th, superseded by SimForge's split keys the same
@@ -194,12 +194,21 @@ def test_greenstones_three_remaining_approvals_stand():
     """
     loaded = sc.load_all()
     total = 0
-    for module_id in ("assign_contract", "comp_analysis", "underwrite_deal"):
+    for module_id in GREENSTONE:
         content = loaded.for_module(module_id)
         assert content is not None, f"{module_id} is approved and still withheld"
         assert content.status == sc.APPROVED
         assert content.approved_by == "Ivan Green"
-        assert content.approved_on == "2026-09-18"
+        # Two dates, because there were two readings. `buyer_match` and
+        # `property_lookup` were corrected and re-approved on the 20th (entries 137,
+        # 139); the other three have stood since the 18th. The date is asserted per
+        # key rather than as one constant, which is what stops a re-approval being
+        # backdated onto prose that did not exist when it was given.
+        expected_on = (
+            "2026-09-20" if module_id in ("buyer_match", "property_lookup")
+            else "2026-09-18"
+        )
+        assert content.approved_on == expected_on
         total += sum(len(v) for v in content.scenarios.values())
 
         accounted = set(content.scenarios) | set(content.not_applicable)
@@ -208,10 +217,7 @@ def test_greenstones_three_remaining_approvals_stand():
             f"{sorted(set(sc.SUBMITTABLE_CLASSES) - accounted)}"
         )
 
-    assert total == 26, (
-        f"expected the 26 scenarios still approved, found {total}. The other 18 are "
-        "buyer_match's 8 and property_lookup's 10, drafted by entry 137."
-    )
+    assert total == 44, f"expected the 44 approved scenarios, found {total}"
 
 
 def test_burkhams_twenty_are_still_drafts_of_their_own():
@@ -224,12 +230,11 @@ def test_burkhams_twenty_are_still_drafts_of_their_own():
     """
     loaded = sc.load_all()
     drafts = loaded.drafts()
-    burkham = set(drafts) - set(GREENSTONE)
-    assert len(burkham) == 20, f"expected Burkham's 20, found {len(burkham)}"
-    # Greenstone's two are drafts for a different reason - corrected content awaiting a
-    # reading (entry 137) rather than an approval never given. Counted apart so a change
-    # to either population cannot be hidden by the other moving the opposite way.
-    assert set(drafts) & set(GREENSTONE) == {"buyer_match", "property_lookup"}
+    assert len(drafts) == 20, f"expected Burkham's 20 still drafted, found {len(drafts)}"
+    # Greenstone's five are all approved again as of 20 September, so the two that spent
+    # two days in draft (entry 137) are back out of this set. Asserted by exclusion so a
+    # Greenstone key slipping back to draft cannot hide inside Burkham's count.
+    assert not (set(drafts) & set(GREENSTONE))
     assert all(c.approved_by == "" and c.approved_on == "" for c in drafts.values())
 
 

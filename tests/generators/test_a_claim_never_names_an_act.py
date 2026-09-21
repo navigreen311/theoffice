@@ -168,29 +168,25 @@ def test_the_five_corrected_keys_carry_exactly_this(
     assert answer.expected_answer["record_claim_options"] == options
 
 
-def test_the_act_correction_did_not_move_anyone_s_approval():
-    """**A correction to Ivan's own ruling is not a new approval** - entry 133's rule.
+def test_every_greenstone_key_is_approved_and_carries_its_own_date():
+    """**Two approvals, two dates, and that is the field working.**
 
-    Three of the five still carry his 18 September approval, unmoved: removing a word
-    that named an act changed no fact.
+    Entry 133's correction kept the 18 September approval on all five: five act words
+    came out of option lists and no fact changed. Entry 137 then returned `buyer_match`
+    and `property_lookup` to draft, because what a CORRECT ANSWER IS had changed under
+    them - and Ivan re-approved those two on 20 September after reading the new prose.
 
-    The other two are drafts, and NOT because of this correction. Entry 137 returned
-    `buyer_match` and `property_lookup` to draft when what a CORRECT ANSWER IS changed
-    under them - a different kind of edit, and the one `status` exists to catch. Their
-    names are listed here rather than skipped, so a reader can see the distinction the
-    two entries draw between an edit that keeps an approval and one that cannot.
+    So three keys carry the 18th and two carry the 20th. An approval dated the 18th on
+    the corrected pair would claim he read prose that did not exist yet, which is the
+    whole reason `approved_on` is a separate required field (entry 126).
     """
     loaded = sc.load_all()
-    corrected_content = {"buyer_match", "property_lookup"}
+    re_approved = {"buyer_match", "property_lookup"}
     for module_id in GREENSTONE:
         content = loaded.modules[module_id]
-        if module_id in corrected_content:
-            assert content.status == sc.DRAFT, (
-                f"{module_id} had its content corrected in entry 137 and must not be "
-                "approved until Ivan has read the new prose"
-            )
-            assert content.approved_by == "" and content.approved_on == ""
-        else:
-            assert content.status == sc.APPROVED
-            assert content.approved_by == "Ivan Green"
-            assert content.approved_on == "2026-09-18"
+        assert content.status == sc.APPROVED
+        assert content.approved_by == "Ivan Green"
+        expected = "2026-09-20" if module_id in re_approved else "2026-09-18"
+        assert content.approved_on == expected, (
+            f"{module_id} is approved on {content.approved_on}, expected {expected}"
+        )
