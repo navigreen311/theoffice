@@ -438,8 +438,14 @@ async def test_a_department_with_no_unit_b_certification_is_refused_not_appointe
     that was structurally impossible.
 
     The assertion is `missing_unit_b` specifically, and NOT that the artifact is empty:
-    a shortfall does not auto-reject the Pack, does not auto-appoint an uncertified
-    agent and does not silently reduce scope. It reports.
+    a shortfall does not auto-reject the Pack, does not grant an uncertified agent
+    production authority and does not silently reduce scope. It reports.
+
+    **Entry 145 changed where the refusal bites and not what it says.** A candidate with
+    unit A and no unit B is eligible to sit the exam, so it may hold a seat; it is
+    `certified=False`, it is named here with `missing_unit_b`, and Gate 11 refuses to
+    activate its grant. Department certification is still necessary and still never
+    sufficient.
     """
     from generators import pipeline
     from generators.pack import load_pack
@@ -469,6 +475,11 @@ async def test_a_department_with_no_unit_b_certification_is_refused_not_appointe
         "one reason, and collapsing it into another is how this stayed hidden"
     )
     assert appointment.shortfall is True
-    assert not any(p.appointed for p in appointment.appointments), (
-        "an uncertified agent was appointed"
+    assert not any(
+        a.certified for p in appointment.appointments for a in p.appointed
+    ), (
+        "a candidate with no unit B was recorded as certified; department certification "
+        "is necessary and never sufficient, and entry 145 moved where that is enforced "
+        "rather than whether it is"
     )
+    assert appointment.capacity.certified_and_free == 0

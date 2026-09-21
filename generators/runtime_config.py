@@ -78,7 +78,17 @@ def generate(
         for position in appointment.appointments:
             ceiling = tier_by_title.get(position.position_title, "suggest")
             for agent in position.appointed:
-                for module in agent.certified_modules:
+                # EVERY MODULE THE POSITION OPERATES, not the certified subset. Ruled
+                # 21 September 2026, entry 145: the grant is the exam ticket, and
+                # issuing one only for modules already certified is what closed the
+                # loop - `_exam_takers` reads grants, so an uncertified agent was never
+                # examined and could never stop being uncertified.
+                #
+                # The grant is written INACTIVE either way. `resolve_grant` refuses it
+                # on certification state on every call, and Gate 11 refuses to activate
+                # it - so what this hands an uncertified agent is a seat at the exam and
+                # nothing else.
+                for module in agent.modules:
                     forge = module_forge.get(module, "UNREGISTERED")
                     # The declared ceiling FOR THIS MODULE. Absent from the map means the
                     # position's single ceiling, which is every Pack authored before

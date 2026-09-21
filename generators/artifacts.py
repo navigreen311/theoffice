@@ -187,6 +187,20 @@ class AppointedAgent:
     office_agent_id: str
     agent_name: str
     department: str
+
+    #: Every module the position operates - **the exam roster**, and what Gate 5 issues a
+    #: grant for.
+    #:
+    #: Ruled 21 September 2026 (entry 145). Grants were built from `certified_modules`,
+    #: which made the ladder circular: an uncertified appointee got no grant, so
+    #: `_exam_takers` found nobody, so no exam was set, so no verdict could ever be
+    #: written. The two lists were one until the circle had to be cut, and this is the
+    #: half that says what an agent may be EXAMINED on.
+    modules: list[str]
+
+    #: The subset of `modules` this agent already holds a current unit-A certification
+    #: for. What an agent may be TRUSTED with, and still the only list `certified` and
+    #: the capacity numbers are computed from.
     certified_modules: list[str]
 
     #: The tier this agent operates each module at, keyed `forge_id/module_id`. The lower of
@@ -212,6 +226,17 @@ class AppointedAgent:
     #: by one.
     certified_tiers: dict[str, str]
 
+    #: Unit A current on every module in `modules` **and** unit B current on every Forge
+    #: they touch. Both, exactly as 5.2 requires - what entry 145 moved is where that
+    #: test is enforced, not what it means.
+    #:
+    #: **This is the field that keeps the gap report honest.** An appointment may now
+    #: contain an uncertified agent, so a reader counting `len(appointed)` would be
+    #: reading a staffing level that cannot operate. `CapacityNumbers.certified_and_free`
+    #: counts this flag, and `requires_certification` still names every uncertified
+    #: candidate with the specific state that explains it.
+    certified: bool = True
+
 
 @dataclass(frozen=True, slots=True)
 class CandidateShortfall:
@@ -219,7 +244,14 @@ class CandidateShortfall:
     agent_name: str
     reason: str
     """`never_certified` | `in_training` | `stale_instructions` | `stale_forge` |
-    `failed` | `revoked` | `wrong_department` | `missing_unit_b`.
+    `failed` | `revoked` | `wrong_department` | `missing_unit_b` |
+    `module_not_registered`.
+
+    **Two of these mean "not eligible" and the rest mean "not certified", and after
+    entry 145 that difference decides whether the candidate can fill a seat.**
+    `revoked` and `module_not_registered` say the agent cannot sit the exam at all;
+    every other value says the exam has not been passed yet, which is what Gate 4.5
+    stopped refusing a seat for.
 
     Named, never collapsed to "not eligible" - Part 10.1, and because the fix for
     `in_training` is to wait while the fix for `wrong_department` is to look elsewhere.

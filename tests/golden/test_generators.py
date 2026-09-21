@@ -254,8 +254,19 @@ async def test_role_definition_derives_implied_compliance_flags(greenstone_world
 async def test_appointment_never_fills_a_position_with_an_uncertified_agent(
     greenstone_world, admin
 ):
-    """G4 — 5.2, absolute. Uncertified candidates appear as requires_certification,
-    never as filled."""
+    """G4 — 5.2 as entry 145 applies it: a seat may be filled by somebody eligible to
+    sit the exam, and certification is what Gate 11 requires before authority.
+
+    **This test asserted the opposite until 21 September**, and the rule it asserted
+    closed the ladder: 4.5 seated only certified agents, Gate 5 granted only to the
+    seated, Gate 8 examined only grant holders, and the sweep certified only the
+    examined. Nothing could become certified without an off-ladder bootstrap.
+
+    So what is asserted now is the pair that makes the change a move rather than a
+    loosening: the seat IS filled, and the agent in it is `certified=False`, still named
+    in `requires_certification` with the specific state that explains it, and counted
+    nowhere that claims it can operate.
+    """
     # Unit B only: department certification is necessary, never sufficient.
     certify(admin, [], [], unit_b_departments=[d for _a, _n, d in ROSTER])
     pack = load_pack(PACK_PATH)
@@ -264,7 +275,6 @@ async def test_appointment_never_fills_a_position_with_an_uncertified_agent(
         result = await pipeline.run_all(pack, conn)
 
     for position in result.appointment.appointments:
-        assert position.appointed == [], f"{position.position_title} was filled uncertified"
         if position.pending:
             # A PENDING POSITION IS NOT AN UNCERTIFIED ONE, AND THE DIFFERENCE IS THE TEST.
             #
@@ -282,12 +292,28 @@ async def test_appointment_never_fills_a_position_with_an_uncertified_agent(
                 "a pending position must not ask anybody to go and get certified"
             )
             continue
-        assert position.unfilled == position.headcount_required
+        assert position.appointed, (
+            f"{position.position_title} has eligible candidates and no seat filled; "
+            "entry 145 makes an exam ticket the test, not a certification"
+        )
+        assert position.unfilled == 0
+        assert all(not a.certified for a in position.appointed), (
+            "nobody here is certified, so no appointment may claim to be"
+        )
         assert position.requires_certification, "candidates must be reported, not hidden"
         assert all(
             c.reason in ("never_certified", "in_training", "missing_unit_b")
             for c in position.requires_certification
         )
+        seated = {a.office_agent_id for a in position.appointed}
+        assert seated <= {c.office_agent_id for c in position.requires_certification}, (
+            "an uncertified agent in a seat must still be named in the gap report"
+        )
+
+    assert result.appointment.capacity.certified_and_free == 0, (
+        "not one of these agents is certified; the number that says who can operate "
+        "today must not move because a seat was filled by somebody who cannot"
+    )
 
     assert any(p.pending for p in result.appointment.appointments), (
         "Deal Underwriter is declared pending in the Pack; if no appointment reports it "
@@ -311,6 +337,10 @@ async def test_shortfall_reports_all_three_capacity_numbers(greenstone_world, ad
         result = await pipeline.run_all(pack, conn)
 
     cap = result.appointment.capacity
+    # STILL A SHORTFALL, and since entry 145 that is the assertion worth keeping. Seats
+    # now fill with eligible candidates, so reading `shortfall` off `unfilled` alone
+    # would have switched the governance escalation off on the day positions stopped
+    # emptying. A seat held by somebody who cannot operate it is still a shortfall.
     assert result.appointment.shortfall is True
     assert cap.certified_and_free == 1
     assert cap.produced_not_yet_certified > 0

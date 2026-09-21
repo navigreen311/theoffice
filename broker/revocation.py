@@ -199,6 +199,62 @@ async def covered_grants(
     }
 
 
+async def covered_targets(
+    conn: AsyncConnection,
+    *,
+    venture_id: str,
+    targets: list[tuple[str, str, str]],
+) -> set[tuple[str, str, str]]:
+    """Which (agent, forge, module) triples a live revocation covers, before a grant exists.
+
+    `check_revocations` asks for one call; `covered_grants` asks over a table of grants.
+    This asks over a set of triples that have **no grant yet** - which is the question
+    Gate 4.5 has to ask once appointment stopped meaning "certified" and started meaning
+    "can sit the exam" (entry 145).
+
+    WHY IT CANNOT GO THROUGH `covered_grants`
+    =========================================
+
+        That one starts `FROM agent_forge_grant`. An agent being considered for a seat
+        holds no grant for the module yet - Gate 5 is what issues it, two gates later -
+        so every candidate would come back uncovered and a revoked agent would be
+        appointed into a seat whose exam `_exam_takers` then refuses to open. A seat
+        that reads filled and produces no exam is the failure this question exists to
+        prevent.
+
+    Same `_covers`, same four scopes, same `reinstated_at IS NULL`. The predicate is
+    written once and this is its third cardinality, not its second spelling.
+
+    Returns a set rather than a mapping: the caller reports a shortfall reason per
+    candidate and does not name the revocation, because a position's report is about
+    seats and the revocation register is where a revocation is explained.
+    """
+    if not targets:
+        return set()
+    # Unnested from three arrays rather than built as a VALUES list with one placeholder
+    # per element: the triples are a parameter, and a SQL string whose length depends on
+    # how many candidates a position has is a string nobody can read in a log.
+    sql = f"""
+        SELECT DISTINCT t.agent_id, t.forge_id, t.module_id
+        FROM unnest(
+                 %(agents)s::uuid[], %(forges)s::text[], %(modules)s::text[]
+             ) AS t(agent_id, forge_id, module_id)
+        JOIN revocation r
+          ON {_covers(
+              agent="t.agent_id", forge="t.forge_id",
+              module="t.module_id", venture="%(venture_id)s",
+          )}
+    """
+    async with conn.cursor() as cur:
+        await cur.execute(sql, {
+            "agents": [t[0] for t in targets],
+            "forges": [t[1] for t in targets],
+            "modules": [t[2] for t in targets],
+            "venture_id": venture_id,
+        })
+        return {(str(a), f, m) for a, f, m in await cur.fetchall()}
+
+
 def assert_authority(scope: str, actor_role: str) -> None:
     """Check the actor may revoke at this scope.
 
