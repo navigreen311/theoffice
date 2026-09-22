@@ -258,7 +258,10 @@ async def test_a_pass_is_recorded_so_somebody_can_ask_whether_it_ran(world, admi
     assert status == "passed" and completed_at is not None
     body = findings if isinstance(findings, dict) else json.loads(findings)
     assert "proposals_expired" in body
-    assert "escalations_overdue_without_a_deadline" in body
+    # RENAMED BY ENTRY 158. This was `escalations_overdue_without_a_deadline` - the
+    # visible form of the question entry 156 left open. Four hours answered it, so the
+    # counter is now simply how many are late.
+    assert "escalations_overdue" in body
 
 
 # ------------------------------------------- it records when the deadline passed

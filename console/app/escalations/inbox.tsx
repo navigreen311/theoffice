@@ -54,10 +54,23 @@ export function Waiting({ item }: { item: RoutedEscalation }) {
       <header>
         <h3>
           {item.department ?? item.venture_id}: {item.kind}
+          {/* LATE, AND STILL YOURS TO TAKE. Ruled 22 September 2026, entry 158:
+              overdue flags it and cancels nothing. The buttons below are unchanged,
+              because the item is unchanged - what the mark says is how long it has
+              been waiting, which is the one thing the page could not say while
+              `d8e8f35c` sat here for thirteen hours. */}
+          {item.overdue ? (
+            <span className="ml-2 rounded-md bg-warn-bg px-1.5 py-0.5 text-meta text-warn">
+              overdue
+            </span>
+          ) : null}
         </h3>
-        <p className="muted">
+        <p className={item.overdue ? "text-meta text-warn" : "muted"}>
           Raised <Ago iso={item.raised_at} /> by <Raiser item={item} />, on the{" "}
           {item.path} path.
+          {item.overdue
+            ? ` Nobody has received it, and it is past ${item.overdue_after_hours} hours.`
+            : ""}
         </p>
       </header>
 

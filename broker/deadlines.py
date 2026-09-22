@@ -79,7 +79,7 @@ from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from broker import audit
+from broker import audit, escalation
 
 #: How often the background runner checks. Ruled "on its own", so the interval is a
 #: property of the deployment rather than of anybody's attention.
@@ -198,19 +198,18 @@ async def expire_overdue_escalations(conn: AsyncConnection) -> list[dict[str, An
     return expired
 
 
-async def _undeadlined_overdue(conn: AsyncConnection) -> int:
-    """Escalations raised, unreceived, and carrying no deadline to miss.
+async def _overdue_count(conn: AsyncConnection) -> int:
+    """Escalations nobody has received within four hours of them being raised.
 
-    The visible form of entry 156's open question. A count that climbs is the argument
-    for answering it.
+    **Entry 156 asked what makes an escalation overdue; entry 158 answered it.** This
+    counter used to be `escalations_overdue_without_a_deadline` - the visible form of
+    that open question, counting rows that could not be judged late because no rule said
+    when late began. There is a rule now, it is four hours, and it is the same rule for
+    every venture and department, so the count is simply how many are late.
+
+    **It counts and does not act.** Overdue flags; it cancels nothing.
     """
-    async with conn.cursor() as cur:
-        await cur.execute(
-            "SELECT count(*) FROM escalation_record "
-            " WHERE expires_at IS NULL AND received_at IS NULL AND answered_at IS NULL"
-        )
-        row = await cur.fetchone()
-    return int(row[0]) if row else 0
+    return len(await escalation.overdue(conn))
 
 
 async def run_once(conn: AsyncConnection) -> dict[str, Any]:
@@ -231,14 +230,15 @@ async def run_once(conn: AsyncConnection) -> dict[str, Any]:
 
     proposals_expired = await expire_overdue_proposals(conn)
     escalations_expired = await expire_overdue_escalations(conn)
-    undeadlined = await _undeadlined_overdue(conn)
+    overdue_now = await _overdue_count(conn)
 
     findings = {
         "proposals_expired": len(proposals_expired),
         "escalations_expired": len(escalations_expired),
-        # NAMED, not summed into the two above. An escalation nobody can expire is not
-        # an escalation that was fine.
-        "escalations_overdue_without_a_deadline": undeadlined,
+        # NAMED, not summed into the two above. An escalation that is late is not an
+        # escalation that was fine, and it is not one that was cancelled either - entry
+        # 158: overdue flags it and cancels nothing.
+        "escalations_overdue": overdue_now,
         "worst_lag_seconds": max(
             [
                 (r["noticed_at"] - r["expires_at"]).total_seconds()

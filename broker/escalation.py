@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from enum import Enum
 from typing import Any
 
@@ -212,6 +213,40 @@ async def governance(conn: AsyncConnection, *, reason: str) -> Route:
 
 #: Decisions that change who may act. None of these may be settled inside the Village,
 #: including by the COO, and this is the list rather than a judgement call at each site.
+#: How long a named human has to RECEIVE an escalation before it is late. Ruled by Ivan
+#: Green, 22 September 2026, entry 158: *"An escalation is overdue four hours after it is
+#: raised, for every venture and department. Overdue flags it and cancels nothing."*
+#:
+#: **One number, for every venture and department.** Entry 156 left this open and built
+#: the mechanism without it, because nothing in the Pack or the schema said what made an
+#: escalation late and a default would have been a number nobody chose. This is the
+#: number, chosen.
+#:
+#: Universal rather than per-venture on the ruling's own terms. A deadline that varied by
+#: department would be a second thing to configure, a second thing to get wrong, and a
+#: reason for every late escalation to be somebody else's rule.
+#:
+#: MEASURED: `d8e8f35c` sat thirteen hours with nothing marking it late.
+OVERDUE_AFTER = timedelta(hours=4)
+
+
+def is_overdue(raised_at: datetime, received_at: datetime | None,
+               *, now: datetime | None = None) -> bool:
+    """Whether an escalation is late. **Derived, never stored.**
+
+    Overdue is a fact about the clock and two timestamps, so it is computed wherever it
+    is shown. Storing it would mean a row that says "late" until somebody re-ran a job,
+    and a row that says "not late" four hours and one second after it was raised.
+
+    **Receipt stops the clock, not the answer.** The ruling is about an escalation
+    nobody has picked up. Once a named human has said they have it, what is outstanding
+    is their answer - a different question, and not one entry 158 rules on.
+    """
+    if received_at is not None:
+        return False
+    return (now or datetime.now(UTC)) - raised_at >= OVERDUE_AFTER
+
+
 GOVERNANCE_ONLY = frozenset({
     "capacity_shortfall",
     "certification",
@@ -602,6 +637,32 @@ async def travelled(
     return _escalation(row) if row else None
 
 
+async def overdue(conn: AsyncConnection, *, venture_id: str | None = None
+                  ) -> list[Escalation]:
+    """Raised, unreceived, and past four hours. Oldest first.
+
+    Ruled 22 September 2026, entry 158. **Nothing here cancels anything** - this is a
+    read. The rows it returns are the same rows `outstanding` returns; they are simply
+    the ones nobody has picked up in time.
+
+    `venture_id=None` asks across every venture, which is what the sweep needs: the
+    ruling is universal, so a count that had to be asked per venture would report a
+    number that depended on who was asking.
+    """
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT * FROM escalation_record "
+            "  WHERE received_at IS NULL "
+            "    AND answered_at IS NULL "
+            "    AND raised_at <= now() - %s "
+            "    AND (%s::text IS NULL OR venture_id = %s) "
+            "  ORDER BY raised_at",
+            (OVERDUE_AFTER, venture_id, venture_id),
+        )
+        rows = await cur.fetchall()
+    return [_escalation(row) for row in rows]
+
+
 async def outstanding(conn: AsyncConnection, *, venture_id: str) -> list[Escalation]:
     """Raised and not yet answered, oldest first. The queue a drill produces."""
     async with conn.cursor(row_factory=dict_row) as cur:
@@ -661,6 +722,11 @@ async def routed_to(
             "received_at": found.received_at.isoformat() if found.received_at else None,
             "answered_at": found.answered_at.isoformat() if found.answered_at else None,
             "answer": found.answer,
+            # LATE, AND NOTHING ELSE. Ruled 22 September 2026, entry 158: overdue flags
+            # it and cancels nothing. The item stays in `waiting`, stays receivable,
+            # stays answerable - it just says how long it has been there.
+            "overdue": is_overdue(found.raised_at, found.received_at),
+            "overdue_after_hours": OVERDUE_AFTER.total_seconds() / 3600,
         }
 
     waiting = [shown(r) for r in rows if r["received_at"] is None]
