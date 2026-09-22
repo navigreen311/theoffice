@@ -13492,8 +13492,6 @@ Left alone deliberately. The Pack is declaring what a reviewer's authentication 
 be*, which is a requirement, and the account column is recording what it *is*. Whether a
 Pack may require something the platform cannot enforce is a question for Ivan, not a
 default this change should pick.
-
-
 ## 155. A routed human cannot receive what they cannot find
 
 > **Ruled third of three on 22 September and numbered first, because it landed first.**
@@ -13548,3 +13546,131 @@ now, and names nothing it has not been given.
 
 The stop line carried `$<Ago iso={run.stop.at} />` inside a template string, so the page
 rendered those characters rather than a time. JSX in a string is a string.
+
+
+## 156. A deadline passes on its own
+
+**Ruling by Ivan Green, 22 September 2026:**
+
+> *"A deadline passes on its own. A scheduled job expires overdue proposals and
+> escalations. Measured: e19ca4ce expired at 05:17:15 and stayed pending until 10:07:23,
+> when a page load triggered it."*
+
+### Expiry was a side effect of attention
+
+`proposals.expire_overdue` was correct, and had exactly one caller:
+`GET /api/proposals/queue`. So expiry was **read-triggered**, and nothing scheduled
+anything.
+
+The drill proposal is the measurement. Its deadline passed at 05:17:15. It stayed
+`pending` for four hours and fifty minutes and became `expired` at 10:07:23, which is
+the second a page was opened.
+
+Three defects fell out of that one fact.
+
+**It did not happen.** A deadline that only passes when somebody looks is not a deadline.
+
+**It happened at the wrong time**, which is entry 157.
+
+**It depended on who looked first.** The queue expires *before* it reads, so the reviewer
+an item was routed to would have had it expired out from under her by the act of opening
+the page she was meant to decide it on. Ira never saw the proposal she was asked to
+decide, and would not have seen it even if she had gone looking.
+
+### The job, and where it runs
+
+`broker/deadlines.py` expires both and records that it ran. `broker serve` starts it for
+the lifetime of the API; `broker expire-deadlines` does one pass for a deployment that
+would rather own the schedule. **Both call the same function**, so the two cannot drift.
+
+In-process rather than cron, and the reason is in this repository's own history:
+`broker/__main__.py` has said *"designed to be invoked by cron or a systemd timer"* since
+it was written, and nothing has ever invoked it. A control that is true only if somebody
+sets it up is how this entry came to exist.
+
+**The pass is recorded in `sweep_run`.** The verdict-ingest sweep had no record and the
+answer to "has this been running" was nobody knows; that is the first question anybody
+asks about a deadline that did not pass, so it is answerable before it costs anything.
+A failed pass logs and the next tick tries again — a job that dies on the first transient
+error is a job that was running yesterday, which is the state being ended.
+
+### The read path stops writing
+
+`GET /api/proposals/queue` no longer expires anything. The concern that produced that
+call was real — a queue must not present an overdue item as decidable — so `queue()`
+derives `overdue` from `expires_at` at read time instead. Same honest display, without
+the read being a write.
+
+### Escalations have no deadline, and this does not invent one
+
+The ruling names proposals and escalations together. Proposals carry `expires_at` with an
+8-hour default declared in 0021. **Escalations carry nothing** — no column, no default,
+and nothing in the Pack, the schema or this ledger says how long a named human has to
+receive one.
+
+So `escalation_record.expires_at` is nullable with no default, the job expires the rows
+that carry a deadline, and today that is none of them. The mechanism is real; the rule is
+Ivan's.
+
+> **Open question: what is an escalation's deadline, and who sets it?** Per venture, per
+> department, per kind, or per escalation? A default of twenty-four hours here would be a
+> number nobody chose, applied to every escalation this platform ever raises, arriving
+> through a migration rather than through a ruling — which is the defect entry 157 has
+> just finished removing from a placeholder.
+
+Until it is answered, every sweep reports
+`escalations_overdue_without_a_deadline`, so the gap is visible rather than quiet.
+
+**Also ruled by the same logic and not built:** an escalation that has been *received* is
+left alone past its deadline. Receipt is a person saying they have it, and a timeout must
+not overwrite that. What is late at that point is the answer, which is a second deadline
+and a second question.
+
+
+## 157. An expiry records when the deadline passed
+
+**Ruling by Ivan Green, 22 September 2026:**
+
+> *"An expiry records when the deadline passed, not when it was noticed. Measured: the
+> entry reads 10:07:23, which is when I opened the page."*
+
+### One entry, two different facts
+
+The `proposal_expired` entry for e19ca4ce said 10:07:23. That is a true statement about
+when a page was opened, filed as the time an event happened. The event happened at
+05:17:15.
+
+Nobody reading that entry later could have recovered the difference, and the difference
+is the entire content of the finding: four hours and fifty minutes in which a deadline
+had passed and nothing had noticed.
+
+### Three fields, because there are three facts
+
+    expired_at    the deadline. The event.
+    noticed_at    when the job got there.
+    lag_seconds   the distance between them.
+
+**`lag_seconds` is on the record deliberately.** It is the number that says whether the
+scheduler is running. Nothing else in the system would show a stopped job; a lag that
+climbs says so on every row it writes.
+
+### The chain's own timestamp is not touched
+
+`audit_log.ts` says when the entry was written and continues to. Backdating it would put
+a row in the hash chain claiming to predate rows already in it, which breaks the one
+property the chain has. So this is an added field, never a rewritten one — and a test
+asserts `ts` is *not* the deadline.
+
+### The constraint, because a convention would not have caught it
+
+`an_expiry_is_the_deadline` on `escalation_record`:
+
+    expired_at IS NULL OR expired_at = expires_at
+
+The job could write `now()` there and no reader would know. This makes it impossible
+rather than discouraged, and it is the constraint that would have caught the defect being
+fixed.
+
+Proposals need no equivalent: `expires_at` is the deadline and `status = 'expired'` says
+it passed, so the row already cannot record a different moment. The audit entry is where
+the two times were confused, and that is where the two fields now are.
