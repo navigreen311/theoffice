@@ -75,6 +75,34 @@ EVENTS: tuple[Event, ...] = (
           "is set. Carries the discharges this one superseded, because a discharge "
           "is replaced rather than edited.",
           "broker.app", CONSOLE),
+    Event("console_compliance_entry_approved", "Compliance entry approved",
+          "A named human adopted a compliance library entry - somebody other than the "
+          "person who wrote it. RULED 22 September 2026, entry 163: approval used to "
+          "be a word in the same statement as the text, with one writer and no event "
+          "at all. Carries whether the entry is now relied on, which needs a counsel "
+          "review as well (entry 165).",
+          "broker.app", CONSOLE),
+    Event("console_compliance_counsel_review_recorded", "Counsel review recorded",
+          "A named human recorded that a lawyer read a compliance library entry - "
+          "naming the reviewer, their firm, the date they read it, and the specific "
+          "claims they confirmed. The lawyer has no account here, so this is the "
+          "recorder's statement about a review and the recorder is who answers for it. "
+          "RULED 22 September 2026, entry 164: `counsel_reviewed_at` existed for two "
+          "weeks with no writer anywhere.",
+          "broker.app", CONSOLE),
+    Event("console_venture_declared_in_simulation", "Venture declared in simulation",
+          "A named human declared a venture in simulation, with a reason and a date. "
+          "RULED 22 September 2026, entry 166: in simulation an unreviewed compliance "
+          "entry is recorded as deliberately DEFERRED - not verified - and does not "
+          "fail Gate 2 or Gate 6. No attestation may read TRUE on the strength of it, "
+          "so a department's compliance coupling cannot be attested while it stands.",
+          "broker.app", CONSOLE),
+    Event("console_venture_left_simulation", "Venture left simulation",
+          "A named human took a venture out of simulation - a separate act from "
+          "declaring it, and one that does not un-happen. Carries the entries that "
+          "began failing again at that moment, which is every one that is not both "
+          "approved and counsel-reviewed.",
+          "broker.app", CONSOLE),
     Event("console_role_granted", "Role granted",
           "Somebody was given a role by somebody holding a stronger one.",
           "broker.app", CONSOLE),

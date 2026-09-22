@@ -52,7 +52,7 @@ from typing import Any
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 
-from broker import audit, escalation, humans
+from broker import audit, escalation, humans, simulation
 
 #: The role a human must hold to attest. NOT A NEW ROLE, and that is a measurement:
 #: `office_human_role` has held `('venture_operator', 'compliance_officer', 'ivan')`
@@ -166,6 +166,40 @@ async def attest(
                 "somebody's reading of a route that resolves. Raise one "
                 "(`escalation.raise_escalation`), have it received and answered, and "
                 "attest against that."
+            )
+
+    # NO ATTESTATION MAY EVER READ TRUE ON THE STRENGTH OF SIMULATION.
+    # Ruled 22 September 2026, entry 166.
+    #
+    # Simulation defers a check. An attestation is a person's statement that the check
+    # passed. The second cannot be built out of the first, and the gap between them is
+    # the entire reason a declared simulation is safe to have at all - without this
+    # clause, declaring simulation would quietly convert "we have not looked" into
+    # "somebody looked and it holds" one gate later.
+    #
+    # ONLY `compliance_coupling_verified` IS REFUSED, and the scope is measured rather
+    # than reasoned: Ivan Green's own attestations of 22 September read
+    # `escalation_path_verified: TRUE` and `compliance_coupling_verified: FALSE` for
+    # greenstone/research and greenstone/operations, under the conditions that produced
+    # this ruling. An escalation path is travelled by a real human answering a real
+    # escalation and has nothing to do with the compliance library; refusing it here
+    # would refuse a fact simulation does not touch.
+    #
+    # NO OVERRIDE ARGUMENT, deliberately. A keyword that let a caller attest anyway
+    # would be the thing this clause forbids, spelled as a parameter.
+    if compliance_coupling_verified:
+        deferral = await simulation.current(conn, venture_id)
+        if deferral is not None:
+            raise AttestationError(
+                f"{venture_id} is in simulation - declared by "
+                f"{deferral.declared_by_name} on {deferral.declared_at.date()}: "
+                f"{deferral.reason} - so its compliance coupling cannot be attested "
+                "verified. RULED 22 SEPTEMBER 2026, entry 166: no attestation may read "
+                "TRUE on the strength of simulation. In simulation an unreviewed entry "
+                "is deliberately deferred, which is a decision to postpone the check "
+                "and not a finding that it passed. Attest FALSE with that as the "
+                "reason, or leave simulation and get the entries approved and "
+                "counsel-reviewed."
             )
 
     attestation_id = uuid.uuid4()

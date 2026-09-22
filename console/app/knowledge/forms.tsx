@@ -8,9 +8,11 @@ import { assessSection } from "@/lib/curriculum";
 import { Badge, Button, Field, inputClass } from "@/components/ui";
 
 import {
+  approveEntryAction,
   authorEntryAction,
   authorPersonaAction,
   authorPlaybookAction,
+  recordCounselReviewAction,
   recordExclusionAction,
   recordNoteAction,
   shareAction,
@@ -23,6 +25,9 @@ import {
  * `useFormState` from `react-dom`, not `useActionState` — React 18.3.1, where the
  * latter type-checks, builds, and throws at render.
  */
+
+/** One entry a form can offer as a choice. */
+export type EntryChoice = { venture_id: string; entry_ref: string };
 
 function Submit({ label, busy }: { label: string; busy: string }) {
   const { pending } = useFormStatus();
@@ -470,6 +475,128 @@ export function RecordExclusion({ counts }: { counts: { personas: number; record
         label={`Record this exclusion (${total})`}
         busy="Recording…"
       />
+      <Result state={state} />
+    </form>
+  );
+}
+
+/**
+ * Approve an entry — entry 163, and the smallest form in this file on purpose.
+ *
+ * Two fields, because an approval carries no opinion of its own. The approver comes
+ * from the session, never from the form: a field that could name somebody else would
+ * make this a record of an approval rather than an approval.
+ *
+ * The entry ref is a `datalist` over the unapproved ones rather than a `select`,
+ * because an officer who knows the ref should be able to type it, and a list that is
+ * empty when everything is approved should not read as a broken control.
+ */
+export function ApproveEntryForm({ pending }: { pending: EntryChoice[] }) {
+  const [state, action] = useFormState(approveEntryAction, null);
+  return (
+    <form action={action} className="space-y-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Venture">
+          <input className={inputClass} name="venture_id" list="approve-ventures" />
+          <datalist id="approve-ventures">
+            {[...new Set(pending.map((e) => e.venture_id))].map((v) => (
+              <option key={v} value={v} />
+            ))}
+          </datalist>
+        </Field>
+        <Field
+          label="Entry ref"
+          hint={
+            pending.length > 0
+              ? `${pending.length} awaiting approval`
+              : "Every entry is approved."
+          }
+        >
+          <input className={inputClass} name="entry_ref" list="approve-refs" />
+          <datalist id="approve-refs">
+            {pending.map((e) => (
+              <option key={`${e.venture_id}/${e.entry_ref}`} value={e.entry_ref} />
+            ))}
+          </datalist>
+        </Field>
+      </div>
+      <p className="text-meta text-ink-muted">
+        You are the approver — it is taken from your session, not from this form. An
+        entry&apos;s approver is never its author.
+      </p>
+      <Submit label="Approve" busy="Approving…" />
+      <Result state={state} />
+    </form>
+  );
+}
+
+/**
+ * Record a counsel review — entry 164.
+ *
+ * Counsel has no account here, so this records YOUR statement that a named reviewer at
+ * a named firm read the entry on a given date and confirmed specific claims. You are
+ * who answers for the statement, which is why the recorder is the session and not a
+ * field.
+ *
+ * One claim per line. A comma-separated field would have been shorter and a claim about
+ * the law is a sentence that contains commas.
+ */
+export function CounselReviewForm({ pending }: { pending: EntryChoice[] }) {
+  const [state, action] = useFormState(recordCounselReviewAction, null);
+  return (
+    <form action={action} className="space-y-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Venture">
+          <input className={inputClass} name="venture_id" list="review-ventures" />
+          <datalist id="review-ventures">
+            {[...new Set(pending.map((e) => e.venture_id))].map((v) => (
+              <option key={v} value={v} />
+            ))}
+          </datalist>
+        </Field>
+        <Field
+          label="Entry ref"
+          hint={
+            pending.length > 0
+              ? `${pending.length} with no counsel review recorded`
+              : "Every entry has a review recorded."
+          }
+        >
+          <input className={inputClass} name="entry_ref" list="review-refs" />
+          <datalist id="review-refs">
+            {pending.map((e) => (
+              <option key={`${e.venture_id}/${e.entry_ref}`} value={e.entry_ref} />
+            ))}
+          </datalist>
+        </Field>
+        <Field label="Reviewer" hint="The lawyer who read it. A person, not a firm.">
+          <input className={inputClass} name="reviewer_name" placeholder="Marta Reyes" />
+        </Field>
+        <Field label="Firm">
+          <input
+            className={inputClass}
+            name="reviewer_firm"
+            placeholder="Reyes &amp; Okonkwo LLP"
+          />
+        </Field>
+        <Field
+          label="Date reviewed"
+          hint="When counsel read it — not today, unless that is when they read it."
+        >
+          <input className={inputClass} type="date" name="reviewed_on" />
+        </Field>
+      </div>
+      <Field
+        label="Claims confirmed"
+        hint="One per line. What counsel did NOT confirm, this does not confirm — an entry is a mixture, and one yes rounds it to whichever part you felt best about."
+      >
+        <textarea className={inputClass} name="claims_confirmed" rows={4} />
+      </Field>
+      <p className="text-meta text-ink-muted">
+        Recorded by you, on the lawyer&apos;s behalf. You are who answers for the
+        statement.
+      </p>
+      <Submit label="Record review" busy="Recording…" />
       <Result state={state} />
     </form>
   );

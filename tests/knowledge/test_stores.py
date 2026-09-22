@@ -19,11 +19,18 @@ import pytest
 
 from broker import knowledge
 from broker.db import connection
-from tests.conftest import declare_author, requires_db, undeclare_author
+from tests.conftest import (
+    declare_author,
+    rely_on_entry,
+    requires_db,
+    undeclare_author,
+)
 
 pytestmark = [requires_db, pytest.mark.db]
 
-AUTHOR = uuid.UUID("00000000-0000-5000-8000-00000000aaaa")
+AUTHOR = uuid.UUID("00000000-0000-5000-8000-000000a17410")
+#: Entries 163/164: the approver and the counsel recorder are never the author.
+APPROVER = uuid.UUID("00000000-0000-5000-8000-000000a17411")
 MINE = "greenstone"
 THEIRS = "burkham-wickmont"
 
@@ -33,10 +40,11 @@ def _clean(admin: psycopg.Connection):
     # AUTHOR is an account now, not a bare id. Entry 162: a compliance entry names a
     # real author, and until that ruling this file passed a UUID matching no row.
     declare_author(admin, AUTHOR, "Stores Test Author")
+    declare_author(admin, APPROVER, "Stores Test Approver")
     _wipe(admin)
     yield
     _wipe(admin)
-    undeclare_author(admin, AUTHOR)
+    undeclare_author(admin, AUTHOR, APPROVER)
 
 
 def _wipe(conn: psycopg.Connection) -> None:
@@ -182,7 +190,7 @@ async def test_an_entry_missing_any_of_the_six_fields_is_refused(_clean, omit):
     assert omit in str(exc.value)
 
 
-async def test_an_entry_resolves_by_ref_and_reports_all_three_halves(_clean):
+async def test_an_entry_resolves_by_ref_and_reports_all_three_halves(_clean, admin):
     """`resolve_entry_refs` returns mine, somebody else's, and nobody's.
 
     Three lists, not two. "Resolved" and "missing" were the whole answer while the table
@@ -203,8 +211,18 @@ async def test_an_entry_resolves_by_ref_and_reports_all_three_halves(_clean):
             ["test/ftc-tsr", "test/theirs", "test/does-not-exist"],
             venture_id="test-venture",
         )
+        # `resolve_entry_refs` asks whether a ref EXISTS for this venture, which is a
+        # different question from whether it may be relied on (entry 165). It is
+        # deliberately unchanged: a draft that resolves is not missing, and reporting it
+        # as missing sends an author to write an entry that is already written.
+        drafts_still_resolve = mine
+
+    rely_on_entry(admin, venture_id="test-venture", entry_ref="test/ftc-tsr",
+                  approver=APPROVER)
+    async with connection() as conn:
         flags = await knowledge.flags_with_entries(conn, "test-venture")
 
+    assert drafts_still_resolve == ["test/ftc-tsr"]
     assert mine == ["test/ftc-tsr"]
     assert elsewhere == ["test/theirs"], "another venture's entry is not mine"
     assert unresolved == ["test/does-not-exist"]

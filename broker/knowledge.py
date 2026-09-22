@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from psycopg import AsyncConnection
@@ -217,6 +218,36 @@ REQUIRED_ENTRY_FIELDS = (
 #: including the column's, because an entry nobody approved must not read as settled.
 ENTRY_STATUSES = ("draft", "draft_pending_claim_library_approval", "approved")
 
+#: What an AUTHOR may set. Ruled 22 September 2026, entry 163: *"Approval is a separate
+#: act by a different named human."* `approved` is reachable only through
+#: `approve_compliance_entry`, and the CHECK added by migration 0057 refuses the status
+#: without an approver in the same row - so this tuple is the message, not the control.
+AUTHORABLE_STATUSES = ("draft", "draft_pending_claim_library_approval")
+
+APPROVED_STATUS = "approved"
+
+#: Ruled 22 September 2026, entry 165: *"An entry is relied on only when approved and
+#: counsel-reviewed."* One expression, in SQL and in Python, so the two cannot drift.
+RELIED_ON_SQL = "status = 'approved' AND counsel_reviewed_at IS NOT NULL"
+
+
+def is_relied_on(entry: dict[str, Any]) -> bool:
+    """Whether anything may treat this entry as authoritative. Entry 165.
+
+    Both halves, and neither implies the other. Approval is this Office saying the entry
+    is the one to use; counsel review is a lawyer saying the law in it is right. An
+    entry approved and unreviewed is a decision about an unchecked claim, and one
+    reviewed and unapproved is a checked claim nobody adopted.
+
+    Takes a row rather than a ref so it cannot be asked without the facts in hand. The
+    SQL form is `RELIED_ON_SQL`, and `test_the_two_forms_of_the_predicate_agree` runs
+    them against the same rows.
+    """
+    return (
+        entry.get("status") == APPROVED_STATUS
+        and entry.get("counsel_reviewed_at") is not None
+    )
+
 
 async def author_compliance_entry(
     conn: AsyncConnection,
@@ -271,9 +302,16 @@ async def author_compliance_entry(
             "venture_id is whose entry this is; it is required. An entry with no owner "
             "is the state that let one venture overwrite another's (migration 0039)."
         )
-    if status not in ENTRY_STATUSES:
+    if status == APPROVED_STATUS:
         raise KnowledgeError(
-            f"status must be one of {', '.join(ENTRY_STATUSES)}; got {status!r}"
+            "an author may not approve their own entry. RULED 22 SEPTEMBER 2026, entry "
+            "163: approval is a separate act by a different named human. Write the "
+            "entry, then have somebody else call approve_compliance_entry. Until then "
+            f"the status is one of {', '.join(AUTHORABLE_STATUSES)}."
+        )
+    if status not in AUTHORABLE_STATUSES:
+        raise KnowledgeError(
+            f"status must be one of {', '.join(AUTHORABLE_STATUSES)}; got {status!r}"
         )
 
     # A REAL AUTHOR. Ruled 22 September 2026, entry 162.
@@ -308,6 +346,22 @@ async def author_compliance_entry(
                 runtime_flag = EXCLUDED.runtime_flag,
                 status = EXCLUDED.status,
                 claim_provenance = EXCLUDED.claim_provenance,
+                -- RE-AUTHORING UNDOES THE APPROVAL AND THE REVIEW. Entries 163 and 164.
+                --
+                -- Both were about THIS TEXT. An approval that survived a rewrite would
+                -- be an approver's name on words they never read, and a counsel review
+                -- that survived one would be a lawyer's firm attached to claims they
+                -- were never shown - which is worse than no review, because it reads
+                -- as one. The same property `content_hash` gives certification:
+                -- republishing decertifies.
+                approved_by = NULL,
+                approved_at = NULL,
+                counsel_reviewed_at = NULL,
+                counsel_reviewer_name = NULL,
+                counsel_reviewer_firm = NULL,
+                counsel_recorded_by = NULL,
+                counsel_recorded_at = NULL,
+                counsel_claims_confirmed = NULL,
                 updated_at = now()
             """,
             (venture_id, entry_ref, framework, jurisdiction, applicability_rule,
@@ -323,25 +377,59 @@ async def author_compliance_entry(
 #: the database did not, so an entry written by hand and never reviewed looked exactly
 #: like one taken from a statute.
 _ENTRY_COLUMNS = (
-    "venture_id, entry_ref, framework, jurisdiction, applicability_rule, "
+    "e.venture_id, e.entry_ref, framework, jurisdiction, applicability_rule, "
     "agent_behavior_implication, escalation_trigger, citation, runtime_flag, "
-    "status, claim_provenance, counsel_reviewed_at, authored_at, updated_at"
+    "status, claim_provenance, counsel_reviewed_at, authored_at, updated_at, "
+    # Entries 163 and 164. Who approved and who recorded the review travel WITH the
+    # text, for the reason `status` does: a reader who has the entry and not its
+    # standing has no way to know it has one.
+    "approved_by, approved_at, counsel_reviewer_name, counsel_reviewer_firm, "
+    "counsel_recorded_by, counsel_recorded_at, counsel_claims_confirmed"
 )
 
 
 async def compliance_entries(
     conn: AsyncConnection, venture_id: str | None = None
 ) -> list[dict[str, Any]]:
-    """Every entry, or one venture's. Ordered by venture then ref, because the key is."""
-    where = "WHERE venture_id = %s " if venture_id else ""
+    """Every entry, or one venture's. Ordered by venture then ref, because the key is.
+
+    Each row carries `relied_on` (entry 165), computed here rather than left to the
+    caller. A reader that has to derive it derives it differently somewhere, and the
+    whole point of the rule is that there is one answer to whether an entry counts.
+    """
+    where = "WHERE e.venture_id = %s " if venture_id else ""
     params = (venture_id,) if venture_id else ()
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
-            f"SELECT {_ENTRY_COLUMNS} FROM compliance_library_entry "
-            f"{where}ORDER BY venture_id, entry_ref",
+            f"SELECT {_ENTRY_COLUMNS}, "
+            # Entry 166. Whether this entry's venture is in simulation, so a reader can
+            # tell a draft that is failing its gates from one that is deliberately
+            # deferred. Joined rather than fetched separately: the page that shows the
+            # entry is the page that has to say which, and a second call would let the
+            # two answers come from different moments.
+            "       (vs.simulation_id IS NOT NULL) AS venture_in_simulation "
+            "  FROM compliance_library_entry e "
+            "  LEFT JOIN venture_simulation vs "
+            "    ON vs.venture_id = e.venture_id AND vs.left_at IS NULL "
+            f"{where}ORDER BY e.venture_id, e.entry_ref",
             params,
         )
-        return [dict(r) for r in await cur.fetchall()]
+        rows = [dict(r) for r in await cur.fetchall()]
+
+    return [
+        {
+            **row,
+            "relied_on": is_relied_on(row),
+            # DEFERRED IS NOT RELIED ON, and the two stay separate fields for the
+            # reason `broker/simulation.py` gives at length: collapsing them makes a
+            # declaration of simulation read, three screens later, as an entry a lawyer
+            # approved.
+            "deferred_under_simulation": (
+                row["venture_in_simulation"] and not is_relied_on(row)
+            ),
+        }
+        for row in rows
+    ]
 
 
 #: What an entry's `authored_by` turned out to be, once somebody looked it up.
@@ -421,6 +509,259 @@ async def compliance_authorship(
     }
 
 
+async def approve_compliance_entry(
+    conn: AsyncConnection,
+    *,
+    venture_id: str,
+    entry_ref: str,
+    approved_by: uuid.UUID,
+) -> dict[str, Any]:
+    """Adopt an entry. A separate act, by somebody who did not write it.
+
+    RULED 22 SEPTEMBER 2026 (decisions entry 163)
+    =============================================
+
+        *"Approval is a separate act by a different named human. A compliance entry's
+        approver is never its author. Approving writes its own audit event. Measured:
+        status travels in the same statement as the text, with one writer and no
+        event."*
+
+    WHAT APPROVAL WAS
+    =================
+
+        A word in the same INSERT as the text. `author_compliance_entry` took `status`
+        as a parameter, and the one caller that passed anything read it from a field in
+        a YAML file. So an author approved their own entry by typing `status: approved`
+        above it, and nothing anywhere recorded that an approval had happened.
+
+        The only reason it never did happen is that no file carries the word.
+
+    WHY THIS TAKES A REF AND NOT A ROW
+    ==================================
+
+        The entry is re-read here, inside the same statement that sets the status, so
+        the approval attaches to the text as it is now. An approver who fetched a row,
+        read it, and approved it a minute later would otherwise be adopting whatever
+        the author had written in between - and re-authoring is a single upsert with no
+        version to compare against.
+
+    THREE REFUSALS
+    ==============
+
+        not a person        `assert_named_human_by_id`. Approval is a name on a
+                            decision, and a fixture is not somebody who can be asked
+                            about it.
+        the author          the ruling. Checked here for the message, and by migration
+                            0057's CHECK on the same row, which is the control.
+        already approved    a second approval is not a fact about the entry; it is the
+                            same fact claimed twice, and entries 149 and 159 say what
+                            to do about that - nothing, loudly.
+
+    Returns the approved row. The audit event is written by the caller that knows who is
+    holding the connection, the same way `file_discharge` leaves it to the route.
+    """
+    await humans.assert_named_human_by_id(
+        conn, human_id=approved_by, act="approve a compliance library entry"
+    )
+
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            f"SELECT {_ENTRY_COLUMNS}, authored_by FROM compliance_library_entry e "
+            " WHERE e.venture_id = %s AND e.entry_ref = %s",
+            (venture_id, entry_ref),
+        )
+        found = await cur.fetchone()
+
+        if found is None:
+            raise KnowledgeError(
+                f"no entry {entry_ref!r} for {venture_id!r}. An approval names an "
+                "entry that exists; approving a ref into being is how one venture's "
+                "text ends up adopted under another's id."
+            )
+        if found["authored_by"] == approved_by:
+            raise KnowledgeError(
+                f"{entry_ref} was written by this same account, which may not approve "
+                "it. RULED 22 SEPTEMBER 2026, entry 163: a compliance entry's approver "
+                "is never its author. Somebody else has to read it."
+            )
+        if found["status"] == APPROVED_STATUS:
+            raise KnowledgeError(
+                f"{entry_ref} is already approved, by {found['approved_by']} on "
+                f"{found['approved_at']}. A second approval records nothing that was "
+                "not already true. Re-author the entry if the text should change; that "
+                "clears the approval, which is the point."
+            )
+
+        await cur.execute(
+            f"""
+            UPDATE compliance_library_entry AS e
+               SET status = '{APPROVED_STATUS}',
+                   approved_by = %s,
+                   approved_at = now(),
+                   updated_at = now()
+             WHERE e.venture_id = %s AND e.entry_ref = %s
+            RETURNING {_ENTRY_COLUMNS}, authored_by
+            """,
+            (approved_by, venture_id, entry_ref),
+        )
+        row = await cur.fetchone()
+    await conn.commit()
+    assert row is not None
+    return {**dict(row), "relied_on": is_relied_on(dict(row))}
+
+
+#: What a counsel review must name. Ruled 22 September 2026, entry 164.
+#: Named rather than counted, so a refusal says which one is missing.
+COUNSEL_REVIEW_FIELDS = (
+    "reviewer_name", "reviewer_firm", "reviewed_on", "claims_confirmed",
+)
+
+
+async def record_counsel_review(
+    conn: AsyncConnection,
+    *,
+    venture_id: str,
+    entry_ref: str,
+    recorded_by: uuid.UUID,
+    reviewer_name: str,
+    reviewer_firm: str,
+    reviewed_on: datetime,
+    claims_confirmed: list[str],
+) -> dict[str, Any]:
+    """Record that a lawyer read this entry, and what they confirmed.
+
+    RULED 22 SEPTEMBER 2026 (decisions entry 164)
+    =============================================
+
+        *"Counsel review is recorded by a named human on the lawyer's behalf, naming the
+        reviewer, their firm, the date, and the specific claims confirmed. Never
+        self-recorded alongside authorship. Measured: `counsel_reviewed_at` has no
+        writer anywhere."*
+
+    THE COLUMN EXISTED FOR TWO WEEKS AND NOTHING WROTE IT
+    =====================================================
+
+        Migration 0039 added `counsel_reviewed_at`. V28 reads it, the console reads it,
+        the discharge rule cites it - and no statement in this repository ever set it.
+        Twenty-one entries, every one NULL, because there was no act that could make it
+        anything else.
+
+    ON THE LAWYER'S BEHALF, AND THAT IS THE SHAPE
+    =============================================
+
+        The lawyer does not have an account on this Office and is not going to get one.
+        So this records a named human's statement ABOUT a review, which is a weaker
+        claim than a signature and is honest about being one: `counsel_recorded_by` is
+        who is answerable for the statement, and `counsel_reviewer_name` and
+        `counsel_reviewer_firm` are who they say read it.
+
+        **Two dates, deliberately.** `reviewed_on` is when counsel read it;
+        `counsel_recorded_at` is when this was written down. A single column would let
+        a review dated last March be recorded today with no trace of the gap, and the
+        gap is exactly what a reader needs to judge whether the review is current.
+
+    THE CLAIMS ARE A LIST BECAUSE AN ENTRY IS A MIXTURE
+    ===================================================
+
+        The authoring format already says so about `claim_provenance`: *"an entry is a
+        mixture, and an entry-level tag would round the mixture to whichever tag the
+        author felt best about."* A single "counsel reviewed this" rounds the same
+        mixture the same way. So the review names what it confirmed, and what it does
+        not name it does not confirm.
+
+    NEVER SELF-RECORDED ALONGSIDE AUTHORSHIP - the author may not record the review of
+    their own entry. Checked here and by migration 0057's CHECK on the same row.
+    """
+    await humans.assert_named_human_by_id(
+        conn, human_id=recorded_by, act="record a counsel review"
+    )
+
+    values: dict[str, object] = {
+        "reviewer_name": reviewer_name.strip(),
+        "reviewer_firm": reviewer_firm.strip(),
+        "reviewed_on": reviewed_on,
+        "claims_confirmed": claims_confirmed,
+    }
+    missing = [name for name in COUNSEL_REVIEW_FIELDS if not values[name]]
+    if missing:
+        raise KnowledgeError(
+            f"a counsel review names the reviewer, their firm, the date and the "
+            f"specific claims confirmed; missing: {', '.join(missing)}. RULED 22 "
+            "SEPTEMBER 2026, entry 164. A review recorded as a bare date is the boolean "
+            "this rule exists to refuse."
+        )
+    if not all(isinstance(c, str) and c.strip() for c in claims_confirmed):
+        raise KnowledgeError(
+            "every confirmed claim is a sentence somebody can check against the entry; "
+            "a blank one confirms nothing and reads as though it did"
+        )
+
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT authored_by, counsel_reviewed_at, counsel_reviewer_name "
+            "  FROM compliance_library_entry "
+            " WHERE venture_id = %s AND entry_ref = %s",
+            (venture_id, entry_ref),
+        )
+        found = await cur.fetchone()
+
+        if found is None:
+            raise KnowledgeError(
+                f"no entry {entry_ref!r} for {venture_id!r}. A review names the entry "
+                "it reviewed."
+            )
+        if found["authored_by"] == recorded_by:
+            raise KnowledgeError(
+                f"{entry_ref} was written by this same account, which may not record "
+                "its counsel review. RULED 22 SEPTEMBER 2026, entry 164: never "
+                "self-recorded alongside authorship."
+            )
+        if found["counsel_reviewed_at"] is not None:
+            raise KnowledgeError(
+                f"{entry_ref} already carries a counsel review by "
+                f"{found['counsel_reviewer_name']}. A second review is a different "
+                "reading of the same text, and there is nowhere here to keep both - "
+                "re-author the entry, which clears the review, and record the new one."
+            )
+
+        await cur.execute(
+            f"""
+            UPDATE compliance_library_entry AS e
+               SET counsel_reviewed_at = %s,
+                   counsel_reviewer_name = %s,
+                   counsel_reviewer_firm = %s,
+                   counsel_recorded_by = %s,
+                   counsel_recorded_at = now(),
+                   counsel_claims_confirmed = %s,
+                   updated_at = now()
+             WHERE e.venture_id = %s AND e.entry_ref = %s
+            RETURNING {_ENTRY_COLUMNS}, authored_by
+            """,
+            (reviewed_on, reviewer_name.strip(), reviewer_firm.strip(), recorded_by,
+             Jsonb(claims_confirmed), venture_id, entry_ref),
+        )
+        row = await cur.fetchone()
+    await conn.commit()
+    assert row is not None
+    return {**dict(row), "relied_on": is_relied_on(dict(row))}
+
+
+async def relied_on_refs(conn: AsyncConnection, venture_id: str) -> set[str]:
+    """This venture's entry refs that may be relied on. Entry 165.
+
+    The SQL half of `is_relied_on`, kept beside it. Callers that need to ask about many
+    refs at once use this rather than reading every row and filtering in Python - which
+    is how a second spelling of the rule gets written.
+    """
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "SELECT entry_ref FROM compliance_library_entry "
+            f"WHERE venture_id = %s AND {RELIED_ON_SQL}",
+            (venture_id,),
+        )
+        return {r[0] for r in await cur.fetchall()}
+
+
 async def resolve_entry_refs(
     conn: AsyncConnection, refs: list[str], *, venture_id: str
 ) -> tuple[list[str], list[str], list[str]]:
@@ -453,11 +794,20 @@ async def flags_with_entries(conn: AsyncConnection, venture_id: str) -> set[str]
 
     Scoped since 0039. Unscoped, Greenstone's entry explained Burkham's flag and Gate 6
     passed on it - which is not a gate reading a library, it is a gate reading a name.
+
+    **And relied on since entry 165.** *"An entry is relied on only when approved and
+    counsel-reviewed. Anything treating a draft as authoritative refuses."* Explaining a
+    flag is the definition of being relied on: the flag reaches an agent as a
+    constraint, and what makes it a constraint rather than a label is the entry behind
+    it. A draft behind it is nobody's answer.
+
+    Measured when this line was written: every entry in the table is a draft, so this
+    returns the empty set for both ventures. That is the state of the work, reported.
     """
     async with conn.cursor() as cur:
         await cur.execute(
             "SELECT DISTINCT runtime_flag FROM compliance_library_entry "
-            "WHERE runtime_flag IS NOT NULL AND venture_id = %s",
+            f"WHERE runtime_flag IS NOT NULL AND venture_id = %s AND {RELIED_ON_SQL}",
             (venture_id,),
         )
         return {r[0] for r in await cur.fetchall()}
@@ -610,16 +960,21 @@ async def history(
 __all__ = [
     "KnowledgeError",
     "Playbook",
+    "approve_compliance_entry",
     "author_compliance_entry",
     "author_persona",
     "author_playbook",
+    "compliance_authorship",
     "compliance_entries",
     "flags_with_entries",
     "history",
+    "is_relied_on",
     "list_shares",
     "persona_index",
     "playbooks_for",
     "record",
+    "record_counsel_review",
+    "relied_on_refs",
     "resolve_entry_refs",
     "revoke_share",
     "share_playbook",

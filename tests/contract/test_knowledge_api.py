@@ -301,6 +301,147 @@ async def test_the_authorship_report_names_every_entry_and_rewrites_none(api):
     assert "verdict" not in report and "passed" not in report
 
 
+async def test_approval_is_a_second_officer_and_writes_its_own_event(api, admin):
+    """**Entries 163 and 165, at the HTTP boundary.**
+
+    The author POSTs the entry; a different `compliance_officer` POSTs the approval;
+    the entry is still not relied on until a counsel review is recorded. Three requests
+    for what used to be one field in one.
+    """
+    author = await make_human(
+        "Entry Author", "compliance_officer", None, origin=account_origin.HUMAN
+    )
+    approver = await make_human(
+        "Entry Approver", "compliance_officer", None, origin=account_origin.HUMAN
+    )
+    await api.post(
+        "/api/knowledge/compliance",
+        json={**ENTRY, "entry_ref": "test/approved-over-http"},
+        headers=auth(author),
+    )
+
+    # The author cannot approve their own.
+    refused = await api.post(
+        "/api/knowledge/compliance/approve",
+        json={"venture_id": ENTRY["venture_id"], "entry_ref": "test/approved-over-http"},
+        headers=auth(author),
+    )
+    assert refused.status_code == 400, refused.text
+    assert "never its author" in refused.text
+
+    approved = await api.post(
+        "/api/knowledge/compliance/approve",
+        json={"venture_id": ENTRY["venture_id"], "entry_ref": "test/approved-over-http"},
+        headers=auth(approver),
+    )
+    assert approved.status_code == 200, approved.text
+    body = approved.json()
+    assert body["status"] == "approved"
+    assert body["relied_on"] is False
+    assert "counsel review" in body["note"], (
+        "the response has to say what is still missing; an approver who reads "
+        "'approved' and stops has approved something nothing will read"
+    )
+
+    with admin.cursor() as cur:
+        cur.execute(
+            "SELECT count(*) FROM audit_log "
+            " WHERE event_type = 'console_compliance_entry_approved' "
+            "   AND subject->>'entry_ref' = 'test/approved-over-http'"
+        )
+        assert cur.fetchone()[0] == 1, (
+            "approving wrote no audit event; entry 163 says it writes its own"
+        )
+
+
+async def test_a_counsel_review_over_http_names_its_source(api, admin):
+    """**Entry 164, at the HTTP boundary**, and the second half of 165.
+
+    The recorder is `me`, never a field. Counsel has no account here, so what is
+    recorded is a named human's statement about a review - and they are who answers
+    for it.
+    """
+    author = await make_human(
+        "Review Author", "compliance_officer", None, origin=account_origin.HUMAN
+    )
+    recorder = await make_human(
+        "Review Recorder", "compliance_officer", None, origin=account_origin.HUMAN
+    )
+    ref = "test/reviewed-over-http"
+    await api.post(
+        "/api/knowledge/compliance",
+        json={**ENTRY, "entry_ref": ref}, headers=auth(author),
+    )
+    await api.post(
+        "/api/knowledge/compliance/approve",
+        json={"venture_id": ENTRY["venture_id"], "entry_ref": ref},
+        headers=auth(recorder),
+    )
+
+    review = {
+        "venture_id": ENTRY["venture_id"],
+        "entry_ref": ref,
+        "reviewer_name": "Marta Reyes",
+        "reviewer_firm": "Reyes & Okonkwo LLP",
+        "reviewed_on": "2026-09-01T00:00:00Z",
+        "claims_confirmed": ["The applicability rule as written."],
+    }
+
+    refused = await api.post(
+        "/api/knowledge/compliance/counsel-review", json=review, headers=auth(author)
+    )
+    assert refused.status_code == 400
+    assert "self-recorded alongside authorship" in refused.text
+
+    # An empty claims list never reaches the domain function: the schema refuses it.
+    bare = await api.post(
+        "/api/knowledge/compliance/counsel-review",
+        json={**review, "claims_confirmed": []}, headers=auth(recorder),
+    )
+    assert bare.status_code == 422
+
+    recorded = await api.post(
+        "/api/knowledge/compliance/counsel-review", json=review, headers=auth(recorder)
+    )
+    assert recorded.status_code == 200, recorded.text
+    body = recorded.json()
+    assert body["relied_on"] is True
+    assert body["counsel_reviewer_firm"] == "Reyes & Okonkwo LLP"
+
+    with admin.cursor() as cur:
+        cur.execute(
+            "SELECT subject FROM audit_log "
+            " WHERE event_type = 'console_compliance_counsel_review_recorded' "
+            "   AND subject->>'entry_ref' = %s", (ref,)
+        )
+        rows = cur.fetchall()
+    assert len(rows) == 1
+    assert rows[0][0]["reviewer_firm"] == "Reyes & Okonkwo LLP"
+    assert rows[0][0]["claims_confirmed"] == ["The applicability rule as written."]
+
+
+async def test_a_venture_operator_cannot_approve_or_record_a_review(api):
+    """Same role as authoring, and no lower.
+
+    `compliance_officer` for both: a second officer is a second person, which is all
+    entry 163 asks for. Requiring `ivan` would mean one account approves the whole
+    portfolio's library, which is the concentration the separation exists to avoid.
+    """
+    token = await make_human(
+        "Operator", "venture_operator", MINE, origin=account_origin.HUMAN
+    )
+    for route, body in (
+        ("/api/knowledge/compliance/approve",
+         {"venture_id": MINE, "entry_ref": "whatever"}),
+        ("/api/knowledge/compliance/counsel-review",
+         {"venture_id": MINE, "entry_ref": "whatever", "reviewer_name": "M Reyes",
+          "reviewer_firm": "Reyes LLP", "reviewed_on": "2026-09-01T00:00:00Z",
+          "claims_confirmed": ["a claim"]}),
+    ):
+        response = await api.post(route, json=body, headers=auth(token))
+        assert response.status_code == 403, f"{route}: {response.text}"
+
+
 async def test_a_venture_operator_cannot_write_a_portfolio_wide_entry(api):
     """The library is portfolio-wide, so authority is too.
 

@@ -70,11 +70,20 @@ def auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-async def make(name: str, role: str, venture: str | None = None) -> str:
+async def make(
+    name: str, role: str, venture: str | None = None,
+    origin: str = account_origin.TEST_FIXTURE,
+) -> str:
+    """A caller with a role. `origin` is a parameter since entry 166.
+
+    Most routes here do not care what kind of account is calling. Declaring a venture in
+    simulation does: it is an act by a named human, and a fixture cannot be asked about
+    a decision to defer a compliance rule.
+    """
     async with connection() as conn:
         _id, token = await humans.create_human(
             conn,
-            origin=account_origin.TEST_FIXTURE,
+            origin=origin,
             display_name=name,
             email=f"{name.lower()}@ventures.invalid",
         )
@@ -464,3 +473,93 @@ async def test_the_three_capacity_numbers_sum_to_the_active_roster(
                 (agent_id,),
             )
         admin.commit()
+
+
+# ------------------------------------------------------- simulation (entry 166)
+
+async def test_declaring_and_leaving_simulation_over_http(api, admin):
+    """**Entry 166, end to end.** Two acts, two routes, two audit events.
+
+    The declaration is a named human's, with a reason and a date; leaving is a separate
+    act that does not un-happen; and the read surface keeps the history so a gate result
+    from while it stood can still be accounted for.
+    """
+    founder = await make("Sim Founder", "ivan", None, origin=account_origin.HUMAN)
+
+    empty = (await api.get(f"/api/ventures/{VENTURE}/simulation",
+                           headers=auth(founder))).json()
+    assert empty["in_simulation"] is False
+    assert empty["history"] == []
+
+    reason = "mock runs and simulations before real clients"
+    declared = await api.post(
+        f"/api/ventures/{VENTURE}/simulation", json={"reason": reason},
+        headers=auth(founder),
+    )
+    assert declared.status_code == 201, declared.text
+    body = declared.json()
+    assert body["reason"] == reason
+    assert body["declared_by"] == "Sim Founder"
+    assert "no attestation may read TRUE" in body["note"], (
+        "the response has to say what simulation does NOT buy; an operator who reads "
+        "'in simulation' and stops will attest on the strength of it"
+    )
+
+    # A second declaration records a decision nobody took.
+    again = await api.post(
+        f"/api/ventures/{VENTURE}/simulation", json={"reason": "again"},
+        headers=auth(founder),
+    )
+    assert again.status_code == 409
+
+    left = await api.post(
+        f"/api/ventures/{VENTURE}/simulation/leave",
+        json={"reason": "a real client signed"}, headers=auth(founder),
+    )
+    assert left.status_code == 200, left.text
+    assert left.json()["left_by"] == "Sim Founder"
+    assert "fail again" in left.json()["note"]
+
+    after = (await api.get(f"/api/ventures/{VENTURE}/simulation",
+                           headers=auth(founder))).json()
+    assert after["in_simulation"] is False
+    assert len(after["history"]) == 1, "the declaration survives leaving"
+    assert after["history"][0]["left_reason"] == "a real client signed"
+
+    with admin.cursor() as cur:
+        cur.execute(
+            "SELECT event_type FROM audit_log "
+            " WHERE event_type IN ('console_venture_declared_in_simulation', "
+            "                      'console_venture_left_simulation') "
+            "   AND subject->>'venture_id' = %s ORDER BY event_type", (VENTURE,)
+        )
+        assert [r[0] for r in cur.fetchall()] == [
+            "console_venture_declared_in_simulation",
+            "console_venture_left_simulation",
+        ]
+
+
+async def test_a_compliance_officer_may_not_declare_simulation(api):
+    """`ivan`, not the role that writes and approves the entries.
+
+    A declaration decides that a venture may provision past a compliance rule. That
+    reaches further than any single entry, and it is the same founder authority a
+    discharge already requires.
+    """
+    officer = await make(
+        "Sim Officer", "compliance_officer", None, origin=account_origin.HUMAN
+    )
+    response = await api.post(
+        f"/api/ventures/{VENTURE}/simulation", json={"reason": "please"},
+        headers=auth(officer),
+    )
+    assert response.status_code == 403, response.text
+
+
+async def test_a_declaration_with_no_reason_is_refused_by_the_schema(api):
+    founder = await make("Sim Founder 2", "ivan", None, origin=account_origin.HUMAN)
+    response = await api.post(
+        f"/api/ventures/{VENTURE}/simulation", json={"reason": ""},
+        headers=auth(founder),
+    )
+    assert response.status_code == 422

@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
 import psycopg
@@ -70,6 +71,22 @@ DISCHARGE_HUMAN_ID = uuid.UUID("00000000-0000-5000-8000-00000000d15c")
 #: an account the rule accepts; entry 151 requires that origin be stated at creation,
 #: not that a fixture may never state this one.
 WORLD_AUTHOR_ID = uuid.UUID("00000000-0000-5000-8000-000000a17403")
+
+#: Who approved the world's entries, and who recorded their counsel review.
+#:
+#: RULED 22 SEPTEMBER 2026, entries 163 and 164: an entry's approver is never its
+#: author, and a counsel review is never self-recorded alongside authorship. So a
+#: prepared world needs a SECOND person. That is the rule showing up in the fixture,
+#: which is where a rule about two people should show up.
+#:
+#: One account for both acts, deliberately. Neither ruling says the approver and the
+#: recorder must differ from each other - only that neither is the author - and a world
+#: that invented a third person would be asserting a rule nobody made.
+WORLD_APPROVER_ID = uuid.UUID("00000000-0000-5000-8000-000000a17404")
+
+#: The lawyer the world's counsel review names. Not an account: counsel has none, which
+#: is the whole shape of entry 164 - a named human records a review on their behalf.
+WORLD_COUNSEL = ("Marta Reyes", "Reyes & Okonkwo LLP")
 
 FORGE_ID = "cre-forge"
 # `generate_loi` was removed 2026-09-02 along with the Pack declaration. CRE Forge
@@ -502,6 +519,18 @@ def build_world(admin: psycopg.Connection) -> None:
             """,
             (WORLD_AUTHOR_ID,),
         )
+        # Entries 163 and 164: neither the approver nor the counsel recorder may be the
+        # author, so the world has a second person.
+        cur.execute(
+            """
+            INSERT INTO office_human
+              (human_id, display_name, email, auth_method, status, created_at, origin)
+            VALUES (%s, 'World Compliance Approver', 'world-approver@example.invalid',
+                    'bearer_token', 'active', now(), 'human')
+            ON CONFLICT (human_id) DO NOTHING
+            """,
+            (WORLD_APPROVER_ID,),
+        )
         for entry in COMPLIANCE_ENTRIES:
             cur.execute(
                 """
@@ -517,6 +546,7 @@ def build_world(admin: psycopg.Connection) -> None:
                 """,
                 {**entry, "authored_by": WORLD_AUTHOR_ID},
             )
+        rely_on_the_library(cur)
 
         for agent_id, name, dept in ROSTER:
             cur.execute(
@@ -527,6 +557,54 @@ def build_world(admin: psycopg.Connection) -> None:
                 """,
                 (agent_id, f"village::{name}", name, dept),
             )
+
+
+def rely_on_the_library(cur: psycopg.Cursor) -> None:
+    """Approve and counsel-review the world's two entries, so they may be relied on.
+
+    RULED 22 SEPTEMBER 2026, entry 165: *"An entry is relied on only when approved and
+    counsel-reviewed. Anything treating a draft as authoritative refuses."*
+
+    **"Fully prepared" grew a fourth thing.** V28 at Gate 2 and Gate 6's flag coverage
+    both now read the standing of an entry rather than its existence, so a world whose
+    library was two drafts is a world where Greenstone blocks at Gate 2 - which is the
+    rule working, and is why this exists rather than the rule being softened for tests.
+
+    Written as SQL rather than through `approve_compliance_entry` for the reason the
+    rest of this module is: the world is built on the admin connection, before there is
+    an app pool, and a fixture that needed the domain layer would be a fixture that
+    could not run until the thing under test imported cleanly.
+
+    **What that costs, stated:** these two statements bypass the Python checks. They do
+    not bypass migration 0057's CHECKs, which is the point of the CHECKs - a world that
+    named the author as its own approver would fail to build.
+    """
+    for entry in COMPLIANCE_ENTRIES:
+        cur.execute(
+            """
+            UPDATE compliance_library_entry
+               SET status = 'approved',
+                   approved_by = %(approver)s,
+                   approved_at = now(),
+                   counsel_reviewed_at = %(reviewed_on)s,
+                   counsel_reviewer_name = %(reviewer)s,
+                   counsel_reviewer_firm = %(firm)s,
+                   counsel_recorded_by = %(approver)s,
+                   counsel_recorded_at = now(),
+                   counsel_claims_confirmed = %(claims)s
+             WHERE venture_id = 'greenstone' AND entry_ref = %(entry_ref)s
+            """,
+            {
+                "approver": WORLD_APPROVER_ID,
+                "reviewed_on": datetime(2026, 9, 1, tzinfo=UTC),
+                "reviewer": WORLD_COUNSEL[0],
+                "firm": WORLD_COUNSEL[1],
+                "claims": psycopg.types.json.Jsonb(
+                    [entry["applicability_rule"], entry["agent_behavior_implication"]]
+                ),
+                "entry_ref": entry["entry_ref"],
+            },
+        )
 
 
 def clear_nv_discharge(admin: psycopg.Connection) -> None:
@@ -685,7 +763,8 @@ def teardown_world(conn: psycopg.Connection) -> None:
                 (entry["entry_ref"],),
             )
         # After the entries: the foreign key added by 0056 points this way.
-        cur.execute("DELETE FROM office_human WHERE human_id = %s", (WORLD_AUTHOR_ID,))
+        cur.execute("DELETE FROM office_human WHERE human_id = ANY(%s)",
+                    ([WORLD_AUTHOR_ID, WORLD_APPROVER_ID],))
         cur.execute("DELETE FROM forge_operating_instruction")
         # Proposals reference the agents about to be removed. `wipe_venture` learned this
         # the hard way with provisioning_run; a teardown that names some dependents and

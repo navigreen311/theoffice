@@ -24,11 +24,18 @@ import pytest
 
 from broker import knowledge
 from broker.db import connection
-from tests.conftest import declare_author, requires_db, undeclare_author
+from tests.conftest import (
+    declare_author,
+    rely_on_entry,
+    requires_db,
+    undeclare_author,
+)
 
 pytestmark = [requires_db, pytest.mark.db]
 
 AUTHOR = uuid.UUID("00000000-0000-5000-8000-0000000000e1")
+#: Entries 163/164: neither the approver nor the counsel recorder is the author.
+APPROVER = uuid.UUID("00000000-0000-5000-8000-0000000000e2")
 MINE, THEIRS = "test-mine", "test-theirs"
 REF = "test/shared-ref-v1"
 
@@ -54,10 +61,11 @@ def _clean(admin: psycopg.Connection):
 
     # Entry 162: `authored_by` must resolve to an `origin='human'` account.
     declare_author(admin, AUTHOR, "Per-Venture Test Author")
+    declare_author(admin, APPROVER, "Per-Venture Test Approver")
     wipe()
     yield
     wipe()
-    undeclare_author(admin, AUTHOR)
+    undeclare_author(admin, AUTHOR, APPROVER)
 
 
 async def test_two_ventures_hold_the_same_ref_with_different_text():
@@ -86,18 +94,42 @@ async def test_two_ventures_hold_the_same_ref_with_different_text():
     )
 
 
-async def test_a_flag_another_venture_explains_is_not_explained_here():
-    """What Gate 6 reads. Unscoped, Greenstone's entry explained Burkham's flag."""
+async def test_a_flag_another_venture_explains_is_not_explained_here(admin):
+    """What Gate 6 reads. Unscoped, Greenstone's entry explained Burkham's flag.
+
+    The entry is approved and counsel-reviewed here because entry 165 added a second
+    term to this same query: a flag is explained when a RELIED-ON entry carries it, and
+    a draft carrying it explains nothing. Both terms are exercised - the venture term by
+    `mine`, the standing term by the test below.
+    """
     async with connection() as conn:
         await knowledge.author_compliance_entry(
             conn, venture_id=THEIRS, entry_ref=REF, authored_by=AUTHOR,
             runtime_flag="tsr_disclosure_required", **ENTRY,
         )
+    rely_on_entry(admin, venture_id=THEIRS, entry_ref=REF, approver=APPROVER)
+
+    async with connection() as conn:
         mine = await knowledge.flags_with_entries(conn, MINE)
         theirs = await knowledge.flags_with_entries(conn, THEIRS)
 
     assert "tsr_disclosure_required" in theirs
     assert "tsr_disclosure_required" not in mine
+
+
+async def test_a_draft_explains_no_flag():
+    """**Entry 165, on the query Gate 6 reads.**
+
+    The entry exists, belongs to this venture, and names the flag. It is a draft, so it
+    explains nothing - which is the whole rule, since the flag reaches an agent as a
+    constraint only if there is something behind it to constrain by.
+    """
+    async with connection() as conn:
+        await knowledge.author_compliance_entry(
+            conn, venture_id=MINE, entry_ref=REF, authored_by=AUTHOR,
+            runtime_flag="tsr_disclosure_required", **ENTRY,
+        )
+        assert await knowledge.flags_with_entries(conn, MINE) == set()
 
 
 async def test_an_entry_is_a_draft_until_something_says_otherwise():

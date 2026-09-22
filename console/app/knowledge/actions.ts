@@ -270,3 +270,87 @@ export async function recordExclusionAction(
     return fail(error);
   }
 }
+
+/**
+ * Approve a compliance entry — entry 163.
+ *
+ * `venture_id` and `entry_ref` in the body rather than the path, because an entry_ref
+ * contains a slash and a path that has to be escaped is a path somebody gets wrong.
+ *
+ * The approver is never sent: the API takes it from the session, which is what makes
+ * this an act rather than a form. The 400 that comes back when the author tries to
+ * approve their own entry is the domain function's message, unedited — it names the
+ * ruling, and paraphrasing it here would give two answers to one refusal.
+ */
+export async function approveEntryAction(
+  _prev: KnowledgeActionState | null,
+  form: FormData,
+): Promise<KnowledgeActionState> {
+  const text = (name: string) => String(form.get(name) ?? "").trim();
+  if (!text("venture_id") || !text("entry_ref")) {
+    return { error: "An approval names the venture and the entry ref it approves." };
+  }
+  try {
+    const result = await api.post<{ entry_ref: string; note: string }>(
+      "/api/knowledge/compliance/approve",
+      { venture_id: text("venture_id"), entry_ref: text("entry_ref") },
+    );
+    revalidatePath("/knowledge");
+    return { ok: `${result.entry_ref} approved. ${result.note}` };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/**
+ * Record a counsel review — entry 164.
+ *
+ * One claim per line, split here. The alternative was a comma-separated field, and a
+ * claim about the law is a sentence that contains commas.
+ */
+export async function recordCounselReviewAction(
+  _prev: KnowledgeActionState | null,
+  form: FormData,
+): Promise<KnowledgeActionState> {
+  const text = (name: string) => String(form.get(name) ?? "").trim();
+  const claims = text("claims_confirmed")
+    .split(NEWLINE)
+    .map((claim) => claim.trim())
+    .filter(Boolean);
+
+  const missing: string[] = (
+    [
+      ["venture_id", "Venture"],
+      ["entry_ref", "Entry ref"],
+      ["reviewer_name", "Reviewer"],
+      ["reviewer_firm", "Firm"],
+      ["reviewed_on", "Date reviewed"],
+    ] as const
+  )
+    .filter(([name]) => !text(name))
+    .map(([, label]) => label);
+  if (claims.length === 0) missing.push("Claims confirmed");
+  if (missing.length > 0) {
+    return {
+      error: `A counsel review names the reviewer, their firm, the date and the specific claims confirmed. Missing: ${missing.join(", ")}. A review recorded as a bare date is the boolean entry 164 refuses.`,
+    };
+  }
+
+  try {
+    const result = await api.post<{ entry_ref: string; note: string }>(
+      "/api/knowledge/compliance/counsel-review",
+      {
+        venture_id: text("venture_id"),
+        entry_ref: text("entry_ref"),
+        reviewer_name: text("reviewer_name"),
+        reviewer_firm: text("reviewer_firm"),
+        reviewed_on: new Date(text("reviewed_on")).toISOString(),
+        claims_confirmed: claims,
+      },
+    );
+    revalidatePath("/knowledge");
+    return { ok: `${result.entry_ref}: review recorded. ${result.note}` };
+  } catch (error) {
+    return fail(error);
+  }
+}
