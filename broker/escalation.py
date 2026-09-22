@@ -48,7 +48,7 @@ from psycopg.rows import dict_row
 
 from broker import humans
 from broker.audit import write_event
-from broker.errors import OfficeError
+from broker.errors import NotAuthorized, OfficeError
 
 #: The COO position, in the Village's own terms. Not a name, and not a `role_key`:
 #: `department_head` is the ladder rung and twelve agents hold it. The seat is the
@@ -271,6 +271,85 @@ class Escalation:
         return self.received_at is not None and self.answered_at is not None
 
 
+async def name_recipient(
+    conn: AsyncConnection,
+    *,
+    venture_id: str,
+    department: str | None,
+    human: humans.Human,
+    named_by: humans.Human,
+    reason: str,
+) -> None:
+    """Name who a governance escalation reaches for one venture and department.
+
+    RULED 21 SEPTEMBER 2026 (decisions entry 150)
+    =============================================
+
+        *"A governance escalation routes to the human named for its venture and
+        department. Account age never decides."*
+
+    Founder authority names it, and a named human is named: `assert_named_human` on
+    both sides, because a recipient who is a fixture is an escalation that goes nowhere
+    and a namer who is one is a decision nobody made.
+
+    `department=None` sets the venture's default, for an escalation that names no
+    department. It is **not** a fallback for a department nobody has named - see
+    `recipient_for`.
+    """
+    if not reason.strip():
+        raise OfficeError("naming a recipient says why")
+    humans.authorize(named_by, required_role="ivan", venture_id=None)
+    humans.assert_named_human(named_by, act="name an escalation recipient")
+    humans.assert_named_human(human, act="receive escalations")
+
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "INSERT INTO escalation_recipient "
+            "  (venture_id, department, human_id, named_by, reason) "
+            "VALUES (%s, %s, %s, %s, %s) "
+            "ON CONFLICT (venture_id, COALESCE(department, '*')) DO UPDATE SET "
+            "  human_id = EXCLUDED.human_id, named_by = EXCLUDED.named_by, "
+            "  named_at = now(), reason = EXCLUDED.reason",
+            (venture_id, department, human.human_id, named_by.human_id, reason.strip()),
+        )
+    await conn.commit()
+
+    await write_event(
+        event_type="escalation_recipient_named",
+        actor_type="human", actor_id=named_by.human_id, venture_id=venture_id,
+        subject={
+            "department": department or "*",
+            "human_id": str(human.human_id),
+            "display_name": human.display_name,
+            "reason": reason.strip(),
+        },
+    )
+
+
+async def recipient_for(
+    conn: AsyncConnection, *, venture_id: str, department: str | None
+) -> tuple[uuid.UUID, str] | None:
+    """`(human_id, display_name)` for this venture and department, or None.
+
+    **An exact department match first, and the venture default only when the escalation
+    names no department.** A banking escalation with nobody named for banking is not
+    routed to whoever holds the venture default: that would deliver a banking decision
+    to somebody who was never named for it and record it as though banking's path
+    worked.
+    """
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT r.human_id, h.display_name FROM escalation_recipient r "
+            "  JOIN office_human h ON h.human_id = r.human_id "
+            " WHERE r.venture_id = %s "
+            "   AND COALESCE(r.department, '*') = COALESCE(%s, '*') "
+            "   AND h.status = 'active'",
+            (venture_id, department),
+        )
+        row = await cur.fetchone()
+    return (row["human_id"], row["display_name"]) if row else None
+
+
 async def raise_escalation(
     conn: AsyncConnection,
     *,
@@ -308,10 +387,26 @@ async def raise_escalation(
     if raised_by_kind not in ("agent", "human"):
         raise OfficeError(f"unknown raiser kind {raised_by_kind!r}")
 
-    route = (
-        await governance(conn, reason=reason) if path is Path.GOVERNANCE
-        else await operational(conn, reason=reason)
-    )
+    if path is Path.GOVERNANCE:
+        # NAMED, NOT OLDEST. Ruled 21 September 2026, entry 150. `governance` resolves
+        # through `attributable_actor`, which orders by `created_at` - it answers "who
+        # do we attribute an unattended action to" and was never a routing rule.
+        named = await recipient_for(
+            conn, venture_id=venture_id, department=department
+        )
+        if named is None:
+            raise OfficeError(
+                f"nobody is named to receive a governance escalation for "
+                f"{venture_id}/{department or 'the venture'}. Name one with "
+                "`name_recipient`; routing it to whoever happens to be available is "
+                "how an escalation reaches somebody who was never asked to answer it."
+            )
+        human_id, display_name = named
+        route = Route(
+            path=Path.GOVERNANCE, to=display_name, reason=reason, human_id=human_id
+        )
+    else:
+        route = await operational(conn, reason=reason)
     if route.to is None or not str(route.to).strip():
         # An operational route with an empty COO seat resolves to nobody, and
         # `operational` says so rather than substituting a holder. Raising into that is
@@ -349,18 +444,63 @@ async def raise_escalation(
     return found
 
 
-async def record_receipt(
-    conn: AsyncConnection, *, escalation_id: uuid.UUID, received_by: uuid.UUID
-) -> Escalation:
-    """Somebody on the other end picked it up.
+def _only_the_routed_human(found: Escalation, me: humans.Human, act: str) -> None:
+    """Refuse anybody but the human this escalation was routed to.
 
-    **The step the two paths could not demonstrate.** Delivery is what an escalation
-    path is, and both of them returned a recipient's name and stopped there.
+    RULED 21 SEPTEMBER 2026 (decisions entry 150)
+    =============================================
+
+        *"Only the routed human records receipt and answer, and never the raiser. The
+        actor comes from their token on a route, never from an argument."*
+
+        Measured on the first build: both functions took the actor as a `uuid` and
+        checked nothing - any uuid, including the raiser's own or an agent's. The test
+        that was supposed to demonstrate a travelled path had one person raise, receive
+        and answer, which is the shape `0051`'s docstring says proves nothing.
+
+    THREE REFUSALS, AND THE THIRD IS NOT REDUNDANT
+    ==============================================
+
+        not a person        a fixture cannot answer for a decision
+        not the recipient   somebody else's escalation is not yours to close
+        the raiser          even when the raiser IS the named recipient. A path is a
+                            delivery between two parties, and a round trip inside one
+                            of them measures a function call.
+    """
+    humans.assert_named_human(me, act=act)
+    if found.route.human_id is None or me.human_id != found.route.human_id:
+        raise NotAuthorized(
+            f"this escalation was routed to {found.route.to}; {me.display_name} may not "
+            f"{act}. An escalation somebody else closes is not a delivery to the person "
+            "it was addressed to.",
+        )
+    if me.human_id == found.raised_by:
+        raise NotAuthorized(
+            f"{me.display_name} raised this escalation and may not {act}. Raised and "
+            "answered by one party is a round trip inside one party; it measures a "
+            "function call rather than a path.",
+        )
+
+
+async def record_receipt(
+    conn: AsyncConnection, *, escalation_id: uuid.UUID, me: humans.Human
+) -> Escalation:
+    """The routed human picked it up. **Never the raiser, and never anybody else.**
+
+    `me` is a `Human` and not a uuid, and that is the ruling: the actor comes from a
+    token on a route, so what reaches here is who turned up rather than whoever the
+    caller named.
 
     Idempotent on the first receipt: a second call leaves the original timestamp alone,
     because when it was picked up is a fact and the second caller is not a second
     pickup.
     """
+    found = await get(conn, escalation_id)
+    if found is None:
+        raise LookupError(f"no such escalation {escalation_id}")
+    _only_the_routed_human(found, me, "record receipt of it")
+    received_by = me.human_id
+
     async with conn.cursor() as cur:
         await cur.execute(
             "UPDATE escalation_record SET received_at = now(), received_by = %s "
@@ -370,21 +510,23 @@ async def record_receipt(
     await conn.commit()
 
     found = await get(conn, escalation_id)
-    if found is None:
-        raise LookupError(f"no such escalation {escalation_id}")
+    assert found is not None
     if found.received_at is not None:
         await write_event(
             event_type="escalation_received",
+            # `human` because `me` IS one - `_only_the_routed_human` refused anything
+            # else two lines up. Entry 150: the audit log records who actually acted,
+            # and this used to be a constant beside a uuid nobody had checked.
             actor_type="human", actor_id=received_by, venture_id=found.venture_id,
             subject={"escalation_id": str(escalation_id),
-                     "department": found.department},
+                     "department": found.department,
+                     "received_by_name": me.display_name},
         )
     return found
 
 
 async def record_answer(
-    conn: AsyncConnection, *, escalation_id: uuid.UUID, answered_by: uuid.UUID,
-    answer: str,
+    conn: AsyncConnection, *, escalation_id: uuid.UUID, me: humans.Human, answer: str,
 ) -> Escalation:
     """What the recipient decided. Refused before a receipt, and refused empty.
 
@@ -396,6 +538,8 @@ async def record_answer(
     found = await get(conn, escalation_id)
     if found is None:
         raise LookupError(f"no such escalation {escalation_id}")
+    _only_the_routed_human(found, me, "answer it")
+    answered_by = me.human_id
     if found.received_at is None:
         raise OfficeError(
             "this escalation has not been received, so it cannot be answered. An answer "
@@ -414,9 +558,10 @@ async def record_answer(
 
     await write_event(
         event_type="escalation_answered",
+        # A person, established rather than asserted - see `record_receipt`.
         actor_type="human", actor_id=answered_by, venture_id=found.venture_id,
         subject={"escalation_id": str(escalation_id), "department": found.department,
-                 "answer": answer.strip()},
+                 "answered_by_name": me.display_name, "answer": answer.strip()},
     )
     answered = await get(conn, escalation_id)
     assert answered is not None
@@ -467,6 +612,76 @@ async def outstanding(conn: AsyncConnection, *, venture_id: str) -> list[Escalat
         )
         rows = await cur.fetchall()
     return [_escalation(row) for row in rows]
+
+
+
+async def routed_to(
+    conn: AsyncConnection, *, human_id: uuid.UUID
+) -> dict[str, Any]:
+    """What one person's escalation page shows: waiting, received, and answered.
+
+    Three lists rather than one with a status column, because the acts available differ
+    and a page that mixed them would have to decide per row which button to draw.
+
+    `history` is capped: a page is a place to act, and an unbounded list of answered
+    items is a report.
+    """
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT e.*, i.agent_name AS raised_by_agent, h.display_name "
+            "         AS raised_by_person "
+            "  FROM escalation_record e "
+            "  LEFT JOIN office_agent_identity i ON i.office_agent_id = e.raised_by "
+            "  LEFT JOIN office_human h ON h.human_id = e.raised_by "
+            " WHERE e.routed_to_human = %s "
+            " ORDER BY e.raised_at",
+            (human_id,),
+        )
+        rows = [dict(r) for r in await cur.fetchall()]
+
+    def shown(row: dict[str, Any]) -> dict[str, Any]:
+        found = _escalation(row)
+        return {
+            "escalation_id": str(found.escalation_id),
+            "venture_id": found.venture_id,
+            "department": found.department,
+            "kind": found.kind,
+            "path": found.route.path.value,
+            # WHAT IT ASKS, in the raiser's words. The reason is the whole item: an
+            # escalation whose text a reader cannot see is a notification.
+            "reason": found.route.reason,
+            # WHO RAISED IT, by name and not by uuid. An agent and a human are drawn
+            # from different tables, and `raised_by_kind` says which one to read.
+            "raised_by": (
+                row["raised_by_agent"] if found.raised_by_kind == "agent"
+                else row["raised_by_person"]
+            ) or str(found.raised_by),
+            "raised_by_kind": found.raised_by_kind,
+            "raised_at": found.raised_at.isoformat(),
+            "received_at": found.received_at.isoformat() if found.received_at else None,
+            "answered_at": found.answered_at.isoformat() if found.answered_at else None,
+            "answer": found.answer,
+        }
+
+    waiting = [shown(r) for r in rows if r["received_at"] is None]
+    received = [
+        shown(r) for r in rows
+        if r["received_at"] is not None and r["answered_at"] is None
+    ]
+    answered = [shown(r) for r in rows if r["answered_at"] is not None]
+    return {
+        "waiting": waiting,
+        "received": received,
+        "answered": answered[-25:],
+        # DERIVED, like the approvals queue's empty state: a reader of an empty page
+        # should be told which empty it is.
+        "empty_reason": (
+            "" if rows else
+            "No escalation has ever been routed to you. Both paths resolve; until "
+            "something is raised through `escalation.raise_escalation`, neither has "
+            "been travelled."
+        ),
+    }
 
 
 def _escalation(row: dict[str, Any]) -> Escalation:

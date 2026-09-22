@@ -54,6 +54,7 @@ from broker import (
     curriculum_quality,
     departments,
     discharges,
+    escalation,
     forge_map,
     humans,
     incidents,
@@ -88,7 +89,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0051"
+EXPECTED_SCHEMA_REVISION = "0052"
 
 # `live_grants` means "a grant no live revocation covers". The four-scope rule that
 # decides that has exactly one copy - `revocation._covers`, the same text
@@ -1029,6 +1030,80 @@ async def proposal_queue(conn: DB, _me: ME) -> dict[str, Any]:
     await proposals.expire_overdue(conn)
     result = await proposals.queue(conn)
     return {"as_of": datetime.now(UTC).isoformat(), **result}
+
+
+
+# ------------------------------------------------------------------- escalations
+
+@app.get("/api/escalations")
+async def list_escalations(conn: DB, me: ME) -> dict[str, Any]:
+    """Every escalation routed to the person asking, and what has happened to each.
+
+    RULED 21 SEPTEMBER 2026 (decisions entry 150)
+    =============================================
+
+        *"The routed human can reach it: a console page on the /proposals pattern,
+        showing the item, who raised it, what it asks, and the two acts."*
+
+        There was no page and no route. `record_receipt` and `record_answer` had no
+        caller outside the tests, so the only party who could record a delivery was the
+        process that raised it - which is the one party a delivery cannot be to.
+
+    SCOPED TO THE CALLER, not filtered by a query parameter. `routed_to_human =
+    me.human_id` is the whole `WHERE`: an escalation addressed to somebody else is not
+    this person's to see, to receive or to answer, and a page that listed them all
+    would invite exactly the close-somebody-else's-item the rule refuses.
+    """
+    return {
+        "as_of": datetime.now(UTC).isoformat(),
+        **await escalation.routed_to(conn, human_id=me.human_id),
+    }
+
+
+class EscalationAnswer(BaseModel):
+    answer: str = Field(min_length=1)
+
+
+@app.post("/api/escalations/{escalation_id}/receive")
+async def receive_escalation(
+    escalation_id: uuid.UUID, conn: DB, me: ME
+) -> dict[str, str]:
+    """The routed human says they have it.
+
+    **`me` comes from the token and is never a body field.** That is the ruling: the
+    actor is who turned up, not who the caller named. `record_receipt` refuses anybody
+    but the routed human, refuses the raiser, and refuses a fixture.
+    """
+    try:
+        found = await escalation.record_receipt(conn, escalation_id=escalation_id, me=me)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except NotAuthorized as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    return {"received_at": found.received_at.isoformat()}
+
+
+@app.post("/api/escalations/{escalation_id}/answer")
+async def answer_escalation(
+    escalation_id: uuid.UUID, body: EscalationAnswer, conn: DB, me: ME
+) -> dict[str, str]:
+    """What the routed human decided, in their own words.
+
+    Refused before a receipt - by this path and by a CHECK - because an answer with no
+    receipt in front of it is two timestamps rather than a delivery.
+    """
+    try:
+        found = await escalation.record_answer(
+            conn, escalation_id=escalation_id, me=me, answer=body.answer
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except NotAuthorized as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except OfficeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    assert found.answered_at is not None
+    return {"answered_at": found.answered_at.isoformat()}
 
 
 @app.get("/api/proposals")

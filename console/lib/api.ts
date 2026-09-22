@@ -802,6 +802,37 @@ export type Reviewer = {
   matched_to_a_human: boolean;
 };
 
+/**
+ * One escalation routed to the person asking.
+ *
+ * `raised_by` is a NAME, resolved on the API side from `raised_by_kind` - an agent and
+ * a human are drawn from different tables, and a console that joined them itself would
+ * be a second place that had to know which (entry 150).
+ */
+export type RoutedEscalation = {
+  escalation_id: string;
+  venture_id: string;
+  department: string | null;
+  kind: string;
+  path: string;
+  reason: string;
+  raised_by: string;
+  raised_by_kind: string;
+  raised_at: string;
+  received_at: string | null;
+  answered_at: string | null;
+  answer: string | null;
+};
+
+/** Three lists, because the act available differs per list. */
+export type EscalationInbox = {
+  as_of: string;
+  waiting: RoutedEscalation[];
+  received: RoutedEscalation[];
+  answered: RoutedEscalation[];
+  empty_reason: string;
+};
+
 export type ApprovalQueue = {
   as_of: string;
   pending: PendingApproval[];

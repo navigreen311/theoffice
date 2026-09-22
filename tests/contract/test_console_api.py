@@ -587,6 +587,19 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
         # is the separate act that puts one in force.
         "/api/packs/draft",
         "/api/packs/{venture_id}/publish",
+        # THE ROUTED HUMAN'S TWO ACTS. Ruled 21 September 2026, entry 150: only the
+        # routed human records receipt and answer, and the actor comes from their token
+        # on a route rather than from an argument.
+        #
+        # Two routes and not one, because receipt and answer are separate facts and the
+        # gap between them is what a drill measures. Neither takes an actor: `me` is the
+        # session, and `record_receipt`/`record_answer` refuse anybody but the human the
+        # escalation was routed to - never the raiser, never a fixture.
+        #
+        # Neither grants anything, and neither reaches somebody else's item:
+        # `/api/escalations` scopes on `routed_to_human = me.human_id`.
+        "/api/escalations/{escalation_id}/receive",
+        "/api/escalations/{escalation_id}/answer",
     }, f"the write surface changed: {sorted(writes)}"
 
 

@@ -13091,3 +13091,111 @@ Every account a test creates the ordinary way is a fixture, because
 drill needs a person — `governance` resolves through `attributable_actor`, which refuses
 to deliver to a fixture — so two fixtures are promoted explicitly, with the reason beside
 them, rather than by weakening the classifier.
+
+## 150. Only the routed human, and account age decides nothing
+
+**Six rulings by Ivan Green, 21 September 2026, on #202 before it merges.** Every one
+of them is a measurement of the build entry 149 produced, and the first four are the
+same defect from four sides: **the record said a path had been travelled and nothing
+established that anybody had travelled it.**
+
+> *"Only the routed human records receipt and answer, and never the raiser. The actor
+> comes from their token on a route, never from an argument."*
+>
+> *"The audit log records who actually acted."*
+>
+> *"The routed human can reach it: a console page on the /proposals pattern, showing the
+> item, who raised it, what it asks, and the two acts."*
+>
+> *"Split `_travel` into two people."*
+>
+> *"A revoked role grants nothing. Fix `attributable_actor`."*
+>
+> *"A governance escalation routes to the human named for its venture and department.
+> Account age never decides. Greenstone: operations to Ira Green, research to Ivan
+> Green."*
+
+### What the first build actually permitted
+
+`record_receipt` and `record_answer` took the actor as a `uuid` and checked nothing:
+no authorisation, no comparison with `routed_to_human`, no `assert_named_human`, no
+check against the raiser. Any uuid — including an agent's — and both functions then
+wrote `actor_type="human"` into a hash-chained log. **A false attribution in the one
+place this project treats as non-repudiable.**
+
+There was no route and no page, so the only party able to record a delivery was the
+process that raised it — the one party a delivery cannot be to.
+
+**And the test proved it.** `_travel` had one human raise, receive and answer in three
+consecutive calls: exactly the shape `0051`'s own docstring rejects — *"raised and
+answered by the same process, in the same second, proves the function returns."* The
+test written to demonstrate a travelled path was demonstrating the thing the design
+forbids, and it passed because nothing checked who was acting.
+
+### Three refusals, and the third is not redundant
+
+    not a person        a fixture cannot answer for a decision
+    not the recipient   somebody else's escalation is not yours to close
+    the raiser          even when the raiser IS the named recipient
+
+The third stands on its own: a path is a delivery between two parties, and a round trip
+inside one of them measures a function call however well-credentialed the party is.
+
+`me` is a `Human` rather than a uuid, and it reaches the functions from a token on
+`POST /api/escalations/{id}/receive` and `/answer`. `actor_type="human"` is now true by
+construction — the refusal two lines above it established it — instead of asserted about
+an argument nobody had looked at.
+
+### The page
+
+`/escalations`, on `/proposals`' pattern: the item, who raised it and in what capacity,
+what it asks **in the raiser's own words**, and the two acts as separate buttons. The
+gap between raised and received is what a drill measures, and one button would erase it.
+
+Scoped by the API and not by a filter in the page — `routed_to_human = me.human_id` is
+the whole `WHERE`. A page listing everybody's would invite the close-somebody-else's-item
+the rule refuses.
+
+### Account age was deciding who governs
+
+`governance` resolved through `attributable_actor`, whose query ends
+`ORDER BY h.created_at LIMIT 1`. That function answers *who do we attribute an unattended
+action to* and was never a routing rule. On this database it returns Ivan Green because
+his account is the oldest, and **there was no argument that would have reached Ira.**
+
+`escalation_recipient` (0052) keys a named human on venture and department. A row with
+`department IS NULL` is the venture's default, for an escalation that names none — and
+it is **not** a fallback for a department nobody has named: delivering a banking
+decision to whoever holds the default would record banking's path as working when nobody
+named for banking ever saw it.
+
+Nothing is seeded by the migration. The two pairs Ivan named are written by
+`name_recipient`, which needs founder authority and writes an audit event — a migration
+that inserted them would record the decision as having been made by a schema change.
+
+### The revoked-role sweep, in full
+
+Eight reads of `office_human_role`. **Three ignored `revoked_at`; five did not.**
+
+    broker/humans.py:733     attributable_actor       MISSING - the one ruled
+    broker/access_overview.py:89   the Access page     MISSING - it rendered a revoked
+                                                       role as held, on the page that
+                                                       answers "who can do this"
+    scripts/load_compliance_library.py:183  the loader's actor   MISSING
+
+    broker/humans.py:199     authenticate             correct
+    broker/humans.py:382     the last-administrator count   correct
+    broker/humans.py:405     may-grant                correct
+    broker/humans.py:623     one human's roles        correct
+    broker/humans.py:779     the roster               correct
+
+All three are fixed. And a second finding on the third: it selected
+`role IN ('administrator','venture_operator')`, and **`administrator` is not a role** —
+`office_human_role` has held `('venture_operator','compliance_officer','ivan')` since
+0010, so that arm has never matched anything. Removed rather than left as a name
+somebody reads as real.
+
+Yesterday's revocation of `dev-all build check`'s `ivan` role was real but not yet
+load-bearing: it resolved to Ivan Green only because he is older. Had the fixture been
+created first, taking its role away would have changed nothing about who governance
+escalations reach.

@@ -188,6 +188,12 @@ EVENTS: tuple[Event, ...] = (
           "reason its grant is: an event a caller remembers to write is an event the "
           "next caller forgets.",
           "broker.humans", CONSOLE),
+    Event("escalation_recipient_named", "Escalation recipient named",
+          "A human with founder authority named who a governance escalation reaches "
+          "for one venture and department. Ruled 21 September 2026: account age never "
+          "decides - routing used to pick the oldest account holding `ivan`, so nothing "
+          "could reach anybody else (entry 150).",
+          "broker.escalation", CONSOLE),
     Event("escalation_raised", "Escalation raised",
           "Somebody escalated a decision they may not make, and this says who raised "
           "it, by which path, and which named recipient it was routed to. Ruled 21 "

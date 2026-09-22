@@ -65,6 +65,10 @@ COUPLING_REASON = (
 async def conn(operator) -> AsyncIterator:
     async with connection() as opened:
         opened.operator = operator  # type: ignore[attr-defined]
+        # THE SECOND PERSON. A drill needs a raiser who is not the recipient, and
+        # `operator` is a real account with a role too weak to attest - which is
+        # exactly what a raiser should be.
+        opened.raiser = operator  # type: ignore[attr-defined]
         yield opened
 
 
@@ -103,16 +107,23 @@ async def founder(world) -> humans.Human:
     return resolved
 
 
-async def _travel(conn, human, department: str = DEPARTMENT):
-    """Raise, receive and answer one escalation for a department.
+async def _travel(conn, raiser, recipient, department: str = DEPARTMENT):
+    """Raise, receive and answer one escalation - **with two people**.
 
-    **What `attest` now requires before it will accept `escalation_path_verified`** -
-    ruled 21 September 2026, entry 149: an escalation path cannot be attested verified
-    until it can be shown to have been travelled.
+    **SPLIT ON 21 SEPTEMBER 2026, ruled: the first version had one human do all three.**
+    That is the shape `0051`'s own docstring says proves nothing - *"raised and answered
+    by the same process, in the same second"* - and the test meant to demonstrate a
+    travelled path was demonstrating the thing the design forbids. It passed because
+    nothing checked who was acting.
 
-    The whole round trip, because that is the claim: a raise alone is a function that
-    returned, and a raise-and-answer with no receipt in between is two timestamps.
+    `recipient` must be the human this venture and department NAMES, and must not be the
+    raiser; `record_receipt` and `record_answer` refuse anything else now.
     """
+    await escalation.name_recipient(
+        conn, venture_id=VENTURE, department=department, human=recipient,
+        named_by=recipient,
+        reason=f"named for {department} so a drill has somewhere to go",
+    )
     raised = await escalation.raise_escalation(
         conn,
         kind="certification",
@@ -120,15 +131,15 @@ async def _travel(conn, human, department: str = DEPARTMENT):
         venture_id=VENTURE,
         department=department,
         reason="drill: does this department's governance path reach a person",
-        raised_by=human.human_id,
+        raised_by=raiser.human_id,
         raised_by_kind="human",
     )
     await escalation.record_receipt(
-        conn, escalation_id=raised.escalation_id, received_by=human.human_id
+        conn, escalation_id=raised.escalation_id, me=recipient
     )
     return await escalation.record_answer(
-        conn, escalation_id=raised.escalation_id, answered_by=human.human_id,
-        answer="Received and answered by hand; the route resolved to a named person.",
+        conn, escalation_id=raised.escalation_id, me=recipient,
+        answer="Received and answered by the person named for this department.",
     )
 
 
@@ -139,7 +150,9 @@ async def _attest(conn, human, **over):
     ruling: the evidence is a thing somebody did, and an attestation reads it.
     """
     if over.get("escalation_path_verified", True):
-        await _travel(conn, human, over.get("department", DEPARTMENT))
+        await _travel(
+            conn, conn.raiser, human, over.get("department", DEPARTMENT)
+        )
     kwargs = {
         "venture_id": VENTURE, "department": DEPARTMENT, "forge_id": FORGE,
         "human": human,
@@ -384,7 +397,7 @@ async def test_a_path_nobody_has_travelled_cannot_be_attested_verified(conn, fou
 
 async def test_a_travelled_path_may_be_attested(conn, founder):
     """The positive case, so the gate is a requirement rather than a wall."""
-    await _travel(conn, founder, "banking")
+    await _travel(conn, conn.raiser, founder, "banking")
     found = await attestation.attest(
         conn, venture_id=VENTURE, department="banking", forge_id=FORGE, human=founder,
         escalation_path_verified=True,
@@ -402,7 +415,7 @@ async def test_another_departments_drill_is_not_evidence(conn, founder):
     - a capacity shortfall, say - is evidence about the venture's path and not about
     research's. Counting it would let one drill attest three departments.
     """
-    await _travel(conn, founder, "research")
+    await _travel(conn, conn.raiser, founder, "research")
     with pytest.raises(attestation.AttestationError):
         await attestation.attest(
             conn, venture_id=VENTURE, department="operations", forge_id=FORGE,

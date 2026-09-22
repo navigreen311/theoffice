@@ -732,6 +732,11 @@ async def attributable_actor(
               FROM office_human h
               JOIN office_human_role r ON r.human_id = h.human_id
              WHERE r.role = %s
+               -- A REVOKED ROLE GRANTS NOTHING. Ruled 21 September 2026, entry 150.
+               -- This query ignored it, so a role somebody had taken away still made
+               -- its holder eligible to be attributed an action. Every other read of
+               -- this table filtered it; this one and two more did not.
+               AND r.revoked_at IS NULL
                AND h.status = 'active'
                AND h.origin = 'human'
              ORDER BY h.created_at

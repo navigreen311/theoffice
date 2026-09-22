@@ -179,10 +179,18 @@ async def run(paths: list[Path], check_only: bool) -> int:
 
         async with conn.cursor(row_factory=dict_row) as cur:
             await cur.execute(
+                # A REVOKED ROLE GRANTS NOTHING - entry 150, the third of the
+                # three queries that ignored it.
+                #
+                # `administrator` IS NOT A ROLE. `office_human_role` has held
+                # ('venture_operator','compliance_officer','ivan') since 0010, so that
+                # arm has never matched anything and the query has always resolved on
+                # `venture_operator` alone. Left in the list would be a name somebody
+                # reads as real; removed, the query says what it does.
                 "SELECT h.human_id FROM office_human h "
                 "JOIN office_human_role r ON r.human_id = h.human_id "
-                "WHERE h.status = 'active' "
-                "  AND r.role IN ('administrator','venture_operator') LIMIT 1"
+                "WHERE h.status = 'active' AND r.revoked_at IS NULL "
+                "  AND r.role = 'venture_operator' LIMIT 1"
             )
             row = await cur.fetchone()
         if row is None and not check_only:

@@ -86,7 +86,12 @@ async def overview(conn: AsyncConnection) -> dict[str, Any]:
                      '[]'
                    ) AS roles
             FROM office_human h
-            LEFT JOIN office_human_role r ON r.human_id = h.human_id
+            -- A REVOKED ROLE GRANTS NOTHING, and this page is where somebody
+            -- goes to see who holds what. Ruled 21 September 2026, entry 150: it
+            -- rendered a revoked role as held, so the page that answers "who can do
+            -- this" answered it wrong.
+            LEFT JOIN office_human_role r
+              ON r.human_id = h.human_id AND r.revoked_at IS NULL
             GROUP BY h.human_id
             ORDER BY h.created_at
             """
