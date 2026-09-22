@@ -585,6 +585,22 @@ async def record_result(
               -- and one whose test is withdrawn stops claiming it was tested.
               basis = EXCLUDED.basis,
               attestation_ref = EXCLUDED.attestation_ref,
+              -- AND THE DECLARATION GOES WITH THE BASIS. Entry 167.
+              --
+              -- Without this line a tested PASS landing on a department that holds a
+              -- simulation certification writes `basis = 'tested'` over a row whose
+              -- `simulation_ref` survives, and
+              -- `a_simulation_certification_names_its_declaration` refuses the whole
+              -- statement. The constraint was right and the omission was mine: it
+              -- meant **a simulation certification blocked a real one from ever
+              -- landing**, and the verdict-ingest sweep would have died on a
+              -- CheckViolation rather than recording the PASS.
+              --
+              -- Replaced, not cleared: `EXCLUDED.simulation_ref` is NULL for every
+              -- caller of this function, because nothing that earns a certification
+              -- passes a declaration. Spelling it as a replacement keeps it true if one
+              -- ever does.
+              simulation_ref = EXCLUDED.simulation_ref,
               updated_at = now()
             RETURNING cert_id, unit, state, certified_tier
             """,
@@ -684,6 +700,39 @@ SIMULATION_JOIN_SQL = (
     "LEFT JOIN venture_simulation {sim} "
     "       ON {sim}.simulation_id = {cert}.simulation_ref"
 )
+
+#: **Certified, and the permission behind it still stands.** Entry 167.
+#:
+#: The predicate every reader that asks "is this certification good" must use, as a
+#: correlated EXISTS so it needs no join and can be dropped into a WHERE clause anywhere.
+#:
+#: WHY THIS IS A SHARED CONSTANT AND NOT FIVE COPIES OF AN `AND`
+#: ============================================================
+#:
+#:     Because five copies is what it was, and two of them were missing. The first cut
+#:     of entry 167 put the void check in Gate 9 and in `resolve_grant` and stopped
+#:     there, which left **Gate 11 activating production grants on a void simulation
+#:     certification** - the gate whose own comment says it re-checks rather than
+#:     trusting Gate 9, "the same rule at the moment it becomes irreversible".
+#:
+#:     A void certification still reads `state = 'certified'`, because nothing in this
+#:     system rewrites a certification. That is the right design and it is exactly why
+#:     `state = 'certified'` is not a safe thing for a reader to write on its own.
+#:
+#: `{cert}` is the certification's alias in the caller's query.
+CERTIFIED_AND_LIVE_SQL = """
+    {cert}.state = 'certified'
+    AND NOT EXISTS (
+      SELECT 1 FROM venture_simulation vs_live
+       WHERE vs_live.simulation_id = {cert}.simulation_ref
+         AND vs_live.left_at IS NOT NULL
+    )
+"""
+
+
+def certified_and_live(cert: str) -> str:
+    """`CERTIFIED_AND_LIVE_SQL` for a certification aliased as `cert`."""
+    return CERTIFIED_AND_LIVE_SQL.format(cert=cert).strip()
 
 
 def simulation_columns(cert: str, sim: str) -> str:

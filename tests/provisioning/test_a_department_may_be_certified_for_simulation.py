@@ -583,3 +583,220 @@ async def test_gate_9_accepts_it_in_simulation_and_refuses_it_after(
         "the voided units are named; a reader cannot act on a count"
     )
     assert "VOID" in refused.reason
+
+
+# ================== the three the first cut of this entry got wrong
+
+async def test_gate_11_will_not_activate_on_a_void_certification(simulated):
+    """**THE HOLE THE FIRST CUT LEFT.**
+
+    Gate 9 refused a void certification and `resolve_grant` refused a call behind one,
+    and **Gate 11 activated production grants on it anyway** - because its predicate
+    read `cb.state = 'certified'`, and a void certification still reads exactly that.
+
+    Gate 11's own docstring is why this matters: it re-checks rather than trusting Gate
+    9, because "a gate that trusts its predecessor's verdict is a gate that can be
+    reached by any path that sets the predecessor's state". A rule that lives only in
+    Gate 9 is a rule Gate 11 is designed not to inherit.
+
+    Asserted against the predicate itself rather than through a run: this is a statement
+    about what that UPDATE matches, and a run would also have to clear Gate 9, which
+    would hide the case entirely.
+    """
+    await _declare()
+    await _certify()
+
+    with simulated.cursor() as cur:
+        cur.execute(
+            "UPDATE agent_forge_grant SET activated_at = NULL, activated_by = NULL "
+            " WHERE venture_id = %s", (VENTURE,)
+        )
+        cur.execute(
+            "UPDATE agent_forge_grant g SET dept_context_cert_ref = c.cert_id::text "
+            "  FROM certification c "
+            " WHERE c.unit = 'B' AND c.forge_id = %s AND c.department = %s "
+            "   AND g.venture_id = %s AND g.forge_id = %s",
+            (FORGE_ID, DEPARTMENT, VENTURE, FORGE_ID),
+        )
+    simulated.commit()
+
+    assert _activatable(simulated) > 0, (
+        "nothing was activatable even before leaving; this test would pass vacuously"
+    )
+
+    await _leave()
+
+    assert _activatable(simulated) == 0, (
+        "Gate 11 would activate production grants on a certification that is void"
+    )
+
+
+def _activatable(admin: psycopg.Connection) -> int:
+    """How many grants Gate 11's Unit B predicate currently matches."""
+    with admin.cursor() as cur:
+        cur.execute(
+            "SELECT count(*) FROM agent_forge_grant g "
+            " WHERE g.venture_id = %s AND g.activated_at IS NULL "
+            "   AND g.superseded_at IS NULL "
+            "   AND EXISTS (SELECT 1 FROM certification cb "
+            "                WHERE cb.unit = 'B' "
+            "                  AND cb.cert_id::text = g.dept_context_cert_ref "
+            f"                  AND {certification.certified_and_live('cb')})",
+            (VENTURE,),
+        )
+        return int(cur.fetchone()[0])
+
+
+async def test_a_real_verdict_replaces_a_simulation_certification(simulated):
+    """**THE SECOND HOLE.** A simulation certification blocked a real one from landing.
+
+    `record_result`'s upsert replaced `basis` and `attestation_ref` and left
+    `simulation_ref` alone, so a tested PASS on a department holding a simulation
+    certification wrote `basis = 'tested'` over a surviving declaration reference - and
+    `a_simulation_certification_names_its_declaration` refused the whole statement.
+
+    The constraint was right. The omission meant the verdict-ingest sweep would have
+    died on a CheckViolation instead of recording the PASS, and the department could
+    never earn its way off the simulation basis.
+    """
+    await _declare()
+    await _certify()
+    assert _row(simulated)["basis"] == certification.SIMULATION_BASIS
+
+    content_hash, api_version = _live(simulated, CRE_MODULES[0])
+    async with connection() as conn:
+        await certification.record_result(
+            conn, unit="B", forge_id=FORGE_ID, department=DEPARTMENT,
+            verdict="PASS", rubric_version="1.0.0", certified_tier="propose",
+            instruction_content_hash=content_hash, forge_api_version=api_version,
+            agent_model="phi4:latest",
+            model_identity={
+                "model_tag": "phi4:latest",
+                "file_digest": "sha256:" + "ab" * 32,
+                "settings": {"temperature": 0.0, "max_tokens": 2048},
+            },
+        )
+
+    after = _row(simulated)
+    assert after["basis"] == "tested", "the real verdict did not land"
+    assert after["simulation_ref"] is None, (
+        "the declaration reference survived a tested certification"
+    )
+    assert after["simforge_verdict"] == "PASS"
+
+    async with connection() as conn:
+        assert await certification.simulation_certifications(conn, VENTURE) == []
+
+
+async def test_it_cannot_become_real_without_a_verdict(simulated):
+    """**THE THIRD QUESTION.** Promotion needs an exam, not an edit.
+
+    The only thing that turns a simulation certification into a tested one is
+    `record_result` with a SimForge verdict and a full model identity. There is no path
+    that flips `basis` on its own, and a hand-edited row is still visibly unearned.
+    """
+    await _declare()
+    await _certify()
+
+    with pytest.raises(psycopg.errors.CheckViolation), simulated.cursor() as cur:
+        cur.execute(
+            "UPDATE certification SET basis = 'tested' "
+            " WHERE unit = 'B' AND forge_id = %s AND department = %s",
+            (FORGE_ID, DEPARTMENT),
+        )
+    simulated.rollback()
+
+    # Clearing the reference too does not buy a certification: the row carries no
+    # verdict and no model, which is what every reader of a tested row asks for.
+    with simulated.cursor() as cur:
+        cur.execute(
+            "UPDATE certification SET basis = 'tested', simulation_ref = NULL "
+            " WHERE unit = 'B' AND forge_id = %s AND department = %s",
+            (FORGE_ID, DEPARTMENT),
+        )
+    simulated.commit()
+    promoted = _row(simulated)
+    assert promoted["simforge_verdict"] is None
+    assert promoted["model_digest"] is None
+
+
+#: Reads of `state = 'certified'` that CANNOT see a Unit B certification, with the
+#: argument for each. Entry 167.
+#:
+#: The whitelist shape `test_the_api_exposes_no_route_that_bypasses_a_control` uses, and
+#: for its reason: a bare grep over this string finds thirteen sites and twelve of them
+#: are structurally unable to reach the rows this rule is about. Listing them with the
+#: argument is the difference between a guard and a nuisance.
+CANNOT_SEE_A_UNIT_B_CERTIFICATION = {
+    # `c.unit = 'A'` in the join. A simulation certification is Unit B by constraint
+    # (`only_unit_b_is_certified_for_simulation`), so these never see one.
+    "app.py": "joins c.unit = 'A'",
+    "roster.py": "joins c.unit = 'A'",
+    # Joins on `c.module_id = i.module_id`. A Unit B certification carries
+    # `module_id IS NULL` by design, so the join eliminates it before the filter runs.
+    "instructions.py": "joins on module_id, which is NULL on every Unit B row",
+    "knowledge.py": "joins on module_id, which is NULL on every Unit B row",
+    # Prose, not a query.
+    "bootstrap_phase0.py": "a comment about resolve_grant, not a read",
+    "provisioning.py": "docstrings and the comment on the predicate that was fixed",
+    # A DENOMINATOR, and the one honest exception. `checked` counts how many
+    # certifications the staleness sweep considered, and it does consider a void
+    # simulation certification - `recompute_staleness` walks every certified row. The
+    # number is not a claim about any grant, and excluding void rows would make the
+    # denominator disagree with the work that was actually done.
+    "sweeps.py": "a sweep denominator, not a claim about a grant",
+}
+
+
+def test_every_reader_that_can_see_one_uses_the_predicate():
+    """**Load-bearing.** The first cut had the rule in two readers and not in three.
+
+    Gate 11 activated production grants on a void certification, because its predicate
+    read `cb.state = 'certified'` and a void certification reads exactly that. The
+    defect was not a wrong predicate, it was a MISSING one - and no behavioural test
+    catches a reader nobody thought to write a test for.
+
+    So this is a grep with a whitelist, and **the whitelist carries the argument** for
+    why each file cannot reach a Unit B simulation certification. A new file reading
+    `state = 'certified'` fails here until somebody either uses
+    `certification.certified_and_live` or writes down why it does not need to.
+    """
+    import pathlib
+
+    root = pathlib.Path(__file__).resolve().parents[2]
+    offenders = []
+    for path in sorted(
+        list((root / "broker").glob("*.py")) + list((root / "generators").glob("*.py"))
+    ):
+        if path.name == "certification.py":
+            continue
+        for number, line in enumerate(
+            path.read_text(encoding="utf-8").splitlines(), 1
+        ):
+            if "state = 'certified'" not in line:
+                continue
+            if "certified_and_live" in line:
+                continue
+            if path.name in CANNOT_SEE_A_UNIT_B_CERTIFICATION:
+                continue
+            offenders.append(f"{path.name}:{number}")
+
+    assert not offenders, (
+        f"{offenders} read `state = 'certified'` without asking whether the "
+        "certification is VOID. A simulation certification still reads `certified` "
+        "after its venture leaves - nothing rewrites a certification. Use "
+        "certification.certified_and_live(alias), or add the file to "
+        "CANNOT_SEE_A_UNIT_B_CERTIFICATION with the argument for why it cannot reach "
+        "one."
+    )
+
+
+def test_the_whitelist_does_not_outlive_its_files():
+    """An exemption for a file that no longer exists is one nobody is checking."""
+    import pathlib
+
+    root = pathlib.Path(__file__).resolve().parents[2]
+    present = {p.name for p in (root / "broker").glob("*.py")}
+    present |= {p.name for p in (root / "generators").glob("*.py")}
+    missing = sorted(set(CANNOT_SEE_A_UNIT_B_CERTIFICATION) - present)
+    assert not missing, f"whitelist names files that are gone: {missing}"

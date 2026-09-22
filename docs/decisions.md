@@ -14483,6 +14483,48 @@ distinct basis that refuses a verdict, void by derivation with nothing to rememb
 naming a declaration that names a person, bound to the instruction set, `ivan` only, and
 Unit A unreachable by construction.
 
+### Three holes in the first cut of this entry, found by being asked
+
+Ivan asked three questions before merging: does Gate 9 refuse the instant a venture
+leaves with no override anywhere; is every certification *marked* void rather than merely
+ignored; can one ever become real without being re-earned. **All three came back loose.**
+
+**Gate 11 activated production grants on a void certification.** The void check went into
+Gate 9 and into `resolve_grant` and stopped there. Gate 11 does its own independent
+check — by its own docstring, *"a gate that trusts its predecessor's verdict is a gate
+that can be reached by any path that sets the predecessor's state"* — and that check read
+`cb.state = 'certified'`. A void certification reads exactly that, because nothing here
+rewrites a certification. The comment directly above that predicate says *"this is the
+same rule at the moment it becomes irreversible"*, and the rule was not in it.
+
+**A simulation certification blocked a real one from ever landing.** `record_result`'s
+upsert replaced `basis` and `attestation_ref` and left `simulation_ref` alone, so a
+tested PASS on such a department wrote `basis = 'tested'` over a surviving declaration
+reference and `a_simulation_certification_names_its_declaration` refused the whole
+statement. The constraint was right; the omission meant the verdict-ingest sweep would
+have died on a CheckViolation instead of recording the PASS — and the department could
+never earn its way off the simulation basis.
+
+**`generators/appointment.py` read a void certification as `certified`** when capping a
+position's tier, so it reported eligibility on a permission that had ended.
+
+### The fix is one predicate, not three patches
+
+`certification.certified_and_live(alias)` — *certified, and the permission behind it
+still stands* — as a correlated EXISTS that drops into any WHERE clause. Gate 11,
+appointment and the Gate 11 unit-A arm all use it; Gate 9 and `resolve_grant` keep their
+own branches because they report and raise rather than filter.
+
+`test_every_reader_that_can_see_one_uses_the_predicate` greps for `state = 'certified'`
+and fails on any reader that is not either using the predicate or on a whitelist that
+**carries the argument for why it cannot reach a Unit B row**. Twelve of the thirteen
+sites join `unit = 'A'` or on `module_id`, which is NULL on every Unit B certification.
+The thirteenth is the staleness sweep's denominator, which counts what the sweep actually
+examined and is not a claim about any grant.
+
+That shape is deliberate: the defect was a MISSING predicate, and no behavioural test
+catches a reader nobody thought to write a test for.
+
 ### What it does not fix
 
 Gate 9 is no longer shut by entry 166. It is still shut by everything else: Greenstone

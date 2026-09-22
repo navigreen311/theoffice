@@ -42,6 +42,7 @@ from broker import (
     attestation,
     audit,
     build,
+    certification,
     humans,
     instructions,
     knowledge,
@@ -2544,11 +2545,20 @@ async def _gate_11(ctx: _Context) -> GateOutcome:
             "   AND EXISTS ("
             "       SELECT 1 FROM certification ca "
             "        WHERE ca.unit = 'A' AND ca.cert_id::text = g.operation_cert_ref "
-            "          AND ca.state = 'certified') "
+            f"          AND {certification.certified_and_live('ca')}) "
+            # AND THE PERMISSION BEHIND IT STILL STANDS. Entry 167.
+            #
+            # `state = 'certified'` alone was not enough once a certification could be
+            # VOID: a simulation certification still reads `certified` after its venture
+            # leaves, because nothing here rewrites a certification. Gate 9 refuses it
+            # and this gate re-checks rather than trusting Gate 9 - by its own
+            # docstring, "a gate that trusts its predecessor's verdict is a gate that
+            # can be reached by any path that sets the predecessor's state" - so the
+            # rule has to be here too, at the moment it becomes irreversible.
             "   AND EXISTS ("
             "       SELECT 1 FROM certification cb "
             "        WHERE cb.unit = 'B' AND cb.cert_id::text = g.dept_context_cert_ref "
-            "          AND cb.state = 'certified') "
+            f"          AND {certification.certified_and_live('cb')}) "
             # A GRANT WITH NO PLANNED TIER CONFERS NOTHING, so there is nothing here to
             # switch on. Ruled 21 September 2026 and carried by 0049. Behind the
             # certification test rather than instead of it: a tierless grant is also an
