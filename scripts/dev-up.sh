@@ -202,7 +202,7 @@ TOKEN="$("$VPY" - "$OPERATOR_NAME" "$OPERATOR_EMAIL" "${NEW_TOKEN:-0}" <<'PY' | 
 import asyncio, sys
 sys.path.insert(0, ".")
 import broker  # noqa: F401
-from broker import audit, humans
+from broker import account_origin, audit, humans
 from broker.db import close_pool, connection
 
 name, email, reissue = sys.argv[1], sys.argv[2], sys.argv[3] == "1"
@@ -226,7 +226,10 @@ async def main() -> None:
 
         if row is None:
             human_id, token = await humans.create_human(
-                conn, display_name=name, email=email
+                # A PERSON, declared (entry 151). This is the developer's own account:
+                # it self-grants `ivan` two lines down, which is the documented
+                # exception `assert_may_grant` otherwise forbids.
+                conn, display_name=name, email=email, origin=account_origin.HUMAN,
             )
             # Self-granted, and only here. Every later grant names a different granter
             # because `assert_may_grant` forbids granting to yourself; this row is the

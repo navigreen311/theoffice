@@ -13215,10 +13215,16 @@ escalations reach.
 `smoke-1a2b3c4d`, or an address under a reserved `.invalid` domain. Both are good
 evidence and neither is a declaration.
 
-`dev-all build check` is created by `scripts/dev-all.sh` at **`dev-all@localhost`**.
-`@localhost` is not `.invalid` and `dev-all build check` is not `prefix-hex`, so it read
-as a person. The rule was not misapplied; a new caller simply did not follow the naming
-convention the rule was inferred from.
+`dev-all build check` carries the address **`dev-all@localhost`**. `@localhost` is not
+`.invalid` and `dev-all build check` is not `prefix-hex`, so it read as a person. The
+rule was not misapplied; this account simply did not follow the naming convention the
+rule was inferred from.
+
+**Where it came from is an open question, written as one.** `create_human` appears in
+three scripts and none of them uses that name or address, and `audit_log` holds no
+creation event for it — only yesterday's revocation of its role. So it was made by a
+path that writes no audit entry. Which path is not something this ledger can state, and
+a plausible script name in its place would be an invention.
 
 ### Why the stored column agreed with the guess
 

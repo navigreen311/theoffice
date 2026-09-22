@@ -17,6 +17,11 @@ WHAT THE GUESS GOT WRONG, AND WHY THE COLUMN AGREED WITH IT
     matches neither. Its address is `dev-all@localhost`, which is not `.invalid`, so it
     read as a person.
 
+    Where it came from is not established. No script in this repository creates it and
+    `audit_log` records no creation - only yesterday's revocation of its role - so it
+    was made by a path that writes no audit entry. That is left as a question rather
+    than filled in with a plausible script name.
+
     0027 stored the column and backfilled it *with the same rule*. Measured on the
     development database before this migration: **242 accounts, and the stored column
     disagrees with the read-time guess on none of them.** The column did not contradict

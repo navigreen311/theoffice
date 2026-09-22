@@ -241,14 +241,19 @@ TOKEN="$("$VPY" - <<'PY' 2>/dev/null | tail -1
 import asyncio, sys, uuid
 sys.path.insert(0, ".")
 import broker  # noqa: F401 - event-loop policy
-from broker import humans
+from broker import account_origin, humans
 from broker.db import connection
 
 async def main():
     async with connection() as conn:
         suffix = uuid.uuid4().hex[:8]
+        # DECLARED (entry 151). `smoke-<hex>@example.invalid` is the exact shape the
+        # retired classifier was inferred from, and the script that makes it is the one
+        # place that never had to guess.
         hid, token = await humans.create_human(
-            conn, display_name=f"smoke-{suffix}", email=f"smoke-{suffix}@example.invalid"
+            conn, display_name=f"smoke-{suffix}",
+            email=f"smoke-{suffix}@example.invalid",
+            origin=account_origin.TEST_FIXTURE,
         )
         await humans.grant_role(conn, human_id=hid, role="ivan", granted_by=hid)
         print(token)
@@ -288,7 +293,7 @@ PERSON_TOKEN="$("$VPY" - <<'PY' 2>/dev/null | tail -1
 import asyncio, sys
 sys.path.insert(0, ".")
 import broker  # noqa: F401 - event-loop policy
-from broker import humans
+from broker import account_origin, humans
 from broker.db import connection
 
 NAME, EMAIL = "Console Operator", "console.operator@office.smoke"
@@ -307,7 +312,12 @@ async def main():
             human_id = row[0]
         else:
             human_id, token = await humans.create_human(
-                conn, display_name=NAME, email=EMAIL
+                # A PERSON, ON PURPOSE AND NOW IN WRITING (entry 151). The comment above
+                # says why this account is not a fixture: the Access page needs one
+                # non-fixture row, and entry 148 means only a named human can decide the
+                # proposal further down. The address carried that meaning before; the
+                # declaration carries it now.
+                conn, display_name=NAME, email=EMAIL, origin=account_origin.HUMAN,
             )
         await humans.grant_role(
             conn, human_id=human_id, role="ivan", granted_by=human_id

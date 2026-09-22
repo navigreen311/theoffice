@@ -11,8 +11,12 @@ WHAT THE GUESS MISSED
 =====================
 
     `account_origin.origin_of` matched a display name shaped like `smoke-1a2b3c4d` or an
-    address under a reserved `.invalid` domain. `dev-all build check` is created by
-    `scripts/dev-all.sh` at `dev-all@localhost`. Neither shape, so: a person.
+    address under a reserved `.invalid` domain. `dev-all build check` carries the address
+    `dev-all@localhost`. Neither shape, so: a person.
+
+    Nothing in this repository creates that account and `audit_log` holds no creation
+    event for it, so how it was made is an open question rather than a fact this file
+    can state.
 
     It held the `ivan` role - founder authority, the strongest in the system - from
     17 to 21 September, and `assert_named_human` would not have stopped it deciding a
@@ -161,22 +165,25 @@ async def test_an_insert_that_omits_origin_fails(admin):
 
 # ------------------------------------------------------------------ the account itself
 
-async def test_the_dev_all_build_check_account_is_a_fixture(admin):
-    """The one row the ruling names, if this database has it.
+async def test_no_dev_all_build_check_account_reads_as_a_person(admin):
+    """The one row the ruling names - asserted so that it needs no skip.
 
-    Skipped rather than failed where it does not exist: a fresh database and CI have
-    never run `scripts/dev-all.sh`, and a test that demands the account be present would
-    be asserting a fact about one developer's machine. Where it IS present - the
-    development database, which is where the finding was made - it must be a fixture.
+    **Stated as "none of these is a person" rather than "this one is a fixture".** The
+    account exists on the development database, where the finding was made, and on no
+    other; a test written the other way round would either assert a fact about one
+    developer's machine or skip. CI refuses a run with any skip at all, deliberately -
+    `requires_db` turns a broken service container into a green tick otherwise - so a
+    skip here would spend that control to say nothing.
+
+    The invariant is true either way: where the row exists it must be a fixture, and
+    where it does not there is nothing to be wrong.
     """
     with admin.cursor() as cur:
         cur.execute(
             "SELECT origin FROM office_human WHERE email = 'dev-all@localhost'"
         )
-        row = cur.fetchone()
-    if row is None:
-        pytest.skip("this database has no dev-all build check account")
-    assert row[0] == account_origin.TEST_FIXTURE, (
+        rows = cur.fetchall()
+    assert [r[0] for r in rows if r[0] != account_origin.TEST_FIXTURE] == [], (
         "`dev-all build check` reads as a person again. It holds no role today, but it "
         "held `ivan` for four days while reading as one, and `assert_named_human` "
         "would not have refused it (entry 151)."

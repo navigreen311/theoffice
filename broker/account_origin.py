@@ -20,12 +20,17 @@ DECLARED, NOT GUESSED. RULED 21 SEPTEMBER 2026 (entry 151)
     This module used to classify from two patterns: a display name shaped like
     `smoke-1a2b3c4d`, or an email under a reserved `.invalid` domain. Both are gone.
 
-    **What the patterns could not see.** `dev-all build check` is created by
-    `scripts/dev-all.sh` with the address `dev-all@localhost`. `@localhost` is not
-    `.invalid` and `dev-all build check` is not `prefix-hexhex`, so it read as a person
-    and held the `ivan` role for four days as one. The classifier was not wrong about
-    its own rule; the rule was a guess about a naming convention, and a new caller did
-    not follow it.
+    **What the patterns could not see.** `dev-all build check` carries the address
+    `dev-all@localhost`. `@localhost` is not `.invalid` and `dev-all build check` is not
+    `prefix-hexhex`, so it read as a person and held the `ivan` role for four days as
+    one. The classifier was not wrong about its own rule; the rule was a guess about a
+    naming convention, and this account did not follow it.
+
+    **An open question rather than an answer: nothing in this repository creates it.**
+    `create_human` appears in three scripts and none of them uses that name or address,
+    and `audit_log` holds no creation event for it - only the revocation of its role on
+    21 September. So it was made by a path that writes no audit entry, and which path
+    that was is not something this file can state.
 
     **Why the stored column did not catch it.** 0027 stored `origin` and backfilled it
     with this same function. Measured before 0053: 242 accounts, and the column

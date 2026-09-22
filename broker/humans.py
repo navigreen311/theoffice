@@ -105,9 +105,11 @@ async def create_human(
     It used to be `account_origin.origin_of({display_name, email})` - a display-name
     pattern and a `.invalid` domain. `dev-all build check` matched neither, because its
     address is `dev-all@localhost`, so a build-check account read as a person and
-    `assert_named_human` would not have refused it. The parameter has no default for the
-    same reason the column no longer has one: the caller knows what it is creating, and
-    a value invented on its behalf is the defect.
+    `assert_named_human` would not have refused it. No caller in this repository creates
+    that account and no audit entry records its creation, which is its own finding.
+
+    The parameter has no default for the same reason the column no longer has one: the
+    caller knows what it is creating, and a value invented on its behalf is the defect.
 
     The plaintext is returned exactly once and never stored. A caller that loses it
     issues a new one; a system that can recover it is a system where the hash was
