@@ -93,15 +93,33 @@ async def create_human(
     *,
     display_name: str,
     email: str,
+    origin: str,
     auth_method: str = "sso_mfa",
     token: str | None = None,
 ) -> tuple[uuid.UUID, str]:
     """Create a human and return (human_id, plaintext token).
 
+    `origin` IS REQUIRED AND IS NOT GUESSED. Ruled 21 September 2026, entry 151:
+    *"A fixture is declared, never guessed. `origin` is set explicitly at creation."*
+
+    It used to be `account_origin.origin_of({display_name, email})` - a display-name
+    pattern and a `.invalid` domain. `dev-all build check` matched neither, because its
+    address is `dev-all@localhost`, so a build-check account read as a person and
+    `assert_named_human` would not have refused it. No caller in this repository creates
+    that account and no audit entry records its creation, which is its own finding.
+
+    The parameter has no default for the same reason the column no longer has one: the
+    caller knows what it is creating, and a value invented on its behalf is the defect.
+
     The plaintext is returned exactly once and never stored. A caller that loses it
     issues a new one; a system that can recover it is a system where the hash was
     pointless.
     """
+    if origin not in account_origin.DECLARABLE:
+        raise ValueError(
+            f"origin must be one of {', '.join(sorted(account_origin.DECLARABLE))}; "
+            f"got {origin!r}. It says what this account IS, not what it may do."
+        )
     human_id = uuid.uuid4()
     plaintext = token or issue_token()
     async with conn.cursor() as cur:
@@ -114,10 +132,7 @@ async def create_human(
                 email,
                 auth_method,
                 hash_token(plaintext),
-                # Marked at the moment it is created, by the one classifier. The column
-                # is what attribution reads, and a fixture that arrives unmarked is a
-                # fixture eligible to sign an audit entry.
-                account_origin.origin_of({"display_name": display_name, "email": email}),
+                origin,
             ),
         )
     await conn.commit()

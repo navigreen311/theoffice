@@ -20,7 +20,7 @@ import httpx
 import psycopg
 import pytest
 
-from broker import humans
+from broker import account_origin, humans
 from broker.app import app
 from broker.db import connection
 from tests.conftest import requires_db
@@ -67,7 +67,10 @@ async def make_human(
 ) -> tuple[uuid.UUID, str]:
     async with connection() as conn:
         human_id, token = await humans.create_human(
-            conn, display_name=name, email=f"{name.lower()}@example.invalid"
+            conn,
+            origin=account_origin.TEST_FIXTURE,
+            display_name=name,
+            email=f"{name.lower()}@example.invalid",
         )
         if role:
             await humans.grant_role(

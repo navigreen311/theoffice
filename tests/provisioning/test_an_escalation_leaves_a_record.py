@@ -38,7 +38,7 @@ from collections.abc import AsyncIterator
 import pytest
 import pytest_asyncio
 
-from broker import escalation, humans
+from broker import account_origin, escalation, humans
 from broker.db import connection
 from broker.errors import NotAuthorized, OfficeError
 from tests.conftest import requires_db
@@ -57,23 +57,22 @@ async def conn(operator) -> AsyncIterator:
 
 
 async def _person(name: str, email: str) -> humans.Human:
-    """A real account. `account_origin` classifies every `.invalid` address as a fixture
-    (entry 148), and a fixture may neither be named a recipient nor record anything, so
-    the promotion is explicit."""
+    """A real account, and it says so at creation.
+
+    This used to create the account and then `UPDATE office_human SET origin = 'human'`,
+    because the classifier read every `.invalid` address as a fixture and a fixture may
+    neither be named a recipient nor record anything. **That promotion was the tell.**
+    A test correcting a classification immediately after making the row is a test
+    working around a guess, and entry 151 replaced the guess with a declaration.
+    """
     async with connection() as conn:
         human_id, token = await humans.create_human(
-            conn, display_name=name, email=email,
+            conn, origin=account_origin.HUMAN, display_name=name, email=email,
         )
         await humans.grant_role(
             conn, human_id=human_id, role="ivan", venture_id=None,
             granted_by=uuid.UUID("00000000-0000-5000-8000-00000000aaaa"),
         )
-        async with conn.cursor() as cur:
-            await cur.execute(
-                "UPDATE office_human SET origin = 'human' WHERE human_id = %s",
-                (human_id,),
-            )
-        await conn.commit()
         resolved = await humans.authenticate(conn, token)
     assert resolved is not None
     return resolved

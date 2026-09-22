@@ -37,7 +37,7 @@ import httpx
 import psycopg
 import pytest
 
-from broker import humans, pack_templates, packs, ventures
+from broker import account_origin, humans, pack_templates, packs, ventures
 from broker.app import app
 from broker.db import connection
 from generators.validator import all_rule_ids
@@ -103,7 +103,10 @@ async def world(admin: psycopg.Connection, monkeypatch: pytest.MonkeyPatch):
 
     async with connection() as conn:
         human_id, token = await humans.create_human(
-            conn, display_name="Pack operator", email="packs@packs.invalid"
+            conn,
+            origin=account_origin.TEST_FIXTURE,
+            display_name="Pack operator",
+            email="packs@packs.invalid",
         )
         await humans.grant_role(
             conn, human_id=human_id, role="venture_operator", venture_id=None,

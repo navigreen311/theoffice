@@ -47,6 +47,7 @@ import asyncio
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -126,12 +127,26 @@ def _refs(laws_body: str) -> tuple[set[str], set[str]]:
     return declared, ruled_out - declared
 
 
-async def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--apply", action="store_true", help="author them; otherwise emit only")
-    args = ap.parse_args()
+async def derive(conn: Any) -> tuple[list[dict], list[str]]:
+    """(ready, stops) — what this script would author. **Writes nothing.**
 
-    async with connection() as conn, conn.cursor() as cur:
+    EXTRACTED SO THE COMPARATOR CAN CALL IT. Ruled 21 September 2026, entry 152:
+
+        *"The instruction comparator covers every Forge with authored instructions, and
+        CI fails on drift in any of them. Measured: it covers cre-forge only.
+        CapitalForge was checked by hand."*
+
+    The comparator could not reach this before. `author_cre_forge_instructions` holds
+    its manuals in a module-level `MANUALS` dict, so importing it is enough; this script
+    derives its manuals from documents, inside `main`, behind an `argparse` call and a
+    module-level `raise SystemExit`. There was no way to ask it what it would author
+    without running it.
+
+    So the derivation lives here and both callers use it: `main` derives then authors,
+    the comparator derives then compares. A second spelling of the derivation would
+    drift from this one exactly as the manuals drifted from the database.
+    """
+    async with conn.cursor() as cur:
         await cur.execute(
             "SELECT module_id, compliance_flags_implied FROM forge_module_registry "
             "WHERE forge_id = %s",
@@ -140,11 +155,6 @@ async def main() -> int:
         registry = {m: set(f or []) for m, f in await cur.fetchall()}
         await cur.execute("SELECT entry_ref, runtime_flag FROM compliance_library_entry")
         lib = dict(await cur.fetchall())
-        await cur.execute(
-            "SELECT api_version FROM forge_registry WHERE forge_id = %s", (FORGE_ID,)
-        )
-        row = await cur.fetchone()
-        api_version = row[0] if row else None
 
     flag_to_ref = {v: k for k, v in lib.items()}
     stops: list[str] = []
@@ -201,6 +211,28 @@ async def main() -> int:
              "flags": sorted(reg_flags)}
         )
 
+    return ready, stops
+
+
+async def api_version(conn: Any) -> str | None:
+    """The Forge's registered API version, stamped on what this script authors."""
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "SELECT api_version FROM forge_registry WHERE forge_id = %s", (FORGE_ID,)
+        )
+        row = await cur.fetchone()
+    return row[0] if row else None
+
+
+async def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--apply", action="store_true", help="author them; otherwise emit only")
+    args = ap.parse_args()
+
+    async with connection() as conn:
+        ready, stops = await derive(conn)
+        version = await api_version(conn)
+
     print(f"\n{len(ready)} ready, {len(stops)} stopped\n")
     for r in ready:
         sizes = " ".join(f"{k}={len(v)}" for k, v in r["content"].items())
@@ -223,7 +255,7 @@ async def main() -> int:
                 forge_id=FORGE_ID,
                 module_id=r["module_id"],
                 instruction_version=r["version"],
-                forge_api_version=api_version,
+                forge_api_version=version,
                 content=r["content"],
                 authored_by=actor,
             )
@@ -231,4 +263,5 @@ async def main() -> int:
     return 0
 
 
-raise SystemExit(asyncio.run(main()))
+if __name__ == "__main__":
+    raise SystemExit(asyncio.run(main()))

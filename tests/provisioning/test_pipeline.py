@@ -19,7 +19,7 @@ import psycopg
 import pytest
 import yaml
 
-from broker import humans, packs, provisioning, revocation
+from broker import account_origin, humans, packs, provisioning, revocation
 from broker.db import connection
 from broker.errors import GrantNotActivated
 from broker.grants import resolve_grant
@@ -375,7 +375,10 @@ async def test_a_human_from_another_venture_cannot_record_the_review(
     """Role scoping, not role rank. Part 14."""
     async with connection() as conn:
         human_id, token = await humans.create_human(
-            conn, display_name="Wrong Venture", email="wrong@provisioning.invalid"
+            conn,
+            origin=account_origin.TEST_FIXTURE,
+            display_name="Wrong Venture",
+            email="wrong@provisioning.invalid",
         )
         await humans.grant_role(
             conn, human_id=human_id, role="venture_operator", venture_id="burkham",

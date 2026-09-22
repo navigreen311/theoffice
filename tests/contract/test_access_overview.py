@@ -49,10 +49,24 @@ async def api():
         yield client
 
 
-async def make(name: str, role: str, email: str | None = None) -> tuple[uuid.UUID, str]:
+async def make(
+    name: str,
+    role: str,
+    email: str | None = None,
+    origin: str = account_origin.HUMAN,
+) -> tuple[uuid.UUID, str]:
+    """An account of a DECLARED origin (entry 151).
+
+    The address used to carry this: `@example.invalid` meant fixture and anything else
+    meant person, and every test below chose its email to mean one of the two. The
+    parameter says it outright, so a reader of a test does not have to know the rule
+    that classified the domain - and so that a new address shape cannot quietly change
+    what a test is testing.
+    """
     async with connection() as conn:
         human_id, token = await humans.create_human(
-            conn, display_name=name, email=email or f"{name.lower()}@office.example.com"
+            conn, origin=origin, display_name=name,
+            email=email or f"{name.lower()}@office.example.com",
         )
         await humans.grant_role(
             conn, human_id=human_id, role=role, venture_id=None, granted_by=SEED
@@ -62,30 +76,55 @@ async def make(name: str, role: str, email: str | None = None) -> tuple[uuid.UUI
 
 # ------------------------------------------------------------------ origin
 
-def test_a_test_fixture_is_recognised_by_name_or_domain():
-    """Derived, not stored, and this is the rule.
+def test_an_account_is_the_origin_it_declares():
+    """**Declared, never guessed.** Ruled 21 September 2026, entry 151.
 
-    The smoke script creates an account on every run. A column filled by one backfill
-    describes the accounts that existed the day it ran; a pattern applied at read time
-    recognises the ones created tomorrow.
+    This test used to assert the opposite: that a fixture is *recognised* from a display
+    name like `smoke-1a2b3c4d` or an address under `.invalid`, and that deriving beat
+    storing because the smoke script creates more accounts every run.
+
+    **The rule it asserted got `dev-all build check` wrong.** That account is created by
+    `scripts/dev-all.sh` at `dev-all@localhost`, which is neither shape, so it read as a
+    person and held the `ivan` role as one for four days - and `assert_named_human`,
+    the control that stops a fixture deciding a proposal or receiving an escalation,
+    would have let it through.
+
+    So the name and the address decide nothing now. The column does, and the caller
+    that created the row wrote it.
     """
-    for name, email in (
-        ("smoke-1a2b3c4d", "smoke-1a2b3c4d@example.invalid"),
-        ("ui-90abcdef", "ui-90abcdef@example.invalid"),
-        ("Somebody", "somebody@test.invalid"),
-    ):
-        assert account_origin.origin_of({"display_name": name, "email": email}) == (
-            account_origin.TEST_FIXTURE
-        ), f"{name} was not recognised as a fixture"
+    assert account_origin.origin_of({"origin": "test_fixture"}) == (
+        account_origin.TEST_FIXTURE
+    )
+    assert account_origin.origin_of({"origin": "human"}) == account_origin.HUMAN
+    assert account_origin.origin_of({"origin": "service"}) == account_origin.SERVICE
 
+    # THE PART THAT WOULD HAVE CAUGHT IT. A name and an address that once said
+    # "fixture" now say nothing at all, and what the row declares is the whole answer.
     assert account_origin.origin_of(
-        {"display_name": "Ivan", "email": "ivan@example.com"}
+        {"display_name": "smoke-1a2b3c4d", "email": "smoke-1a2b3c4d@example.invalid",
+         "origin": "human"}
     ) == account_origin.HUMAN
-
-    # A service account is the one thing no pattern can tell you, so it is stored.
     assert account_origin.origin_of(
-        {"display_name": "nightly-sweep", "email": "ops@example.com", "origin": "service"}
-    ) == account_origin.SERVICE
+        {"display_name": "dev-all build check", "email": "dev-all@localhost",
+         "origin": "test_fixture"}
+    ) == account_origin.TEST_FIXTURE
+
+
+def test_a_row_that_declares_no_origin_is_refused_rather_than_assumed():
+    """**Load-bearing.** The failure mode this replaces was a silent default.
+
+    `office_human.origin` was `NOT NULL DEFAULT 'human'`, so an INSERT that said nothing
+    produced a person. If `origin_of` answered `human` for a row that carries no origin,
+    the same hole would reopen one level up: a query that forgot to select the column
+    would report every account as a colleague and nothing would say so.
+
+    A missing origin is a query to fix, not a value to guess.
+    """
+    with pytest.raises(ValueError, match="carries no `origin`"):
+        account_origin.origin_of({"display_name": "Ivan", "email": "ivan@example.com"})
+
+    with pytest.raises(ValueError, match="unknown account origin"):
+        account_origin.origin_of({"origin": "probably-a-person"})
 
 
 # -------------------------------------------------------- privilege concentration
@@ -97,7 +136,10 @@ async def test_test_accounts_holding_the_strongest_role_raise_the_banner(api):
     revocation, so each of the other 94 could stop every agent on every Forge.
     """
     _real_id, token = await make("Ivan", "ivan", "ivan@office.example.com")
-    await make("smoke-deadbeef", "ivan", "smoke-deadbeef@example.invalid")
+    await make(
+        "smoke-deadbeef", "ivan", "smoke-deadbeef@example.invalid",
+        origin=account_origin.TEST_FIXTURE,
+    )
 
     overview = (await api.get("/api/access/overview", headers=auth(token))).json()
     concentration = overview["concentration"]
@@ -208,8 +250,14 @@ async def test_a_person_a_pack_names_with_no_account_is_named(api, admin):
 async def test_bulk_suspension_suspends_fixtures_and_never_the_actor(api):
     """Reversible, audited, and it cannot lock out the person running it."""
     ivan_id, token = await make("Ivan", "ivan", "ivan@office.example.com")
-    await make("smoke-11111111", "ivan", "smoke-11111111@example.invalid")
-    await make("smoke-22222222", "venture_operator", "smoke-22222222@example.invalid")
+    await make(
+        "smoke-11111111", "ivan", "smoke-11111111@example.invalid",
+        origin=account_origin.TEST_FIXTURE,
+    )
+    await make(
+        "smoke-22222222", "venture_operator", "smoke-22222222@example.invalid",
+        origin=account_origin.TEST_FIXTURE,
+    )
 
     result = (
         await api.post("/api/access/suspend-test-fixtures", json={}, headers=auth(token))
@@ -229,7 +277,10 @@ async def test_bulk_suspension_deletes_nothing(api, admin: psycopg.Connection):
     roster that reads more tidily because the evidence is gone is a worse roster.
     """
     _id, token = await make("Ivan", "ivan", "ivan@office.example.com")
-    await make("smoke-33333333", "ivan", "smoke-33333333@example.invalid")
+    await make(
+        "smoke-33333333", "ivan", "smoke-33333333@example.invalid",
+        origin=account_origin.TEST_FIXTURE,
+    )
 
     with admin.cursor() as cur:
         cur.execute("SELECT count(*) FROM office_human")

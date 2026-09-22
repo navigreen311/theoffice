@@ -10,7 +10,7 @@ import httpx
 import psycopg
 import pytest
 
-from broker import humans
+from broker import account_origin, humans
 from broker import incident_taxonomy as taxonomy
 from broker.app import app
 from broker.db import connection
@@ -73,7 +73,10 @@ async def make_human(name: str, role: str, venture_id: str | None) -> str:
     """A human holding one role, and their bearer token."""
     async with connection() as conn:
         human_id, token = await humans.create_human(
-            conn, display_name=name, email=f"{name.lower()}@incidents.invalid"
+            conn,
+            origin=account_origin.TEST_FIXTURE,
+            display_name=name,
+            email=f"{name.lower()}@incidents.invalid",
         )
         await humans.grant_role(
             conn, human_id=human_id, role=role, venture_id=venture_id, granted_by=SEED

@@ -18,7 +18,7 @@ import httpx
 import psycopg
 import pytest
 
-from broker import humans
+from broker import account_origin, humans
 from broker.app import app
 from broker.db import connection
 from tests.conftest import requires_db
@@ -55,7 +55,7 @@ def _clean(admin: psycopg.Connection):
 async def make(name: str, role: str, email: str) -> tuple[uuid.UUID, str]:
     async with connection() as conn:
         human_id, token = await humans.create_human(
-            conn, display_name=name, email=email
+            conn, origin=account_origin.HUMAN, display_name=name, email=email
         )
         await humans.grant_role(
             conn, human_id=human_id, role=role, granted_by=human_id
@@ -149,14 +149,16 @@ async def test_the_index_refuses_a_duplicate_even_if_the_function_is_bypassed(ad
     """
     with admin.cursor() as cur:
         cur.execute(
-            "INSERT INTO office_human (human_id, display_name, email, auth_method) "
-            "VALUES (%s, 'Ivan Green', 'a@office.example.com', 'sso_mfa')",
+            "INSERT INTO office_human (human_id, display_name, email, auth_method, "
+            "                          origin) "
+            "VALUES (%s, 'Ivan Green', 'a@office.example.com', 'sso_mfa', 'human')",
             (uuid.uuid4(),),
         )
         with pytest.raises(psycopg.errors.UniqueViolation):
             cur.execute(
-                "INSERT INTO office_human (human_id, display_name, email, auth_method) "
-                "VALUES (%s, '  ivan green ', 'b@office.example.com', 'sso_mfa')",
+                "INSERT INTO office_human (human_id, display_name, email, auth_method, "
+                "                          origin) "
+                "VALUES (%s, '  ivan green ', 'b@office.example.com', 'sso_mfa', 'human')",
                 (uuid.uuid4(),),
             )
     admin.rollback()

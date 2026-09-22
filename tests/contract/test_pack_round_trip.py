@@ -42,7 +42,7 @@ import psycopg.types.json
 import pytest
 import yaml
 
-from broker import humans, packs
+from broker import account_origin, humans, packs
 from broker.db import connection
 from tests.conftest import requires_db, wipe_venture
 from tests.world import PACK_PATH, build_world
@@ -68,7 +68,10 @@ async def author(admin: psycopg.Connection):
     build_world(admin)
     async with connection() as conn:
         human_id, _token = await humans.create_human(
-            conn, display_name="Round-trip operator", email="roundtrip@packs.invalid"
+            conn,
+            origin=account_origin.TEST_FIXTURE,
+            display_name="Round-trip operator",
+            email="roundtrip@packs.invalid",
         )
         await humans.grant_role(
             conn, human_id=human_id, role="venture_operator", venture_id=None,

@@ -21,7 +21,7 @@ import psycopg
 import pytest
 
 from broker import __main__ as cli
-from broker import humans, village
+from broker import account_origin, humans, village
 from broker.db import connection
 from broker.shifts import OffShift
 from client.office_client import AgentContext
@@ -51,12 +51,22 @@ async def make_operator(admin: psycopg.Connection):
     made: list[uuid.UUID] = []
 
     async def _make(
-        role: str | None, venture: str | None = VENTURE, domain: str = "staffing.test"
+        role: str | None,
+        venture: str | None = VENTURE,
+        domain: str = "staffing.test",
+        origin: str = account_origin.HUMAN,
     ) -> tuple[str, uuid.UUID]:
+        """An operator of a DECLARED origin (entry 151).
+
+        `staffing.plan` refuses anything that is not `human` - *"a shift records who put
+        an agent on duty, and a fixture names nobody who can answer for it"* - and the
+        address used to decide which it was. It says so here now, because a domain that
+        happened to end `.invalid` was never what made an account a fixture.
+        """
         email = f"op-{uuid.uuid4().hex[:8]}@{domain}"
         async with connection() as conn:
             human_id, _ = await humans.create_human(
-                conn, display_name=f"Operator {email[3:9]}", email=email
+                conn, origin=origin, display_name=f"Operator {email[3:9]}", email=email
             )
             if role:
                 await humans.grant_role(
@@ -254,7 +264,10 @@ async def test_a_test_fixture_cannot_put_an_agent_on_duty(
     granted_agent, make_operator, admin, capsys
 ):
     agent_id, _, _ = granted_agent
-    email, _ = await make_operator("ivan", venture=None, domain="example.invalid")
+    email, _ = await make_operator(
+        "ivan", venture=None, domain="example.invalid",
+        origin=account_origin.TEST_FIXTURE,
+    )
 
     assert await assign(agent_id, email, confirm=True) == 1
     assert "test_fixture account" in capsys.readouterr().out

@@ -24,7 +24,7 @@ import psycopg
 import pytest
 from psycopg.rows import dict_row
 
-from broker import humans, revocation, sync_roster, village
+from broker import account_origin, humans, revocation, sync_roster, village
 from broker.db import connection
 
 pytestmark = pytest.mark.asyncio
@@ -168,7 +168,10 @@ async def operator(admin: psycopg.Connection):
     """A real account, because attribution refuses a fixture and the suite has only those."""
     async with connection() as conn:
         human_id, _ = await humans.create_human(
-            conn, display_name="Departure operator", email="dep@x.departure.invalid"
+            conn,
+            origin=account_origin.TEST_FIXTURE,
+            display_name="Departure operator",
+            email="dep@x.departure.invalid",
         )
         await humans.grant_role(
             conn, human_id=human_id, role="ivan", venture_id=None, granted_by=human_id

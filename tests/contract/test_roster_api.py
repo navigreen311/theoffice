@@ -36,7 +36,7 @@ import httpx
 import psycopg
 import pytest
 
-from broker import humans, roster
+from broker import account_origin, humans, roster
 from broker.app import app
 from broker.db import connection
 from tests.conftest import requires_db
@@ -85,7 +85,10 @@ async def world(admin: psycopg.Connection):
     _wipe(admin)
     async with connection() as conn:
         human_id, token = await humans.create_human(
-            conn, display_name="Roster operator", email="roster@roster.invalid"
+            conn,
+            origin=account_origin.TEST_FIXTURE,
+            display_name="Roster operator",
+            email="roster@roster.invalid",
         )
         await humans.grant_role(
             conn, human_id=human_id, role="venture_operator", venture_id=None,

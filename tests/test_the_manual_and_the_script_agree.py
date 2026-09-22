@@ -49,7 +49,7 @@ from broker.db import connection
 from scripts.author_cre_forge_instructions import FORGE, MANUALS, VERSION
 from scripts.check_instructions_match import differences
 from tests.conftest import requires_db
-from tests.world import build_world, teardown_world
+from tests.world import build_world, instruction_for, teardown_world
 
 pytestmark = [requires_db, pytest.mark.db]
 
@@ -150,6 +150,7 @@ def test_the_manual_digest_matches_its_version():
 
 async def test_the_comparator_says_so_when_they_match(world, admin):
     """The positive case, so nothing below is satisfied by reporting drift always."""
+    _drop_forge(admin, "newforge")
     from scripts.author_cre_forge_instructions import main as author
 
     await author()
@@ -214,3 +215,191 @@ async def test_a_module_the_script_authors_and_nothing_holds_is_reported(world, 
         found = await differences(conn)
 
     assert [d.kind for d in found if d.module_id == "comp_analysis"] == ["not live"]
+
+
+
+def _drop_forge(admin: psycopg.Connection, forge_id: str) -> None:
+    """Remove a Forge and everything that points at it. Idempotent, both directions.
+
+    Called on the way in as well as out, for the reason `_drop_author` gives: a test
+    that dies between the insert and its teardown leaves the rows behind, and every
+    later run then fails on a unique key - a failure about the harness, reported as a
+    failure about instructions. That happened once while writing these two.
+    """
+    with admin.cursor() as cur:
+        cur.execute(
+            "DELETE FROM forge_operating_instruction WHERE forge_id = %s", (forge_id,)
+        )
+        cur.execute(
+            "DELETE FROM forge_module_registry WHERE forge_id = %s", (forge_id,)
+        )
+        cur.execute("DELETE FROM forge_registry WHERE forge_id = %s", (forge_id,))
+    admin.commit()
+
+# ------------------------------------------- every Forge, not just the one (entry 152)
+
+async def test_capitalforge_has_a_deriver_and_it_is_the_script_s_own():
+    """The registration itself, because forgetting it is the failure mode.
+
+    `scripts/check_instructions_match.py` covered `cre-forge` alone from 21 September
+    until entry 152: one import, singular constants. CapitalForge's eleven authored
+    modules were compared by nothing, measured by hand once, and a manual edited without
+    a re-run would have drifted under a green CI exactly as `buyer_match` did.
+
+    Asserted as identity rather than presence: a deriver registered under the name and
+    then replaced by something that returns `{}` would satisfy "capitalforge is in
+    SOURCES" and check nothing.
+    """
+    from scripts import instruction_sources
+
+    assert instruction_sources.capital.FORGE_ID in instruction_sources.SOURCES
+    assert (
+        instruction_sources.SOURCES[instruction_sources.capital.FORGE_ID]
+        is instruction_sources.capitalforge
+    )
+    # And the deriver reaches the script's real derivation, not a copy of it.
+    assert hasattr(instruction_sources.capital, "derive")
+
+
+async def test_a_forge_whose_manuals_a_person_authored_must_have_a_script(world, admin):
+    """**LOAD-BEARING.** The control that keeps the coverage true as Forges are added.
+
+    A loop over `SOURCES` passes for ever on a Forge nobody registered. This asks the
+    database which Forges carry human-authored instructions, and reports any that no
+    deriver here can produce - so binding a Forge and forgetting to register it breaks
+    the build instead of reporting a clean bridge.
+    """
+    from scripts.author_cre_forge_instructions import main as author
+
+    await author()
+    async with connection() as conn:
+        assert await differences(conn) == []
+
+    with admin.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO forge_registry
+              (forge_id, display_name, base_url, api_version, auth_model,
+               credential_mode, health_status)
+            VALUES (%s, %s, 'https://example.invalid', '1.0.0', 'bearer', 'brokered',
+                    'GREEN')
+            """,
+            ("newforge", "newforge"),
+        )
+        cur.execute(
+            """
+            INSERT INTO forge_module_registry
+              (forge_id, module_id, module_name, idempotency_support, is_mutating,
+               compliance_flags_implied, verified_at, verified_against,
+               verification_method)
+            VALUES ('newforge', 'do_a_thing', 'Do A Thing', 'key', TRUE, '{}',
+                    now(), 'test', 'adapter_manifest')
+            """
+        )
+        cur.execute(
+            """
+            INSERT INTO forge_operating_instruction
+              (forge_id, module_id, instruction_version, forge_api_version,
+               content, authored_by)
+            VALUES ('newforge', 'do_a_thing', '1.0.0', '1.0.0', %s, %s)
+            """,
+            # A COMPLETE instruction, from the world's own helper: the schema requires
+            # every section, and a half-built row would fail on the CHECK rather than
+            # on the thing this test is about.
+            (Json(instruction_for("do_a_thing")), AUTHOR_ID),
+        )
+    admin.commit()
+
+    try:
+        async with connection() as conn:
+            found = await differences(conn)
+        named = [d for d in found if d.forge_id == "newforge"]
+        assert named, (
+            "a Forge with a human-authored live instruction and no deriver was not "
+            f"reported: {found}"
+        )
+        assert named[0].kind == "no authoring script"
+    finally:
+        with admin.cursor() as cur:
+            cur.execute("DELETE FROM forge_operating_instruction "
+                        " WHERE forge_id = 'newforge'")
+            cur.execute("DELETE FROM forge_module_registry "
+                        " WHERE forge_id = 'newforge'")
+            cur.execute("DELETE FROM forge_registry WHERE forge_id = 'newforge'")
+        admin.commit()
+
+
+async def test_a_fixture_authored_row_is_not_a_manual_anybody_must_script(world, admin):
+    """The other side of the same rule, and why it is drawn at the author.
+
+    A prepared test world inserts `forge_operating_instruction` rows for `simforge` and
+    `voiceforge` so the gates have something to read. They are scaffolding. Demanding an
+    authoring script for them would be demanding a script to maintain fixtures, and the
+    comparator would fail on every database that had ever run the suite.
+
+    **"A person authored it" is a declaration now, not a guess** - `office_human.origin`
+    is set at creation since entry 151 - so this test and the one above rest on the same
+    fact the same way.
+    """
+    _drop_forge(admin, "scaffoldforge")
+    from scripts.author_cre_forge_instructions import main as author
+
+    await author()
+
+    fixture_author = uuid.UUID("9a11c0de-0000-4000-8000-00000000f1ce")
+    with admin.cursor() as cur:
+        cur.execute(
+            "INSERT INTO office_human (human_id, display_name, email, token_hash, "
+            "                          status, origin, auth_method) "
+            "VALUES (%s, 'Scaffolding', 'scaffold@world.invalid', %s, 'active', "
+            "        'test_fixture', 'sso_mfa')",
+            (fixture_author, f"scaffold-token-{fixture_author.hex}"),
+        )
+        cur.execute(
+            """
+            INSERT INTO forge_registry
+              (forge_id, display_name, base_url, api_version, auth_model,
+               credential_mode, health_status)
+            VALUES (%s, %s, 'https://example.invalid', '1.0.0', 'bearer', 'brokered',
+                    'GREEN')
+            """,
+            ("scaffoldforge", "scaffoldforge"),
+        )
+        cur.execute(
+            """
+            INSERT INTO forge_module_registry
+              (forge_id, module_id, module_name, idempotency_support, is_mutating,
+               compliance_flags_implied, verified_at, verified_against,
+               verification_method)
+            VALUES ('scaffoldforge', 'do_a_thing', 'Do A Thing', 'key', TRUE, '{}',
+                    now(), 'test', 'adapter_manifest')
+            """
+        )
+        cur.execute(
+            """
+            INSERT INTO forge_operating_instruction
+              (forge_id, module_id, instruction_version, forge_api_version,
+               content, authored_by)
+            VALUES ('scaffoldforge', 'do_a_thing', '1.0.0', '1.0.0', %s, %s)
+            """,
+            (Json(instruction_for("do_a_thing")), fixture_author),
+        )
+    admin.commit()
+
+    try:
+        async with connection() as conn:
+            found = await differences(conn)
+        assert [d for d in found if d.forge_id == "scaffoldforge"] == [], (
+            "a fixture-authored instruction row was treated as a manual needing a "
+            f"script: {found}"
+        )
+    finally:
+        with admin.cursor() as cur:
+            cur.execute("DELETE FROM forge_operating_instruction "
+                        " WHERE forge_id = 'scaffoldforge'")
+            cur.execute("DELETE FROM forge_module_registry "
+                        " WHERE forge_id = 'scaffoldforge'")
+            cur.execute("DELETE FROM forge_registry WHERE forge_id = 'scaffoldforge'")
+            cur.execute("DELETE FROM office_human WHERE human_id = %s",
+                        (fixture_author,))
+        admin.commit()

@@ -27,7 +27,7 @@ import json
 import sys
 
 import broker  # noqa: F401  - imported for its event-loop policy side effect
-from broker import audit, humans, sweeps
+from broker import account_origin, audit, humans, sweeps
 from broker.db import connection
 
 
@@ -132,7 +132,11 @@ async def _bootstrap_human(name: str, email: str, role: str) -> int:
             return 1
 
         human_id, token = await humans.create_human(
-            conn, display_name=name, email=email
+            conn, display_name=name, email=email,
+            # THE FIRST PERSON, declared (entry 151). This command exists to create one
+            # human and refuses if any already exist; the account it makes is the one
+            # that bootstraps every later grant.
+            origin=account_origin.HUMAN,
         )
         # granted_by is the human themselves, and only here. Every later grant names a
         # different granter because `assert_may_grant` forbids granting to yourself -

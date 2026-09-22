@@ -20,7 +20,7 @@ import httpx
 import psycopg
 import pytest
 
-from broker import humans
+from broker import account_origin, humans
 from broker.app import app
 from broker.db import connection
 from tests.conftest import requires_db
@@ -88,7 +88,10 @@ def auth(token: str) -> dict[str, str]:
 async def make_human(name: str, role: str, venture: str | None = MINE) -> str:
     async with connection() as conn:
         human_id, token = await humans.create_human(
-            conn, display_name=name, email=f"{name.lower()}@kb.invalid"
+            conn,
+            origin=account_origin.TEST_FIXTURE,
+            display_name=name,
+            email=f"{name.lower()}@kb.invalid",
         )
         await humans.grant_role(
             conn, human_id=human_id, role=role, venture_id=venture, granted_by=AUTHOR
