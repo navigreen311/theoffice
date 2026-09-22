@@ -104,6 +104,11 @@ VENTURE_DEPENDENTS = (
     # Append-only tables first; they need their guard trigger disabled, which is why
     # they are named separately below rather than being deleted in this loop.
     "provisioning_gate_result",
+    # Venture-scoped, and it leaks between tests without this: one suite's drill is
+    # evidence a later suite's attestation reads, so a department nobody escalated for
+    # could be attested verified (entry 149). It has no `forge_id`, so it belongs in
+    # this list and not in FORGE_DEPENDENTS - which is where it went first.
+    "escalation_record",
     "provisioning_run",
     "signoff_record",
     "curriculum_submission",

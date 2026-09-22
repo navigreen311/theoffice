@@ -12996,3 +12996,98 @@ the rule generalises, and to which acts, is not settled here.
 reachable through `humans.create_human` can stand for a person in a test. The approvals
 suite promotes its own account with a comment rather than weakening the classifier, and
 that is a seam worth knowing about before somebody writes a test that cannot pass.
+
+## 149. An escalation leaves a record
+
+**Two rulings by Ivan Green, 21 September 2026:**
+
+> *"A role grant or revocation writes an audit event, in `grant_role` and `revoke_role`
+> themselves. Measured: both wrote none, and `revoke_role`'s docstring claims the audit
+> log records it."*
+>
+> *"An escalation leaves a record: raised, by whom, routed to which named human,
+> received, and answered, with timestamps. Both escalation paths return a route and
+> write nothing. An escalation path cannot be attested verified until it can be shown to
+> have been travelled."*
+
+### The role change nobody could verify
+
+`grant_role` wrote `granted_by` and `granted_at` on the role row; `revoke_role` stamped
+`revoked_at` and `revoked_by`. Both are a record. **Neither is the hash-chained one**, so
+nothing a ledger verification covers said who changed who may act — and `revoke_role`'s
+own docstring said *"the audit log says who"*, which the code did not support.
+
+It surfaced granting Ira Green `compliance_officer` for Greenstone: the event had to be
+written by hand beside the call. **That is the shape that tells you the function should
+have written it**, and it is why the ruling names the two functions rather than the act.
+
+Nothing is claimed when nothing changed. `ON CONFLICT DO NOTHING` makes a re-grant a
+no-op, and an event saying a role was granted when the human already held it is a false
+entry in a chain whose entire value is that it contains none.
+
+### Both escalation paths resolved and neither had a caller
+
+`governance` and `operational` resolve a recipient and return a `Route`. Measured:
+**neither has a single caller in `broker/` or `generators/`.** The only references
+outside that module are `appointment.py` declaring a path on the artifact and calling
+`assert_path` to keep a governance decision away from an agent.
+
+So the attestation brief of 21 September could say only that both resolve. Nothing had
+travelled either, and there was nowhere to record it if anything had.
+
+### Five facts, three timestamps
+
+    raised       raised_at, raised_by, raised_by_kind
+    by whom      an agent or a human, named - the kind says which, because the two ids
+                 come from different tables
+    routed to    routed_to_name always; routed_to_human when the path is GOVERNANCE,
+                 enforced by a CHECK, because a governance route that names no human
+                 could not have been delivered to anybody
+    received     received_at, received_by
+    answered     answered_at, answered_by, answer
+
+**Receipt is its own step and that is the point.** Raised-and-answered in one second by
+one process proves a function returns; the ruling is about somebody on the other end
+getting it. `received_at` NULL with `raised_at` set is a live finding — an escalation
+nobody picked up — and `outstanding` is where a reader sees it.
+
+An answer before a receipt is refused twice, by the writer and by a CHECK. An answer is a
+sentence, not a flag.
+
+### The resolvers stay resolvers
+
+`raise_escalation` is the act; `governance` and `operational` are unchanged. A resolver
+that wrote a row every time somebody asked *"who would this go to"* would fill the record
+with escalations nobody made, and `travelled` would then be satisfied by a question.
+
+`assert_path` runs before anything is written, so a governance decision addressed to an
+agent is refused rather than recorded as having been refused.
+
+### What it costs an attestation
+
+`attest` now refuses `escalation_path_verified=True` unless a complete
+raised–received–answered row exists **for that department**. One drill attests one
+department: `travelled` matches on `department` and never on NULL, so a venture-wide
+escalation — a capacity shortfall — is evidence about the venture's path and not about
+research's.
+
+**Only the true verdict is gated.** Requiring a successful drill before somebody may
+write down that a path does *not* work would be the register forcing a lie, which is the
+same argument that makes a negative attestation recordable at all.
+
+The check runs **after** the authorisation. Telling somebody their evidence is missing
+when they were never allowed to attest answers the wrong question, and it tells a caller
+without founder authority what evidence would have worked.
+
+### Two seams this exposed, both in the harness
+
+`escalation_record` leaked between tests until it was added to the venture wipe — one
+suite's drill was evidence a later suite's attestation could read. **It went into
+`FORGE_DEPENDENTS` first**, which was wrong: the table has no `forge_id`, and the two
+lists answer different questions.
+
+Every account a test creates the ordinary way is a fixture, because
+`account_origin.origin_of` classifies every `.invalid` address as one (entry 148). A
+drill needs a person — `governance` resolves through `attributable_actor`, which refuses
+to deliver to a fixture — so two fixtures are promoted explicitly, with the reason beside
+them, rather than by weakening the classifier.

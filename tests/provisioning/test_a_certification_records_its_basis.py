@@ -40,7 +40,7 @@ import psycopg
 import pytest
 import pytest_asyncio
 
-from broker import attestation, certification, humans
+from broker import attestation, certification, escalation, humans
 from broker.db import connection
 from broker.errors import NotAuthorized
 from tests.conftest import requires_db
@@ -86,12 +86,60 @@ async def founder(world) -> humans.Human:
             conn, human_id=human_id, role="ivan", venture_id=None,
             granted_by=uuid.UUID("00000000-0000-5000-8000-00000000aaaa"),
         )
+        # A PERSON, not a fixture. Two things need it, both ruled:
+        # `assert_named_human`'s rule is about proposals and does not reach here, but
+        # `escalation.governance` resolves through `attributable_actor`, which refuses
+        # to deliver to a fixture - so a drill raised by this account has nowhere to go.
+        # `account_origin` classifies every `.invalid` email as a fixture (entry 148),
+        # so the promotion is explicit rather than reachable through `create_human`.
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "UPDATE office_human SET origin = 'human' WHERE human_id = %s",
+                (human_id,),
+            )
+        await conn.commit()
         resolved = await humans.authenticate(conn, token)
     assert resolved is not None
     return resolved
 
 
+async def _travel(conn, human, department: str = DEPARTMENT):
+    """Raise, receive and answer one escalation for a department.
+
+    **What `attest` now requires before it will accept `escalation_path_verified`** -
+    ruled 21 September 2026, entry 149: an escalation path cannot be attested verified
+    until it can be shown to have been travelled.
+
+    The whole round trip, because that is the claim: a raise alone is a function that
+    returned, and a raise-and-answer with no receipt in between is two timestamps.
+    """
+    raised = await escalation.raise_escalation(
+        conn,
+        kind="certification",
+        path=escalation.Path.GOVERNANCE,
+        venture_id=VENTURE,
+        department=department,
+        reason="drill: does this department's governance path reach a person",
+        raised_by=human.human_id,
+        raised_by_kind="human",
+    )
+    await escalation.record_receipt(
+        conn, escalation_id=raised.escalation_id, received_by=human.human_id
+    )
+    return await escalation.record_answer(
+        conn, escalation_id=raised.escalation_id, answered_by=human.human_id,
+        answer="Received and answered by hand; the route resolved to a named person.",
+    )
+
+
 async def _attest(conn, human, **over):
+    """Attests, and travels the path first when the attestation says the path works.
+
+    The escalation is raised HERE rather than inside `attest`, which is the point of the
+    ruling: the evidence is a thing somebody did, and an attestation reads it.
+    """
+    if over.get("escalation_path_verified", True):
+        await _travel(conn, human, over.get("department", DEPARTMENT))
     kwargs = {
         "venture_id": VENTURE, "department": DEPARTMENT, "forge_id": FORGE,
         "human": human,
@@ -117,9 +165,21 @@ async def test_founder_authority_attests(conn, founder):
 async def test_a_venture_operator_may_not_attest(conn, operator):
     """**Not a matter of degree.** `operator` holds `venture_operator`, which is enough
     to review artifacts at Gate 4 and to abandon a run, and is not enough to stand in for
-    a certification test that does not exist."""
+    a certification test that does not exist.
+
+    Called directly rather than through `_attest`, which travels the escalation path
+    first: this test is about who may attest, and the authorisation is checked before
+    any evidence is looked for.
+    """
     with pytest.raises(NotAuthorized):
-        await _attest(conn, operator)
+        await attestation.attest(
+            conn, venture_id=VENTURE, department=DEPARTMENT, forge_id=FORGE,
+            human=operator,
+            escalation_path_verified=True,
+            escalation_path_reason=ESCALATION_REASON,
+            compliance_coupling_verified=True,
+            compliance_coupling_reason=COUPLING_REASON,
+        )
 
 
 async def test_passed_is_derived_from_the_two_facts(conn, founder):
@@ -297,6 +357,79 @@ async def test_a_basis_and_a_ref_cannot_disagree(conn, founder, admin):
                 (uuid.uuid4(), FORGE, basis, ref),
             )
         admin.rollback()
+
+
+# ---------------------------------------- an escalation path has to have been travelled
+
+async def test_a_path_nobody_has_travelled_cannot_be_attested_verified(conn, founder):
+    """**The ruling, and the reason the stop-gap gets stricter rather than looser.**
+
+    Ruled 21 September 2026, entry 149. An attestation exists because no test can
+    establish that a department's escalation path works - and "I looked at it" is a
+    different claim from "somebody raised one and somebody answered it". The second is
+    recordable now, so the first stops being enough.
+    """
+    with pytest.raises(attestation.AttestationError) as refused:
+        await attestation.attest(
+            conn, venture_id=VENTURE, department="banking", forge_id=FORGE,
+            human=founder,
+            escalation_path_verified=True,
+            escalation_path_reason="I read the route and it resolves to a person.",
+            compliance_coupling_verified=True,
+            compliance_coupling_reason=COUPLING_REASON,
+        )
+    assert "raised, received and answered" in str(refused.value)
+    assert "banking" in str(refused.value)
+
+
+async def test_a_travelled_path_may_be_attested(conn, founder):
+    """The positive case, so the gate is a requirement rather than a wall."""
+    await _travel(conn, founder, "banking")
+    found = await attestation.attest(
+        conn, venture_id=VENTURE, department="banking", forge_id=FORGE, human=founder,
+        escalation_path_verified=True,
+        escalation_path_reason="Drill of 21 September: raised, received, answered.",
+        compliance_coupling_verified=True,
+        compliance_coupling_reason=COUPLING_REASON,
+    )
+    assert found.escalation_path_verified is True
+
+
+async def test_another_departments_drill_is_not_evidence(conn, founder):
+    """One drill attests one department.
+
+    `travelled` matches on `department` and never on NULL, so a venture-wide escalation
+    - a capacity shortfall, say - is evidence about the venture's path and not about
+    research's. Counting it would let one drill attest three departments.
+    """
+    await _travel(conn, founder, "research")
+    with pytest.raises(attestation.AttestationError):
+        await attestation.attest(
+            conn, venture_id=VENTURE, department="operations", forge_id=FORGE,
+            human=founder,
+            escalation_path_verified=True,
+            escalation_path_reason="research's drill went fine.",
+            compliance_coupling_verified=True,
+            compliance_coupling_reason=COUPLING_REASON,
+        )
+
+
+async def test_reporting_a_broken_path_needs_no_drill(conn, founder):
+    """**Only the TRUE verdict is gated**, and that is deliberate.
+
+    Requiring a successful drill before somebody may write down that a path does not
+    work would be the register forcing a lie - the same argument that makes a negative
+    attestation recordable at all.
+    """
+    found = await attestation.attest(
+        conn, venture_id=VENTURE, department="banking", forge_id=FORGE, human=founder,
+        escalation_path_verified=False,
+        escalation_path_reason="No queue answers a banking escalation today.",
+        compliance_coupling_verified=True,
+        compliance_coupling_reason=COUPLING_REASON,
+    )
+    assert found.escalation_path_verified is False
+    assert found.passed is False
 
 
 # ------------------------------------------------------------------ what ends it

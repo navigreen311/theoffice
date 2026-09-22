@@ -47,6 +47,7 @@ from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 
 from broker import humans
+from broker.audit import write_event
 from broker.errors import OfficeError
 
 #: The COO position, in the Village's own terms. Not a name, and not a `role_key`:
@@ -237,3 +238,255 @@ def assert_path(kind: str, path: Path) -> None:
             kind=kind,
             attempted_path=path.value,
         )
+
+
+# ======================================================= the record an escalation leaves
+
+@dataclass(frozen=True, slots=True)
+class Escalation:
+    """One escalation, and what has happened to it so far."""
+
+    escalation_id: uuid.UUID
+    venture_id: str
+    department: str | None
+    route: Route
+    kind: str
+    raised_at: Any
+    raised_by: uuid.UUID
+    raised_by_kind: str
+    received_at: Any = None
+    received_by: uuid.UUID | None = None
+    answered_at: Any = None
+    answered_by: uuid.UUID | None = None
+    answer: str | None = None
+
+    @property
+    def travelled(self) -> bool:
+        """Raised, received AND answered. Anything less is a path nobody has shown works.
+
+        Ruled 21 September 2026: *"An escalation path cannot be attested verified until
+        it can be shown to have been travelled."* Received is the half that matters -
+        raised-and-answered by one process in one second proves a function returns.
+        """
+        return self.received_at is not None and self.answered_at is not None
+
+
+async def raise_escalation(
+    conn: AsyncConnection,
+    *,
+    kind: str,
+    path: Path,
+    venture_id: str,
+    reason: str,
+    raised_by: uuid.UUID,
+    raised_by_kind: str = "agent",
+    department: str | None = None,
+) -> Escalation:
+    """Route an escalation AND record that it was raised.
+
+    RULED 21 SEPTEMBER 2026 (decisions entry 149)
+    =============================================
+
+        *"An escalation leaves a record: raised, by whom, routed to which named human,
+        received, and answered, with timestamps. Both escalation paths return a route
+        and write nothing."*
+
+    `governance` and `operational` stay exactly what they were: resolvers, which answer
+    "who would this go to" without asserting that anybody sent anything. **Resolving a
+    route is not raising an escalation**, and a function that wrote a row every time
+    somebody asked the question would fill the record with escalations nobody made.
+
+    This is the act. It resolves through the same two functions, writes the row, and
+    returns both.
+
+    `assert_path` is called FIRST, before anything is written. A governance decision
+    addressed to an agent is refused rather than recorded as refused.
+    """
+    assert_path(kind, path)
+    if not reason.strip():
+        raise OfficeError("an escalation says why it was raised")
+    if raised_by_kind not in ("agent", "human"):
+        raise OfficeError(f"unknown raiser kind {raised_by_kind!r}")
+
+    route = (
+        await governance(conn, reason=reason) if path is Path.GOVERNANCE
+        else await operational(conn, reason=reason)
+    )
+    if route.to is None or not str(route.to).strip():
+        # An operational route with an empty COO seat resolves to nobody, and
+        # `operational` says so rather than substituting a holder. Raising into that is
+        # not an escalation, it is a message addressed to a vacancy.
+        raise OfficeError(
+            f"the {path.value} path resolves to nobody right now; there is nothing to "
+            "escalate to and a row saying otherwise would be a delivery nobody made"
+        )
+
+    escalation_id = uuid.uuid4()
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "INSERT INTO escalation_record "
+            "  (escalation_id, venture_id, department, path, kind, reason, "
+            "   raised_by, raised_by_kind, routed_to_name, routed_to_human) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            (
+                escalation_id, venture_id, department, path.value, kind, reason.strip(),
+                raised_by, raised_by_kind, route.to, route.human_id,
+            ),
+        )
+    await conn.commit()
+
+    await write_event(
+        event_type="escalation_raised",
+        actor_type=raised_by_kind, actor_id=raised_by, venture_id=venture_id,
+        subject={
+            "escalation_id": str(escalation_id), "kind": kind, "path": path.value,
+            "department": department, "routed_to": route.to,
+            "routed_to_human": str(route.human_id) if route.human_id else None,
+        },
+    )
+    found = await get(conn, escalation_id)
+    assert found is not None
+    return found
+
+
+async def record_receipt(
+    conn: AsyncConnection, *, escalation_id: uuid.UUID, received_by: uuid.UUID
+) -> Escalation:
+    """Somebody on the other end picked it up.
+
+    **The step the two paths could not demonstrate.** Delivery is what an escalation
+    path is, and both of them returned a recipient's name and stopped there.
+
+    Idempotent on the first receipt: a second call leaves the original timestamp alone,
+    because when it was picked up is a fact and the second caller is not a second
+    pickup.
+    """
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "UPDATE escalation_record SET received_at = now(), received_by = %s "
+            " WHERE escalation_id = %s AND received_at IS NULL",
+            (received_by, escalation_id),
+        )
+    await conn.commit()
+
+    found = await get(conn, escalation_id)
+    if found is None:
+        raise LookupError(f"no such escalation {escalation_id}")
+    if found.received_at is not None:
+        await write_event(
+            event_type="escalation_received",
+            actor_type="human", actor_id=received_by, venture_id=found.venture_id,
+            subject={"escalation_id": str(escalation_id),
+                     "department": found.department},
+        )
+    return found
+
+
+async def record_answer(
+    conn: AsyncConnection, *, escalation_id: uuid.UUID, answered_by: uuid.UUID,
+    answer: str,
+) -> Escalation:
+    """What the recipient decided. Refused before a receipt, and refused empty.
+
+    The CHECK in 0051 refuses both as well, and this refuses them first so a caller
+    meets a sentence rather than a constraint name.
+    """
+    if not answer.strip():
+        raise OfficeError("an escalation is answered with a sentence, not a flag")
+    found = await get(conn, escalation_id)
+    if found is None:
+        raise LookupError(f"no such escalation {escalation_id}")
+    if found.received_at is None:
+        raise OfficeError(
+            "this escalation has not been received, so it cannot be answered. An answer "
+            "before a receipt is not a path that worked; it is two timestamps somebody "
+            "wrote."
+        )
+
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "UPDATE escalation_record SET answered_at = now(), answered_by = %s, "
+            "       answer = %s "
+            " WHERE escalation_id = %s AND answered_at IS NULL",
+            (answered_by, answer.strip(), escalation_id),
+        )
+    await conn.commit()
+
+    await write_event(
+        event_type="escalation_answered",
+        actor_type="human", actor_id=answered_by, venture_id=found.venture_id,
+        subject={"escalation_id": str(escalation_id), "department": found.department,
+                 "answer": answer.strip()},
+    )
+    answered = await get(conn, escalation_id)
+    assert answered is not None
+    return answered
+
+
+async def get(conn: AsyncConnection, escalation_id: uuid.UUID) -> Escalation | None:
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT * FROM escalation_record WHERE escalation_id = %s", (escalation_id,)
+        )
+        row = await cur.fetchone()
+    return _escalation(row) if row else None
+
+
+async def travelled(
+    conn: AsyncConnection, *, venture_id: str, department: str
+) -> Escalation | None:
+    """The newest escalation for this department that was raised, received AND answered.
+
+    **What `attestation.attest` reads before it will accept `escalation_path_verified`.**
+    Ruled 21 September 2026: an escalation path cannot be attested verified until it can
+    be shown to have been travelled.
+
+    `department = %s` and never NULL: a venture-wide escalation is evidence about the
+    venture's path, not about research's, and counting it would let one drill attest
+    three departments.
+    """
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT * FROM escalation_record "
+            " WHERE venture_id = %s AND department = %s "
+            "   AND received_at IS NOT NULL AND answered_at IS NOT NULL "
+            " ORDER BY answered_at DESC LIMIT 1",
+            (venture_id, department),
+        )
+        row = await cur.fetchone()
+    return _escalation(row) if row else None
+
+
+async def outstanding(conn: AsyncConnection, *, venture_id: str) -> list[Escalation]:
+    """Raised and not yet answered, oldest first. The queue a drill produces."""
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT * FROM escalation_record "
+            " WHERE venture_id = %s AND answered_at IS NULL ORDER BY raised_at",
+            (venture_id,),
+        )
+        rows = await cur.fetchall()
+    return [_escalation(row) for row in rows]
+
+
+def _escalation(row: dict[str, Any]) -> Escalation:
+    return Escalation(
+        escalation_id=row["escalation_id"],
+        venture_id=row["venture_id"],
+        department=row["department"],
+        route=Route(
+            path=Path(row["path"]),
+            to=row["routed_to_name"],
+            reason=row["reason"],
+            human_id=row["routed_to_human"],
+        ),
+        kind=row["kind"],
+        raised_at=row["raised_at"],
+        raised_by=row["raised_by"],
+        raised_by_kind=row["raised_by_kind"],
+        received_at=row["received_at"],
+        received_by=row["received_by"],
+        answered_at=row["answered_at"],
+        answered_by=row["answered_by"],
+        answer=row["answer"],
+    )
