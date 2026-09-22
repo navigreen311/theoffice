@@ -13674,3 +13674,75 @@ fixed.
 Proposals need no equivalent: `expires_at` is the deadline and `status = 'expired'` says
 it passed, so the row already cannot record a different moment. The audit entry is where
 the two times were confused, and that is where the two fields now are.
+
+
+## 158. An escalation is overdue at four hours
+
+**Ruling by Ivan Green, 22 September 2026:**
+
+> *"An escalation is overdue four hours after it is raised, for every venture and
+> department. Overdue flags it and cancels nothing. Measured: d8e8f35c sat 13 hours with
+> nothing marking it late."*
+
+### The question entry 156 left open, answered
+
+156 built the expiry job and refused to invent the number: nothing in the Pack, the
+schema or this ledger said what made an escalation late, so `escalation_record.expires_at`
+went in nullable with no default and the sweep reported
+`escalations_overdue_without_a_deadline` on every pass so the gap stayed visible.
+
+This is the number. **Four hours, and the same four hours everywhere.**
+
+Universal on the ruling's own terms. A deadline that varied by department would be a
+second thing to configure, a second thing to get wrong, and a reason for every late
+escalation to be somebody else's rule. `test_nothing_configures_the_threshold_per_venture`
+reads the signatures so a way to vary it cannot be added quietly.
+
+### Flags, and cancels nothing — which is the part that decides what this is
+
+Four hours is a number and could have been any number. *"Cancels nothing"* is the ruling.
+
+An escalation that **expired** at four hours would be one the platform had given up on.
+The drill that produced this ruling is the argument against that: `d8e8f35c` was raised
+at 21:16 on the 21st, received at 10:40 the next morning — thirteen hours — and answered
+four minutes after that. **People arrive late rather than not at all.** A rule that
+cancelled would have made that answer impossible, and the answer was the point of the
+drill.
+
+So an overdue escalation stays in `waiting`, stays receivable, stays answerable, and the
+buttons beside it are unchanged. What the mark says is how long it has been there, which
+is the one thing the page could not say while `d8e8f35c` sat in it.
+
+### Derived, never stored
+
+Overdue is a fact about the clock and two timestamps, so it is computed wherever it is
+shown. A stored flag would mean a row reading "late" until somebody re-ran a job, and a
+row reading "not late" four hours and one second after it was raised.
+
+There is **no migration**. That is not an economy; it is the shape of the rule.
+
+### Receipt stops the clock, not the answer
+
+The ruling is about an escalation nobody has picked up. Once a named human has said they
+have it, what is outstanding is their answer — a different question, on a different
+clock, and not one this entry rules on.
+
+> **Still open: is an answer ever late, and what happens then?** Receipt is a person
+> saying they have it. Nothing yet says how long they then have, and nothing here
+> invents it.
+
+### Where it shows
+
+    escalation.is_overdue()   the predicate, taking the clock as an argument
+    escalation.overdue()      the rows, per venture or across all of them
+    routed_to()               `overdue` on each item in a person's inbox
+    the deadline sweep        `escalations_overdue`, replacing the counter that
+                              existed only because the number was missing
+    /escalations              an amber mark beside the item, and the waiting time
+
+### What this does not touch
+
+`escalation_record.expires_at` and `expired_at`, added by 156, remain unused — nothing
+sets a deadline, so nothing expires. They are left in place rather than dropped because
+overdue and expiry are different claims, and **whether an escalation ever expires is
+still unruled.** Removing the columns would answer that question by deletion.

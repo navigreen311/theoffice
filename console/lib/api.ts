@@ -822,6 +822,9 @@ export type RoutedEscalation = {
   received_at: string | null;
   answered_at: string | null;
   answer: string | null;
+  /** Late: raised more than `overdue_after_hours` ago and still unreceived. Flags only. */
+  overdue: boolean;
+  overdue_after_hours: number;
 };
 
 /** Three lists, because the act available differs per list. */
