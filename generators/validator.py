@@ -1112,6 +1112,29 @@ async def _v28_library_refs_resolve(
     the entry does not exist, which is the thing V28 would otherwise have to discover.
     A ref that resolves to nothing is the failure, because that Pack claims coverage it
     does not have.
+
+    A DRAFT NOW FAILS. RULED 22 SEPTEMBER 2026 (decisions entry 165)
+    ===============================================================
+
+        *"An entry is relied on only when approved and counsel-reviewed. Anything
+        treating a draft as authoritative refuses."*
+
+        **This rule used to pass one and say so.** The words were: *"A draft does not
+        fail: the Pack cites an entry that exists and is this venture's... Cited, not
+        settled."* That reasoning was about the database having no `status` column at
+        all, so an unreviewed entry read exactly like a statute, and naming the drafts
+        in the reason was the best available answer.
+
+        It is not the answer any more, because there is now an act that changes the
+        state. A note saying "cited, not settled" is advice; a Pack that passes Gate 2
+        on it provisions agents whose compliance surface rests on text nobody adopted
+        and no lawyer read.
+
+        Measured when this changed: all 21 entries are drafts and none is
+        counsel-reviewed, so **every Pack citing a library entry now fails V28.** That
+        is the work reported. The remedy is `approve_compliance_entry` and
+        `record_counsel_review`, which is a different instruction from the one this rule
+        used to give and a reachable one.
     """
     refs = [
         c.library_entry_ref
@@ -1139,23 +1162,25 @@ async def _v28_library_refs_resolve(
         {f"{ref} (registered to {owner})" for ref, owner, _s, _c in rows
          if owner != pack.venture_id and ref not in found}
     )
-    drafts = sorted(
-        ref for ref, owner, status, reviewed in rows
-        if owner == pack.venture_id and (status != "approved" or reviewed is None)
+    # NOT RELIED ON: this venture's entry, resolving, and not yet something a Pack may
+    # rest on. Entry 165. Split by which half is missing, because "get it approved" and
+    # "get a lawyer to read it" go to different people.
+    unapproved = sorted(
+        ref for ref, owner, status, _reviewed in rows
+        if owner == pack.venture_id and status != "approved"
     )
+    unreviewed = sorted(
+        ref for ref, owner, _status, reviewed in rows
+        if owner == pack.venture_id and reviewed is None
+    )
+    not_relied_on = sorted(set(unapproved) | set(unreviewed))
 
     missing = sorted(set(refs) - found - {e.split(" ")[0] for e in elsewhere})
-    if not missing and not elsewhere:
-        # A draft does not fail: the Pack cites an entry that exists and is this
-        # venture's. It is said out loud because the database used to hold no status at
-        # all, so an entry written by hand and approved by nobody read exactly like one
-        # taken from a statute - and this rule was where that impression was formed.
-        note = (
-            f" {len(drafts)} of them {'is' if len(drafts) == 1 else 'are'} not approved "
-            f"or not counsel-reviewed: {_join(drafts)}. Cited, not settled."
-            if drafts else ""
+    if not missing and not elsewhere and not not_relied_on:
+        return True, (
+            f"{len(found)} of {len(refs)} library ref(s) resolve, and every one is "
+            "approved and counsel-reviewed"
         )
-        return True, f"{len(found)} of {len(refs)} library ref(s) resolve.{note}"
 
     # UNWRITTEN AND UNLOADED ARE DIFFERENT FACTS, and saying "resolve to nothing" for
     # both is what let nineteen fully-written entries sit behind this rule reading as
@@ -1167,6 +1192,21 @@ async def _v28_library_refs_resolve(
     unwritten = [r for r in missing if r not in on_disk]
 
     parts: list[str] = []
+    if not_relied_on:
+        halves = []
+        if unapproved:
+            halves.append(f"not approved: {_join(unapproved)}")
+        if unreviewed:
+            halves.append(f"no counsel review recorded: {_join(unreviewed)}")
+        parts.append(
+            f"{len(not_relied_on)} RESOLVE BUT ARE NOT RELIED ON - "
+            + "; ".join(halves)
+            + ". Entry 165: an entry is relied on only when approved AND "
+            "counsel-reviewed. Approval is a separate act by somebody who did not "
+            "write the entry; a counsel review names the reviewer, their firm, the "
+            "date and the claims confirmed. Do NOT re-author these - re-authoring "
+            "clears both."
+        )
     if elsewhere:
         parts.append(
             f"{len(elsewhere)} REGISTERED TO ANOTHER VENTURE: {_join(elsewhere)}. A ref "
@@ -1188,9 +1228,10 @@ async def _v28_library_refs_resolve(
             f"packs/compliance-library/ either: {_join(unwritten)}. Write the entry, "
             "or set library_gap so the Pack stops claiming coverage it does not have."
         )
+    unusable = len(missing) + len(elsewhere) + len(not_relied_on)
     return False, (
-        f"[COMPLIANCE LIBRARY GAP] {len(missing) + len(elsewhere)} of {len(refs)} ref(s) "
-        f"do not resolve for {pack.venture_id}. " + " ".join(parts)
+        f"[COMPLIANCE LIBRARY GAP] {unusable} of {len(refs)} ref(s) cannot be relied on "
+        f"for {pack.venture_id}. " + " ".join(parts)
     )
 
 

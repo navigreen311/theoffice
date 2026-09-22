@@ -603,6 +603,18 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
         # `/api/escalations` scopes on `routed_to_human = me.human_id`.
         "/api/escalations/{escalation_id}/receive",
         "/api/escalations/{escalation_id}/answer",
+        # APPROVAL AND COUNSEL REVIEW. Ruled 22 September 2026, entries 163 and 164.
+        #
+        # Two routes and not one, because they are two claims resting on two kinds of
+        # authority: approval is this Office adopting the entry, and a counsel review is
+        # a named human reporting what a lawyer said. Collapsing them would let one POST
+        # do both, which is the single-writer shape entry 163 exists to end.
+        #
+        # Neither takes an actor. `me` approves and `me` records, and both are refused
+        # when `me` is the entry's author - in the domain function, and again in
+        # migration 0057's CHECK on the same row.
+        "/api/knowledge/compliance/approve",
+        "/api/knowledge/compliance/counsel-review",
     }, f"the write surface changed: {sorted(writes)}"
 
 

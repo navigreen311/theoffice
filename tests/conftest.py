@@ -18,6 +18,7 @@ import uuid
 from collections.abc import AsyncIterator, Iterator
 
 import psycopg
+import psycopg.types.json
 import pytest
 import pytest_asyncio
 
@@ -270,11 +271,59 @@ def declare_author(
             "                          origin, token_hash) "
             "VALUES (%s, %s, %s, 'bearer_token', 'human', %s) "
             "ON CONFLICT (human_id) DO NOTHING",
-            (human_id, display_name, f"{human_id.hex[:12]}@author.invalid",
+            # The FULL hex, not a prefix: the ids these tests use differ only in their
+            # last characters, and a prefix collided on the email unique index.
+            (human_id, display_name, f"{human_id.hex}@author.invalid",
              f"author-{human_id.hex}"),
         )
     conn.commit()
     return human_id
+
+
+def rely_on_entry(
+    conn: psycopg.Connection, *, venture_id: str, entry_ref: str,
+    approver: uuid.UUID,
+) -> uuid.UUID:
+    """Approve an entry and record a counsel review, so it may be relied on.
+
+    RULED 22 SEPTEMBER 2026, entry 165: *"An entry is relied on only when approved and
+    counsel-reviewed."* Before that ruling, writing an entry was enough for Gate 6 to
+    treat its flag as explained and for V28 to pass a Pack citing it.
+
+    **`approver` is a parameter with no default**, because entries 163 and 164 say the
+    approver and the recorder are never the author - so a caller has to have a second
+    person in hand, and a helper that invented one would hide the rule it exists to
+    satisfy. `declare_author` makes the account.
+
+    SQL rather than the domain functions, like the rest of this module: these fixtures
+    run on the admin connection. The CHECKs still apply, so a caller that passes the
+    author fails here rather than producing a row that breaks a later test.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE compliance_library_entry
+               SET status = 'approved',
+                   approved_by = %(approver)s,
+                   approved_at = now(),
+                   counsel_reviewed_at = now(),
+                   counsel_reviewer_name = 'Marta Reyes',
+                   counsel_reviewer_firm = 'Reyes & Okonkwo LLP',
+                   counsel_recorded_by = %(approver)s,
+                   counsel_recorded_at = now(),
+                   counsel_claims_confirmed = %(claims)s
+             WHERE venture_id = %(venture_id)s AND entry_ref = %(entry_ref)s
+            """,
+            {
+                "approver": approver,
+                "claims": psycopg.types.json.Jsonb(["the applicability rule as written"]),
+                "venture_id": venture_id,
+                "entry_ref": entry_ref,
+            },
+        )
+        assert cur.rowcount == 1, f"no entry {entry_ref!r} for {venture_id!r} to rely on"
+    conn.commit()
+    return approver
 
 
 def undeclare_author(conn: psycopg.Connection, *human_ids: uuid.UUID) -> None:

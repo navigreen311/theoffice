@@ -29,6 +29,11 @@ type Entry = {
   citation: string;
   status: string;
   counsel_reviewed_at: string | null;
+  counsel_reviewer_name: string | null;
+  counsel_reviewer_firm: string | null;
+  counsel_claims_confirmed: string[] | null;
+  approved_by: string | null;
+  relied_on: boolean;
 };
 
 /**
@@ -48,6 +53,25 @@ function standing(entry: Entry): { label: string; tone: string } | null {
     return { label: "NO COUNSEL REVIEW", tone: "border-line text-ink-muted" };
   }
   return null;
+}
+
+/**
+ * What the standing COSTS, which the mark alone does not say.
+ *
+ * Ruled 22 September 2026, entry 165: an entry is relied on only when approved and
+ * counsel-reviewed, and anything treating a draft as authoritative refuses. So a DRAFT
+ * mark is no longer a caveat on an entry that still works - the entry does not work,
+ * and a reader who has only the mark has to already know that to act on it.
+ */
+function consequence(entry: Entry): string | null {
+  if (entry.relied_on) return null;
+  const missing =
+    entry.status !== "approved" && !entry.counsel_reviewed_at
+      ? "It is neither approved nor counsel-reviewed"
+      : entry.status !== "approved"
+        ? "Nobody has approved it"
+        : "No counsel review is recorded";
+  return `${missing}, so nothing relies on it: Gate 2 refuses a Pack citing this ref, and Gate 6 does not count its flag as explained.`;
 }
 
 export default async function CompliancePage({
@@ -85,7 +109,10 @@ export default async function CompliancePage({
       <div>
         <h1 className="text-page font-medium text-ink">Compliance Library</h1>
         <p className="mt-1 max-w-3xl text-desc text-ink-secondary">
-          A flag with no entry reaches the agent as a label, not a constraint.
+          A flag with no entry reaches the agent as a label, not a constraint. Since
+          entry 165 an entry is relied on only once it is approved by somebody other
+          than its author and a counsel review is recorded; until both, nothing reads
+          it.
         </p>
       </div>
 
@@ -168,6 +195,16 @@ export default async function CompliancePage({
               <p className="mt-0.5 text-meta text-ink-muted">
                 Escalates when: {entry.escalation_trigger}
               </p>
+              {consequence(entry) ? (
+                <p className="mt-0.5 text-meta text-warn">{consequence(entry)}</p>
+              ) : (
+                <p className="mt-0.5 text-meta text-ink-muted">
+                  Counsel review: {entry.counsel_reviewer_name} of{" "}
+                  {entry.counsel_reviewer_firm}, confirming{" "}
+                  {entry.counsel_claims_confirmed?.length ?? 0} claim
+                  {entry.counsel_claims_confirmed?.length === 1 ? "" : "s"}.
+                </p>
+              )}
             </li>
           ))}
           {visible.length === 0 ? (

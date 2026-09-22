@@ -33,7 +33,13 @@ from tests.conftest import requires_db
 # `SIM_MODULES` is imported rather than restated: this file's own copy named
 # `run_scenario_pack`, which the real SimForge does not dispatch, and a second list of a
 # Forge's modules kept in step by hand is the shape `tests/world.py` exists to prevent.
-from tests.world import COMPLIANCE_ENTRIES, SIM_MODULES, WORLD_AUTHOR_ID
+from tests.world import (
+    COMPLIANCE_ENTRIES,
+    SIM_MODULES,
+    WORLD_APPROVER_ID,
+    WORLD_AUTHOR_ID,
+    rely_on_the_library,
+)
 
 pytestmark = [requires_db, pytest.mark.db]
 
@@ -87,6 +93,22 @@ def stocked_library(admin: psycopg.Connection):
                 """,
                 {**entry, "authored_by": WORLD_AUTHOR_ID},
             )
+        # Approved and counsel-reviewed, because entry 165 made those the condition for
+        # V28 to pass rather than a note in its message. A stocked library of drafts is
+        # a library nothing may rely on - which is what
+        # `test_v28_refuses_a_resolved_entry_that_is_still_a_draft` asserts, by taking
+        # one of these back.
+        cur.execute(
+            """
+            INSERT INTO office_human
+              (human_id, display_name, email, auth_method, status, created_at, origin)
+            VALUES (%s, 'World Compliance Approver', 'world-approver@example.invalid',
+                    'bearer_token', 'active', now(), 'human')
+            ON CONFLICT (human_id) DO NOTHING
+            """,
+            (WORLD_APPROVER_ID,),
+        )
+        rely_on_the_library(cur)
     admin.commit()
     yield
     _clear_library(admin)
@@ -451,19 +473,25 @@ async def test_v28_says_when_a_ref_belongs_to_another_venture(
     )
 
 
-async def test_v28_says_a_resolved_entry_is_still_a_draft(
+async def test_v28_refuses_a_resolved_entry_that_is_still_a_draft(
     greenstone, bridged_world, stocked_library, admin
 ):
-    """Passing, and saying what it passed on.
+    """**THE RULING.** Entry 165, and the reversal of what this rule used to do.
 
-    The table held no status at all until 0039, so an entry approved by nobody read
-    exactly like one taken from a statute - and this rule was where that impression was
-    formed, because it is the one that says the refs resolve.
+    It used to PASS and name the drafts: *"A draft does not fail: the Pack cites an
+    entry that exists and is this venture's... Cited, not settled."* That was the right
+    answer while there was no act that could change the state - the database held no
+    status at all until 0039, and saying so in the message was the best available.
+
+    There is an act now. A Pack that passes Gate 2 on a draft provisions agents whose
+    compliance surface rests on text nobody adopted and no lawyer read, and the note
+    saying so is advice nobody has to take.
     """
     with admin.cursor() as cur:
         cur.execute(
-            "UPDATE compliance_library_entry SET status = 'approved', "
-            "counsel_reviewed_at = now() WHERE entry_ref = 'compliance/ftc-tsr-v2'"
+            "UPDATE compliance_library_entry "
+            "   SET status = 'draft', approved_by = NULL, approved_at = NULL "
+            " WHERE entry_ref = 'compliance/ftc-tsr-v2'"
         )
     admin.commit()
 
@@ -471,11 +499,44 @@ async def test_v28_says_a_resolved_entry_is_still_a_draft(
         report = await validate(greenstone, conn)
 
     v28 = report.get("V28")
-    assert v28.verdict is Verdict.PASS
-    assert "not approved or not counsel-reviewed" in v28.message
-    assert "compliance/nv-two-party-consent-v1" in v28.message
-    assert "compliance/ftc-tsr-v2" not in v28.message, (
-        "the reviewed one is not named among the drafts"
+    assert v28.verdict is Verdict.FAIL, v28.message
+    assert "RESOLVE BUT ARE NOT RELIED ON" in v28.message
+    assert "not approved: compliance/ftc-tsr-v2" in v28.message
+    assert "compliance/nv-two-party-consent-v1" not in v28.message, (
+        "the relied-on entry is not named among the ones that block"
+    )
+    # The remedy has to be the right one. "Re-author it" clears the counsel review on
+    # the entry that still has one, which is the opposite of what is wanted.
+    assert "Do NOT re-author these" in v28.message
+
+
+async def test_v28_names_which_half_is_missing(
+    greenstone, bridged_world, stocked_library, admin
+):
+    """Approved and unreviewed is a different message from written and unapproved.
+
+    They go to different people: one needs a second officer to read it, the other needs
+    a lawyer. A single "not relied on" would send both to whichever one the reader
+    guessed.
+    """
+    with admin.cursor() as cur:
+        cur.execute(
+            "UPDATE compliance_library_entry "
+            "   SET counsel_reviewed_at = NULL, counsel_reviewer_name = NULL, "
+            "       counsel_reviewer_firm = NULL, counsel_recorded_by = NULL, "
+            "       counsel_recorded_at = NULL, counsel_claims_confirmed = NULL "
+            " WHERE entry_ref = 'compliance/ftc-tsr-v2'"
+        )
+    admin.commit()
+
+    async with connection() as conn:
+        report = await validate(greenstone, conn)
+
+    v28 = report.get("V28")
+    assert v28.verdict is Verdict.FAIL, v28.message
+    assert "no counsel review recorded: compliance/ftc-tsr-v2" in v28.message
+    assert "not approved:" not in v28.message, (
+        "this entry is approved; saying it is not sends the reader to the wrong person"
     )
 
 

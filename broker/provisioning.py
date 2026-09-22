@@ -440,9 +440,24 @@ async def _gate_6(ctx: _Context) -> GateOutcome:
         # venture's entry explained any venture's flag: Greenstone's NV consent entry
         # answered for Burkham's `recording_consent_required` and Gate 6 passed on it.
         # That is a gate reading a name rather than a library.
+        # RELIED ON, not merely present. Ruled 22 September 2026, entry 165: *"An entry
+        # is relied on only when approved and counsel-reviewed. Anything treating a
+        # draft as authoritative refuses."*
+        #
+        # This is the second tightening of this one query. 0039 added the venture term,
+        # because a gate that read any venture's entry was reading a name rather than a
+        # library. This adds the standing term, for the same kind of reason: a flag is
+        # "explained" when an agent carrying it can be told what to do, and a draft
+        # nobody approved and no lawyer read does not tell anybody anything.
+        #
+        # Measured when this was written: every one of the 21 entries is a draft, so
+        # this set is empty for every venture and Gate 6 blocks on every declared flag.
+        # That is the work reported, not a regression - and it is the reason the rule
+        # is worth having, since the gate passed on those drafts yesterday.
         await cur.execute(
             "SELECT DISTINCT runtime_flag FROM compliance_library_entry "
-            "WHERE runtime_flag IS NOT NULL AND venture_id = %s",
+            f"WHERE runtime_flag IS NOT NULL AND venture_id = %s "
+            f"  AND {knowledge.RELIED_ON_SQL}",
             (ctx.venture_id,),
         )
         explained_flags = {r["runtime_flag"] for r in await cur.fetchall()}

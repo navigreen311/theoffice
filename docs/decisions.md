@@ -14021,3 +14021,203 @@ inventing the scope of a rule rather than recording one.
 > in the repository writes that column at all. `approved` is reachable only from a YAML
 > file loaded by a script over the admin DSN. Neither act has an author, a role, or an
 > audit event, and nothing here invents one.
+
+
+## 163. Approval is a separate act
+
+**Ruling by Ivan Green, 22 September 2026:**
+
+> *"Approval is a separate act by a different named human. A compliance entry's approver
+> is never its author. Approving writes its own audit event. Measured: status travels in
+> the same statement as the text, with one writer and no event."*
+
+### What approval was
+
+A word in the same INSERT as the text. `author_compliance_entry` took `status` as a
+parameter; the only caller that ever passed anything read it from a field in a YAML file,
+loaded by a script over the admin DSN. One writer, no second party, no role of its own,
+and **no audit event anywhere** — `audit_log` has no event type for approving a
+compliance entry because there was no act to record.
+
+So an author could approve their own entry by typing a word above it. The only reason
+none ever did is that no file in `packs/compliance-library/` carries the word `approved`.
+That is luck, not a control — the same shape as `sync-roster` resolving its actor as "the
+oldest account holding `ivan`" and getting the right answer because the real account
+happened to be oldest.
+
+### Three refusals, and where each one lives
+
+    not a person       `assert_named_human_by_id` (entry 162). An approval is a name on
+                       a decision, and a fixture is not somebody who can be asked about
+                       it. The same distinction entry 148 drew for deciding a proposal.
+    the author         the ruling. In Python for the message, and in migration 0057's
+                       CHECK for the control.
+    already approved   a second approval is the same fact claimed twice. Entries 149 and
+                       159 already say what to do about that, and this is the act where
+                       it matters most: an entry with two approvers is one where the
+                       second name is on a decision somebody else made.
+
+### Why a CHECK can do this at all
+
+`approved_by <> authored_by` compares two columns of **one row**. No subquery, no
+trigger, no denormalised copy of anything. That is the whole reason the approver lives on
+`compliance_library_entry` rather than in a side table of approvals — a side table would
+need a trigger to enforce the same rule, and a trigger is a thing somebody disables.
+
+What a CHECK cannot ask is whether an id is a *person*. That goes in the trigger migration
+0056 installed, which grows two cases and keeps its name.
+
+### The approver is `me`, and holds the same role
+
+`POST /api/knowledge/compliance/approve` takes no approver field, for the reason
+`file_discharge` and the Gate 10 signoff route take none: an approval records who adopted
+the entry, and a body that could name somebody else makes it a form rather than an act.
+
+`compliance_officer`, the same role as authoring. **A second officer is a second person,
+which is all this ruling asks for.** Requiring `ivan` would mean one account approves the
+entire portfolio's library — the concentration the separation exists to avoid.
+
+### Approving writes its own event
+
+`console_compliance_entry_approved`, carrying the venture, the ref, the flag, who wrote
+it, and whether the entry is now relied on. That last field is there because an approver
+who reads "approved" and stops has approved something nothing will read — see 165.
+
+
+## 164. A counsel review names its source
+
+**Ruling by Ivan Green, 22 September 2026:**
+
+> *"Counsel review is recorded by a named human on the lawyer's behalf, naming the
+> reviewer, their firm, the date, and the specific claims confirmed. Never self-recorded
+> alongside authorship. Measured: `counsel_reviewed_at` has no writer anywhere."*
+
+### A column that existed for two weeks and nothing wrote
+
+Migration 0039 added `counsel_reviewed_at` on 15 September. V28 reads it. The console
+reads it and shows **NO COUNSEL REVIEW** when it is null. The discharge rule cites it in
+its own docstring. And no statement in this repository has ever set it — the `ON CONFLICT
+DO UPDATE` in `author_compliance_entry` does not list it, and nothing else touches the
+column at all.
+
+Twenty-one entries, every one NULL, because there was no act that could make it anything
+else. A column that only ever reads NULL is a question the schema asks and no surface
+answers.
+
+### On the lawyer's behalf, and honest about being that
+
+Counsel has no account on this Office and is not going to get one. So what is recorded is
+**a named human's statement about a review** — which is a weaker claim than a signature,
+and the record says so by naming both sides:
+
+    counsel_recorded_by     who is answerable for the statement
+    counsel_reviewer_name   who they say read it
+    counsel_reviewer_firm   who that person practises with
+
+### Two dates, because they are two facts
+
+    counsel_reviewed_at   when the lawyer read it
+    counsel_recorded_at   when somebody wrote that down
+
+One column would let a review dated last March be recorded today with no trace of the
+gap, and the gap is exactly what a reader needs to judge whether a review is current.
+`counsel_reviewed_at` keeps its name rather than being renamed to something tidier,
+because V28 and the console already read it and a rename moves what those resolve to.
+
+### The claims are a list because an entry is a mixture
+
+The authoring format already says this about `claim_provenance`, and says it better than
+a new sentence would:
+
+> *"Per CLAIM, not per entry — an entry is a mixture, and an entry-level tag would round
+> the mixture to whichever tag the author felt best about."*
+
+"A lawyer reviewed this entry" rounds the same mixture the same way. So a review names
+what it confirmed, as a non-empty array, and **what it does not name it does not
+confirm.** The CHECK requires all six fields or none of them: a review missing its firm
+is a review nobody can chase, and a review missing its claims is the boolean this rule
+exists to refuse.
+
+### Never self-recorded alongside authorship
+
+`counsel_recorded_by <> authored_by`, on the same row, for the same reason and by the
+same mechanism as 163's. The author may write the entry and may not be the one who says a
+lawyer blessed it.
+
+### What is not built
+
+**There is no console form for either act.** Both are API-only. The authoring form on
+`/knowledge/compliance` is untouched, and the page now says what a draft costs rather
+than offering a way to fix it. A second officer must POST. That is a real gap and it is
+recorded here rather than filled with a form nobody ruled on.
+
+
+## 165. An entry is relied on only when approved and counsel-reviewed
+
+**Ruling by Ivan Green, 22 September 2026:**
+
+> *"An entry is relied on only when approved and counsel-reviewed. Anything treating a
+> draft as authoritative refuses. Measured: all 21 are draft, zero counsel-reviewed."*
+
+### Neither half implies the other
+
+Approval is this Office saying the entry is the one to use. Counsel review is a lawyer
+saying the law in it is right. An entry **approved and unreviewed** is a decision about an
+unchecked claim; one **reviewed and unapproved** is a checked claim nobody adopted.
+
+One rule, in two spellings that are tested against each other:
+
+    knowledge.is_relied_on(entry)   Python, over a row
+    knowledge.RELIED_ON_SQL         the same predicate, in the WHERE clause
+
+`test_the_two_forms_of_the_predicate_agree` runs both over four entries in all four
+states. Two spellings of one rule is how a gate and a page come to disagree about whether
+an entry counts — the class of defect entry 153 measured on a different table.
+
+### What now refuses
+
+    V28, at Gate 2      a Pack citing a ref that resolves to a draft FAILS.
+    Gate 6              a flag is "explained" only by a relied-on entry, so a draft
+                        behind a flag covers nothing.
+    the coverage panel  counts relied-on entries, so it cannot read green while Gate 6
+                        blocks on the same store.
+    /knowledge/compliance  says what the standing costs, not just what it is.
+
+**Measured today: all 21 entries are drafts and none is counsel-reviewed, so nothing in
+this system is currently relied on.** Greenstone's Pack fails V28 at Gate 2. That is the
+state of the work reported honestly, and it is the reason the rule is worth having —
+yesterday the same Packs passed on the same drafts.
+
+### V28 used to pass one and say so. That was right then.
+
+Its old words:
+
+> *"A draft does not fail: the Pack cites an entry that exists and is this venture's... It
+> is said out loud because the database used to hold no status at all, so an entry written
+> by hand and approved by nobody read exactly like one taken from a statute. Cited, not
+> settled."*
+
+That reasoning was about there being **no act that could change the state.** With nothing
+to do about a draft, naming the drafts in a passing message was the best available answer.
+
+There is an act now — two of them. So the note becomes a refusal, and it names which half
+is missing, because "get it approved" and "get a lawyer to read it" go to different
+people. It also says *do not re-author these*, which is the wrong remedy and the tempting
+one.
+
+### `resolve_entry_refs` is deliberately unchanged
+
+It answers whether a ref *exists* for a venture, which is a different question. A draft
+that resolves is not missing, and reporting it as missing sends an author to write an
+entry that is already written — the mistake migration 0039's third case exists to prevent,
+in a new costume.
+
+### Re-authoring clears both
+
+This is the part that makes 163 and 164 mean anything. An approval that survived a
+rewrite would be an approver's name on words they never read; a counsel review that
+survived one would be a lawyer's firm attached to claims they were never shown — worse
+than no review, because it reads as one.
+
+So the `ON CONFLICT DO UPDATE` nulls all eight columns and the status returns to `draft`.
+The same property `content_hash` gives certification: republishing decertifies.
