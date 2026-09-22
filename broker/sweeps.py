@@ -22,6 +22,7 @@ So two rules shape everything here:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import subprocess
 import uuid
@@ -35,7 +36,7 @@ from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from broker import certification, incidents, simforge
+from broker import certification, incidents, shifts, simforge
 from broker.db import connection
 from broker.simforge import SimForgeError
 
@@ -972,16 +973,27 @@ async def freshness(conn: AsyncConnection) -> dict[str, dict[str, Any]]:
 
 # --------------------------------------------------------------------- entry point
 
+#: Kind -> the function that runs it. ONE registry, because there were two lists and a
+#: runner added later would have been a third. `run_all` walks it and so does the
+#: background runner; a sweep added to one is added to both.
+_SWEEPS = {
+    AUDIT_CHAIN: sweep_audit_chain,
+    CERTIFICATION_STALENESS: sweep_certification_staleness,
+    MANIFEST_RECONCILIATION: sweep_manifest_reconciliation,
+    VERDICT_INGEST: sweep_verdict_ingest,
+}
+
+
 async def run_all(*, include_restore_drill: bool = False) -> dict[str, SweepResult]:
-    """Run every sweep, serialised per kind. Safe to invoke from cron."""
+    """Run every sweep whether or not it is due, serialised per kind.
+
+    Kept for `broker sweep`, which is somebody deciding to run one now. The background
+    runner uses `run_due` and respects `MAX_AGE`; this does not, because a person who
+    typed the command has already answered the question `MAX_AGE` asks.
+    """
     results: dict[str, SweepResult] = {}
     async with connection() as conn:
-        for kind, fn in (
-            (AUDIT_CHAIN, sweep_audit_chain),
-            (CERTIFICATION_STALENESS, sweep_certification_staleness),
-            (MANIFEST_RECONCILIATION, sweep_manifest_reconciliation),
-            (VERDICT_INGEST, sweep_verdict_ingest),
-        ):
+        for kind, fn in _SWEEPS.items():
             async with _sweep_lock(conn, kind) as acquired:
                 if acquired:
                     results[kind] = await fn(conn)
@@ -995,3 +1007,147 @@ async def run_all(*, include_restore_drill: bool = False) -> dict[str, SweepResu
                             conn, admin_dsn=admin_dsn
                         )
     return results
+
+
+# ------------------------------------------------- the runner, entry 168
+
+#: How often the loop wakes. NOT how often a sweep runs - each kind runs when it is
+#: older than its own `MAX_AGE`, and the tick only decides how soon after falling due it
+#: happens.
+#:
+#: **Sixty seconds, matching `deadlines.DEFAULT_INTERVAL_SECONDS`, and the reason is the
+#: shift flush rather than the sweeps.** Entry 169 says a shift is flushed *at
+#: shift_end*, and PHI sitting for an hour after a window closes is not that. The daily
+#: sweeps are unaffected: `due()` gates them on their own `MAX_AGE`, so a minute's tick
+#: still means a daily sweep runs daily.
+#:
+#: The cost of asking every minute is five indexed reads over `sweep_run` plus one over
+#: `shift_assignment`, on tables with a few hundred rows between them.
+TICK_SECONDS = 60.0
+
+
+async def due(conn: AsyncConnection) -> list[str]:
+    """Which sweep kinds are older than their own declared `MAX_AGE`.
+
+    RULED 22 SEPTEMBER 2026 (decisions entry 168)
+    =============================================
+
+        *"A sweep runs on its own, in the API's lifespan, as deadlines do. Keep the
+        declared MAX_AGE intervals."*
+
+    **`MAX_AGE` is reused rather than a second schedule being written beside it.**
+    `freshness()` already calls a sweep older than its `MAX_AGE` *stale*, and stale is
+    not green. A separate interval would mean the thing that decides when to run and the
+    thing that decides whether the result counts could disagree - and the one that
+    reports would be the one nobody noticed had drifted.
+
+    `never_run` is due. That is not an edge case here: measured 22 September, `audit_chain`
+    and `certification_staleness` last ran in **August**, and `restore_drill` has never
+    run at all.
+    """
+    overdue: list[str] = []
+    state = await freshness(conn)
+    for kind in SCHEDULED:
+        reading = state.get(kind)
+        if reading is None or reading["state"] in ("never_run", "stale"):
+            overdue.append(kind)
+    return overdue
+
+
+#: The kinds the runner drives. `restore_drill` is NOT among them, deliberately.
+#:
+#: It shells out to `pg_restore` against a real admin DSN and takes as long as a restore
+#: takes. `run_all` already gates it behind `include_restore_drill` and an explicit
+#: `OFFICE_ADMIN_DSN`, which is the shape of a thing somebody decides to do - and a
+#: quarterly job that starts itself inside the API process is a quarterly job that will
+#: one day start itself during an incident.
+#:
+#: **It is therefore still unscheduled, and that is an open question rather than an
+#: answer.** `freshness` will keep reporting it `never_run`, which is not green, which
+#: is the correct state for a control nobody has exercised.
+SCHEDULED = (AUDIT_CHAIN, CERTIFICATION_STALENESS, MANIFEST_RECONCILIATION,
+             VERDICT_INGEST)
+
+
+async def run_due(conn: AsyncConnection) -> dict[str, SweepResult]:
+    """Run every sweep that is due, serialised per kind. Returns what ran.
+
+    Nothing runs when nothing is due, and the tick that finds nothing due writes no
+    `sweep_run` row - so the table stays a record of work rather than of wakeups.
+    """
+    ran: dict[str, SweepResult] = {}
+    for kind in await due(conn):
+        fn = _SWEEPS[kind]
+        async with _sweep_lock(conn, kind) as acquired:
+            if acquired:
+                ran[kind] = await fn(conn)
+    return ran
+
+
+async def run_forever(*, interval_seconds: float = TICK_SECONDS) -> None:
+    """The background runner. Started by the API's lifespan; cancelled on shutdown.
+
+    **One failed pass does not stop the loop**, the same rule `deadlines.run_forever`
+    follows and for the same reason: a sweep runner that dies on the first transient
+    database error is a sweep runner that was running yesterday, which is the state this
+    exists to end.
+
+    A failure in ONE KIND does not stop the others either. `sweep_verdict_ingest` talks
+    to SimForge and `sweep_audit_chain` does not, so an unreachable SimForge must not be
+    able to stop the hash chain being verified - which is exactly the coupling that
+    would make an outage in one system hide tampering in another.
+    """
+    import logging
+
+    log = logging.getLogger("broker.sweeps")
+    while True:
+        try:
+            async with connection() as conn:
+                # EVERY TICK, not gated on `MAX_AGE`. Entry 169: a shift is flushed at
+                # shift_end, which is a continuous condition like a passing deadline and
+                # not a control with a freshness window. `flush_ended_shifts` writes
+                # nothing when nothing has ended.
+                try:
+                    flushed = await shifts.flush_ended_shifts(conn)
+                    if flushed["ended_unflushed_considered"]:
+                        log.info("ended-shift flush: %s", flushed)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    log.exception(
+                        "ended-shift flush failed; the next tick will try again"
+                    )
+
+                for kind in await due(conn):
+                    try:
+                        async with _sweep_lock(conn, kind) as acquired:
+                            if not acquired:
+                                continue
+                            result = await _SWEEPS[kind](conn)
+                        log.info(
+                            "sweep %s: %s (%s checked)",
+                            kind, result.status, result.denominator,
+                        )
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception:
+                        log.exception(
+                            "sweep %s failed; the next tick will try again", kind
+                        )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("sweep runner failed; the next tick will try again")
+        await asyncio.sleep(interval_seconds)
+
+
+@asynccontextmanager
+async def running(*, interval_seconds: float = TICK_SECONDS) -> AsyncIterator[Any]:
+    """Run the sweeps for the lifetime of the block. Used by the API's lifespan."""
+    task = asyncio.create_task(run_forever(interval_seconds=interval_seconds))
+    try:
+        yield task
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
