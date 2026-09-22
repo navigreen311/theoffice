@@ -157,7 +157,7 @@ async def test_an_insert_that_omits_origin_fails(admin):
     with pytest.raises(psycopg.errors.NotNullViolation), admin.cursor() as cur:
         cur.execute(
             "INSERT INTO office_human (human_id, display_name, email, auth_method) "
-            "VALUES (%s, 'No Origin Column', 'omitted@declared.invalid', 'sso_mfa')",
+            "VALUES (%s, 'No Origin Column', 'omitted@declared.invalid', 'bearer_token')",
             (uuid.uuid4(),),
         )
     admin.rollback()

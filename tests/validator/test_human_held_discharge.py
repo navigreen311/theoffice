@@ -75,7 +75,7 @@ def no_discharges(admin: psycopg.Connection):
             INSERT INTO office_human
               (human_id, display_name, email, auth_method, status, created_at, origin)
             VALUES (%s, 'Discharge Test Operator', 'discharge-test@example.invalid',
-                    'mfa_only', 'active', now(), 'test_fixture')
+                    'bearer_token', 'active', now(), 'test_fixture')
             ON CONFLICT (human_id) DO NOTHING
             """,
             (HUMAN,),

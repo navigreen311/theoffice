@@ -58,6 +58,21 @@ class Human:
     otherwise. The database is what decides for a real one.
     """
 
+    auth_method: str = "bearer_token"
+    """What is actually enforced for this account. Ruled 21 September 2026, entry 154.
+
+    **Carried but not yet enforced anywhere, and that is deliberate.** Entry 148's
+    finding was that `Human` did not carry `origin`, so every route taking `me` from a
+    token was structurally unable to ask the question. This closes the same gap for
+    authentication before anything needs it - a caller can now ask what a signer's
+    credential actually is.
+
+    What it cannot do yet is refuse: `mfa_enrolled_at` has no writer in this repository,
+    so requiring an enrolment would refuse every account including both people. What
+    enrolment would MEAN for an account whose only credential is a bearer token The
+    Office issued is the open question entry 154 records rather than answers.
+    """
+
     @property
     def is_active(self) -> bool:
         return self.status == "active"
@@ -94,10 +109,32 @@ async def create_human(
     display_name: str,
     email: str,
     origin: str,
-    auth_method: str = "sso_mfa",
+    created_by: uuid.UUID | None = None,
+    auth_method: str = "bearer_token",
     token: str | None = None,
 ) -> tuple[uuid.UUID, str]:
     """Create a human and return (human_id, plaintext token).
+
+    CREATING AN ACCOUNT WRITES AN AUDIT EVENT. Ruled 21 September 2026, entry 153:
+    *"Creating an account writes an audit event. Measured: `dev-all build check` has no
+    creation record, only its revocation."*
+
+    The measurement is the argument. `dev-all build check` held `ivan` - founder
+    authority - for four days, and the hash-chained log contains exactly one row about
+    it: the revocation of that role on 21 September. **There is no record of the account
+    being made, by whom, or why**, and nothing in this repository creates it, so the
+    question of where it came from cannot be answered from the ledger that exists to
+    answer exactly that.
+
+    `console_human_created` was written by the route and `bootstrap_human_created` by
+    the CLI, so two of the three paths already did this - at the caller, which is the
+    shape entry 149 ruled against for `grant_role`. An event a caller remembers to write
+    is an event the next caller forgets, and the next caller is how this account exists.
+
+    `created_by` is nullable for one documented case and one only: the bootstrap human,
+    who has nobody above them to be created by. It resolves to the new account's own id
+    there, the way `grant_role`'s self-grant does, and it is visible as an exception
+    rather than as a gap.
 
     `origin` IS REQUIRED AND IS NOT GUESSED. Ruled 21 September 2026, entry 151:
     *"A fixture is declared, never guessed. `origin` is set explicitly at creation."*
@@ -136,6 +173,32 @@ async def create_human(
             ),
         )
     await conn.commit()
+
+    # AFTER THE COMMIT, so the event describes an account that exists. An entry written
+    # first records an intention, which is the ordering `shifts.assign_shift` already
+    # argues for at the flush boundary.
+    #
+    # The token is not in the subject and must never be: this log is readable by anyone
+    # who can read the Access page, and a credential in a hash-chained record is a
+    # credential that cannot be redacted.
+    await audit.write_event(
+        event_type="human_account_created",
+        actor_type="human",
+        # SELF, for the bootstrap human only - the documented exception above.
+        actor_id=created_by or human_id,
+        venture_id=None,
+        subject={
+            "human_id": str(human_id),
+            "display_name": display_name,
+            "email": email,
+            # BOTH DECLARATIONS ON THE RECORD (entries 151 and 154). What this account
+            # is, and what is actually enforced for it - the two facts that decide what
+            # it may do, recorded at the only moment they are chosen.
+            "origin": origin,
+            "auth_method": auth_method,
+            "self_created": created_by is None,
+        },
+    )
     return human_id, plaintext
 
 
@@ -205,6 +268,7 @@ async def authenticate(conn: AsyncConnection, token: str) -> Human | None:
         await cur.execute(
             """
             SELECT h.human_id, h.display_name, h.email, h.status, h.origin,
+                   h.auth_method,
                    COALESCE(
                      array_agg(ARRAY[r.role, COALESCE(r.venture_id, '')])
                        FILTER (WHERE r.role IS NOT NULL),
@@ -214,7 +278,8 @@ async def authenticate(conn: AsyncConnection, token: str) -> Human | None:
             LEFT JOIN office_human_role r
               ON r.human_id = h.human_id AND r.revoked_at IS NULL
             WHERE h.token_hash = %s
-            GROUP BY h.human_id, h.display_name, h.email, h.status, h.origin
+            GROUP BY h.human_id, h.display_name, h.email, h.status, h.origin,
+                     h.auth_method
             """,
             (hash_token(token),),
         )
@@ -247,6 +312,7 @@ async def authenticate(conn: AsyncConnection, token: str) -> Human | None:
         status=row["status"],
         roles=roles,
         origin=row["origin"],
+        auth_method=row["auth_method"],
     )
 
 
@@ -625,10 +691,19 @@ async def set_daily_total(
 
 
 async def get_human(conn: AsyncConnection, human_id: uuid.UUID) -> Human | None:
+    """One human by id, carrying every field `Human` has.
+
+    **It selected neither `origin` nor `auth_method` and let both default**, so a fixture
+    fetched through here arrived as `origin='human'` and would have passed
+    `assert_named_human` - the exact gap entry 148 found in the token path, surviving in
+    the by-id path because the dataclass defaults are permissive. Fixed alongside entry
+    154 rather than left for the next reader to find a third time.
+    """
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
             """
-            SELECT h.human_id, h.display_name, h.email, h.status,
+            SELECT h.human_id, h.display_name, h.email, h.status, h.origin,
+                   h.auth_method,
                    COALESCE(
                      array_agg(ARRAY[r.role, COALESCE(r.venture_id, '')])
                        FILTER (WHERE r.role IS NOT NULL),
@@ -638,7 +713,8 @@ async def get_human(conn: AsyncConnection, human_id: uuid.UUID) -> Human | None:
             LEFT JOIN office_human_role r
               ON r.human_id = h.human_id AND r.revoked_at IS NULL
             WHERE h.human_id = %s
-            GROUP BY h.human_id, h.display_name, h.email, h.status
+            GROUP BY h.human_id, h.display_name, h.email, h.status, h.origin,
+                     h.auth_method
             """,
             (human_id,),
         )
@@ -651,6 +727,8 @@ async def get_human(conn: AsyncConnection, human_id: uuid.UUID) -> Human | None:
         email=row["email"],
         status=row["status"],
         roles=tuple((r[0], r[1] or None) for r in row["roles"]),
+        origin=row["origin"],
+        auth_method=row["auth_method"],
     )
 
 

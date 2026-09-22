@@ -90,7 +90,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0053"
+EXPECTED_SCHEMA_REVISION = "0054"
 
 # `live_grants` means "a grant no live revocation covers". The four-scope rule that
 # decides that has exactly one copy - `revocation._covers`, the same text
@@ -2732,7 +2732,10 @@ async def list_revocations(
 class HumanRequest(BaseModel):
     display_name: str = Field(min_length=1)
     email: str = Field(min_length=3)
-    auth_method: str = "sso_mfa"
+    # THE HONEST DEFAULT (entry 154). It was `sso_mfa`, which every account inherited
+    # and nothing verified: 242 of 242 claimed it and none had ever enrolled. A route
+    # cannot enrol a second factor, so it cannot create an account that has one.
+    auth_method: str = "bearer_token"
     role: str | None = None
     venture_id: str | None = None
 
@@ -2756,6 +2759,9 @@ async def create_human_route(body: HumanRequest, conn: DB, me: ME) -> dict[str, 
     human_id, token = await humans.create_human(
         conn, display_name=body.display_name, email=body.email,
         auth_method=body.auth_method,
+        # WHO MADE THIS ACCOUNT, carried into the event `create_human` writes (entry
+        # 153). The route knows it and the function is where it is recorded.
+        created_by=me.human_id,
         # A PERSON, DECLARED (entry 151). This route creates a colleague: it requires
         # `compliance_officer`, it returns a credential meant for somebody to use, and
         # the account it makes is expected to sign things. Nothing reaches here to make
@@ -2768,11 +2774,11 @@ async def create_human_route(body: HumanRequest, conn: DB, me: ME) -> dict[str, 
             venture_id=body.venture_id, granted_by=me.human_id,
         )
 
-    await _audit_human_action(
-        me, "console_human_created",
-        {"human_id": str(human_id), "email": body.email, "initial_role": body.role},
-        body.venture_id,
-    )
+    # NO `console_human_created` HERE ANY MORE. Ruled 21 September 2026, entry 153:
+    # creating an account writes an audit event, in `create_human` itself. This route
+    # wrote one and the CLI wrote a different one and nothing else wrote any, which is
+    # how `dev-all build check` came to exist with no creation record at all. The role,
+    # if one was requested, is `grant_role`'s own event (entry 149).
     return {
         "human_id": str(human_id),
         "token": token,

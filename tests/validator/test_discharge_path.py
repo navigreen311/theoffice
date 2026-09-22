@@ -47,7 +47,7 @@ def filer(admin: psycopg.Connection):
             """
             INSERT INTO office_human
               (human_id, display_name, email, auth_method, status, created_at, origin)
-            VALUES (%s, 'Discharge Filer', 'filer@example.invalid', 'mfa_only',
+            VALUES (%s, 'Discharge Filer', 'filer@example.invalid', 'bearer_token',
                     'active', now(), 'test_fixture')
             """,
             (human_id,),

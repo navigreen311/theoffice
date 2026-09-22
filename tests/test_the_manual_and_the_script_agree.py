@@ -74,7 +74,7 @@ def world(admin: psycopg.Connection):
             "INSERT INTO office_human (human_id, display_name, email, token_hash, "
             "                          status, origin, auth_method) "
             "VALUES (%s, 'Instruction Author', 'author@manual.invalid', %s, "
-            "        'active', 'human', 'sso_mfa')",
+            "        'active', 'human', 'bearer_token')",
             (AUTHOR_ID, "not-a-real-token-hash-" + AUTHOR_ID.hex),
         )
         cur.execute(
@@ -352,7 +352,7 @@ async def test_a_fixture_authored_row_is_not_a_manual_anybody_must_script(world,
             "INSERT INTO office_human (human_id, display_name, email, token_hash, "
             "                          status, origin, auth_method) "
             "VALUES (%s, 'Scaffolding', 'scaffold@world.invalid', %s, 'active', "
-            "        'test_fixture', 'sso_mfa')",
+            "        'test_fixture', 'bearer_token')",
             (fixture_author, f"scaffold-token-{fixture_author.hex}"),
         )
         cur.execute(

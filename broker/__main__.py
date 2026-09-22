@@ -27,7 +27,7 @@ import json
 import sys
 
 import broker  # noqa: F401  - imported for its event-loop policy side effect
-from broker import account_origin, audit, humans, sweeps
+from broker import account_origin, humans, sweeps
 from broker.db import connection
 
 
@@ -133,6 +133,9 @@ async def _bootstrap_human(name: str, email: str, role: str) -> int:
 
         human_id, token = await humans.create_human(
             conn, display_name=name, email=email,
+            # created_by is left None: this IS the first account, and there is nobody
+            # above it. `create_human` resolves the actor to the new account itself and
+            # records `self_created`, the way the self-grant below is recorded.
             # THE FIRST PERSON, declared (entry 151). This command exists to create one
             # human and refuses if any already exist; the account it makes is the one
             # that bootstraps every later grant.
@@ -144,12 +147,10 @@ async def _bootstrap_human(name: str, email: str, role: str) -> int:
         await humans.grant_role(
             conn, human_id=human_id, role=role, granted_by=human_id
         )
-        await audit.write_event(
-            event_type="bootstrap_human_created",
-            actor_type="human", actor_id=human_id, venture_id=None,
-            subject={"display_name": name, "email": email, "role": role,
-                     "via": "cli bootstrap, self-granted"},
-        )
+        # `bootstrap_human_created` is gone from here. `create_human` writes
+        # `human_account_created` and `grant_role` writes `human_role_granted`, so both
+        # facts are recorded by the functions that perform them (entries 149 and 153)
+        # rather than by whichever caller remembered.
 
     print(f"created {name} <{email}> with role {role}")
     print(f"human_id: {human_id}")
