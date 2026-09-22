@@ -14531,3 +14531,160 @@ Gate 9 is no longer shut by entry 166. It is still shut by everything else: Gree
 has Unit A certified on **1 of 8** live grants — 5 FAIL, 20 TIMEOUT across the table —
 and Gate 9.5's held-out partition does not exist. Simulation now reaches Gate 9. It does
 not reach Gate 12.
+## 168. A sweep runs on its own
+
+**Ruling by Ivan Green, 22 September 2026:**
+
+> *"A sweep runs on its own, in the API's lifespan, as deadlines do. Keep the declared
+> MAX_AGE intervals. Measured: verdict_ingest 3 runs ever, last 21 Sep; audit_chain and
+> certification_staleness last ran in August; deadline_expiry 221 runs. A withdrawn
+> SimForge verdict that nobody reads leaves an agent holding authority it lost."*
+
+### The same mistake, twelve entries later, in the module next door
+
+Entry 156 found it in `deadlines`:
+
+> *"`broker/__main__.py` has said 'designed to be invoked by cron or a systemd timer'
+> since it was written and nothing has ever invoked it; a second thing that is true only
+> if somebody sets it up is how this got here."*
+
+`sweeps.run_all` carried *"Safe to invoke from cron"* in its own docstring. Nothing
+invoked it either. Measured 22 September:
+
+    sweep_kind                runs   last run        MAX_AGE
+    ----------------------    ----   ------------    -------
+    deadline_expiry            221   15 min ago      —
+    verdict_ingest               3   21 Sep          1 day
+    audit_chain                  3   25 Aug          1 day
+    certification_staleness      1   24 Aug          1 day
+    manifest_reconciliation      1   24 Aug          31 days
+    restore_drill                0   never           92 days
+
+`deadline_expiry` is the one entry 156 put in the lifespan. It is also the only one that
+runs.
+
+### Why this one is worse than a late deadline
+
+The ruling says it and `sweeps.py` had already written it down, in the comment explaining
+why `verdict_ingest` is daily:
+
+> *"A missed PASS is loud: the agent stays uncertified, `resolve_grant` refuses every
+> call it makes, and somebody asks why within a shift. **A missed REVOKED is silent** —
+> SimForge withdrew a certification, The Office never read the verdict, and the agent
+> goes on holding production authority it has lost, with the call path happily enforcing
+> a `certified` row that is no longer true."*
+
+The interval was right. Nothing ran it.
+
+### `MAX_AGE` is the schedule, not a second one beside it
+
+`due()` reuses `freshness()`, which already calls a sweep older than its `MAX_AGE`
+**stale**, and stale is not green. A separate interval would mean the thing that decides
+when to run and the thing that decides whether the result counts could drift apart — and
+the one that reports would be the one nobody noticed.
+
+`never_run` is due. That is not an edge case: two sweeps had not run since August.
+
+### One registry, because there were two lists
+
+`_SWEEPS` maps kind → function. `run_all` walks it and so does the runner. There were two
+lists before and a third was about to be written; `test_the_runner_and_run_all_share_one_registry`
+is there because two controls over one invariant, the second not knowing about the first,
+is the defect shape this ledger keeps recording.
+
+`run_all` is kept, and no longer respects `MAX_AGE`: somebody who typed `broker sweep` has
+already answered the question `MAX_AGE` asks.
+
+### The restore drill is deliberately not scheduled
+
+It shells out to `pg_restore` against a real admin DSN and takes as long as a restore
+takes. A quarterly job that starts itself inside the API process is a quarterly job that
+will one day start itself during an incident.
+
+> **Still open: what runs the restore drill?** `freshness` will keep reporting it
+> `never_run`, which is not green, which is the correct state for a control nobody has
+> exercised. Nothing here invents an answer.
+
+### Two runners, not one
+
+`deadlines.running()` and `sweeps.running()` side by side in the lifespan. They tick for
+different reasons — deadlines minimise `lag_seconds` on a passing deadline, sweeps respect
+each kind's own `MAX_AGE` — and merging them would be one interval answering two
+questions.
+
+
+## 169. A shift that ends is flushed
+
+**Ruling by Ivan Green, 22 September 2026:**
+
+> *"A shift that ends is flushed, at shift_end, by that same scheduler, with no
+> reassignment. Measured: flush_phi's only caller is rotate, so a flush is reachable only
+> as a side effect of assigning a new shift. Three Greenstone agents have been blocked
+> since 17 Sep."*
+
+### A closed loop, and three agents inside it
+
+`flush_phi` had exactly one caller in the repository: `rotate`, step 2 of moving an agent
+from one venture to another. So a flush was reachable **only as a side effect of assigning
+a new shift** — and `assign_shift` raises `ShiftBlocked` when the previous shift has no
+verified flush.
+
+Measured: three Greenstone shifts, assigned 16 September between 19:53 and 19:54, ended
+around 03:55 on the 17th. `flush_completed_at` NULL, `flush_verified` false,
+**`flush_attempted_at` NULL** — nothing had tried in six days. The only thing that could
+flush them was a call that would first have to get past the block their unflushed state
+creates.
+
+The CLI has printed the shape of this after every assignment since it was written:
+
+> *"At \<end\> \<agent\> goes off shift, and nothing will assign the next window. That is
+> decisions entry 81, not a fault in this command."*
+
+Nothing flushed the closing one either, and that part was not written down anywhere.
+
+### No reassignment, and that is the ruling
+
+`rotate` flushes and then assigns, because somebody asked for a rotation. Nobody asked for
+one here: what happened is that a window closed. A scheduler that assigned the next shift
+would be deciding who works next, which is `staffing`'s job and a person's decision.
+
+So `flush_ended_shifts` writes to `agent_working_memory` and `shift_assignment` and
+touches nothing else. `test_an_ended_shift_is_flushed_and_nothing_is_assigned` counts the
+shifts before and after.
+
+### `flush_attempted_at IS NULL`, not `NOT flush_verified`
+
+A flush that ran and **failed** is `FlushFailed` — PHI survived, which is an incident
+somebody has to look at. A loop that retried it every minute would turn a standing alarm
+into a log nobody reads.
+
+So the sweep picks up shifts nothing has tried. All three of the measured ones qualify,
+because nothing has ever tried them.
+
+### Every tick, not on a `MAX_AGE`
+
+The flush runs before the `due()` gate in `run_forever`, and `TICK_SECONDS` is 60 —
+matching `deadlines.DEFAULT_INTERVAL_SECONDS`, and for this reason rather than for the
+sweeps'. *"At shift_end"* is not PHI sitting for an hour after a window closes.
+
+The daily sweeps are unaffected: `due()` gates them on their own `MAX_AGE`, so a minute's
+tick still means a daily sweep runs daily. The cost of asking every minute is five indexed
+reads over `sweep_run` and one over `shift_assignment`.
+
+### One failure does not stop the others
+
+`FlushFailed` is raised per shift by `flush_phi` and caught per shift here. A flush that
+leaves PHI behind is an incident about **one** agent and must not stop the other nine
+being cleared — the same rule `run_forever` follows between sweep kinds, where an
+unreachable SimForge must not be able to stop the hash chain being verified.
+
+### The three are not yet flushed
+
+**Nothing in this change has run against the live database.** The scheduler is in this
+branch; the API on main does not have it.
+
+They will be flushed within a minute of this merging and the API restarting, by the sweep
+itself — which is the point of the entry, and is why there is no script here to run them
+by hand.
+
+> **Open until then: greenstone's three shifts of 16 September are still unflushed.**

@@ -126,8 +126,28 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     invoked it; a second thing that is true only if somebody sets it up is how this got
     here. `broker expire-deadlines` still exists for a deployment that prefers a timer,
     and the two do the same work - `deadlines.run_once`.
+
+    RULED 22 SEPTEMBER 2026 (entries 168 and 169): *"A sweep runs on its own, in the
+    API's lifespan, as deadlines do."* and *"A shift that ends is flushed, at shift_end,
+    by that same scheduler."*
+
+    **The same argument, twelve entries later, about the same mistake.** `sweeps.run_all`
+    had said "safe to invoke from cron" since it was written, and nothing invoked it:
+    measured 22 September, `verdict_ingest` had run three times ever and last on the
+    21st, while `audit_chain` and `certification_staleness` last ran in **August** -
+    against a declared `MAX_AGE` of one day each. `deadline_expiry`, which entry 156 put
+    in this lifespan, had run 221 times.
+
+    What that costs is not symmetrical. A missed PASS is loud - the agent stays
+    uncertified and somebody asks within a shift. **A missed REVOKED is silent:**
+    SimForge withdrew a certification, The Office never read the verdict, and the agent
+    goes on holding production authority it has lost.
+
+    Two runners rather than one, because they tick for different reasons: deadlines
+    minimise `lag_seconds` on a passing deadline, and the sweeps respect each kind's own
+    `MAX_AGE`. Merging them would mean one interval answering two questions.
     """
-    async with deadlines.running():
+    async with deadlines.running(), sweeps.running():
         yield
     await close_pool()
 

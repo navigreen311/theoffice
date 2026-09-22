@@ -237,6 +237,93 @@ async def flush_phi(
     return result
 
 
+# -------------------------------------------- the ended-shift flush, entry 169
+
+async def ended_unflushed(conn: AsyncConnection) -> list[dict[str, Any]]:
+    """Shifts whose window has closed and whose PHI has never been flushed.
+
+    RULED 22 SEPTEMBER 2026 (decisions entry 169)
+    =============================================
+
+        *"A shift that ends is flushed, at shift_end, by that same scheduler, with no
+        reassignment."*
+
+    `flush_attempted_at IS NULL` rather than `NOT flush_verified`: a flush that ran and
+    FAILED is `FlushFailed`, which is an incident somebody has to look at, and a loop
+    that retried it every hour would turn a standing alarm into a log nobody reads. This
+    picks up shifts nothing has tried, which is all three of the measured ones.
+    """
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT shift_id, office_agent_id, venture_id, shift_end "
+            "  FROM shift_assignment "
+            " WHERE shift_end <= now() AND flush_attempted_at IS NULL "
+            " ORDER BY shift_end"
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def flush_ended_shifts(conn: AsyncConnection) -> dict[str, Any]:
+    """Flush every shift that has ended and never been flushed. Assigns nothing.
+
+    RULED 22 SEPTEMBER 2026 (decisions entry 169)
+    =============================================
+
+        *"A shift that ends is flushed, at shift_end, by that same scheduler, with no
+        reassignment."*
+
+    WHAT A FLUSH USED TO REQUIRE
+    ============================
+
+        `flush_phi` had exactly one caller in this repository: `rotate`, step 2 of moving
+        an agent from one venture to another. So a flush was reachable **only as a side
+        effect of assigning a new shift** - and `assign_shift` refuses when the previous
+        shift has no verified flush.
+
+        That is a closed loop, and three Greenstone agents sat in it from 17 September:
+        shifts ended, never flushed, `flush_attempted_at` NULL, and the only thing that
+        could flush them was a call that would first have to get past the block their
+        unflushed state creates.
+
+        The CLI has printed the shape of this after every assignment since it was
+        written: *"At <end> <agent> goes off shift, and nothing will assign the next
+        window."* Nothing flushed the closing one either.
+
+    **NO REASSIGNMENT**, and that is the ruling rather than an economy. `rotate` flushes
+    and then assigns, because somebody asked for a rotation. Nobody asked for one here:
+    what happened is that a window closed. A scheduler that assigned the next shift would
+    be deciding who works next, which is `staffing`'s job and a person's decision.
+
+    One failure does not stop the others. `FlushFailed` is raised per shift by
+    `flush_phi` and caught per shift here, because a flush that leaves PHI behind is an
+    incident about ONE agent and must not stop the other nine being cleared.
+    """
+    flushed: list[str] = []
+    failed: list[dict[str, str]] = []
+
+    for shift in await ended_unflushed(conn):
+        try:
+            await flush_phi(
+                conn,
+                office_agent_id=shift["office_agent_id"],
+                shift_id=shift["shift_id"],
+            )
+        except FlushFailed as exc:
+            # Recorded, never worked around. `flush_phi` has already written the row and
+            # the audit event; what this adds is that the sweep saw it and carried on.
+            failed.append({"shift_id": str(shift["shift_id"]), "reason": str(exc)})
+            continue
+        flushed.append(str(shift["shift_id"]))
+
+    return {
+        "shifts_flushed": flushed,
+        "shifts_failed": failed,
+        # The denominator, as every sweep in this system reports one: "0 flushed" and
+        # "0 flushed out of 0" are different facts and only the second is evidence.
+        "ended_unflushed_considered": len(flushed) + len(failed),
+    }
+
+
 async def previous_shift(
     conn: AsyncConnection, office_agent_id: uuid.UUID
 ) -> dict[str, Any] | None:

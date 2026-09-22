@@ -344,7 +344,11 @@ EVENTS: tuple[Event, ...] = (
           "A shift closed and its boundary work ran.", "broker.shifts", SYSTEM),
     Event("shift_phi_flush", "PHI flushed at shift boundary",
           "Protected health information was cleared when a shift ended. The temporal PHI "
-          "wall depends on this entry existing.", "broker.shifts", SYSTEM),
+          "wall depends on this entry existing. RULED 22 September 2026, entry 169: this "
+          "now happens BECAUSE a shift ended. Until then `flush_phi` had one caller - "
+          "`rotate` - so a flush was reachable only as a side effect of assigning a new "
+          "shift, and three Greenstone shifts that ended on 17 September had never been "
+          "attempted.", "broker.shifts", SYSTEM),
 )
 
 BY_TYPE = {event.event_type: event for event in EVENTS}
