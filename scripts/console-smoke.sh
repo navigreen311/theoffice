@@ -278,31 +278,47 @@ step "One real person, so Access has a row"
 # be a fixture - this script creates it.
 #
 # Idempotent: a re-run finds it and adds nothing.
-"$VPY" - <<'PY' >/dev/null
+#
+# IT ALSO CARRIES A TOKEN NOW, and that is entry 148: only a named human may decide a
+# proposal. The operator above is a fixture ON PURPOSE - this script creates it - so the
+# decision check further down cannot use it, and a second real account would be a second
+# thing to keep in step. This one account is both the row the Access page needs and the
+# person the approval queue needs.
+PERSON_TOKEN="$("$VPY" - <<'PY' 2>/dev/null | tail -1
 import asyncio, sys
 sys.path.insert(0, ".")
 import broker  # noqa: F401 - event-loop policy
 from broker import humans
 from broker.db import connection
 
+NAME, EMAIL = "Console Operator", "console.operator@office.smoke"
+
 async def main():
     async with connection() as conn:
         async with conn.cursor() as cur:
             await cur.execute(
-                "SELECT count(*) FROM office_human WHERE origin = 'human'"
+                "SELECT human_id FROM office_human WHERE email = %s", (EMAIL,)
             )
             row = await cur.fetchone()
-        if row and row[0]:
-            return
-        await humans.create_human(
-            conn,
-            display_name="Console Operator",
-            email="console.operator@office.smoke",
+        # A TOKEN IS RETURNED ONCE AND NEVER RECOVERABLE, so a re-run that found the
+        # account cannot print its token - it issues a new one for the same person.
+        if row:
+            token = await humans.reissue_token(conn, human_id=row[0])
+            human_id = row[0]
+        else:
+            human_id, token = await humans.create_human(
+                conn, display_name=NAME, email=EMAIL
+            )
+        await humans.grant_role(
+            conn, human_id=human_id, role="ivan", granted_by=human_id
         )
+        print(token)
 
 asyncio.run(main())
 PY
-say "the Access page has at least one non-fixture account"
+)"
+[ -n "$PERSON_TOKEN" ] || { echo "could not issue a token for a person" >&2; exit 1; }
+say "the Access page has at least one non-fixture account, and it can decide"
 
 step "Console"
 # Its own build directory, so running this script does not break a console the
@@ -2038,7 +2054,12 @@ if [ -n "$PROPOSAL_ID" ]; then
   fi
 
   # Deny it, which also exercises the decision path and leaves the queue as it was.
-  pycheck - "$TOKEN" "$API_PORT" "$PROPOSAL_ID" <<'PY'
+  #
+  # AS THE PERSON, NOT THE OPERATOR. Ruled 21 September 2026, entry 148: only a named
+  # human may decide a proposal, because four were decided by smoke fixtures and nothing
+  # stopped them. This script's operator is one of those fixtures by design, so it is
+  # refused here - correctly - and `$PERSON_TOKEN` is the account the Access step creates.
+  pycheck - "$PERSON_TOKEN" "$API_PORT" "$PROPOSAL_ID" <<'PY'
 import json, sys, urllib.request
 token, port, proposal_id = sys.argv[1], sys.argv[2], sys.argv[3]
 req = urllib.request.Request(

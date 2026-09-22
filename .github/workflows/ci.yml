@@ -185,6 +185,28 @@ jobs:
       # what asks it there.
       - name: The manuals match the script
         run: |
+          # An author the script will attribute to. `attributable_actor` refuses a test
+          # fixture - "an audit entry signed by a fixture names nobody who can answer
+          # for it" - and pytest leaves this database with fixtures and nothing else.
+          python - <<'PY'
+          import asyncio, os, uuid, psycopg
+          author = uuid.uuid4()
+          with psycopg.connect(os.environ["OFFICE_ADMIN_DSN"], autocommit=True) as conn:
+              conn.execute(
+                  "INSERT INTO office_human (human_id, display_name, email, token_hash,"
+                  "                          status, origin, auth_method) "
+                  "VALUES (%s, 'CI Instruction Author', 'author@ci.example', %s,"
+                  "        'active', 'human', 'sso_mfa') "
+                  "ON CONFLICT DO NOTHING",
+                  (author, f"ci-author-{author.hex}"),
+              )
+              conn.execute(
+                  "INSERT INTO office_human_role (human_id, role, venture_id, granted_by)"
+                  " VALUES (%s, 'ivan', NULL, %s) ON CONFLICT DO NOTHING",
+                  (author, author),
+              )
+          print("CI instruction author seeded")
+          PY
           python scripts/author_cre_forge_instructions.py
           python scripts/check_instructions_match.py
 
