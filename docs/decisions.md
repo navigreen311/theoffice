@@ -12996,3 +12996,206 @@ the rule generalises, and to which acts, is not settled here.
 reachable through `humans.create_human` can stand for a person in a test. The approvals
 suite promotes its own account with a comment rather than weakening the classifier, and
 that is a seam worth knowing about before somebody writes a test that cannot pass.
+
+## 149. An escalation leaves a record
+
+**Two rulings by Ivan Green, 21 September 2026:**
+
+> *"A role grant or revocation writes an audit event, in `grant_role` and `revoke_role`
+> themselves. Measured: both wrote none, and `revoke_role`'s docstring claims the audit
+> log records it."*
+>
+> *"An escalation leaves a record: raised, by whom, routed to which named human,
+> received, and answered, with timestamps. Both escalation paths return a route and
+> write nothing. An escalation path cannot be attested verified until it can be shown to
+> have been travelled."*
+
+### The role change nobody could verify
+
+`grant_role` wrote `granted_by` and `granted_at` on the role row; `revoke_role` stamped
+`revoked_at` and `revoked_by`. Both are a record. **Neither is the hash-chained one**, so
+nothing a ledger verification covers said who changed who may act — and `revoke_role`'s
+own docstring said *"the audit log says who"*, which the code did not support.
+
+It surfaced granting Ira Green `compliance_officer` for Greenstone: the event had to be
+written by hand beside the call. **That is the shape that tells you the function should
+have written it**, and it is why the ruling names the two functions rather than the act.
+
+Nothing is claimed when nothing changed. `ON CONFLICT DO NOTHING` makes a re-grant a
+no-op, and an event saying a role was granted when the human already held it is a false
+entry in a chain whose entire value is that it contains none.
+
+### Both escalation paths resolved and neither had a caller
+
+`governance` and `operational` resolve a recipient and return a `Route`. Measured:
+**neither has a single caller in `broker/` or `generators/`.** The only references
+outside that module are `appointment.py` declaring a path on the artifact and calling
+`assert_path` to keep a governance decision away from an agent.
+
+So the attestation brief of 21 September could say only that both resolve. Nothing had
+travelled either, and there was nowhere to record it if anything had.
+
+### Five facts, three timestamps
+
+    raised       raised_at, raised_by, raised_by_kind
+    by whom      an agent or a human, named - the kind says which, because the two ids
+                 come from different tables
+    routed to    routed_to_name always; routed_to_human when the path is GOVERNANCE,
+                 enforced by a CHECK, because a governance route that names no human
+                 could not have been delivered to anybody
+    received     received_at, received_by
+    answered     answered_at, answered_by, answer
+
+**Receipt is its own step and that is the point.** Raised-and-answered in one second by
+one process proves a function returns; the ruling is about somebody on the other end
+getting it. `received_at` NULL with `raised_at` set is a live finding — an escalation
+nobody picked up — and `outstanding` is where a reader sees it.
+
+An answer before a receipt is refused twice, by the writer and by a CHECK. An answer is a
+sentence, not a flag.
+
+### The resolvers stay resolvers
+
+`raise_escalation` is the act; `governance` and `operational` are unchanged. A resolver
+that wrote a row every time somebody asked *"who would this go to"* would fill the record
+with escalations nobody made, and `travelled` would then be satisfied by a question.
+
+`assert_path` runs before anything is written, so a governance decision addressed to an
+agent is refused rather than recorded as having been refused.
+
+### What it costs an attestation
+
+`attest` now refuses `escalation_path_verified=True` unless a complete
+raised–received–answered row exists **for that department**. One drill attests one
+department: `travelled` matches on `department` and never on NULL, so a venture-wide
+escalation — a capacity shortfall — is evidence about the venture's path and not about
+research's.
+
+**Only the true verdict is gated.** Requiring a successful drill before somebody may
+write down that a path does *not* work would be the register forcing a lie, which is the
+same argument that makes a negative attestation recordable at all.
+
+The check runs **after** the authorisation. Telling somebody their evidence is missing
+when they were never allowed to attest answers the wrong question, and it tells a caller
+without founder authority what evidence would have worked.
+
+### Two seams this exposed, both in the harness
+
+`escalation_record` leaked between tests until it was added to the venture wipe — one
+suite's drill was evidence a later suite's attestation could read. **It went into
+`FORGE_DEPENDENTS` first**, which was wrong: the table has no `forge_id`, and the two
+lists answer different questions.
+
+Every account a test creates the ordinary way is a fixture, because
+`account_origin.origin_of` classifies every `.invalid` address as one (entry 148). A
+drill needs a person — `governance` resolves through `attributable_actor`, which refuses
+to deliver to a fixture — so two fixtures are promoted explicitly, with the reason beside
+them, rather than by weakening the classifier.
+
+## 150. Only the routed human, and account age decides nothing
+
+**Six rulings by Ivan Green, 21 September 2026, on #202 before it merges.** Every one
+of them is a measurement of the build entry 149 produced, and the first four are the
+same defect from four sides: **the record said a path had been travelled and nothing
+established that anybody had travelled it.**
+
+> *"Only the routed human records receipt and answer, and never the raiser. The actor
+> comes from their token on a route, never from an argument."*
+>
+> *"The audit log records who actually acted."*
+>
+> *"The routed human can reach it: a console page on the /proposals pattern, showing the
+> item, who raised it, what it asks, and the two acts."*
+>
+> *"Split `_travel` into two people."*
+>
+> *"A revoked role grants nothing. Fix `attributable_actor`."*
+>
+> *"A governance escalation routes to the human named for its venture and department.
+> Account age never decides. Greenstone: operations to Ira Green, research to Ivan
+> Green."*
+
+### What the first build actually permitted
+
+`record_receipt` and `record_answer` took the actor as a `uuid` and checked nothing:
+no authorisation, no comparison with `routed_to_human`, no `assert_named_human`, no
+check against the raiser. Any uuid — including an agent's — and both functions then
+wrote `actor_type="human"` into a hash-chained log. **A false attribution in the one
+place this project treats as non-repudiable.**
+
+There was no route and no page, so the only party able to record a delivery was the
+process that raised it — the one party a delivery cannot be to.
+
+**And the test proved it.** `_travel` had one human raise, receive and answer in three
+consecutive calls: exactly the shape `0051`'s own docstring rejects — *"raised and
+answered by the same process, in the same second, proves the function returns."* The
+test written to demonstrate a travelled path was demonstrating the thing the design
+forbids, and it passed because nothing checked who was acting.
+
+### Three refusals, and the third is not redundant
+
+    not a person        a fixture cannot answer for a decision
+    not the recipient   somebody else's escalation is not yours to close
+    the raiser          even when the raiser IS the named recipient
+
+The third stands on its own: a path is a delivery between two parties, and a round trip
+inside one of them measures a function call however well-credentialed the party is.
+
+`me` is a `Human` rather than a uuid, and it reaches the functions from a token on
+`POST /api/escalations/{id}/receive` and `/answer`. `actor_type="human"` is now true by
+construction — the refusal two lines above it established it — instead of asserted about
+an argument nobody had looked at.
+
+### The page
+
+`/escalations`, on `/proposals`' pattern: the item, who raised it and in what capacity,
+what it asks **in the raiser's own words**, and the two acts as separate buttons. The
+gap between raised and received is what a drill measures, and one button would erase it.
+
+Scoped by the API and not by a filter in the page — `routed_to_human = me.human_id` is
+the whole `WHERE`. A page listing everybody's would invite the close-somebody-else's-item
+the rule refuses.
+
+### Account age was deciding who governs
+
+`governance` resolved through `attributable_actor`, whose query ends
+`ORDER BY h.created_at LIMIT 1`. That function answers *who do we attribute an unattended
+action to* and was never a routing rule. On this database it returns Ivan Green because
+his account is the oldest, and **there was no argument that would have reached Ira.**
+
+`escalation_recipient` (0052) keys a named human on venture and department. A row with
+`department IS NULL` is the venture's default, for an escalation that names none — and
+it is **not** a fallback for a department nobody has named: delivering a banking
+decision to whoever holds the default would record banking's path as working when nobody
+named for banking ever saw it.
+
+Nothing is seeded by the migration. The two pairs Ivan named are written by
+`name_recipient`, which needs founder authority and writes an audit event — a migration
+that inserted them would record the decision as having been made by a schema change.
+
+### The revoked-role sweep, in full
+
+Eight reads of `office_human_role`. **Three ignored `revoked_at`; five did not.**
+
+    broker/humans.py:733     attributable_actor       MISSING - the one ruled
+    broker/access_overview.py:89   the Access page     MISSING - it rendered a revoked
+                                                       role as held, on the page that
+                                                       answers "who can do this"
+    scripts/load_compliance_library.py:183  the loader's actor   MISSING
+
+    broker/humans.py:199     authenticate             correct
+    broker/humans.py:382     the last-administrator count   correct
+    broker/humans.py:405     may-grant                correct
+    broker/humans.py:623     one human's roles        correct
+    broker/humans.py:779     the roster               correct
+
+All three are fixed. And a second finding on the third: it selected
+`role IN ('administrator','venture_operator')`, and **`administrator` is not a role** —
+`office_human_role` has held `('venture_operator','compliance_officer','ivan')` since
+0010, so that arm has never matched anything. Removed rather than left as a name
+somebody reads as real.
+
+Yesterday's revocation of `dev-all build check`'s `ivan` role was real but not yet
+load-bearing: it resolved to Ivan Green only because he is older. Had the fixture been
+created first, taking its role away would have changed nothing about who governance
+escalations reach.

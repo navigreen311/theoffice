@@ -177,6 +177,39 @@ EVENTS: tuple[Event, ...] = (
     Event("provisioning_run_aborted", "Run aborted",
           "A run was stopped before completion. The Pack is unchanged.",
           "broker.provisioning", PROVISIONING),
+    Event("human_role_granted", "Role granted",
+          "A human was given a role, by another human. The role row records who and "
+          "when; this is the hash-chained half, and until 21 September 2026 it did not "
+          "exist - `revoke_role`'s docstring claimed the audit log recorded this and it "
+          "recorded nothing (entry 149).",
+          "broker.humans", CONSOLE),
+    Event("human_role_revoked", "Role revoked",
+          "A human's role was taken away. Written by `revoke_role` itself, for the "
+          "reason its grant is: an event a caller remembers to write is an event the "
+          "next caller forgets.",
+          "broker.humans", CONSOLE),
+    Event("escalation_recipient_named", "Escalation recipient named",
+          "A human with founder authority named who a governance escalation reaches "
+          "for one venture and department. Ruled 21 September 2026: account age never "
+          "decides - routing used to pick the oldest account holding `ivan`, so nothing "
+          "could reach anybody else (entry 150).",
+          "broker.escalation", CONSOLE),
+    Event("escalation_raised", "Escalation raised",
+          "Somebody escalated a decision they may not make, and this says who raised "
+          "it, by which path, and which named recipient it was routed to. Ruled 21 "
+          "September 2026: both paths used to return a route and write nothing, so no "
+          "escalation could be shown to have been travelled (entry 149).",
+          "broker.escalation", PROVISIONING),
+    Event("escalation_received", "Escalation received",
+          "The recipient picked it up. THE STEP THAT MATTERS: raised-and-answered in "
+          "one second by one process proves a function returns, not that anybody got "
+          "anything.",
+          "broker.escalation", PROVISIONING),
+    Event("escalation_answered", "Escalation answered",
+          "What the recipient decided, in their own words. A complete raised-received-"
+          "answered record is what lets a department's escalation path be attested "
+          "verified at all.",
+          "broker.escalation", PROVISIONING),
     Event("department_attested", "Department attested",
           "A named human with founder authority attested, for one department and Forge, "
           "that the escalation path and the compliance coupling are verified - with a "

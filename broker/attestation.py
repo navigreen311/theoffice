@@ -52,7 +52,7 @@ from typing import Any
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 
-from broker import audit, humans
+from broker import audit, escalation, humans
 
 #: The role a human must hold to attest. NOT A NEW ROLE, and that is a measurement:
 #: `office_human_role` has held `('venture_operator', 'compliance_officer', 'ivan')`
@@ -130,10 +130,43 @@ async def attest(
             "an attestation gives a reason for each of its two verdicts; the database "
             "refuses one without, and so does this"
         )
+
     # Founder authority, at every venture. `venture_id=None` because `ivan` is held
     # unscoped on this database and a founder decision binds every venture - the same
     # language `forge_module_exclusion` uses about itself.
     role = humans.authorize(human, required_role=FOUNDER_ROLE, venture_id=None)
+
+    # AN ESCALATION PATH CANNOT BE ATTESTED VERIFIED UNTIL IT HAS BEEN TRAVELLED.
+    # Ruled 21 September 2026, entry 149.
+    #
+    # AFTER the authorisation, and that ordering is deliberate: telling somebody their
+    # evidence is missing when they were never allowed to attest at all answers the
+    # wrong question, and it tells a caller without founder authority what evidence
+    # would have worked.
+    #
+    # This is the one place the stop-gap is allowed to be strict, and it is the place it
+    # has to be: an attestation exists because no test can establish that a department's
+    # escalation path works, and "I looked at it" is not the same claim as "somebody
+    # raised one and somebody answered it". The second is now recordable, so the first
+    # stops being enough.
+    #
+    # ONLY THE TRUE VERDICT IS GATED. `escalation_path_verified=False` needs no evidence
+    # and is refused nothing - "I looked and it does not work" is a fact somebody should
+    # be able to write down, and requiring a successful drill before you may report a
+    # failure would be the register forcing a lie.
+    if escalation_path_verified:
+        travelled = await escalation.travelled(
+            conn, venture_id=venture_id, department=department
+        )
+        if travelled is None:
+            raise AttestationError(
+                f"no escalation for {venture_id}/{department} has been raised, received "
+                "and answered, so its path cannot be attested verified. An escalation "
+                "path is a delivery, and what this register would otherwise hold is "
+                "somebody's reading of a route that resolves. Raise one "
+                "(`escalation.raise_escalation`), have it received and answered, and "
+                "attest against that."
+            )
 
     attestation_id = uuid.uuid4()
     async with conn.cursor() as cur:

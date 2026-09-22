@@ -30,7 +30,7 @@ from typing import Any
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 
-from broker import account_origin
+from broker import account_origin, audit
 from broker.errors import NotAuthorized
 from broker.revocation import ROLE_RANK
 
@@ -132,13 +132,51 @@ async def grant_role(
     granted_by: uuid.UUID,
     venture_id: str | None = None,
 ) -> None:
+    """Give a human a role, and say so in the ledger.
+
+    RULED 21 SEPTEMBER 2026 (decisions entry 149)
+    =============================================
+
+        *"A role grant or revocation writes an audit event, in `grant_role` and
+        `revoke_role` themselves."*
+
+        Neither wrote one. The row records `granted_by` and `granted_at`, which is a
+        record - and it is not the hash-chained one, so nothing that verifies the ledger
+        covers a change to who may act. `revoke_role`'s own docstring claimed otherwise:
+        *"the audit log says who"*.
+
+        Found on 21 September, granting Ira Green `compliance_officer` for Greenstone.
+        The event had to be written by hand beside the call, which is the shape that
+        tells you the function should have written it.
+
+    **IN THIS FUNCTION, not at the caller.** That is the whole of the ruling: an event a
+    caller remembers to write is an event the next caller forgets.
+
+    NOTHING IS CLAIMED WHEN NOTHING CHANGED. `ON CONFLICT DO NOTHING` makes a re-grant a
+    no-op, and an event saying a role was granted when the human already held it is a
+    false entry in a chain whose value is that it contains none.
+    """
     async with conn.cursor() as cur:
         await cur.execute(
             "INSERT INTO office_human_role (human_id, role, venture_id, granted_by) "
             "VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING",
             (human_id, role, venture_id, granted_by),
         )
+        granted = cur.rowcount
     await conn.commit()
+
+    if granted:
+        await audit.write_event(
+            event_type="human_role_granted",
+            actor_type="human", actor_id=granted_by, venture_id=venture_id,
+            subject={
+                "human_id": str(human_id),
+                "role": role,
+                # Spelled rather than omitted, because a NULL here means EVERY venture
+                # and an absent key reads as "this one, unspecified".
+                "venture_id": venture_id or "*",
+            },
+        )
 
 
 async def authenticate(conn: AsyncConnection, token: str) -> Human | None:
@@ -392,6 +430,10 @@ async def revoke_role(
     A soft delete, the same shape `playbook_share` uses. Deleting the row would destroy
     the answer to "who had this, who gave it to them, and who took it away" - and that
     question is the entire justification for forbidding self-grants.
+
+    **AND IT WRITES AN AUDIT EVENT NOW** - ruled 21 September 2026, entry 149. The
+    paragraph above used to end *"the audit log says who"*, and the audit log said
+    nothing: this function wrote a column and no event. The claim is true again.
     """
     async with conn.cursor() as cur:
         await cur.execute(
@@ -403,6 +445,18 @@ async def revoke_role(
         )
         removed = cur.rowcount
     await conn.commit()
+
+    # Same rule as the grant: a revocation of a role nobody held is not a revocation.
+    if removed:
+        await audit.write_event(
+            event_type="human_role_revoked",
+            actor_type="human", actor_id=revoked_by, venture_id=venture_id,
+            subject={
+                "human_id": str(human_id),
+                "role": role,
+                "venture_id": venture_id or "*",
+            },
+        )
     return removed > 0
 
 
@@ -678,6 +732,11 @@ async def attributable_actor(
               FROM office_human h
               JOIN office_human_role r ON r.human_id = h.human_id
              WHERE r.role = %s
+               -- A REVOKED ROLE GRANTS NOTHING. Ruled 21 September 2026, entry 150.
+               -- This query ignored it, so a role somebody had taken away still made
+               -- its holder eligible to be attributed an action. Every other read of
+               -- this table filtered it; this one and two more did not.
+               AND r.revoked_at IS NULL
                AND h.status = 'active'
                AND h.origin = 'human'
              ORDER BY h.created_at
