@@ -6,8 +6,10 @@ import { useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 
 import { Ago, LocalTime } from "@/components/local-time";
+import { Term } from "@/components/term";
 import { Badge, Button, inputClass } from "@/components/ui";
 import type { HumanRow } from "@/lib/api";
+import { AUTH_METHOD } from "@/lib/vocabulary";
 
 import {
   reissueTokenAction,
@@ -378,7 +380,17 @@ export function People({
                     MFA enrolled <LocalTime iso={person.mfa_enrolled_at} />
                   </>
                 ) : (
-                  `MFA not enrolled — ${person.auth_method} is a claim, not evidence`
+                  /* WHAT THIS ACCOUNT ACTUALLY HAS, not what it fails to have. This
+                     read "MFA not enrolled — {auth_method} is a claim, not evidence",
+                     which was true while every account claimed `sso_mfa` and none had
+                     enrolled. Entry 154 removed the claim: `bearer_token` IS the
+                     evidence, so calling it one would be the false sentence now. The
+                     value goes through `Term` because a bare identifier as primary text
+                     is the thing the doctrine refuses. */
+                  <span className="inline-flex flex-wrap items-baseline gap-x-1.5">
+                    <span>No second factor —</span>
+                    <Term value={person.auth_method} from={AUTH_METHOD} />
+                  </span>
                 )}
               </span>
             </div>

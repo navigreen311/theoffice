@@ -63,6 +63,21 @@ export const REVOCATION_SCOPE: Vocabulary = {
   forge: "A whole piece of software, everyone",
 };
 
+/**
+ * What is actually enforced when an account authenticates. Ruled 21 September 2026,
+ * decisions entry 154.
+ *
+ * Every account read `sso_mfa` and none had ever enrolled a second factor — 242 of 242,
+ * measured — so the value described an aspiration. `bearer_token` is what those accounts
+ * really have, and the schema now refuses the other two without an enrolment date beside
+ * them.
+ */
+export const AUTH_METHOD: Vocabulary = {
+  bearer_token: "A token The Office issued — no second factor",
+  sso_mfa: "Single sign-on with a second factor",
+  mfa_only: "A second factor, without single sign-on",
+};
+
 export const CREDENTIAL_MODE: Vocabulary = {
   brokered: "The Office holds the key and acts for this agent",
   native: "The agent has its own login",
@@ -156,6 +171,7 @@ export const FRAMEWORK: Vocabulary = {
 
 const DICTIONARIES = [
   RUN_STATE,
+  AUTH_METHOD,
   TRUST_TIER,
   CERTIFICATION_STATE,
   REVOCATION_SCOPE,
