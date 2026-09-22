@@ -237,11 +237,8 @@ async def main() -> None:
             await humans.grant_role(
                 conn, human_id=human_id, role="ivan", granted_by=human_id
             )
-            await audit.write_event(
-                event_type="bootstrap_human_created",
-                actor_type="human", actor_id=human_id, venture_id=None,
-                subject={"email": email, "role": "ivan", "via": "dev-up"},
-            )
+            # No creation event here: `create_human` writes `human_account_created`
+            # and `grant_role` writes `human_role_granted` (entries 149 and 153).
         else:
             # `name` is deliberately not applied here. An account that exists keeps the
             # name it has: renaming is `humans.rename`, which refuses a name another

@@ -47,7 +47,7 @@ def _account(admin: psycopg.Connection, name: str, total: float | None) -> uuid.
             INSERT INTO office_human
               (human_id, display_name, email, auth_method, status, created_at, origin,
                daily_total_hours)
-            VALUES (%s, %s, %s, 'mfa_only', 'active', now(), 'test_fixture', %s)
+            VALUES (%s, %s, %s, 'bearer_token', 'active', now(), 'test_fixture', %s)
             """,
             (human_id, name, f"v39-{human_id}@example.invalid", total),
         )
@@ -65,7 +65,7 @@ def _live_pack(admin: psycopg.Connection, venture: str, capacity: list[dict]) ->
             INSERT INTO office_human
               (human_id, display_name, email, auth_method, status, created_at, origin)
             VALUES (%s, 'V39 Pack Author', 'v39-author@example.invalid',
-                    'mfa_only', 'active', now(), 'test_fixture')
+                    'bearer_token', 'active', now(), 'test_fixture')
             ON CONFLICT (human_id) DO NOTHING
             """,
             (AUTHOR,),

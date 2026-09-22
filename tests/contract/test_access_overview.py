@@ -323,17 +323,79 @@ async def test_authenticating_records_that_the_account_was_seen(api):
     assert me["last_seen_at"] is not None, "signing in did not record presence"
 
 
-async def test_mfa_enrolment_is_separate_from_the_claimed_method(api):
-    """Every account claims `sso_mfa` because that is the column default.
+async def test_an_account_cannot_claim_a_second_factor_it_has_not_enrolled(api):
+    """**The claim is gone; what is left is the fact.** Ruled 21 September 2026, entry 154.
 
-    A signer whose second factor is a default rather than an enrolment weakens exactly
-    the non-repudiation the Gate 10 signature is meant to carry, so the claim and the
-    evidence are different fields.
+    This test used to assert the defect. Every account claimed `sso_mfa` because that was
+    the column default - measured, 242 of 242, with zero enrolments ever - and the test
+    recorded the claim and the missing evidence side by side as two fields that disagreed
+    on purpose.
+
+    0025 had already written why that was dangerous, on the column it added: *"a signer
+    whose MFA is a claim rather than an enrolment weakens the non-repudiation the Gate 10
+    signature is meant to carry."* Correct, and a comment. `auth_method` now carries only
+    what is enforced, and `mfa_is_claimed_only_when_enrolled` is what makes it stay true.
     """
     _id, token = await make("Ivan", "ivan", "ivan@office.example.com")
     overview = (await api.get("/api/access/overview", headers=auth(token))).json()
     me = next(row for row in overview["accounts"] if row["display_name"] == "Ivan")
 
-    assert me["auth_method"] == "sso_mfa", "the claim"
-    assert me["mfa_enrolled_at"] is None, "the evidence, which nobody has provided"
+    assert me["auth_method"] == "bearer_token", (
+        "an account with no enrolment reads as what it actually has"
+    )
+    assert me["mfa_enrolled_at"] is None
     assert overview["counts"]["mfa_enrolled"] == 0
+
+
+async def test_claiming_mfa_without_an_enrolment_is_refused(admin):
+    """**Load-bearing.** The constraint, not the convention.
+
+    `sso_mfa` WAS the convention: a default in `create_human`, a default on the request
+    model, and a literal in the Pack template. A convention is what let 242 accounts
+    inherit a claim nobody made deliberately, so the rule is in the schema where a future
+    default cannot quietly restore it.
+    """
+    import psycopg
+
+    with pytest.raises(
+        psycopg.errors.CheckViolation, match="mfa_is_claimed_only_when_enrolled"
+    ), admin.cursor() as cur:
+        cur.execute(
+            "INSERT INTO office_human (human_id, display_name, email, auth_method, "
+            "                          origin, token_hash) "
+            "VALUES (%s, 'Claims MFA', 'claims@mfa.invalid', 'sso_mfa', "
+            "        'test_fixture', %s)",
+            (uuid.uuid4(), f"claims-mfa-{uuid.uuid4().hex}"),
+        )
+    admin.rollback()
+
+
+async def test_an_enrolled_account_may_claim_it(admin):
+    """The other direction, so the constraint is not satisfied by forbidding everything.
+
+    Nothing in this repository writes `mfa_enrolled_at` - there is no second factor to
+    enrol - so this is the only place a row carrying one exists. It is written directly,
+    and that is the honest shape: a test can assert the rule without the system gaining
+    an enrolment path it does not have.
+    """
+    human_id = uuid.uuid4()
+    with admin.cursor() as cur:
+        cur.execute(
+            "INSERT INTO office_human (human_id, display_name, email, auth_method, "
+            "                          origin, token_hash, mfa_enrolled_at) "
+            "VALUES (%s, 'Enrolled', 'enrolled@mfa.invalid', 'sso_mfa', "
+            "        'test_fixture', %s, now())",
+            (human_id, f"enrolled-{human_id.hex}"),
+        )
+    admin.commit()
+    try:
+        with admin.cursor() as cur:
+            cur.execute(
+                "SELECT auth_method, mfa_enrolled_at IS NOT NULL "
+                "  FROM office_human WHERE human_id = %s", (human_id,)
+            )
+            assert cur.fetchone() == ("sso_mfa", True)
+    finally:
+        with admin.cursor() as cur:
+            cur.execute("DELETE FROM office_human WHERE human_id = %s", (human_id,))
+        admin.commit()

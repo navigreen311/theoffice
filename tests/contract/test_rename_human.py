@@ -151,14 +151,14 @@ async def test_the_index_refuses_a_duplicate_even_if_the_function_is_bypassed(ad
         cur.execute(
             "INSERT INTO office_human (human_id, display_name, email, auth_method, "
             "                          origin) "
-            "VALUES (%s, 'Ivan Green', 'a@office.example.com', 'sso_mfa', 'human')",
+            "VALUES (%s, 'Ivan Green', 'a@office.example.com', 'bearer_token', 'human')",
             (uuid.uuid4(),),
         )
         with pytest.raises(psycopg.errors.UniqueViolation):
             cur.execute(
                 "INSERT INTO office_human (human_id, display_name, email, auth_method, "
                 "                          origin) "
-                "VALUES (%s, '  ivan green ', 'b@office.example.com', 'sso_mfa', 'human')",
+                "VALUES (%s, '  ivan green ', 'b@office.example.com', 'bearer_token', 'human')",
                 (uuid.uuid4(),),
             )
     admin.rollback()

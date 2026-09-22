@@ -13353,3 +13353,142 @@ declares itself to be rather than what its shape suggests.
 No drift on either. CI gains no step: the suite already drives the comparator both ways
 with the world fixture, and it now drives it over both Forges and over a Forge registered
 nowhere.
+
+
+## 153. An account that nobody recorded creating
+
+**Ruling by Ivan Green, 21 September 2026:**
+
+> *"Creating an account writes an audit event. Measured: `dev-all build check` has no
+> creation record, only its revocation."*
+
+### The measurement is the whole argument
+
+`dev-all build check` held `ivan` — founder authority — from 17 to 21 September. The
+hash-chained log contains exactly **one** row about it, and it is the revocation that
+took the role away. There is no record of the account being made, by whom, or why.
+
+Nothing in this repository creates it either: `create_human` appears in three scripts and
+none uses that name or address. So it was made by a path that writes no audit entry, and
+**where it came from cannot be answered from the ledger that exists to answer exactly
+that question.** That remains open; a plausible script name in its place would be an
+invention.
+
+### Two of three paths already did it, at the caller
+
+`console_human_created` was written by the route. `bootstrap_human_created` was written by
+the CLI. Anything else wrote nothing.
+
+That is the shape entry 149 ruled against for `grant_role` four entries ago, and the same
+sentence applies: **an event a caller remembers to write is an event the next caller
+forgets** — and the next caller is how this account exists. So the event moves into
+`create_human`, and the two caller-side ones are retired.
+
+They stay in the glossary. The rows they wrote are in the chain for good, and an entry the
+glossary cannot label renders as a raw identifier.
+
+### What the event carries, and what it must never carry
+
+`human_id`, `display_name`, `email`, and **both declarations**: `origin` (what this
+account is) and `auth_method` (what is actually enforced for it). Those two are chosen
+exactly once — here — and a reader asking how an account with founder authority and no
+second factor came to exist needs both on the same row.
+
+**Not the token.** The chain is append-only by trigger and readable by anyone who can read
+the Access page, so a credential that reached it could never be redacted. A test asserts
+neither the plaintext nor its hash appears.
+
+`created_by` is nullable for one case: the bootstrap human, who has nobody above them. It
+resolves to the new account's own id and records `self_created`, the way `grant_role`'s
+self-grant is already recorded — visible as an exception rather than as a gap.
+
+
+## 154. An account says what is enforced
+
+**Ruling by Ivan Green, 21 September 2026:**
+
+> *"An account's `auth_method` says what is enforced. Measured: Ira reads `sso_mfa` with
+> `mfa_enrolled_at` NULL, and nothing reads the column."*
+
+### Every account, and not one enrolment
+
+    auth_method  mfa enrolled  origin          count
+    sso_mfa      NO            human               2
+    sso_mfa      NO            test_fixture      240
+
+**All 242.** `auth_method` has permitted exactly two values since 0010 — `sso_mfa` and
+`mfa_only` — and both assert a second factor. There has never been a way for an account to
+say the true thing, so every account said the same untrue one, inherited from a default.
+
+### 0025 wrote this down and could not fix it
+
+The column comment 0025 added, when it separated enrolment from the claim:
+
+> *"When a second factor was actually enrolled. Deliberately separate from `auth_method`,
+> which every account claims by default and nothing verifies: a signer whose MFA is a
+> claim rather than an enrolment weakens the non-repudiation the Gate 10 signature is
+> meant to carry."*
+
+Correct, and a comment. **`mfa_enrolled_at` has no writer anywhere in this repository** —
+read by the Access page, the roster query and the console, set by nothing. The separation
+recorded the problem without being able to resolve it, and the console has been showing an
+amber "no MFA" marker against every account for as long as it has existed, which is a
+marker that tells a reader nothing.
+
+### What this changes: the column stops lying
+
+`bearer_token` is added as a value an account can honestly hold. Every account that has
+not enrolled moves to it, and a CHECK — `mfa_is_claimed_only_when_enrolled` — makes
+`sso_mfa` and `mfa_only` unstateable without an enrolment date beside them.
+
+**A constraint rather than a convention**, because `sso_mfa` already *was* the convention:
+a default in `create_human`, a default on the request model, a literal in the Pack
+template. That is how 242 rows inherited a claim nobody made deliberately.
+
+`Human` now carries `auth_method`, so a caller can ask. This is entry 148's gap closed one
+field over: `Human` did not carry `origin`, which is precisely why every route taking `me`
+from a token was structurally unable to check for a fixture. Found while doing it:
+**`get_human` selected neither `origin` nor `auth_method` and let both default**, so a
+fixture read back through it arrived as a person. Fixed here rather than left for a third
+reader.
+
+### What this deliberately does NOT do, and the question it leaves open
+
+**It does not build MFA, and it does not enforce it.**
+
+There is no second factor in this system to enrol. The credential is a bearer token The
+Office issues and hashes; there is no IdP, no TOTP, no WebAuthn. Writing a timestamp into
+`mfa_enrolled_at` to satisfy the new constraint would be the same defect one level down —
+a column claiming an enforcement nobody performs.
+
+So, the question, written rather than answered:
+
+> **What would "MFA enrolled" mean for an account whose only credential is a bearer token
+> The Office issued to it?**
+
+Until that has an answer, enforcing a second factor at `attest`, `sign_off` and
+`revoke` — the three acts worth protecting — would refuse every account on the platform,
+including both people. What it would take, measured:
+
+    1. an enrolment path            nothing writes `mfa_enrolled_at`; without this,
+                                    enforcement refuses everybody
+    2. `Human` carrying the field   DONE here, so a check is possible at all
+    3. a refusal at three sites     `attestation.attest`, `humans.sign_off`,
+                                    `revocation` — shaped like `assert_named_human`,
+                                    called after `authorize`
+    4. a decision about 240 rows    every fixture would fail it, and the suite creates
+                                    more on every run
+
+Steps 3 and 4 are small. Step 1 is the whole problem and step 4 depends on it.
+
+### One inconsistency this leaves standing, named rather than fixed
+
+The Pack's `human_capacity[].auth_method` is a **separate** field with its own
+`Literal["sso_mfa", "mfa_only"]`, and Burkham's Pack declares `sso_mfa` for both Ivan and
+Ira — whose accounts now read `bearer_token`. Nothing in the validator reads that field,
+so nothing detects the disagreement.
+
+Left alone deliberately. The Pack is declaring what a reviewer's authentication *should
+be*, which is a requirement, and the account column is recording what it *is*. Whether a
+Pack may require something the platform cannot enforce is a question for Ivan, not a
+default this change should pick.

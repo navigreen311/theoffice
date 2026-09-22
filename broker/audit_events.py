@@ -41,7 +41,11 @@ class Event:
 EVENTS: tuple[Event, ...] = (
     # ------------------------------------------------------------------ console
     Event("console_human_created", "Person added",
-          "An account was created and a token issued once.",
+          "An account was created and a token issued once. HISTORICAL: no longer "
+          "written. Creating an account writes `human_account_created` from "
+          "`create_human` itself since 21 September 2026 (entry 153). Kept here because "
+          "the rows this name wrote are in the chain for good, and an entry the "
+          "glossary cannot label renders as a raw identifier.",
           "broker.app", CONSOLE),
     Event("console_human_status_changed", "Person suspended or reactivated",
           "Somebody's access was taken away or given back. Takes effect on their next "
@@ -235,8 +239,19 @@ EVENTS: tuple[Event, ...] = (
           "broker.simforge", PROVISIONING),
 
     # -------------------------------------------------------------------- system
+    Event("human_account_created", "Account created",
+          "An account was created, with what it IS (origin) and what is actually "
+          "enforced for it (`auth_method`) recorded at the one moment both are chosen. "
+          "Written by `create_human`, so every path that makes an account leaves this "
+          "entry - ruled 21 September 2026, entry 153, because `dev-all build check` "
+          "held founder authority for four days and the chain recorded only the "
+          "revocation that took it away. `self_created` marks the bootstrap account, "
+          "which has nobody above it to be created by.",
+          "broker.humans", SYSTEM),
     Event("bootstrap_human_created", "First operator created",
-          "The account that removed the need for a shell to create the second one.",
+          "The account that removed the need for a shell to create the second one. "
+          "HISTORICAL: no longer written, replaced by `human_account_created` "
+          "(entry 153).",
           "broker.humans", SYSTEM),
     Event("pack_published", "Business Pack published",
           "A new Pack version took force. It changes what the next provisioning run "

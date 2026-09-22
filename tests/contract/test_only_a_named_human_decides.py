@@ -103,7 +103,7 @@ async def test_authenticate_reads_the_origin_off_the_row(admin: psycopg.Connecti
             cur.execute(
                 "INSERT INTO office_human (human_id, display_name, email, token_hash, "
                 "                          status, origin, auth_method) "
-                "VALUES (%s, %s, %s, %s, 'active', %s, 'sso_mfa')",
+                "VALUES (%s, %s, %s, %s, 'active', %s, 'bearer_token')",
                 (human_id, name, f"{human_id.hex}@origin.invalid",
                  humans.hash_token(token), origin),
             )

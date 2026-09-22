@@ -274,7 +274,7 @@ async def test_the_database_refuses_a_wide_lift_with_one_human(admin: psycopg.Co
         cur.execute(
             "INSERT INTO office_human (human_id, display_name, email, auth_method, "
             "token_hash, status, origin) VALUES (%s, 'Solo', 'solo@x.invalid', "
-            "'mfa_only', 'x', 'active', 'test_fixture')",
+            "'bearer_token', 'x', 'active', 'test_fixture')",
             (human,),
         )
         cur.execute(

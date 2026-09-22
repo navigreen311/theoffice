@@ -54,7 +54,7 @@ async def subject(admin: psycopg.Connection) -> AsyncIterator[uuid.UUID]:
         cur.execute(
             "INSERT INTO office_human (human_id, display_name, email, token_hash, "
             "                          status, origin, auth_method) "
-            "VALUES (%s, %s, %s, %s, 'active', 'human', 'sso_mfa')",
+            "VALUES (%s, %s, %s, %s, 'active', 'human', 'bearer_token')",
             (human_id, f"Role Subject {human_id.hex[:6]}",
              f"{human_id.hex}@roles.invalid", f"role-token-{human_id.hex}"),
         )
