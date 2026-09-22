@@ -150,11 +150,31 @@ export function ReviewForm({
           (artifactsHash ? ` Bound to artifact hash ${artifactsHash.slice(0, 8)}…` : "")
         }
       >
+        {/*
+          INSTRUCTIONS, NOT AN EXAMPLE ANSWER. Ruled 22 September 2026, entry 157.
+
+          The placeholder was a worked review - "all 3 positions filled by certified
+          agents ... 192 approvals/day against 144 review-minutes" - and every number in
+          it was invented. It described a venture with three positions and a V13 failure
+          at a ratio no Pack here has ever had.
+
+          Two things wrong with that, and the second is the serious one. It is grey text
+          a reviewer can read as a summary of the run in front of them, and it is a
+          template for the review they are about to write: the fastest honest-looking
+          thing to do with a filled-in example is to agree with it. A placeholder that
+          suggests a conclusion is a placeholder that collects one.
+
+          So it prompts for the work instead, and names nothing it has not been given.
+        */}
         <textarea
           className={inputClass}
           name="note"
           rows={3}
-          placeholder="Checked the appointment gap report — all 3 positions filled by certified agents. Read the V13 capacity failure: 192 approvals/day against 144 review-minutes. Advancing to confirm the halt at 4.5 before revising the Pack."
+          placeholder={
+            "Name what you checked and what you found. Say which of the counts above " +
+            "you read, what the gap report told you, and why you are advancing or " +
+            "stopping."
+          }
         />
       </Field>
       <div className="flex flex-wrap items-center gap-2">

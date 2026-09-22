@@ -52,7 +52,7 @@ from typing import Any
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 
-from broker import audit, escalation, humans
+from broker import audit, escalation, humans, mfa
 
 #: The role a human must hold to attest. NOT A NEW ROLE, and that is a measurement:
 #: `office_human_role` has held `('venture_operator', 'compliance_officer', 'ivan')`
@@ -109,6 +109,7 @@ async def attest(
     department: str,
     forge_id: str,
     human: humans.Human,
+    mfa_code: str,
     escalation_path_verified: bool,
     escalation_path_reason: str,
     compliance_coupling_verified: bool,
@@ -135,6 +136,21 @@ async def attest(
     # unscoped on this database and a founder decision binds every venture - the same
     # language `forge_module_exclusion` uses about itself.
     role = humans.authorize(human, required_role=FOUNDER_ROLE, venture_id=None)
+
+    # A SECOND FACTOR, VERIFIED NOW. Ruled 21 September 2026, entry 155.
+    #
+    # An attestation is a named human saying a department's escalation path works when
+    # no test can establish it. Its entire value is that somebody's name is on it, and a
+    # bearer token is a credential that can be copied - so until entry 155 the strongest
+    # claim in this system rested on the weakest evidence in it.
+    #
+    # AFTER `authorize`, for the same reason the travelled-path check is: telling a
+    # caller their code is missing when they were never allowed to attest answers the
+    # wrong question.
+    await mfa.assert_verified(
+        conn, me=human, code=mfa_code,
+        act=f"attesting {venture_id}/{department}",
+    )
 
     # AN ESCALATION PATH CANNOT BE ATTESTED VERIFIED UNTIL IT HAS BEEN TRAVELLED.
     # Ruled 21 September 2026, entry 149.

@@ -802,6 +802,75 @@ def v27(pack: BusinessPack) -> tuple[bool, str]:
             else "no module gaps")
 
 
+#: What The Office can actually verify when a person acts. Ruled 21 September 2026,
+#: entry 156, and it is a fact about this platform rather than a preference.
+#:
+#:     bearer_token  a token this system issued and stores hashed
+#:     mfa_only      a TOTP code checked against a secret the person enrolled (entry 155)
+#:
+#: `sso_mfa` is absent on purpose. There is no identity provider here and no assertion to
+#: validate, so a Pack naming it declares a control nobody has built - which is exactly
+#: what both Packs did, unread, for as long as the field has existed.
+ENFORCEABLE_AUTH_METHODS = frozenset({"bearer_token", "mfa_only"})
+
+
+@rule("V42", Severity.FAIL,
+      "No Pack declares an authentication method the platform does not enforce")
+def v42(pack: BusinessPack) -> tuple[bool, str]:
+    """A Pack may not require what The Office cannot check.
+
+    RULED 21 SEPTEMBER 2026 (decisions entry 156)
+    =============================================
+
+        *"A Pack may not declare an auth method the platform does not enforce. Add a
+        validator rule. Measured: Burkham's Pack declares `sso_mfa` for Ivan and Ira,
+        whose accounts read `bearer_token`."*
+
+    WHAT THE FIELD WAS DOING
+    ========================
+
+        `human_capacity[].auth_method` has been `Literal["sso_mfa", "mfa_only"]` since
+        the Pack schema was written, and **no rule read it.** Both Packs declared
+        `sso_mfa` for every reviewer, and every account on the platform authenticated
+        with a bearer token and nothing else - so the Pack asserted a control that did
+        not exist, in a document signed at Gate 10 and reviewed by a person at Gate 4.
+
+        A declaration nothing checks is worse than an absent one. The absent one asks a
+        question; this one answered it, wrongly, for as long as anybody cared to read it.
+
+    WHAT IT CHECKS NOW, AND WHY IT IS ABOUT THE PLATFORM RATHER THAN THE ACCOUNTS
+    =============================================================================
+
+        `ENFORCEABLE_AUTH_METHODS` is what The Office can actually verify at the moment
+        a person acts. Since entry 155 that is `bearer_token` (a hashed token it issued)
+        and `mfa_only` (a TOTP secret it holds and a code it checks). `sso_mfa` is NOT
+        in it: there is no identity provider, no assertion to validate, and a Pack that
+        names one is describing an arrangement nobody has built.
+
+        Deliberately not "does this named human's account currently hold this method".
+        That would make a Pack fail because somebody had not enrolled yet, which is a
+        staffing fact and belongs on the Access page - and it would make Gate 2 depend
+        on account state that moves underneath a signed artifact. The question here is
+        narrower and stays true for the life of the version: **can this platform enforce
+        the thing this Pack says it requires.**
+    """
+    unenforceable = sorted(
+        f"{human.human_name} -> {human.auth_method}"
+        for human in pack.human_capacity
+        if human.auth_method not in ENFORCEABLE_AUTH_METHODS
+    )
+    return (
+        not unenforceable,
+        f"Pack declares an authentication method nothing enforces: "
+        f"{_join(unenforceable)}. This platform can verify "
+        f"{_join(sorted(ENFORCEABLE_AUTH_METHODS))} and nothing else - a bearer token "
+        "it issued, and a TOTP code against a secret the person enrolled. A Pack that "
+        "names an arrangement nobody has built states a control it does not have."
+        if unenforceable else
+        "every declared authentication method is one this platform can enforce",
+    )
+
+
 @rule("V40", Severity.FAIL, "Every declared module reviewer is a role the Pack staffs")
 def v40(pack: BusinessPack) -> tuple[bool, str]:
     """A declared reviewer must name a role somebody in `human_capacity` holds.

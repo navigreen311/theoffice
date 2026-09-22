@@ -910,6 +910,7 @@ async def sign_off(
     human: Human,
     artifact_kind: str,
     artifact_hash_value: str,
+    mfa_code: str,
     required_role: str = "venture_operator",
     distinct_humans: bool = True,
     note: str | None = None,
@@ -920,7 +921,19 @@ async def sign_off(
     has already signed another gate for this venture cannot sign this one - which is the
     entire content of separation of duties, and is checked here rather than trusted to
     process.
+
+    A SECOND FACTOR, VERIFIED NOW. Ruled 21 September 2026, entry 155. This is the
+    signature Gate 11 activates production grants against, and 0025 named the exact
+    consequence of leaving it on a bearer token alone: *"a signer whose MFA is a claim
+    rather than an enrolment weakens the non-repudiation the Gate 10 signature is meant
+    to carry."* It was a claim for every account on the platform.
+
+    One code signs one gate. `assert_verified` records the step it consumed, so a second
+    signature taken inside the same 30 seconds is refused - two signatures with one code
+    are one act, and separation of duties is about two acts.
     """
+    from broker import mfa
+
     role_signed_as = authorize(human, required_role=required_role, venture_id=venture_id)
 
     if distinct_humans:
@@ -939,6 +952,17 @@ async def sign_off(
                 gate=gate,
                 policy="distinct_humans",
             )
+
+    # THE SECOND FACTOR IS CHECKED LAST, after role and after separation of duties.
+    #
+    # It ran first to begin with, and the pipeline test found what that costs: a human
+    # who had already signed another gate spent their one-use code and was told "that
+    # code has already been used" - true, and about the wrong problem. A refusal that
+    # does not depend on the code should not consume one, and the caller should hear the
+    # reason they were actually refused.
+    await mfa.assert_verified(
+        conn, me=human, code=mfa_code, act=f"signing {gate} for {venture_id}",
+    )
 
     signoff_id = uuid.uuid4()
     async with conn.cursor() as cur:

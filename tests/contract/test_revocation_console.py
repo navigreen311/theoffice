@@ -12,7 +12,7 @@ from broker import account_origin, humans, revocation
 from broker.app import app
 from broker.db import connection
 from tests.conftest import requires_db, wipe_venture
-from tests.world import build_world
+from tests.world import build_world, code_for_token
 
 pytestmark = [requires_db, pytest.mark.db]
 
@@ -180,7 +180,8 @@ async def test_the_radius_is_stored_with_the_revocation(api, admin: psycopg.Conn
     _id, token = await make_human("Ivan", "ivan")
     created = await api.post(
         "/api/revocations",
-        json={"scope": "venture", "venture_id": VENTURE, "reason": "Inquiry pending."},
+        json={"scope": "venture", "venture_id": VENTURE, "reason": "Inquiry pending.",
+              "mfa_code": code_for_token(token)},
         headers=auth(token),
     )
     assert created.status_code == 201
@@ -207,7 +208,12 @@ async def test_lifting_a_wide_revocation_needs_a_second_named_human(api):
     ivan_id, token = await make_human("Ivan", "ivan")
     created = await api.post(
         "/api/revocations",
-        json={"scope": "venture", "venture_id": VENTURE, "reason": "Inquiry pending."},
+        json={
+            "scope": "venture",
+            "venture_id": VENTURE,
+            "reason": "Inquiry pending.",
+            "mfa_code": code_for_token(token),
+        },
         headers=auth(token),
     )
     revocation_id = created.json()["revocation_id"]
@@ -248,7 +254,10 @@ async def test_a_narrow_revocation_lifts_without_a_second_human(api):
 
     created = await api.post(
         "/api/revocations",
-        json={"scope": "agent", "office_agent_id": str(agent_id), "reason": "Suspended."},
+        json={
+            "scope": "agent", "office_agent_id": str(agent_id),
+            "reason": "Suspended.", "mfa_code": code_for_token(token),
+        },
         headers=auth(token),
     )
     revocation_id = created.json()["revocation_id"]
@@ -299,7 +308,10 @@ async def test_reinstating_never_removes_the_revocation(api):
 
     created = await api.post(
         "/api/revocations",
-        json={"scope": "venture", "venture_id": VENTURE, "reason": "Inquiry pending."},
+        json={
+            "scope": "venture", "venture_id": VENTURE,
+            "reason": "Inquiry pending.", "mfa_code": code_for_token(token),
+        },
         headers=auth(token),
     )
     revocation_id = created.json()["revocation_id"]

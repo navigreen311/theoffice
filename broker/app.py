@@ -62,6 +62,7 @@ from broker import (
     instructions,
     knowledge,
     knowledge_origin,
+    mfa,
     pack_templates,
     packs,
     proposals,
@@ -90,7 +91,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0054"
+EXPECTED_SCHEMA_REVISION = "0055"
 
 # `live_grants` means "a grant no live revocation covers". The four-scope rule that
 # decides that has exactly one copy - `revocation._covers`, the same text
@@ -1034,6 +1035,64 @@ async def proposal_queue(conn: DB, _me: ME) -> dict[str, Any]:
 
 
 
+# ------------------------------------------------------------- the second factor
+
+class MfaConfirmRequest(BaseModel):
+    code: str = Field(min_length=1)
+
+
+@app.post("/api/access/mfa/begin", status_code=201)
+async def begin_mfa_enrolment(conn: DB, me: ME) -> dict[str, Any]:
+    """Start enrolling a second factor. **For yourself, and there is no other option.**
+
+    Ruled 21 September 2026, entry 155: *"Only the person writes their own enrolment."*
+    That is expressed by the shape rather than by a check - this route takes no body and
+    no human id, so there is no request that could name somebody else. An administrator
+    cannot enrol on a colleague's behalf because there is nowhere to put their name.
+
+    The secret comes back ONCE. It is not recoverable, the way the bearer token is not,
+    and for the same reason: a system that can show it again is one where storing it
+    hashed would have been pointless.
+
+    Not yet enrolled - `POST /api/access/mfa/confirm` with a code from the authenticator
+    is what makes it real. A secret nobody has proved they can use is the claim entries
+    154 and 155 exist to remove.
+    """
+    secret = await mfa.begin_enrolment(conn, me=me)
+    return {
+        "secret": secret,
+        "issuer": "The Office",
+        "account": me.email,
+        # The URI every authenticator app reads from a QR code. Assembled here so the
+        # console does not have to know the format.
+        "otpauth_uri": (
+            f"otpauth://totp/The%20Office:{me.email}?secret={secret}"
+            f"&issuer=The%20Office&digits={mfa.DIGITS}&period={mfa.STEP_SECONDS}"
+        ),
+        "note": (
+            "This secret is shown once. Add it to your authenticator now, then confirm "
+            "with a code. Until you confirm, attesting, signing and revoking are "
+            "refused."
+        ),
+    }
+
+
+@app.post("/api/access/mfa/confirm")
+async def confirm_mfa_enrolment(
+    body: MfaConfirmRequest, conn: DB, me: ME
+) -> dict[str, Any]:
+    """Prove the secret with a code. Only then is this account enrolled.
+
+    Like `begin`, it names nobody: the enrolment written is the caller's own.
+    """
+    await mfa.confirm_enrolment(conn, me=me, code=body.code)
+    return {
+        "enrolled": True,
+        "human_id": str(me.human_id),
+        "note": "Attesting, signing and revoking now ask for a code from this device.",
+    }
+
+
 # ------------------------------------------------------------------- escalations
 
 @app.get("/api/escalations")
@@ -1281,6 +1340,8 @@ async def instruction_diff(
 class RevokeRequest(BaseModel):
     scope: str
     reason: str = Field(min_length=1)
+    #: A code from the revoker's authenticator. Ruled 21 September 2026, entry 155.
+    mfa_code: str = Field(min_length=1)
     office_agent_id: uuid.UUID | None = None
     forge_id: str | None = None
     module_id: str | None = None
@@ -1300,6 +1361,16 @@ async def create_revocation(body: RevokeRequest, conn: DB, me: ME) -> dict[str, 
         raise HTTPException(status_code=400, detail=f"unknown scope {body.scope!r}")
 
     role = humans.authorize(me, required_role=required, venture_id=body.venture_id)
+
+    # A SECOND FACTOR (entry 155). A Forge-scope revocation stops every agent on that
+    # Forge across the portfolio, and until now the whole of that authority rested on a
+    # bearer token. The check is HERE, on the human-initiated path, and deliberately not
+    # inside `revoke`: `sync_roster` calls the same function when an agent departs, and
+    # there is nobody at a keyboard to type a code - demanding one there would leave a
+    # departed agent holding live authority until a person noticed.
+    await mfa.assert_verified(
+        conn, me=me, code=body.mfa_code, act=f"revoking at {body.scope} scope",
+    )
 
     revocation_id = await revocation.revoke(
         conn,
@@ -1504,6 +1575,8 @@ class SignoffRequest(BaseModel):
     venture_id: str
     artifact_kind: str
     artifact_hash: str
+    #: A code from the signer's authenticator. Ruled 21 September 2026, entry 155.
+    mfa_code: str = Field(min_length=1)
     required_role: str = "venture_operator"
     distinct_humans: bool = True
     note: str | None = None
@@ -1515,6 +1588,7 @@ async def create_signoff(body: SignoffRequest, conn: DB, me: ME) -> dict[str, st
     signoff_id = await humans.sign_off(
         conn, gate=body.gate, venture_id=body.venture_id, human=me,
         artifact_kind=body.artifact_kind, artifact_hash_value=body.artifact_hash,
+        mfa_code=body.mfa_code,
         required_role=body.required_role, distinct_humans=body.distinct_humans,
         note=body.note,
     )
@@ -2050,6 +2124,8 @@ async def abort_provisioning_run(
 
 class RunSignoffRequest(BaseModel):
     artifacts_hash: str = Field(min_length=64, max_length=64)
+    #: A code from the signer's authenticator. Ruled 21 September 2026, entry 155.
+    mfa_code: str = Field(min_length=1)
     note: str | None = None
 
 
@@ -2068,7 +2144,8 @@ async def sign_off_provisioning_run(
     try:
         signoff_id, hash_value = await provisioning.sign_off_run(
             conn, run_id=run_id, human=me,
-            displayed_artifacts_hash=body.artifacts_hash, note=body.note,
+            displayed_artifacts_hash=body.artifacts_hash,
+            mfa_code=body.mfa_code, note=body.note,
         )
     except provisioning.ProvisioningError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

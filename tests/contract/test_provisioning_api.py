@@ -29,6 +29,7 @@ from tests.world import (
     PACK_PATH,
     build_world,
     certify_for_positions,
+    code_for_token,
     dispatch_from_registry,
     seed_nv_discharge,
     teardown_world,
@@ -392,7 +393,7 @@ async def test_signoff_refuses_a_hash_that_is_not_the_current_artifacts(
 
     stale = await api.post(
         f"/api/provisioning/runs/{run_id}/signoff",
-        json={"artifacts_hash": "f" * 64}, headers=auth(signer),
+        json={"artifacts_hash": "f" * 64, "mfa_code": code_for_token(signer)}, headers=auth(signer),
     )
     assert stale.status_code == 409
     assert "have not seen" in stale.json()["detail"]
@@ -407,7 +408,7 @@ async def test_signoff_refuses_a_hash_that_is_not_the_current_artifacts(
 
     moved = await api.post(
         f"/api/provisioning/runs/{run_id}/signoff",
-        json={"artifacts_hash": shown}, headers=auth(signer),
+        json={"artifacts_hash": shown, "mfa_code": code_for_token(signer)}, headers=auth(signer),
     )
     assert moved.status_code == 409, (
         "a hash that was correct at render time and is not correct now must be refused"
@@ -448,7 +449,8 @@ async def test_signing_the_displayed_hash_lets_gate_11_activate(
 
     signed = await api.post(
         f"/api/provisioning/runs/{run_id}/signoff",
-        json={"artifacts_hash": shown, "note": "reviewed and signed"},
+        json={"artifacts_hash": shown, "note": "reviewed and signed",
+              "mfa_code": code_for_token(signer)},
         headers=auth(signer),
     )
     assert signed.status_code == 201, signed.text

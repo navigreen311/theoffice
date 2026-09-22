@@ -44,6 +44,7 @@ from broker import account_origin, attestation, certification, escalation, human
 from broker.db import connection
 from broker.errors import NotAuthorized
 from tests.conftest import requires_db
+from tests.world import code_for
 
 pytestmark = [requires_db, pytest.mark.db]
 
@@ -156,6 +157,10 @@ async def _attest(conn, human, **over):
     kwargs = {
         "venture_id": VENTURE, "department": DEPARTMENT, "forge_id": FORGE,
         "human": human,
+        # A SECOND FACTOR (entry 155). An attestation is a named human's word where no
+        # test can substitute for it, so it is exactly the act that should not rest on
+        # a bearer token alone. `code_for` enrols the account on first use.
+        "mfa_code": code_for(human.human_id),
         "escalation_path_verified": True,
         "escalation_path_reason": ESCALATION_REASON,
         "compliance_coupling_verified": True,
@@ -188,6 +193,9 @@ async def test_a_venture_operator_may_not_attest(conn, operator):
         await attestation.attest(
             conn, venture_id=VENTURE, department=DEPARTMENT, forge_id=FORGE,
             human=operator,
+            # Deliberately not a real code: `authorize` refuses this caller before the
+            # second factor is reached, and that ordering is what the assertion rests on.
+            mfa_code="000000",
             escalation_path_verified=True,
             escalation_path_reason=ESCALATION_REASON,
             compliance_coupling_verified=True,
@@ -259,6 +267,10 @@ async def test_a_correction_is_a_new_row_and_the_latest_is_in_force(conn, founde
         conn, founder,
         compliance_coupling_verified=False,
         compliance_coupling_reason="Re-read on the 22nd: the library entry was withdrawn.",
+        # A DIFFERENT CODE FOR A DIFFERENT ACT. The correction this test describes
+        # happened a day later; here it happens in the same 30-second step, and one code
+        # authorises one act (entry 155). `kwargs.update(over)` lets the caller say so.
+        mfa_code=code_for(founder.human_id, step_offset=1),
     )
     current = await attestation.current_attestation(
         conn, venture_id=VENTURE, department=DEPARTMENT, forge_id=FORGE
@@ -386,6 +398,7 @@ async def test_a_path_nobody_has_travelled_cannot_be_attested_verified(conn, fou
         await attestation.attest(
             conn, venture_id=VENTURE, department="banking", forge_id=FORGE,
             human=founder,
+        mfa_code=code_for(founder.human_id),
             escalation_path_verified=True,
             escalation_path_reason="I read the route and it resolves to a person.",
             compliance_coupling_verified=True,
@@ -400,6 +413,7 @@ async def test_a_travelled_path_may_be_attested(conn, founder):
     await _travel(conn, conn.raiser, founder, "banking")
     found = await attestation.attest(
         conn, venture_id=VENTURE, department="banking", forge_id=FORGE, human=founder,
+        mfa_code=code_for(founder.human_id),
         escalation_path_verified=True,
         escalation_path_reason="Drill of 21 September: raised, received, answered.",
         compliance_coupling_verified=True,
@@ -420,6 +434,7 @@ async def test_another_departments_drill_is_not_evidence(conn, founder):
         await attestation.attest(
             conn, venture_id=VENTURE, department="operations", forge_id=FORGE,
             human=founder,
+        mfa_code=code_for(founder.human_id),
             escalation_path_verified=True,
             escalation_path_reason="research's drill went fine.",
             compliance_coupling_verified=True,
@@ -436,6 +451,7 @@ async def test_reporting_a_broken_path_needs_no_drill(conn, founder):
     """
     found = await attestation.attest(
         conn, venture_id=VENTURE, department="banking", forge_id=FORGE, human=founder,
+        mfa_code=code_for(founder.human_id),
         escalation_path_verified=False,
         escalation_path_reason="No queue answers a banking escalation today.",
         compliance_coupling_verified=True,

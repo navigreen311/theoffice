@@ -3019,6 +3019,7 @@ async def sign_off_run(
     run_id: uuid.UUID,
     human: humans.Human,
     displayed_artifacts_hash: str,
+    mfa_code: str,
     note: str | None = None,
 ) -> tuple[uuid.UUID, str]:
     """Gate 10, signed against the artifacts the signer was shown.
@@ -3055,7 +3056,8 @@ async def sign_off_run(
 
     signoff_id = await humans.sign_off(
         conn, gate="gate_10", venture_id=state.venture_id, human=human,
-        artifact_kind="provisioning_artifacts", artifact_hash_value=current, note=note,
+        artifact_kind="provisioning_artifacts", artifact_hash_value=current,
+        mfa_code=mfa_code, note=note,
     )
     await audit.write_event(
         event_type="provisioning_gate_10_signed",

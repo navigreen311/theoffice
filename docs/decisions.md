@@ -13492,3 +13492,178 @@ Left alone deliberately. The Pack is declaring what a reviewer's authentication 
 be*, which is a requirement, and the account column is recording what it *is*. Whether a
 Pack may require something the platform cannot enforce is a question for Ivan, not a
 default this change should pick.
+
+
+## 155. MFA means a second factor
+
+**Ruling by Ivan Green, 21 September 2026:**
+
+> *"MFA means a TOTP second factor the person enrols themselves. `attest`, `sign_off`
+> and `revoke` refuse without a verified code. Only the person writes their own
+> enrolment. Measured: 242 of 242 accounts claimed `sso_mfa`, zero enrolments."*
+
+### The question entry 154 wrote down, answered
+
+154 stopped `auth_method` lying and refused to invent an answer to the obvious next
+question: *what would "MFA enrolled" mean for an account whose only credential is a
+bearer token The Office issued?* Any timestamp written without one would have been the
+same defect one level down.
+
+The answer is the only one that makes the column mean anything: **a secret the platform
+cannot derive from the token it issued, held by the person, proved by a code only they
+can produce right now.**
+
+### Three properties, and each is a shape rather than a check
+
+**The person holds it.** `begin_enrolment` returns the secret once and never again — the
+rule the bearer token already follows.
+
+**The person proves it.** `confirm_enrolment` takes a code and refuses a wrong one. A
+secret nobody has demonstrated they can use is not an enrolment, and `begin` deliberately
+leaves `mfa_enrolled_at` NULL.
+
+**Only the person.** Every function takes `me` and writes `me.human_id`. **There is no
+parameter anywhere for whose enrolment it is**, and both routes take no human id at all —
+so an administrator cannot enrol a colleague because there is nowhere to put their name.
+That is asserted by reading the signatures, so adding such a parameter fails the build.
+
+### Why the algorithm is in this repository
+
+TOTP is RFC 6238: HMAC-SHA1 over a counter from the clock, truncated to six digits. Every
+primitive is standard library and the whole of it is forty lines.
+
+**It is safe to write here because the RFC publishes test vectors.** All six SHA-1 vectors
+from Appendix B run in CI, so the implementation is checked against the specification
+rather than against itself — which is exactly the property whose absence would make a
+hand-written crypto composition reckless.
+
+### One code, one act
+
+A code is valid for its whole 30-second step and TOTP is stateless, so the same six digits
+would otherwise authorise every act inside that window. Two signatures taken with one code
+are one act, and the second is one nobody typed a code for — which is precisely the
+non-repudiation the factor exists to provide. So `(human, step)` is recorded and refused
+afterwards. **The code is never stored**: it is a live credential, and the step identifies
+the window without being usable in it.
+
+### The ordering, which a test found
+
+The check runs **last** — after the role check and after separation of duties. It ran
+first to begin with, and the pipeline suite showed what that costs: a human who had
+already signed another gate spent their one-use code and was told *"that code has already
+been used"*. True, and about the wrong problem. A refusal that does not depend on the code
+should not consume one.
+
+### What is NOT behind a code, and why
+
+`sync_roster` revokes when an agent departs. There is nobody at a keyboard to type a code,
+and demanding one would leave a departed agent holding live authority until a person
+noticed. That path is `actor_type='system'` and stays so. The check sits on the
+human-initiated route instead.
+
+### What this costs, stated plainly
+
+**Nobody on this platform can attest, sign or revoke until they enrol.** Ivan and Ira are
+the only two real accounts, neither has a second factor, and `POST /api/access/mfa/begin`
+followed by `/confirm` is now the first step before any of those three acts.
+
+
+## 156. A Pack may not declare what the platform cannot enforce
+
+**Ruling by Ivan Green, 21 September 2026:**
+
+> *"A Pack may not declare an auth method the platform does not enforce. Add a validator
+> rule. Measured: Burkham's Pack declares `sso_mfa` for Ivan and Ira, whose accounts read
+> `bearer_token`."*
+
+### A field nothing read
+
+`human_capacity[].auth_method` has been `Literal["sso_mfa", "mfa_only"]` since the Pack
+schema was written, and **no rule read it**. Both Packs declared `sso_mfa` for every
+reviewer while every account on the platform authenticated with a bearer token and nothing
+else.
+
+So the Pack asserted a control that did not exist — in a document reviewed by a person at
+Gate 4 and signed at Gate 10. **A declaration nothing checks is worse than an absent one.**
+The absent one asks a question; this one answered it, wrongly, for as long as anybody cared
+to read it.
+
+### V42, and what it asks
+
+`ENFORCEABLE_AUTH_METHODS` is what The Office can verify at the moment a person acts:
+`bearer_token` (a token it issued and stores hashed) and, since entry 155, `mfa_only` (a
+TOTP code against a secret the person enrolled). `sso_mfa` is not in it — there is no
+identity provider and no assertion to validate.
+
+Deliberately **not** "does this named human's account currently hold this method". That
+would fail a Pack because somebody had not enrolled yet, which is a staffing fact
+belonging on the Access page, and it would make Gate 2 depend on account state moving
+underneath a signed artifact. The question is narrower and stays true for the life of the
+version: *can this platform enforce what this Pack says it requires.*
+
+`sso_mfa` stays spellable in the schema so an existing document still parses and V42 can
+report it as the finding it is, rather than the Pack failing to load with a schema error
+that says nothing about why.
+
+### Measured, and wider than the ruling assumed
+
+    greenstone         V42 FAIL: Ira Green -> sso_mfa, Ivan Green -> sso_mfa
+    burkham-wickmont   V42 FAIL: Ira Green -> sso_mfa, Ivan Green -> sso_mfa
+
+The ruling names Burkham. **Greenstone had it too.**
+
+### What was changed, and what was not
+
+Both Packs' YAML now declares `mfa_only` — the stronger of the two things The Office can
+check, and the right one for people who sign gates. The declaration is a requirement, the
+requirement is now real, and it is **not yet true of anybody**: Ivan and Ira must enrol
+before they can sign.
+
+**The published versions in `business_pack` are untouched.** Greenstone 1.10.0 still says
+`sso_mfa`, so run 4637b946 — waiting at Gate 4 — is unaffected, and the change reaches a
+run only when somebody publishes a new version. Gate 4.5 re-runs V13 and V24 only.
+
+V41 was already taken by the founder-policy discharge rule, so the new one is V42 and the
+sequence stays contiguous.
+
+
+## 157. A routed human cannot receive what they cannot find
+
+**Four fixes ruled by Ivan Green, 22 September 2026**, all in the console and all the same
+kind of defect: a page saying something that is not so.
+
+### `/escalations` was not in the navigation
+
+Built for entry 150, never added to the menu. The only route to an item routed to you was
+a URL somebody typed — so the two escalations raised on 21 September sat unreceived behind
+a page with no link to it. Both personal queues are now in `Operate`, and both labels say
+whose they are: *Approvals waiting for you*, *Escalations routed to you*.
+
+`/proposals` **was** linked, as "Approvals". The link existed; the label named the act
+rather than the queue.
+
+### "Every position is filled by a certified agent"
+
+Shown whenever `unfilled` was empty — and `unfilled` counts positions with no *candidate*.
+It says nothing about certification. Run 4637b946 displayed that sentence directly above
+`certified_and_free: 0` and `produced_not_yet_certified: 24`.
+
+It now says every position has a candidate, points at the counts, and names Gate 11 as the
+thing that refuses an uncertified agent.
+
+### The review box's placeholder was a worked answer
+
+*"all 3 positions filled by certified agents ... 192 approvals/day against 144
+review-minutes"* — every number invented, describing a venture with three positions and a
+V13 ratio no Pack here has ever had.
+
+Two things wrong, and the second is the serious one: it is grey text a reviewer can read as
+a summary of the run in front of them, and it is a template for the review they are about
+to write. **The fastest honest-looking thing to do with a filled-in example is to agree
+with it.** A placeholder that suggests a conclusion collects one. It prompts for the work
+now, and names nothing it has not been given.
+
+### The provisioning card printed its own source
+
+The stop line carried `$<Ago iso={run.stop.at} />` inside a template string, so the page
+rendered those characters rather than a time. JSX in a string is a string.

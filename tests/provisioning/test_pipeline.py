@@ -24,6 +24,7 @@ from broker.db import connection
 from broker.errors import GrantNotActivated
 from broker.grants import resolve_grant
 from tests.conftest import requires_db
+from tests.world import code_for
 
 pytestmark = [requires_db, pytest.mark.db]
 
@@ -98,6 +99,7 @@ async def _to_gate_10(conn, operator, signer, *, held_out=None, simforge=None):
         artifact_kind="provisioning_artifacts",
         artifact_hash_value=gate_10.evidence["artifacts_hash"],
         note="artifacts reviewed and signed",
+        mfa_code=code_for(signer.human_id),
     )
     return run_id
 
@@ -935,6 +937,10 @@ async def test_gate_11_does_not_activate_a_grant_whose_agent_is_not_active(
                 artifact_kind="provisioning_artifacts",
                 artifact_hash_value=gate_10.evidence["artifacts_hash"],
                 note="re-signed over the artifacts regenerated without the suspended agent",
+                # The NEXT step's code. This is the second signature by the same person
+                # within the same 30 seconds; a person doing this would have taken
+                # minutes, and one code authorises one act (entry 155).
+                mfa_code=code_for(signer.human_id, step_offset=1),
             )
             outcomes = await provisioning.advance(
                 conn, run_id=run_id, actor=operator.human_id, held_out=HeldOutPasses()
@@ -1330,12 +1336,14 @@ async def test_the_reviewer_at_gate_4_cannot_sign_at_gate_10(feasible_pack, oper
             conn, gate="gate_4", venture_id=VENTURE, human=operator,
             artifact_kind="provisioning_artifacts",
             artifact_hash_value=gate_10.evidence["artifacts_hash"],
+            mfa_code=code_for(operator.human_id),
         )
         with pytest.raises(Exception) as exc:
             await humans.sign_off(
                 conn, gate="gate_10", venture_id=VENTURE, human=operator,
                 artifact_kind="provisioning_artifacts",
                 artifact_hash_value=gate_10.evidence["artifacts_hash"],
+                mfa_code=code_for(operator.human_id),
             )
     assert "separation of duties" in str(exc.value)
 
