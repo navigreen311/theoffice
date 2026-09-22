@@ -14221,3 +14221,127 @@ than no review, because it reads as one.
 
 So the `ON CONFLICT DO UPDATE` nulls all eight columns and the status returns to `draft`.
 The same property `content_hash` gives certification: republishing decertifies.
+
+
+## 166. A venture may be declared in simulation
+
+**Ruling by Ivan Green, 22 September 2026:**
+
+> *"A venture may be declared in simulation by a named human, with a reason and a date.
+> In simulation, an unreviewed compliance entry is recorded as deliberately deferred,
+> not as verified, and does not fail a gate. Leaving simulation is a separate named act;
+> every unreviewed entry fails again the moment it does. No attestation may ever read
+> TRUE on the strength of simulation. Greenstone and Burkham Wickmont are both in
+> simulation as of today, declared by Ivan Green, reason: mock runs and simulations
+> before real clients."*
+
+### What entry 165 had just done, measured
+
+165 was ruled the same day: an entry is relied on only when approved and
+counsel-reviewed, and anything treating a draft as authoritative refuses. Measured
+alongside it — **all 21 entries are drafts, zero counsel-reviewed.** And there is no
+counsel until there are real clients.
+
+Those two facts together hold every venture at Gate 2 for as long as that stays true.
+Greenstone was one gate from a review and would have gone backwards.
+
+**165 is not softened and nothing here weakens it.** What this adds is a declared state
+in which the same fact is recorded as a *deliberate deferral* rather than as a passing
+entry. The entry is unchanged: still a draft, no approver, no counsel review,
+`relied_on` still false. What changes is what a gate does about it, and the gate says
+who decided that and why.
+
+### Deferred is not verified, and the code keeps them apart
+
+Two predicates, never one:
+
+    knowledge.is_relied_on(entry)            the entry stands on its own
+    entry["deferred_under_simulation"]       somebody decided not to require that yet
+
+Collapsing them would make a declaration of simulation read, three screens later, as a
+compliance entry a lawyer approved — which is the confusion 165 was written to end,
+arriving through a different door. So the console shows **both** marks on a deferred
+entry: `DRAFT` and `DEFERRED — SIMULATION`, side by side.
+
+### The clause that makes the rest of it safe
+
+> *"No attestation may ever read TRUE on the strength of simulation."*
+
+Without it, declaring simulation would quietly convert *we have not looked* into
+*somebody looked and it holds* one gate later. `attest` refuses
+`compliance_coupling_verified=True` while the venture is in simulation, and the refusal
+names the declaration that blocks it.
+
+**There is no override argument**, and `test_there_is_no_way_to_attest_true_anyway`
+reads the signature so adding one fails the build. A keyword that let a caller through
+would be this clause spelled as a parameter.
+
+**Only `compliance_coupling_verified` is refused, and the scope is measured rather than
+reasoned.** Ivan Green's own attestations of 22 September read `escalation_path_verified:
+TRUE` and `compliance_coupling_verified: FALSE` for greenstone/research and
+greenstone/operations, under exactly the conditions that produced this ruling. An
+escalation path is travelled by a real human answering a real escalation and has nothing
+to do with the compliance library; refusing it here would refuse a fact simulation does
+not touch.
+
+A FALSE verdict is still recordable — entry 147's rule, unchanged. "The library is
+deferred under simulation" is a reason somebody should be able to write down.
+
+### What this costs, stated rather than discovered
+
+`Attestation.passed` is `escalation_path_verified AND compliance_coupling_verified`. So
+in simulation an attestation cannot pass, Unit B by attestation cannot certify, and
+**Gate 9 is not reachable while a venture is in simulation.**
+
+Simulation moves a venture past Gates 2 and 6. It does not move it to 12, and it is not
+meant to. That is the ruling working: the deferral buys provisioning practice, not a
+certification.
+
+### Leaving is its own act, and it does not un-happen
+
+Three columns on the live row — `left_by`, `left_at`, `left_reason` — filled by a
+separate route, all three or none. A trigger allows exactly that one transition and
+refuses every other update, including un-leaving.
+
+*"Every unreviewed entry fails again the moment it does."* Nothing warns first.
+`leave()` does not re-check the library before acting, deliberately: a leaving act that
+reported "this will break Gate 2 for two entries" would invite the reading that it is a
+negotiation. It is a statement about the venture. The response says which entries began
+failing, **after** the fact, because the person is entitled to know what they turned back
+on.
+
+Re-entering is a new declaration with its own name, reason and date. The history keeps
+both, because a venture that was in simulation last month explains a gate result from
+last month.
+
+### Why `ivan` and not `compliance_officer`
+
+`compliance_officer` writes entries and approves them (entry 163). A declaration of
+simulation decides that a venture may provision past a compliance rule, which reaches
+further than any single entry — the same founder authority a discharge already requires.
+
+### The two declarations the ruling names are not yet written
+
+`scripts/declare_simulation.py` writes them. It is **not run by this change**, because
+the schema it needs is in this branch and not on the live database.
+
+A data migration was the alternative and was rejected: `declared_by` must resolve to an
+`origin='human'` account, Ivan Green's account exists on one deployment, and a migration
+that looked up "the account named Ivan Green" would either fail everywhere except one
+laptop or quietly declare nothing.
+
+> **Open until it is run: neither Greenstone nor Burkham Wickmont is in simulation on
+> the live database.** The ruling says they are as of today; recording that is one
+> command after this merges, and it is a named act rather than something a migration
+> does on somebody's behalf.
+
+### Where it shows
+
+    venture_simulation             one row per declaration; one live per venture
+    broker/simulation.py           declare, leave, current, history
+    V28 at Gate 2                  PASS, naming the deferral, who declared it and why
+    Gate 6                         the flag is covered; `deferred_under_simulation`
+                                   in the evidence names which
+    the coverage panel             agrees with Gate 6, and reports the deferred set
+    attest                         refuses TRUE, and names the declaration
+    /knowledge/compliance          DRAFT and DEFERRED, both, with what it costs

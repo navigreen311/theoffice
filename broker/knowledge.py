@@ -377,7 +377,7 @@ async def author_compliance_entry(
 #: the database did not, so an entry written by hand and never reviewed looked exactly
 #: like one taken from a statute.
 _ENTRY_COLUMNS = (
-    "venture_id, entry_ref, framework, jurisdiction, applicability_rule, "
+    "e.venture_id, e.entry_ref, framework, jurisdiction, applicability_rule, "
     "agent_behavior_implication, escalation_trigger, citation, runtime_flag, "
     "status, claim_provenance, counsel_reviewed_at, authored_at, updated_at, "
     # Entries 163 and 164. Who approved and who recorded the review travel WITH the
@@ -397,16 +397,39 @@ async def compliance_entries(
     caller. A reader that has to derive it derives it differently somewhere, and the
     whole point of the rule is that there is one answer to whether an entry counts.
     """
-    where = "WHERE venture_id = %s " if venture_id else ""
+    where = "WHERE e.venture_id = %s " if venture_id else ""
     params = (venture_id,) if venture_id else ()
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
-            f"SELECT {_ENTRY_COLUMNS} FROM compliance_library_entry "
-            f"{where}ORDER BY venture_id, entry_ref",
+            f"SELECT {_ENTRY_COLUMNS}, "
+            # Entry 166. Whether this entry's venture is in simulation, so a reader can
+            # tell a draft that is failing its gates from one that is deliberately
+            # deferred. Joined rather than fetched separately: the page that shows the
+            # entry is the page that has to say which, and a second call would let the
+            # two answers come from different moments.
+            "       (vs.simulation_id IS NOT NULL) AS venture_in_simulation "
+            "  FROM compliance_library_entry e "
+            "  LEFT JOIN venture_simulation vs "
+            "    ON vs.venture_id = e.venture_id AND vs.left_at IS NULL "
+            f"{where}ORDER BY e.venture_id, e.entry_ref",
             params,
         )
-        return [{**dict(r), "relied_on": is_relied_on(dict(r))}
-                for r in await cur.fetchall()]
+        rows = [dict(r) for r in await cur.fetchall()]
+
+    return [
+        {
+            **row,
+            "relied_on": is_relied_on(row),
+            # DEFERRED IS NOT RELIED ON, and the two stay separate fields for the
+            # reason `broker/simulation.py` gives at length: collapsing them makes a
+            # declaration of simulation read, three screens later, as an entry a lawyer
+            # approved.
+            "deferred_under_simulation": (
+                row["venture_in_simulation"] and not is_relied_on(row)
+            ),
+        }
+        for row in rows
+    ]
 
 
 #: What an entry's `authored_by` turned out to be, once somebody looked it up.
@@ -543,8 +566,8 @@ async def approve_compliance_entry(
 
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
-            f"SELECT {_ENTRY_COLUMNS}, authored_by FROM compliance_library_entry "
-            " WHERE venture_id = %s AND entry_ref = %s",
+            f"SELECT {_ENTRY_COLUMNS}, authored_by FROM compliance_library_entry e "
+            " WHERE e.venture_id = %s AND e.entry_ref = %s",
             (venture_id, entry_ref),
         )
         found = await cur.fetchone()
@@ -571,12 +594,12 @@ async def approve_compliance_entry(
 
         await cur.execute(
             f"""
-            UPDATE compliance_library_entry
+            UPDATE compliance_library_entry AS e
                SET status = '{APPROVED_STATUS}',
                    approved_by = %s,
                    approved_at = now(),
                    updated_at = now()
-             WHERE venture_id = %s AND entry_ref = %s
+             WHERE e.venture_id = %s AND e.entry_ref = %s
             RETURNING {_ENTRY_COLUMNS}, authored_by
             """,
             (approved_by, venture_id, entry_ref),
@@ -703,7 +726,7 @@ async def record_counsel_review(
 
         await cur.execute(
             f"""
-            UPDATE compliance_library_entry
+            UPDATE compliance_library_entry AS e
                SET counsel_reviewed_at = %s,
                    counsel_reviewer_name = %s,
                    counsel_reviewer_firm = %s,
@@ -711,7 +734,7 @@ async def record_counsel_review(
                    counsel_recorded_at = now(),
                    counsel_claims_confirmed = %s,
                    updated_at = now()
-             WHERE venture_id = %s AND entry_ref = %s
+             WHERE e.venture_id = %s AND e.entry_ref = %s
             RETURNING {_ENTRY_COLUMNS}, authored_by
             """,
             (reviewed_on, reviewer_name.strip(), reviewer_firm.strip(), recorded_by,

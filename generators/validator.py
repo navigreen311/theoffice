@@ -41,6 +41,7 @@ from typing import Any
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 
+from broker import simulation
 from generators.pack import BusinessPack
 
 # Part 14: a human reviewing for 100% of their coverage hours does nothing else, and a
@@ -1175,11 +1176,29 @@ async def _v28_library_refs_resolve(
     )
     not_relied_on = sorted(set(unapproved) | set(unreviewed))
 
+    # DEFERRED, NOT VERIFIED. Ruled 22 September 2026, entry 166: in simulation an
+    # unreviewed entry is recorded as deliberately deferred and does not fail a gate.
+    #
+    # The entries are unchanged - still drafts, still not relied on, still reading DRAFT
+    # wherever they are shown. What changes is this rule's verdict, and the message says
+    # who decided that and why, because a PASS whose reason is "simulation" and nothing
+    # else is a pass nobody can account for later.
+    deferral = await simulation.current(conn, pack.venture_id)
+
     missing = sorted(set(refs) - found - {e.split(" ")[0] for e in elsewhere})
     if not missing and not elsewhere and not not_relied_on:
         return True, (
             f"{len(found)} of {len(refs)} library ref(s) resolve, and every one is "
             "approved and counsel-reviewed"
+        )
+    if not missing and not elsewhere and deferral is not None:
+        return True, (
+            f"{len(found)} of {len(refs)} library ref(s) resolve. "
+            f"{len(not_relied_on)} DELIBERATELY DEFERRED, not verified: "
+            f"{_join(not_relied_on)}. {pack.venture_id} is in simulation, declared by "
+            f"{deferral.declared_by_name} on {deferral.declared_at.date()} - "
+            f"{deferral.reason} These entries are still drafts and nothing relies on "
+            "them; leaving simulation makes every one of them fail here again."
         )
 
     # UNWRITTEN AND UNLOADED ARE DIFFERENT FACTS, and saying "resolve to nothing" for

@@ -47,6 +47,7 @@ from broker import (
     knowledge,
     packs,
     revocation,
+    simulation,
 )
 from broker.simforge import (
     CurriculumRejectedError,
@@ -454,13 +455,28 @@ async def _gate_6(ctx: _Context) -> GateOutcome:
         # this set is empty for every venture and Gate 6 blocks on every declared flag.
         # That is the work reported, not a regression - and it is the reason the rule
         # is worth having, since the gate passed on those drafts yesterday.
+        # DEFERRED, NOT VERIFIED. Ruled 22 September 2026, entry 166: in simulation an
+        # unreviewed entry is recorded as deliberately deferred and does not fail a
+        # gate. The `OR` is in the SQL rather than around it so the two states are one
+        # query - a Python branch choosing between two queries is two rules.
+        #
+        # `explained_deferred` is kept separately because the gate's evidence has to say
+        # WHICH flags are covered by a deferral rather than by an entry. A reader who
+        # sees only "explained" cannot tell a library from a decision to wait.
         await cur.execute(
-            "SELECT DISTINCT runtime_flag FROM compliance_library_entry "
-            f"WHERE runtime_flag IS NOT NULL AND venture_id = %s "
-            f"  AND {knowledge.RELIED_ON_SQL}",
-            (ctx.venture_id,),
+            "SELECT DISTINCT runtime_flag, "
+            f"       NOT ({knowledge.RELIED_ON_SQL}) AS deferred "
+            "  FROM compliance_library_entry "
+            " WHERE runtime_flag IS NOT NULL AND venture_id = %(venture_id)s "
+            f"   AND ({knowledge.RELIED_ON_SQL} OR {simulation.IN_SIMULATION_SQL})",
+            {"venture_id": ctx.venture_id},
         )
-        explained_flags = {r["runtime_flag"] for r in await cur.fetchall()}
+        explained_rows = [dict(r) for r in await cur.fetchall()]
+        explained_flags = {r["runtime_flag"] for r in explained_rows}
+        explained_deferred = sorted(
+            {r["runtime_flag"] for r in explained_rows if r["deferred"]}
+        )
+        deferral = await simulation.current(ctx.conn, ctx.venture_id)
 
         await cur.execute(
             "SELECT lifecycle_stage FROM business_playbook "
@@ -501,7 +517,17 @@ async def _gate_6(ctx: _Context) -> GateOutcome:
     personas = coverage(covered_personas, target_personas)
     evidence: dict[str, Any] = {
         "forge_operating_instructions": coverage(authored, modules),
-        "compliance_library": coverage(explained_flags, flags),
+        "compliance_library": {
+            **coverage(explained_flags, flags),
+            # Entry 166. WHICH of the covered flags are covered by a deferral rather
+            # than by an entry somebody approved and a lawyer read. A reader who sees
+            # only "covered" cannot tell a library from a decision to wait, and this
+            # gate's evidence is what a Gate 4 reviewer reads.
+            "deferred_under_simulation": sorted(
+                set(explained_deferred) & set(flags)
+            ),
+            "simulation": deferral.as_evidence() if deferral else None,
+        },
         "business_playbooks": playbooks,
         "persona_library": personas,
         "historical_records": {
@@ -539,11 +565,26 @@ async def _gate_6(ctx: _Context) -> GateOutcome:
             "persona authored"
         )
 
+    deferred_here = sorted(set(explained_deferred) & set(flags))
+    deferral_note = ""
+    if deferred_here and deferral is not None:
+        # NAMED IN THE VERDICT, not only in the evidence. A gate that passes partly on a
+        # deferral and says so only in a JSON field has passed quietly, and the whole
+        # point of entry 166's wording - *recorded as deliberately deferred* - is that
+        # the record reads as a decision somebody took.
+        deferral_note = (
+            f" {len(deferred_here)} of them DELIBERATELY DEFERRED, not verified: "
+            f"{', '.join(deferred_here)} - {ctx.venture_id} is in simulation, declared "
+            f"by {deferral.declared_by_name} on {deferral.declared_at.date()}: "
+            f"{deferral.reason}"
+        )
+
     return GateOutcome(
         "6", PASSED,
         f"instructions for {len(modules)} module(s), {len(flags)} compliance flag(s) "
         f"explained"
-        + (f". Advisory: {'; '.join(advisory)}." if advisory else "."),
+        + (f". Advisory: {'; '.join(advisory)}." if advisory else ".")
+        + deferral_note,
         evidence,
     )
 

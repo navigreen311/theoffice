@@ -144,6 +144,10 @@ VENTURE_APPEND_ONLY = (
     ("historical_record", "historical_record_append_only"),
     ("incident_resolution", "incident_resolution_append_only"),
     ("agent_call_ledger", "agent_call_ledger_append_only"),
+    # Entry 166. A declaration of simulation is not deleted: the gates that deferred on
+    # it read this row, and leaving is the named act. A test venture still has to be
+    # resettable, so the guard comes down here like the other three.
+    ("venture_simulation", "venture_simulation_is_not_deleted"),
 )
 
 
@@ -170,6 +174,11 @@ def wipe_venture(conn: psycopg.Connection, venture_id: str) -> None:
         cur.execute("DELETE FROM incident WHERE venture_id = %s", (venture_id,))
         cur.execute("DELETE FROM historical_record WHERE venture_id = %s", (venture_id,))
         cur.execute("DELETE FROM agent_call_ledger WHERE venture_id = %s", (venture_id,))
+        # Entry 166. Inside the guarded block rather than in the loop below, because the
+        # loop runs after the triggers go back up.
+        cur.execute(
+            "DELETE FROM venture_simulation WHERE venture_id = %s", (venture_id,)
+        )
         for table, trigger in VENTURE_APPEND_ONLY:
             cur.execute(f"ALTER TABLE {table} ENABLE TRIGGER {trigger}")
 

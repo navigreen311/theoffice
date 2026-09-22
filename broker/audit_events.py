@@ -90,6 +90,19 @@ EVENTS: tuple[Event, ...] = (
           "RULED 22 September 2026, entry 164: `counsel_reviewed_at` existed for two "
           "weeks with no writer anywhere.",
           "broker.app", CONSOLE),
+    Event("console_venture_declared_in_simulation", "Venture declared in simulation",
+          "A named human declared a venture in simulation, with a reason and a date. "
+          "RULED 22 September 2026, entry 166: in simulation an unreviewed compliance "
+          "entry is recorded as deliberately DEFERRED - not verified - and does not "
+          "fail Gate 2 or Gate 6. No attestation may read TRUE on the strength of it, "
+          "so a department's compliance coupling cannot be attested while it stands.",
+          "broker.app", CONSOLE),
+    Event("console_venture_left_simulation", "Venture left simulation",
+          "A named human took a venture out of simulation - a separate act from "
+          "declaring it, and one that does not un-happen. Carries the entries that "
+          "began failing again at that moment, which is every one that is not both "
+          "approved and counsel-reviewed.",
+          "broker.app", CONSOLE),
     Event("console_role_granted", "Role granted",
           "Somebody was given a role by somebody holding a stronger one.",
           "broker.app", CONSOLE),

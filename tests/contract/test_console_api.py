@@ -615,6 +615,16 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
         # migration 0057's CHECK on the same row.
         "/api/knowledge/compliance/approve",
         "/api/knowledge/compliance/counsel-review",
+        # DECLARING AND LEAVING SIMULATION. Ruled 22 September 2026, entry 166.
+        #
+        # `ivan` on both, and not `compliance_officer` - the role that writes and
+        # approves the entries. A declaration decides that a venture may provision past
+        # a compliance rule, which reaches further than any single entry.
+        #
+        # Leaving has its own route because it is its own act and does not un-happen. A
+        # single toggle would make the two ends of the interval one decision.
+        "/api/ventures/{venture_id}/simulation",
+        "/api/ventures/{venture_id}/simulation/leave",
     }, f"the write surface changed: {sorted(writes)}"
 
 

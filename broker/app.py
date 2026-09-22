@@ -69,6 +69,7 @@ from broker import (
     provisioning,
     revocation,
     roster,
+    simulation,
     sweeps,
     ventures,
     village,
@@ -91,7 +92,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0057"
+EXPECTED_SCHEMA_REVISION = "0058"
 
 # `live_grants` means "a grant no live revocation covers". The four-scope rule that
 # decides that has exactly one copy - `revocation._covers`, the same text
@@ -2157,14 +2158,40 @@ async def knowledge_coverage(conn: DB, _me: ME) -> dict[str, Any]:
               -- as coverage would report this store green while Gate 6 blocked on
               -- every flag in it, and the panel is what somebody looks at to find out
               -- why.
+              --
+              -- OR DEFERRED. Entry 166: in simulation an unreviewed entry is recorded
+              -- as deliberately deferred and does not fail a gate, so this panel must
+              -- agree with Gate 6 or it reports a block that is not happening.
               SELECT 1 FROM compliance_library_entry e
-               WHERE e.runtime_flag = f AND status = 'approved'
-                 AND counsel_reviewed_at IS NOT NULL
+               WHERE e.runtime_flag = f
+                 AND ((e.status = 'approved' AND e.counsel_reviewed_at IS NOT NULL)
+                      OR EXISTS (SELECT 1 FROM venture_simulation vs
+                                  WHERE vs.venture_id = e.venture_id
+                                    AND vs.left_at IS NULL))
             )
             ORDER BY 1
             """
         )
         unexplained_flags = [r["runtime_flag"] for r in await cur.fetchall()]
+
+        # Which flags are covered only because somebody deferred them. Counted apart
+        # from `unexplained_flags` because they are a different thing to do about.
+        await cur.execute(
+            """
+            SELECT DISTINCT f AS runtime_flag
+            FROM forge_module_registry m,
+                 unnest(m.compliance_flags_implied) AS f
+            WHERE EXISTS (
+              SELECT 1 FROM compliance_library_entry e
+               JOIN venture_simulation vs
+                 ON vs.venture_id = e.venture_id AND vs.left_at IS NULL
+               WHERE e.runtime_flag = f
+                 AND NOT (e.status = 'approved' AND e.counsel_reviewed_at IS NOT NULL)
+            )
+            ORDER BY 1
+            """
+        )
+        deferred_flags = [r["runtime_flag"] for r in await cur.fetchall()]
 
         await cur.execute(
             "SELECT DISTINCT unnest(compliance_flags_implied) AS f "
@@ -2188,11 +2215,16 @@ async def knowledge_coverage(conn: DB, _me: ME) -> dict[str, Any]:
             "denominator": len(flags_in_use),
             "uncovered": unexplained_flags,
             "entries": int(counts["compliance_entries"]),
+            "deferred_under_simulation": deferred_flags,
             "blocking": True,
             "note": (
                 "A flag with no entry reaches the agent as a label, not a constraint. "
                 "Counted here only when the entry is approved AND counsel-reviewed "
-                "(entry 165) - a draft behind a flag is nobody's answer."
+                "(entry 165) - a draft behind a flag is nobody's answer - or when its "
+                "venture is in simulation, where an unreviewed entry is deliberately "
+                "deferred rather than failing (entry 166). Deferred is not verified: "
+                "`deferred_under_simulation` says which are covered by a decision to "
+                "wait."
             ),
         },
         "business_playbooks": {
@@ -3117,6 +3149,134 @@ async def rename_human(
         "note": (
             "Earlier gate reasons, evidence and published Packs keep the old name. They "
             "record what was true when they were written."
+        ),
+    }
+
+
+@app.get("/api/ventures/{venture_id}/simulation")
+async def read_simulation(venture_id: str, conn: DB, _me: ME) -> dict[str, Any]:
+    """Whether this venture is in simulation, and every declaration it has ever had.
+
+    The history, not just the current state. A venture that was in simulation last month
+    and is not now explains a gate result from last month, and a reader who can only see
+    `in_simulation: false` cannot account for it.
+    """
+    live = await simulation.current(conn, venture_id)
+    return {
+        "venture_id": venture_id,
+        "in_simulation": live is not None,
+        "declared": live.as_evidence() if live else None,
+        "history": [
+            {
+                **entry.as_evidence(),
+                "left_by": entry.left_by_name,
+                "left_at": entry.left_at.isoformat() if entry.left_at else None,
+                "left_reason": entry.left_reason,
+            }
+            for entry in await simulation.history(conn, venture_id)
+        ],
+    }
+
+
+class DeclareSimulationRequest(BaseModel):
+    reason: str = Field(min_length=1)
+
+
+@app.post("/api/ventures/{venture_id}/simulation", status_code=201)
+async def declare_simulation(
+    venture_id: str, body: DeclareSimulationRequest, conn: DB, me: ME
+) -> dict[str, Any]:
+    """Declare a venture in simulation. `ivan` only.
+
+    **RULED 22 SEPTEMBER 2026, entry 166.** In simulation an unreviewed compliance entry
+    is recorded as deliberately deferred and does not fail a gate. It is not recorded as
+    verified, and no attestation may read TRUE on the strength of it.
+
+    `ivan`, and not `compliance_officer`, which is the role that writes and approves the
+    entries. A declaration of simulation decides that a venture may provision past a
+    compliance rule; that reaches further than any single entry, and the founder
+    authority a discharge already requires is the same authority.
+
+    The declarer is `me`, never a field, for the reason the approval route has no
+    approver field.
+    """
+    humans.authorize(me, required_role="ivan")
+    try:
+        declared = await simulation.declare(
+            conn, venture_id=venture_id, declared_by=me.human_id, reason=body.reason
+        )
+    except simulation.SimulationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    await _audit_human_action(
+        me, "console_venture_declared_in_simulation",
+        {
+            "venture_id": venture_id,
+            "simulation_id": str(declared.simulation_id),
+            "reason": declared.reason,
+        },
+        venture_id=venture_id,
+    )
+    return {
+        **declared.as_evidence(),
+        "venture_id": venture_id,
+        "note": (
+            "In simulation. An unreviewed compliance entry is now recorded as "
+            "deliberately deferred rather than failing Gate 2 or Gate 6. It is NOT "
+            "verified: no attestation may read TRUE on the strength of this, so a "
+            "department's compliance coupling cannot be attested while it stands."
+        ),
+    }
+
+
+class LeaveSimulationRequest(BaseModel):
+    reason: str = Field(min_length=1)
+
+
+@app.post("/api/ventures/{venture_id}/simulation/leave")
+async def leave_simulation(
+    venture_id: str, body: LeaveSimulationRequest, conn: DB, me: ME
+) -> dict[str, Any]:
+    """Take a venture out of simulation. A separate named act. `ivan` only.
+
+    *"Every unreviewed entry fails again the moment it does."* The response says which
+    ones, counted at the moment of leaving, because the person doing it is entitled to
+    know what they just turned back on - but the count is reported AFTER the act and
+    never as a condition of it. Leaving is a statement about the venture, not a
+    negotiation with the library.
+    """
+    humans.authorize(me, required_role="ivan")
+    try:
+        left = await simulation.leave(
+            conn, venture_id=venture_id, left_by=me.human_id, reason=body.reason
+        )
+    except simulation.SimulationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    entries = await knowledge.compliance_entries(conn, venture_id)
+    now_failing = [e["entry_ref"] for e in entries if not e["relied_on"]]
+
+    await _audit_human_action(
+        me, "console_venture_left_simulation",
+        {
+            "venture_id": venture_id,
+            "simulation_id": str(left.simulation_id),
+            "reason": left.left_reason,
+            "entries_now_failing": now_failing,
+        },
+        venture_id=venture_id,
+    )
+    return {
+        "venture_id": venture_id,
+        "left_by": left.left_by_name,
+        "left_at": left.left_at.isoformat() if left.left_at else None,
+        "reason": left.left_reason,
+        "entries_now_failing": now_failing,
+        "note": (
+            f"Out of simulation. {len(now_failing)} compliance entr"
+            f"{'y' if len(now_failing) == 1 else 'ies'} fail again at Gate 2 and cover "
+            "no flag at Gate 6 from this moment. This does not un-happen; declaring "
+            "simulation again is a new declaration with its own reason."
         ),
     }
 
