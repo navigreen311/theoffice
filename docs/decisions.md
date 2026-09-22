@@ -13492,3 +13492,59 @@ Left alone deliberately. The Pack is declaring what a reviewer's authentication 
 be*, which is a requirement, and the account column is recording what it *is*. Whether a
 Pack may require something the platform cannot enforce is a question for Ivan, not a
 default this change should pick.
+
+
+## 155. A routed human cannot receive what they cannot find
+
+> **Ruled third of three on 22 September and numbered first, because it landed first.**
+> The other two — MFA means a TOTP second factor, and a Pack may not declare an auth
+> method the platform does not enforce — are held unmerged in PR #205 on Ivan's
+> instruction: *"Hold the TOTP enforcement. We have mock runs and simulations to do
+> first, and requiring a second factor to attest or sign would block them."*
+>
+> These four console fixes were split out because none of them depends on that work, and
+> a page saying something untrue should not wait behind a control nobody is ready for.
+>
+> The number is the merge order rather than the ruling order because
+> `test_entry_numbers_are_contiguous_from_one` requires it, and its argument is right:
+> a gap is *"the quieter half of a collision"* — every later reference to the missing
+> number points at nothing.
+
+**Four fixes ruled by Ivan Green, 22 September 2026**, all in the console and all the same
+kind of defect: a page saying something that is not so.
+
+### `/escalations` was not in the navigation
+
+Built for entry 150, never added to the menu. The only route to an item routed to you was
+a URL somebody typed — so the two escalations raised on 21 September sat unreceived behind
+a page with no link to it. Both personal queues are now in `Operate`, and both labels say
+whose they are: *Approvals waiting for you*, *Escalations routed to you*.
+
+`/proposals` **was** linked, as "Approvals". The link existed; the label named the act
+rather than the queue.
+
+### "Every position is filled by a certified agent"
+
+Shown whenever `unfilled` was empty — and `unfilled` counts positions with no *candidate*.
+It says nothing about certification. Run 4637b946 displayed that sentence directly above
+`certified_and_free: 0` and `produced_not_yet_certified: 24`.
+
+It now says every position has a candidate, points at the counts, and names Gate 11 as the
+thing that refuses an uncertified agent.
+
+### The review box's placeholder was a worked answer
+
+*"all 3 positions filled by certified agents ... 192 approvals/day against 144
+review-minutes"* — every number invented, describing a venture with three positions and a
+V13 ratio no Pack here has ever had.
+
+Two things wrong, and the second is the serious one: it is grey text a reviewer can read as
+a summary of the run in front of them, and it is a template for the review they are about
+to write. **The fastest honest-looking thing to do with a filled-in example is to agree
+with it.** A placeholder that suggests a conclusion collects one. It prompts for the work
+now, and names nothing it has not been given.
+
+### The provisioning card printed its own source
+
+The stop line carried `$<Ago iso={run.stop.at} />` inside a template string, so the page
+rendered those characters rather than a time. JSX in a string is a string.
