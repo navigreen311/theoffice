@@ -46,6 +46,18 @@ class Human:
     roles: tuple[tuple[str, str | None], ...]
     """(role, venture_id). `venture_id` None means every venture."""
 
+    origin: str = "human"
+    """`human` or `test_fixture`. **Who this account is, not what it may do.**
+
+    Read here because a role cannot answer it: `attributable_actor` has refused to
+    resolve an action to a fixture since it was written - *"an escalation delivered to
+    `smoke-1a2b3c4d` is not delivered"* - and every route that takes `me` from a token
+    skipped that check entirely, because `Human` did not carry the column.
+
+    Defaulted to `human` so a hand-built `Human` in a test is a person unless it says
+    otherwise. The database is what decides for a real one.
+    """
+
     @property
     def is_active(self) -> bool:
         return self.status == "active"
@@ -139,7 +151,7 @@ async def authenticate(conn: AsyncConnection, token: str) -> Human | None:
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
             """
-            SELECT h.human_id, h.display_name, h.email, h.status,
+            SELECT h.human_id, h.display_name, h.email, h.status, h.origin,
                    COALESCE(
                      array_agg(ARRAY[r.role, COALESCE(r.venture_id, '')])
                        FILTER (WHERE r.role IS NOT NULL),
@@ -149,7 +161,7 @@ async def authenticate(conn: AsyncConnection, token: str) -> Human | None:
             LEFT JOIN office_human_role r
               ON r.human_id = h.human_id AND r.revoked_at IS NULL
             WHERE h.token_hash = %s
-            GROUP BY h.human_id, h.display_name, h.email, h.status
+            GROUP BY h.human_id, h.display_name, h.email, h.status, h.origin
             """,
             (hash_token(token),),
         )
@@ -181,6 +193,7 @@ async def authenticate(conn: AsyncConnection, token: str) -> Human | None:
         email=row["email"],
         status=row["status"],
         roles=roles,
+        origin=row["origin"],
     )
 
 
@@ -211,6 +224,45 @@ def authorize(human: Human, *, required_role: str, venture_id: str | None = None
             venture_id=venture_id,
         )
     return held
+
+
+def assert_named_human(human: Human, *, act: str) -> None:
+    """Refuse an act a test fixture is attempting.
+
+    RULED 21 SEPTEMBER 2026 (decisions entry 148)
+    =============================================
+
+        *"Only a named human may decide a proposal. Smoke fixtures decided four; nothing
+        stopped them."*
+
+        Measured: four `place_call` proposals were decided on 16 September by
+        `smoke-28e7bea5`, `smoke-25e8ed8f`, `smoke-a961648a` and `smoke-3e94169f` - every
+        one an `origin = 'test_fixture'` account, every one recorded in `audit_log` as a
+        human decision. They are the only proposal decisions this system has ever made.
+
+    WHY A ROLE COULD NOT CATCH IT
+    =============================
+
+        The fixtures hold real roles - 239 of the 242 accounts on the development
+        database are fixtures and most hold `ivan` - so every role check they met, they
+        met honestly. What they are not is a person who can be held to the decision, and
+        that is a different question from what they are allowed to do.
+
+        `attributable_actor` has asked it since it was written, for exactly this reason:
+        *"an escalation delivered to `smoke-1a2b3c4d` is not delivered."* It asks it of an
+        account it GOES AND FINDS. This asks it of the account that turned up with a
+        token, which is the half nobody was checking.
+
+    `act` is in the message because "not a named human" with no verb is a sentence
+    somebody has to go and read the code to act on.
+    """
+    if human.origin != "human":
+        raise NotAuthorized(
+            f"{human.display_name} is a {human.origin} and may not {act}. This decision "
+            "is recorded against whoever makes it, and a fixture is not somebody who "
+            "can be held to it.",
+            human_status=human.status,
+        )
 
 
 # ------------------------------------------------------- administering humans

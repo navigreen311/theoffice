@@ -166,6 +166,26 @@ jobs:
       - name: Pytest
         run: python -m pytest -q --junitxml=pytest-results.xml
 
+      # THE LIVE INSTRUCTIONS MUST MATCH THE AUTHORING SCRIPT - ruled 21 September
+      # 2026, decisions entry 148.
+      #
+      # THERE IS NO STEP HERE, AND THAT IS THE SECOND ANSWER RATHER THAN THE ABSENCE OF
+      # ONE. It was written as a step first: seed an author, run the authoring script,
+      # run the comparator. It failed on a foreign key, because `pytest` above tears the
+      # world down and leaves no `forge_module_registry` for a manual to reference - so
+      # the step had to rebuild the world, in YAML, from knowledge `tests/world.py`
+      # already holds. A second spelling of the world is a worse thing than a missing
+      # step.
+      #
+      # `tests/test_the_manual_and_the_script_agree.py` does it inside the suite above,
+      # with the world fixture: it authors from the script and asserts the comparator
+      # finds nothing, then alters a live row and asserts it finds that, then supersedes
+      # one and asserts it says so. And `test_the_manual_digest_matches_its_version` is
+      # the one that catches what actually happened - a manual edited without moving
+      # `VERSION`, which `main` then skips.
+      #
+      # What no CI job can answer is whether somebody ran the script against a REAL
+      # database. `scripts/check_instructions_match.py` is what asks it there.
       - name: Refuse a green run that skipped the database suite
         # THE POINT OF THIS JOB. `requires_db` skips every database test when the DSNs
         # are unset or wrong, and a skipped test is reported as a pass by every summary

@@ -1298,6 +1298,10 @@ async def decide_proposal(
     if row is None:
         raise HTTPException(status_code=404, detail="no such proposal")
     humans.authorize(me, required_role="venture_operator", venture_id=row["venture_id"])
+    # AND A PERSON, not only a sufficient role. Ruled 21 September 2026, entry 148:
+    # four proposals were decided by smoke fixtures holding perfectly good roles, and
+    # they are the only proposal decisions this system has ever made.
+    humans.assert_named_human(me, act="decide a proposal")
 
     try:
         decided = await proposals.decide(
