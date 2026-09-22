@@ -12947,9 +12947,16 @@ test can hold, and it is the part that failed.
 
 **Nobody ran the script.** No test can hold that: CI's database is empty, so the manuals
 always match whatever the test itself authored. `scripts/check_instructions_match.py`
-answers it against a database that has been run against, and CI's job is to exercise the
-comparator — it authors, compares, and a test drives it both ways, once matching and once
-against a row somebody altered.
+answers it against a database that has been run against, and what CI holds is that the
+comparator works — a test authors from the script and asserts it finds nothing, alters a
+live row and asserts it finds that, supersedes one and asserts it says so.
+
+**It was a workflow step first, and that was the wrong place.** The step ran after
+`pytest`, which tears the world down and leaves no `forge_module_registry` for a manual
+to reference, so it failed on a foreign key — and the fix would have been to rebuild the
+world in YAML from knowledge `tests/world.py` already holds. A second spelling of the
+world is worse than no step, so the work moved inside the suite, where the fixture
+exists.
 
 **The comparison is on `content`, never on hashes.** `content_hash` is computed by a
 database function in a trigger; reproducing it in Python would be a second spelling of
