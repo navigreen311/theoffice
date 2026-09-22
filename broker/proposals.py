@@ -31,13 +31,14 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from broker import audit, incidents, revocation
+from broker import incidents, revocation
 
 # `live_grants` means "a grant no live revocation covers". The four-scope rule that
 # decides that has exactly one copy - `revocation._covers`, the same text
@@ -215,50 +216,21 @@ async def get(conn: AsyncConnection, proposal_id: uuid.UUID) -> dict[str, Any] |
 # --------------------------------------------------------------------- expiry
 
 async def expire_overdue(conn: AsyncConnection) -> list[dict[str, Any]]:
-    """Expire proposals whose deadline has passed. **Never approves one.**
+    """MOVED. Use `broker.deadlines.expire_overdue_proposals`.
 
-    A queue that drains itself looks like a queue being worked, which is exactly why
-    auto-approval on timeout is the most attractive shortcut on this page and exactly why
-    it does not exist. An agent below `auto_execute` asked to act, nobody answered, and
-    it did not act - that is the correct outcome. A timeout that approved would make the
-    trust tier a delay rather than a decision.
+    Ruled 22 September 2026, entry 156: a deadline passes on its own. This function was
+    correct and had exactly one caller - `GET /api/proposals/queue` - which made expiry
+    a side effect of somebody opening a page. The work now lives beside the escalation
+    expiry in `broker/deadlines.py`, where the scheduled runner calls both.
 
-    The task fails and both facts are audited.
+    Kept as a one-line delegation rather than deleted: it is the name in the ledger and
+    in two entries, and a reader who follows either should land somewhere that says
+    where it went. It does NOT reimplement anything.
     """
-    async with conn.cursor(row_factory=dict_row) as cur:
-        await cur.execute(
-            """
-            UPDATE proposal
-            SET status = 'expired'
-            WHERE status = 'pending' AND expires_at <= now()
-            RETURNING proposal_id, office_agent_id, venture_id, forge_id, module_id,
-                      task_id, created_at, expires_at
-            """
-        )
-        expired = [dict(r) for r in await cur.fetchall()]
-    await conn.commit()
+    from broker import deadlines
 
-    for row in expired:
-        await audit.write_event(
-            event_type="proposal_expired",
-            # No human acted - that is the point of the entry - so the actor is the
-            # agent whose proposal this was, the way `shifts` records a system act
-            # against the agent it concerns.
-            actor_type="system", actor_id=row["office_agent_id"],
-            venture_id=row["venture_id"],
-            subject={
-                "proposal_id": str(row["proposal_id"]),
-                "task_id": row["task_id"],
-                "module": f"{row['forge_id']}/{row['module_id']}",
-                # Said in the record, not only in the docs. Somebody reading this entry
-                # later needs to know the task failed rather than quietly succeeded.
-                "outcome": "task failed; the proposal was never approved",
-            },
-        )
-    return expired
+    return await deadlines.expire_overdue_proposals(conn)
 
-
-# ---------------------------------------------------------------------- the queue
 
 async def queue(conn: AsyncConnection) -> dict[str, Any]:
     """Everything the approvals page needs, with the empty state's reason computed.
@@ -297,6 +269,20 @@ async def queue(conn: AsyncConnection) -> dict[str, Any]:
             """
         )
         pending = [dict(r) for r in await cur.fetchall()]
+
+        # OVERDUE IS DERIVED AT READ TIME, NOT WRITTEN. Ruled 22 September 2026, entry
+        # 158. This route used to expire before reading so that nothing overdue looked
+        # decidable; the display concern was right, the write was the defect. Comparing
+        # the deadline to now() gives the same honest display and leaves the writing to
+        # `deadlines.running()`.
+        #
+        # A row marked overdue here is one the sweep has not reached yet. That is a
+        # real and visible state - and preferable to the alternative, where the only
+        # thing that ever expired anything was somebody opening this page.
+        now = datetime.now(UTC)
+        for row in pending:
+            deadline = row.get("expires_at")
+            row["overdue"] = bool(deadline and deadline <= now)
 
         await cur.execute(
             """

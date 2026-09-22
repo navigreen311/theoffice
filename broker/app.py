@@ -53,6 +53,7 @@ from broker import (
     build,
     certification,
     curriculum_quality,
+    deadlines,
     departments,
     discharges,
     escalation,
@@ -90,7 +91,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0054"
+EXPECTED_SCHEMA_REVISION = "0055"
 
 # `live_grants` means "a grant no live revocation covers". The four-scope rule that
 # decides that has exactly one copy - `revocation._covers`, the same text
@@ -112,7 +113,21 @@ _NOT_REVOKED = f"""NOT EXISTS (
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    yield
+    """The deadline sweep runs for as long as the API does.
+
+    RULED 22 SEPTEMBER 2026 (entry 156): *"A deadline passes on its own."* It did not.
+    `expire_overdue` had one caller - the approvals page - so a deadline passed when
+    somebody looked, and the drill proposal sat four hours and fifty minutes past its
+    own.
+
+    **In-process rather than cron.** `broker/__main__.py` has said "designed to be
+    invoked by cron or a systemd timer" since it was written and nothing has ever
+    invoked it; a second thing that is true only if somebody sets it up is how this got
+    here. `broker expire-deadlines` still exists for a deployment that prefers a timer,
+    and the two do the same work - `deadlines.run_once`.
+    """
+    async with deadlines.running():
+        yield
     await close_pool()
 
 
@@ -1026,9 +1041,18 @@ async def proposal_queue(conn: DB, _me: ME) -> dict[str, Any]:
     to any Forge and none had ever made a call, so the queue was empty because nothing
     could act. The reason is derived here from what is actually true.
     """
-    # Expire before reading, so the queue never shows an item whose deadline has passed
-    # as though a reviewer could still take it. Expiry fails the task; it never approves.
-    await proposals.expire_overdue(conn)
+    # NO EXPIRY HERE ANY MORE. Ruled 22 September 2026, entry 156.
+    #
+    # This used to call `expire_overdue` before reading, so that the queue never showed
+    # an item whose deadline had passed as though a reviewer could still take it. The
+    # concern was right and the mechanism was wrong: it made a GET the only thing that
+    # ever expired anything, and it meant the reviewer an item was routed to would have
+    # it expired out from under her by the act of opening the page she was meant to
+    # decide it on.
+    #
+    # `deadlines.running()` does the writing now. The queue still refuses to present an
+    # overdue item as decidable - `proposals.queue` marks it `overdue` from `expires_at`
+    # at read time - so the display is honest without the read being a write.
     result = await proposals.queue(conn)
     return {"as_of": datetime.now(UTC).isoformat(), **result}
 

@@ -376,6 +376,23 @@ async def _sync_roster(confirm: bool) -> int:
         return 0
 
 
+async def _expire_deadlines() -> int:
+    """One pass of the deadline sweep, for a cron or systemd deployment.
+
+    `broker serve` runs the same work continuously (entry 156). This exists for a
+    deployment that would rather own the schedule, and it is the same function, so the
+    two cannot drift.
+    """
+    from broker import deadlines
+    from broker.db import connection
+
+    async with connection() as conn:
+        found = await deadlines.run_once(conn)
+    for key, value in found.items():
+        print(f"  {key:<42} {value}")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="broker")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -392,6 +409,11 @@ def main() -> int:
         help="Also run Gate 13. Dumps and restores into a scratch database.",
     )
     sub.add_parser("health", help="Report freshness of every control")
+
+    sub.add_parser(
+        "expire-deadlines",
+        help="Expire overdue proposals and escalations once, then exit",
+    )
 
     hb = sub.add_parser(
         "human", help="Bootstrap the first human. Refuses once one exists."
@@ -489,6 +511,8 @@ def main() -> int:
         return asyncio.run(_sweep(args.restore_drill))
     if args.command == "health":
         return asyncio.run(_health())
+    if args.command == "expire-deadlines":
+        return asyncio.run(_expire_deadlines())
     if args.command == "sync-roster":
         return asyncio.run(_sync_roster(args.confirm))
     if args.command == "bootstrap-phase0":

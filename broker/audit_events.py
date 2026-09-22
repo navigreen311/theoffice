@@ -239,6 +239,13 @@ EVENTS: tuple[Event, ...] = (
           "broker.simforge", PROVISIONING),
 
     # -------------------------------------------------------------------- system
+    Event("escalation_expired", "Escalation: deadline passed",
+          "Nobody received an escalation before its deadline, so a scheduled job "
+          "recorded that the deadline passed. `expired_at` is the deadline itself and "
+          "`noticed_at` is when the job got there - ruled 22 September 2026, entry 157, "
+          "because a proposal expiry once recorded the moment somebody opened a page. "
+          "`lag_seconds` between them is what says whether the job is running.",
+          "broker.deadlines", SYSTEM),
     Event("human_account_created", "Account created",
           "An account was created, with what it IS (origin) and what is actually "
           "enforced for it (`auth_method`) recorded at the one moment both are chosen. "
@@ -290,8 +297,11 @@ EVENTS: tuple[Event, ...] = (
     Event("village_roster_imported", "Village roster imported",
           "The roster was synced from the Village.", "broker.roster", SYSTEM),
     Event("proposal_expired", "Proposal expired",
-          "Nobody decided a proposal before its deadline. Expiry never approves.",
-          "broker.proposals", SYSTEM),
+          "Nobody decided a proposal before its deadline. Expiry never approves. "
+          "`expired_at` is the deadline and `noticed_at` is when the scheduled job got "
+          "there (entry 157) - this entry once carried only the second, so a deadline "
+          "that passed at 05:17 was recorded at 10:07, which is when a page was opened.",
+          "broker.deadlines", SYSTEM),
     Event("shift_assigned", "Shift assigned",
           "An agent was put on shift for a venture.", "broker.shifts", SYSTEM),
     Event("shift_boundary_completed", "Shift ended",
