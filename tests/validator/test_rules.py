@@ -197,7 +197,7 @@ def test_every_rule_from_v1_is_implemented_with_no_gaps():
     assert everything == [f"V{i}" for i in range(1, len(everything) + 1)], (
         f"implemented {ids}, reserved {sorted(reserved)}"
     )
-    # 39 with V42 (entry 156): no Pack declares an authentication method the platform
+    # 39 with V42 (entry 159): no Pack declares an authentication method the platform
     # does not enforce. V41 was already taken by the founder-policy discharge rule, so
     # the new one is 42 and the sequence stays contiguous.
     assert len(ids) == 39, "39 rules implemented"

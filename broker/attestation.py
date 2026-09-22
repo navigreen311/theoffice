@@ -137,11 +137,11 @@ async def attest(
     # language `forge_module_exclusion` uses about itself.
     role = humans.authorize(human, required_role=FOUNDER_ROLE, venture_id=None)
 
-    # A SECOND FACTOR, VERIFIED NOW. Ruled 21 September 2026, entry 155.
+    # A SECOND FACTOR, VERIFIED NOW. Ruled 21 September 2026, entry 158.
     #
     # An attestation is a named human saying a department's escalation path works when
     # no test can establish it. Its entire value is that somebody's name is on it, and a
-    # bearer token is a credential that can be copied - so until entry 155 the strongest
+    # bearer token is a credential that can be copied - so until entry 158 the strongest
     # claim in this system rested on the weakest evidence in it.
     #
     # AFTER `authorize`, for the same reason the travelled-path check is: telling a

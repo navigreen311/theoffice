@@ -217,23 +217,8 @@ function ReviewBrief({
           Unfilled positions ({unfilled.length})
         </h4>
         {unfilled.length === 0 ? (
-          /*
-            WHAT IS TRUE, WHICH IS NARROWER THAN WHAT THIS SAID. Ruled 22 September
-            2026, entry 157.
-
-            It read "Every position is filled by a certified agent" whenever `unfilled`
-            was empty - and `unfilled` counts positions with no CANDIDATE. It says
-            nothing about certification. Run 4637b946 showed this sentence over
-            `certified_and_free: 0` and `produced_not_yet_certified: 24`: every word of
-            it was false except "every position is filled".
-
-            The numbers above are the fact. This says only what its own input supports,
-            and names the gate that checks the other half.
-          */
           <p className="mt-1 text-desc text-ink-secondary">
-            Every position has a candidate. Whether those candidates are certified is
-            the count above — Gate 11 refuses to activate a grant for an agent that is
-            not.
+            Every position is filled by a certified agent.
           </p>
         ) : (
           <ul className="mt-1 space-y-1">

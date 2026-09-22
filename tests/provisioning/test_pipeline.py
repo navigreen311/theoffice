@@ -939,7 +939,7 @@ async def test_gate_11_does_not_activate_a_grant_whose_agent_is_not_active(
                 note="re-signed over the artifacts regenerated without the suspended agent",
                 # The NEXT step's code. This is the second signature by the same person
                 # within the same 30 seconds; a person doing this would have taken
-                # minutes, and one code authorises one act (entry 155).
+                # minutes, and one code authorises one act (entry 158).
                 mfa_code=code_for(signer.human_id, step_offset=1),
             )
             outcomes = await provisioning.advance(

@@ -803,10 +803,10 @@ def v27(pack: BusinessPack) -> tuple[bool, str]:
 
 
 #: What The Office can actually verify when a person acts. Ruled 21 September 2026,
-#: entry 156, and it is a fact about this platform rather than a preference.
+#: entry 159, and it is a fact about this platform rather than a preference.
 #:
 #:     bearer_token  a token this system issued and stores hashed
-#:     mfa_only      a TOTP code checked against a secret the person enrolled (entry 155)
+#:     mfa_only      a TOTP code checked against a secret the person enrolled (entry 158)
 #:
 #: `sso_mfa` is absent on purpose. There is no identity provider here and no assertion to
 #: validate, so a Pack naming it declares a control nobody has built - which is exactly
@@ -819,7 +819,7 @@ ENFORCEABLE_AUTH_METHODS = frozenset({"bearer_token", "mfa_only"})
 def v42(pack: BusinessPack) -> tuple[bool, str]:
     """A Pack may not require what The Office cannot check.
 
-    RULED 21 SEPTEMBER 2026 (decisions entry 156)
+    RULED 21 SEPTEMBER 2026 (decisions entry 159)
     =============================================
 
         *"A Pack may not declare an auth method the platform does not enforce. Add a
@@ -842,7 +842,7 @@ def v42(pack: BusinessPack) -> tuple[bool, str]:
     =============================================================================
 
         `ENFORCEABLE_AUTH_METHODS` is what The Office can actually verify at the moment
-        a person acts. Since entry 155 that is `bearer_token` (a hashed token it issued)
+        a person acts. Since entry 158 that is `bearer_token` (a hashed token it issued)
         and `mfa_only` (a TOTP secret it holds and a code it checks). `sso_mfa` is NOT
         in it: there is no identity provider, no assertion to validate, and a Pack that
         names one is describing an arrangement nobody has built.

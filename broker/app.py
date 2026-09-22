@@ -1045,7 +1045,7 @@ class MfaConfirmRequest(BaseModel):
 async def begin_mfa_enrolment(conn: DB, me: ME) -> dict[str, Any]:
     """Start enrolling a second factor. **For yourself, and there is no other option.**
 
-    Ruled 21 September 2026, entry 155: *"Only the person writes their own enrolment."*
+    Ruled 21 September 2026, entry 158: *"Only the person writes their own enrolment."*
     That is expressed by the shape rather than by a check - this route takes no body and
     no human id, so there is no request that could name somebody else. An administrator
     cannot enrol on a colleague's behalf because there is nowhere to put their name.
@@ -1340,7 +1340,7 @@ async def instruction_diff(
 class RevokeRequest(BaseModel):
     scope: str
     reason: str = Field(min_length=1)
-    #: A code from the revoker's authenticator. Ruled 21 September 2026, entry 155.
+    #: A code from the revoker's authenticator. Ruled 21 September 2026, entry 158.
     mfa_code: str = Field(min_length=1)
     office_agent_id: uuid.UUID | None = None
     forge_id: str | None = None
@@ -1362,7 +1362,7 @@ async def create_revocation(body: RevokeRequest, conn: DB, me: ME) -> dict[str, 
 
     role = humans.authorize(me, required_role=required, venture_id=body.venture_id)
 
-    # A SECOND FACTOR (entry 155). A Forge-scope revocation stops every agent on that
+    # A SECOND FACTOR (entry 158). A Forge-scope revocation stops every agent on that
     # Forge across the portfolio, and until now the whole of that authority rested on a
     # bearer token. The check is HERE, on the human-initiated path, and deliberately not
     # inside `revoke`: `sync_roster` calls the same function when an agent departs, and
@@ -1575,7 +1575,7 @@ class SignoffRequest(BaseModel):
     venture_id: str
     artifact_kind: str
     artifact_hash: str
-    #: A code from the signer's authenticator. Ruled 21 September 2026, entry 155.
+    #: A code from the signer's authenticator. Ruled 21 September 2026, entry 158.
     mfa_code: str = Field(min_length=1)
     required_role: str = "venture_operator"
     distinct_humans: bool = True
@@ -2124,7 +2124,7 @@ async def abort_provisioning_run(
 
 class RunSignoffRequest(BaseModel):
     artifacts_hash: str = Field(min_length=64, max_length=64)
-    #: A code from the signer's authenticator. Ruled 21 September 2026, entry 155.
+    #: A code from the signer's authenticator. Ruled 21 September 2026, entry 158.
     mfa_code: str = Field(min_length=1)
     note: str | None = None
 

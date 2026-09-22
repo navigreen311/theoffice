@@ -921,7 +921,7 @@ class HumanCapacity(Strict):
     #: so a reader cannot act on a shortfall without meeting what the shortfall was computed from.
     median_review_minutes: float
     #: How this reviewer authenticates. **The Pack may only name what the platform can
-    #: enforce** - ruled 21 September 2026, entry 156, checked by V42.
+    #: enforce** - ruled 21 September 2026, entry 159, checked by V42.
     #:
     #: `bearer_token` joins the two that were here because it is what every account on
     #: this platform actually had while both Packs declared `sso_mfa`: a token The Office

@@ -13494,7 +13494,7 @@ Pack may require something the platform cannot enforce is a question for Ivan, n
 default this change should pick.
 
 
-## 155. MFA means a second factor
+## 158. MFA means a second factor
 
 **Ruling by Ivan Green, 21 September 2026:**
 
@@ -13568,7 +13568,7 @@ the only two real accounts, neither has a second factor, and `POST /api/access/m
 followed by `/confirm` is now the first step before any of those three acts.
 
 
-## 156. A Pack may not declare what the platform cannot enforce
+## 159. A Pack may not declare what the platform cannot enforce
 
 **Ruling by Ivan Green, 21 September 2026:**
 
@@ -13625,45 +13625,3 @@ run only when somebody publishes a new version. Gate 4.5 re-runs V13 and V24 onl
 
 V41 was already taken by the founder-policy discharge rule, so the new one is V42 and the
 sequence stays contiguous.
-
-
-## 157. A routed human cannot receive what they cannot find
-
-**Four fixes ruled by Ivan Green, 22 September 2026**, all in the console and all the same
-kind of defect: a page saying something that is not so.
-
-### `/escalations` was not in the navigation
-
-Built for entry 150, never added to the menu. The only route to an item routed to you was
-a URL somebody typed — so the two escalations raised on 21 September sat unreceived behind
-a page with no link to it. Both personal queues are now in `Operate`, and both labels say
-whose they are: *Approvals waiting for you*, *Escalations routed to you*.
-
-`/proposals` **was** linked, as "Approvals". The link existed; the label named the act
-rather than the queue.
-
-### "Every position is filled by a certified agent"
-
-Shown whenever `unfilled` was empty — and `unfilled` counts positions with no *candidate*.
-It says nothing about certification. Run 4637b946 displayed that sentence directly above
-`certified_and_free: 0` and `produced_not_yet_certified: 24`.
-
-It now says every position has a candidate, points at the counts, and names Gate 11 as the
-thing that refuses an uncertified agent.
-
-### The review box's placeholder was a worked answer
-
-*"all 3 positions filled by certified agents ... 192 approvals/day against 144
-review-minutes"* — every number invented, describing a venture with three positions and a
-V13 ratio no Pack here has ever had.
-
-Two things wrong, and the second is the serious one: it is grey text a reviewer can read as
-a summary of the run in front of them, and it is a template for the review they are about
-to write. **The fastest honest-looking thing to do with a filled-in example is to agree
-with it.** A placeholder that suggests a conclusion collects one. It prompts for the work
-now, and names nothing it has not been given.
-
-### The provisioning card printed its own source
-
-The stop line carried `$<Ago iso={run.stop.at} />` inside a template string, so the page
-rendered those characters rather than a time. JSX in a string is a string.

@@ -736,7 +736,7 @@ def certify_for_positions(conn: psycopg.Connection) -> None:
 def enrol_second_factor(admin: psycopg.Connection, human_id: uuid.UUID) -> str:
     """Give this account a known TOTP secret and mark it enrolled. Returns the secret.
 
-    RULED 21 SEPTEMBER 2026 (entry 155): `attest`, `sign_off` and `revoke` refuse
+    RULED 21 SEPTEMBER 2026 (entry 158): `attest`, `sign_off` and `revoke` refuse
     without a verified code, so a test that performs any of those needs an account that
     can produce one.
 
@@ -768,7 +768,7 @@ def code_for(human_id: uuid.UUID, *, step_offset: int = 0) -> str:
     and threading one through every signing helper would put a test-harness argument
     into the signature of everything that signs. It commits immediately and closes.
 
-    One code authorises one act - entry 155 records the step it spent - so this is called
+    One code authorises one act - entry 158 records the step it spent - so this is called
     per act rather than once per test. A variable holding "the code" is a test that
     passes twice and fails the third time for a reason nobody will enjoy finding.
 

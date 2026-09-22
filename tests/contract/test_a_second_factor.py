@@ -1,6 +1,6 @@
 """A second factor that is a factor: enrolled by the person, verified on use.
 
-RULED 21 SEPTEMBER 2026 (decisions entry 155)
+RULED 21 SEPTEMBER 2026 (decisions entry 158)
 =============================================
 
     *"MFA means a TOTP second factor the person enrols themselves. `attest`, `sign_off`

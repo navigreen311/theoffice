@@ -922,7 +922,7 @@ async def sign_off(
     entire content of separation of duties, and is checked here rather than trusted to
     process.
 
-    A SECOND FACTOR, VERIFIED NOW. Ruled 21 September 2026, entry 155. This is the
+    A SECOND FACTOR, VERIFIED NOW. Ruled 21 September 2026, entry 158. This is the
     signature Gate 11 activates production grants against, and 0025 named the exact
     consequence of leaving it on a bearer token alone: *"a signer whose MFA is a claim
     rather than an enrolment weakens the non-repudiation the Gate 10 signature is meant

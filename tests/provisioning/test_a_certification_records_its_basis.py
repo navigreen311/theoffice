@@ -157,7 +157,7 @@ async def _attest(conn, human, **over):
     kwargs = {
         "venture_id": VENTURE, "department": DEPARTMENT, "forge_id": FORGE,
         "human": human,
-        # A SECOND FACTOR (entry 155). An attestation is a named human's word where no
+        # A SECOND FACTOR (entry 158). An attestation is a named human's word where no
         # test can substitute for it, so it is exactly the act that should not rest on
         # a bearer token alone. `code_for` enrols the account on first use.
         "mfa_code": code_for(human.human_id),
@@ -269,7 +269,7 @@ async def test_a_correction_is_a_new_row_and_the_latest_is_in_force(conn, founde
         compliance_coupling_reason="Re-read on the 22nd: the library entry was withdrawn.",
         # A DIFFERENT CODE FOR A DIFFERENT ACT. The correction this test describes
         # happened a day later; here it happens in the same 30-second step, and one code
-        # authorises one act (entry 155). `kwargs.update(over)` lets the caller say so.
+        # authorises one act (entry 158). `kwargs.update(over)` lets the caller say so.
         mfa_code=code_for(founder.human_id, step_offset=1),
     )
     current = await attestation.current_attestation(

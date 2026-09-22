@@ -28,15 +28,7 @@ const NAV: { group: string; links: { href: string; label: string }[] }[] = [
       { href: "/packs", label: "Packs" },
       { href: "/provisioning", label: "Provisioning" },
       { href: "/agents", label: "Agents" },
-      // THE TWO PERSONAL QUEUES, TOGETHER. Ruled 22 September 2026, entry 157: a
-      // routed human cannot receive what they cannot find.
-      //
-      // `/escalations` had no link at all - the page was built for entry 150 and never
-      // entered the navigation, so the only way to an item routed to you was a URL
-      // somebody typed. `/proposals` was here, labelled "Approvals", which names the
-      // act rather than the queue; both labels now say whose they are.
-      { href: "/proposals", label: "Approvals waiting for you" },
-      { href: "/escalations", label: "Escalations routed to you" },
+      { href: "/proposals", label: "Approvals" },
     ],
   },
   {

@@ -1,6 +1,6 @@
 """A second factor that is a factor: TOTP, enrolled by the person, verified on use.
 
-RULED 21 SEPTEMBER 2026 (decisions entry 155)
+RULED 21 SEPTEMBER 2026 (decisions entry 158)
 =============================================
 
     *"MFA means a TOTP second factor the person enrols themselves. `attest`, `sign_off`
@@ -240,7 +240,7 @@ async def assert_verified(
     """Refuse an act whose second factor is missing, wrong, or already spent.
 
     Called by `attestation.attest`, `humans.sign_off` and the console's revoke route -
-    the three acts entry 155 names. Each carries founder or operator authority, and each
+    the three acts entry 158 names. Each carries founder or operator authority, and each
     was reachable with a bearer token alone.
 
     **Not called by `sync_roster`.** A departure revocation has no person at a keyboard
@@ -255,7 +255,7 @@ async def assert_verified(
         raise NotEnrolledError(
             f"{me.display_name} has no enrolled second factor, so {act} is refused. "
             "Enrol one at /access/mfa: this act carries authority a bearer token alone "
-            "is not enough for (entry 155).",
+            "is not enough for (entry 158).",
             act=act,
         )
     if not code:

@@ -552,7 +552,7 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
         "/api/access/suspend-test-fixtures",
         # THE TWO ENROLMENT ROUTES, and they are the write surface's own argument.
         # Both take no human id - there is nothing in either request that could name
-        # somebody else - so "only the person writes their own enrolment" (entry 155)
+        # somebody else - so "only the person writes their own enrolment" (entry 158)
         # is a property of the shape rather than of a check that might be skipped.
         "/api/access/mfa/begin",
         "/api/access/mfa/confirm",

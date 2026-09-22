@@ -69,7 +69,7 @@ def upgrade() -> None:
         COMMENT ON COLUMN office_human.mfa_secret IS
         'The base32 TOTP secret, RFC 6238. Returned to the person exactly once when they '
         'begin enrolment and never again - the same rule token_hash follows. NULL for an '
-        'account that has never begun. Ruled 21 September 2026, entry 155.'
+        'account that has never begun. Ruled 21 September 2026, entry 158.'
     """)
 
     # AN ENROLMENT NAMES A SECRET. Without this, `mfa_enrolled_at` could be set on a row
@@ -92,7 +92,7 @@ def upgrade() -> None:
         COMMENT ON TABLE mfa_code_used IS
         'Which (person, 30-second TOTP step) pairs have been spent, so one code cannot '
         'authorise two acts. The code is NOT stored - it is a live credential, and the '
-        'step identifies the window without being usable in it. Entry 155.'
+        'step identifies the window without being usable in it. Entry 158.'
     """)
     op.execute("GRANT SELECT, INSERT, DELETE ON mfa_code_used TO office_app")
 
@@ -107,7 +107,7 @@ def downgrade() -> None:
         "ALTER TABLE office_human DROP CONSTRAINT IF EXISTS an_enrolment_has_a_secret"
     )
     # The enrolments go with the secret, because an enrolment whose secret is gone is a
-    # claim again - and restoring the exact state entries 154 and 155 removed is not
+    # claim again - and restoring the exact state entries 154 and 158 removed is not
     # something a downgrade should quietly do. `auth_method` follows them back.
     op.execute("""
         UPDATE office_human
