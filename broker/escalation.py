@@ -529,6 +529,13 @@ async def record_receipt(
     Idempotent on the first receipt: a second call leaves the original timestamp alone,
     because when it was picked up is a fact and the second caller is not a second
     pickup.
+
+    **AND WRITES NO EVENT.** Ruled 22 September 2026, entry 159. The row was always
+    guarded; the audit entry was not, so a repeat call wrote a second entry claiming a
+    pickup that did not happen. `grant_role` has followed this rule since entry 149 -
+    *"an event saying a role was granted when the human already held it is a false entry
+    in a chain whose entire value is that it contains none"* - and it reads `rowcount`
+    to do it. So does this.
     """
     found = await get(conn, escalation_id)
     if found is None:
@@ -542,11 +549,20 @@ async def record_receipt(
             " WHERE escalation_id = %s AND received_at IS NULL",
             (received_by, escalation_id),
         )
+        # DID THIS CALL PICK IT UP, or had somebody already? The guarded UPDATE answers
+        # it and `rowcount` is the answer - ruled 22 September 2026, entry 159.
+        received = cur.rowcount
     await conn.commit()
 
     found = await get(conn, escalation_id)
     assert found is not None
-    if found.received_at is not None:
+    # NOTHING IS CLAIMED WHEN NOTHING CHANGED, the rule `grant_role` already follows.
+    #
+    # This read `if found.received_at is not None`, which is true for a fresh receipt
+    # AND for a repeat - so a second call wrote a second entry saying somebody picked up
+    # an escalation they had already picked up. The row was always safe; the chain was
+    # not.
+    if received:
         await write_event(
             event_type="escalation_received",
             # `human` because `me` IS one - `_only_the_routed_human` refused anything
@@ -567,6 +583,14 @@ async def record_answer(
 
     The CHECK in 0051 refuses both as well, and this refuses them first so a caller
     meets a sentence rather than a constraint name.
+
+    **A SECOND ANSWER CHANGES NOTHING AND SAYS NOTHING.** Ruled 22 September 2026,
+    entry 159. The first answer stands - `answered_at IS NULL` in the UPDATE - and the
+    audit entry is now written only when that UPDATE took effect.
+
+    Measured on `d8e8f35c`: two `escalation_answered` rows, eight seconds apart, one
+    answer. A double submit on the console form produced them, and the second was a
+    claim about an act nobody performed.
     """
     if not answer.strip():
         raise OfficeError("an escalation is answered with a sentence, not a flag")
@@ -589,15 +613,26 @@ async def record_answer(
             " WHERE escalation_id = %s AND answered_at IS NULL",
             (answered_by, answer.strip(), escalation_id),
         )
+        answered_now = cur.rowcount
     await conn.commit()
 
-    await write_event(
-        event_type="escalation_answered",
-        # A person, established rather than asserted - see `record_receipt`.
-        actor_type="human", actor_id=answered_by, venture_id=found.venture_id,
-        subject={"escalation_id": str(escalation_id), "department": found.department,
-                 "answered_by_name": me.display_name, "answer": answer.strip()},
-    )
+    # MEASURED, AND THIS IS THE ENTRY THAT PRODUCED THE RULING. `d8e8f35c` carries two
+    # `escalation_answered` rows eight seconds apart, 10:44:31 and 10:44:39, same
+    # escalation and same text. The UPDATE was guarded and took the first; `write_event`
+    # was not, and wrote both. The second claims an answer that did not happen.
+    #
+    # Those two rows stay in the chain. It is append-only by trigger, which is the
+    # property that makes it worth having - a false entry is corrected by a later one,
+    # never by editing the record. This is the correction.
+    if answered_now:
+        await write_event(
+            event_type="escalation_answered",
+            # A person, established rather than asserted - see `record_receipt`.
+            actor_type="human", actor_id=answered_by, venture_id=found.venture_id,
+            subject={"escalation_id": str(escalation_id),
+                     "department": found.department,
+                     "answered_by_name": me.display_name, "answer": answer.strip()},
+        )
     answered = await get(conn, escalation_id)
     assert answered is not None
     return answered

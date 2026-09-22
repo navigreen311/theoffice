@@ -13746,3 +13746,59 @@ clock, and not one this entry rules on.
 sets a deadline, so nothing expires. They are left in place rather than dropped because
 overdue and expiry are different claims, and **whether an escalation ever expires is
 still unruled.** Removing the columns would answer that question by deletion.
+
+
+## 159. A repeated act claims nothing
+
+**Ruling by Ivan Green, 22 September 2026:**
+
+> *"A repeated receipt or answer writes no audit event. `record_receipt` and
+> `record_answer` write only when the row changed, as `grant_role` does. Measured: two
+> `escalation_answered` entries 8 seconds apart for one answer on d8e8f35c."*
+
+### The rows were always safe. The chain was not.
+
+Both UPDATEs have always been guarded — `received_at IS NULL`, `answered_at IS NULL` — so
+a second call has never moved a timestamp or replaced an answer. The first receipt stands
+and the first answer stands.
+
+The audit entries were a different matter:
+
+    record_answer    called `write_event` unconditionally
+    record_receipt   guarded on `if found.received_at is not None`, which is true for a
+                     fresh receipt AND for a repeat
+
+So a second call left the record alone and wrote a claim that it had not.
+
+### What produced the ruling
+
+`d8e8f35c` — the research drill escalation — carries **two** `escalation_answered` rows,
+at 10:44:31 and 10:44:39. Same escalation, same answer text, eight seconds apart. A
+double submit on the console form. `answered_at` is 10:44:31, so the row took the first;
+the second entry describes an act nobody performed.
+
+Found while confirming the drill, not by a test. Nothing was looking for it.
+
+### The rule already existed, four entries earlier
+
+Entry 149 put it in `grant_role`, in these words:
+
+> *"Nothing is claimed when nothing changed. `ON CONFLICT DO NOTHING` makes a re-grant a
+> no-op, and an event saying a role was granted when the human already held it is a false
+> entry in a chain whose entire value is that it contains none."*
+
+`grant_role` reads `cur.rowcount` and writes only when it granted. **`record_receipt` and
+`record_answer` were written after that entry and did not inherit it.** That is the part
+worth noticing: a rule stated once, in one function's docstring, is a rule the next
+function does not get.
+
+So `test_grant_role_still_follows_the_same_rule` sits in the new test file beside the two
+escalation tests. The thing to protect is the rule, not a call site.
+
+### What is not done about the two rows
+
+They stay. `audit_log` is append-only by trigger and refuses UPDATE and DELETE, which is
+the property that makes it worth having — a false entry is answered by a later one, never
+by editing the record.
+
+This entry is that later one.
