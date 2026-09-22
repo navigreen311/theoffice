@@ -78,7 +78,7 @@ from typing import Any
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 
-from broker import escalation, revocation
+from broker import certification, escalation, revocation
 from generators.artifacts import (
     AppointedAgent,
     Appointment,
@@ -414,12 +414,29 @@ async def _unit_a_certs(
 async def _unit_b_certs(
     conn: AsyncConnection, department: str, forges: list[str]
 ) -> dict[str, str]:
+    """This department's Unit B state per Forge, as appointment should read it.
+
+    **A VOID SIMULATION CERTIFICATION READS AS `simulation_certification_void`, NOT AS
+    `certified`.** Entry 167: a simulation certification is void the moment its venture
+    leaves simulation, and the row still says `certified` because nothing here rewrites
+    a certification.
+
+    Reported as its own state rather than dropped, because this function's caller uses
+    the value to explain a shortfall - "never_certified" would send somebody to earn a
+    certification that exists, and a missing key would read as a Forge nobody has
+    touched.
+    """
     if not forges:
         return {}
     async with conn.cursor() as cur:
         await cur.execute(
-            "SELECT forge_id, state FROM certification "
-            "WHERE unit = 'B' AND department = %s AND forge_id = ANY(%s)",
+            "SELECT forge_id, "
+            f"       CASE WHEN {certification.certified_and_live('c')} THEN c.state "
+            "            WHEN c.simulation_ref IS NOT NULL "
+            "              THEN 'simulation_certification_void' "
+            "            ELSE c.state END AS state "
+            "  FROM certification c "
+            " WHERE c.unit = 'B' AND c.department = %s AND c.forge_id = ANY(%s)",
             (department, forges),
         )
         return dict(await cur.fetchall())

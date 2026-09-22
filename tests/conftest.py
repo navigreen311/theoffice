@@ -176,6 +176,17 @@ def wipe_venture(conn: psycopg.Connection, venture_id: str) -> None:
         cur.execute("DELETE FROM agent_call_ledger WHERE venture_id = %s", (venture_id,))
         # Entry 166. Inside the guarded block rather than in the loop below, because the
         # loop runs after the triggers go back up.
+        #
+        # Entry 167's certifications go FIRST: a simulation certification names the
+        # declaration that permitted it, `certification` has no `venture_id` of its own,
+        # and the foreign key points this way. This is the only thing that reaches a
+        # venture's certifications through `wipe_venture`, which is why it is spelled
+        # out rather than folded into the loop.
+        cur.execute(
+            "DELETE FROM certification WHERE simulation_ref IN "
+            "(SELECT simulation_id FROM venture_simulation WHERE venture_id = %s)",
+            (venture_id,),
+        )
         cur.execute(
             "DELETE FROM venture_simulation WHERE venture_id = %s", (venture_id,)
         )

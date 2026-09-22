@@ -378,6 +378,12 @@ class OfficeClient:
                     "trust_tier": grant.trust_tier,
                     "credential_mode": grant.credential_mode,
                     "compliance_flags": list(grant.compliance_flags),
+                    # Entry 167: any surface showing a grant says which of its
+                    # certifications are simulation-only, and the audit entry is the
+                    # surface that survives. A call made while a department's context
+                    # rested on a declaration rather than an exam has to read that way
+                    # afterwards, when somebody is asking what the agent was cleared on.
+                    "unit_b_simulation_only": grant.unit_b_simulation_only,
                     "idempotency_key": idem_key,
                     "task_id": agent_ctx.task_id,
                 },

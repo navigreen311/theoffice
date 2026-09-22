@@ -103,6 +103,14 @@ EVENTS: tuple[Event, ...] = (
           "began failing again at that moment, which is every one that is not both "
           "approved and counsel-reviewed.",
           "broker.app", CONSOLE),
+    Event("department_certified_for_simulation", "Department certified for simulation",
+          "A named human with founder authority issued a Unit B certification on the "
+          "strength of a declaration of simulation rather than an exam. RULED 22 "
+          "September 2026, entry 167: a distinct basis, never 'verified', recorded with "
+          "the declaration that permitted it - and VOID the moment the venture leaves "
+          "simulation. Carries the modules its instruction basis was composed over, so "
+          "republishing any of them decertifies it exactly as it would a tested one.",
+          "broker.certification", CONSOLE),
     Event("console_role_granted", "Role granted",
           "Somebody was given a role by somebody holding a stronger one.",
           "broker.app", CONSOLE),

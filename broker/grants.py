@@ -53,6 +53,7 @@ from broker.errors import (
     NotCertified,
     NotGranted,
     NoTierPlanned,
+    SimulationCertificationVoid,
     UnknownForge,
 )
 
@@ -79,6 +80,18 @@ class ResolvedGrant:
     certified_tier: str
     """Part 10.1: certified tier caps declared tier. `trust_tier` above is already
     capped by this - callers must not re-derive it."""
+
+    unit_b_simulation_only: bool = False
+    """Whether this grant's department context is certified for simulation only.
+
+    RULED 22 SEPTEMBER 2026, entry 167: *"Any surface showing a grant, a gate or a
+    sign-off says which of its certifications are simulation-only."* This is the grant.
+
+    False for a void one, because a void simulation certification never gets this far -
+    `resolve_grant` raises `SimulationCertificationVoid` before building this. So the
+    flag means exactly *certified on a live declaration rather than on an exam*, and it
+    travels into the audit subject with every call the grant authorises.
+    """
 
     @property
     def is_compliance_flagged(self) -> bool:
@@ -139,6 +152,11 @@ SELECT
     ca.model_digest   AS unit_a_digest,
     ca.simforge_verdict AS unit_a_verdict,
     cb.state          AS unit_b_state,
+    -- Entry 167. A simulation certification reads `certified` and is void the moment
+    -- its venture leaves simulation - derived here by join, because a stored flag
+    -- would let a call resolve on a permission that ended.
+    (cb.basis = 'simulation')  AS unit_b_simulation_only,
+    (vs.left_at IS NOT NULL)   AS unit_b_simulation_void,
     x.reason          AS exclusion_reason
 FROM agent_forge_grant g
 JOIN office_agent_identity i ON i.office_agent_id = g.office_agent_id
@@ -159,6 +177,7 @@ LEFT JOIN certification ca ON ca.unit = 'A'
 LEFT JOIN certification cb ON cb.unit = 'B'
                           AND cb.department = i.department
                           AND cb.forge_id = g.forge_id
+LEFT JOIN venture_simulation vs ON vs.simulation_id = cb.simulation_ref
 WHERE g.office_agent_id = %(agent_id)s
   AND g.forge_id        = %(forge_id)s
   AND g.module_id       = %(module_id)s
@@ -285,6 +304,27 @@ async def resolve_grant(
             department=row["department"],
         )
 
+    # A SIMULATION CERTIFICATION IS VOID ONCE THE VENTURE HAS LEFT.
+    # Ruled 22 September 2026, entry 167.
+    #
+    # *"Every simulation certification is void at that point."* Void means void here
+    # too: this is the check that runs on every single call, and a certification that
+    # Gate 9 would now refuse cannot be one the call path still accepts. The row still
+    # reads `certified` - nothing edits a certification - so without this the venture
+    # would leave simulation and its agents would carry on.
+    #
+    # After `NotCertified`, because "never certified" is the more basic fact, and its
+    # own type because the remedy is different: this grant was certified, on a
+    # permission that has ended, and what it needs is a real Unit B rather than a
+    # re-run of anything.
+    if row["unit_b_simulation_void"]:
+        raise SimulationCertificationVoid(
+            "the Unit B certification behind this grant was issued for a simulation "
+            "the venture has since left, and is void. Entry 167: a simulation "
+            "certification is void the moment the venture leaves.",
+            department=row["department"],
+        )
+
     # THE CERTIFICATION PASSED AND NOTHING CAN SAY WHICH MODEL PASSED IT.
     #
     # After `NotCertified`, because "not certified" and "certified by a model nobody
@@ -361,6 +401,7 @@ async def resolve_grant(
         idempotency_support=row["idempotency_support"],
         is_mutating=row["is_mutating"],
         compliance_flags=tuple(row["compliance_flags_implied"] or ()),
+        unit_b_simulation_only=bool(row["unit_b_simulation_only"]),
     )
 
 

@@ -133,6 +133,40 @@ export default async function VenturePage({
                     .join(", ")}
             </Cell>
           </Row>
+          {/*
+            Entry 167: any surface showing a grant, a gate or a sign-off says which of
+            its certifications are simulation-only. This panel shows all three, and a
+            "signed" badge over departments certified on a declaration rather than an
+            exam is exactly the quiet pass the ruling is about. The row is present only
+            when there is something to say, so a venture with none reads unchanged.
+          */}
+          {gates.simulation_only_certifications.length > 0 ? (
+            <Row>
+              <Cell>Unit B — simulation only</Cell>
+              <Cell>
+                <Badge
+                  severity={
+                    gates.simulation_only_certifications.some((c) => c.void)
+                      ? "bad"
+                      : "warn"
+                  }
+                >
+                  {gates.simulation_only_certifications.some((c) => c.void)
+                    ? "void"
+                    : "simulation"}
+                </Badge>
+              </Cell>
+              <Cell>
+                {gates.simulation_only_certifications
+                  .map(
+                    (c) =>
+                      `${c.forge_id}/${c.department}${c.void ? " (VOID — the venture has left simulation)" : ` — declared by ${c.declared_by}`}`,
+                  )
+                  .join("; ")}
+                . Certified on a declaration, not an exam.
+              </Cell>
+            </Row>
+          ) : null}
         </Table>
         {blocking ? (
           <p className="mt-3 rounded border border-bad/40 bg-bad/10 px-3 py-2 text-xs text-bad">

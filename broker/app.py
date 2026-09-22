@@ -92,7 +92,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0058"
+EXPECTED_SCHEMA_REVISION = "0059"
 
 # `live_grants` means "a grant no live revocation covers". The four-scope rule that
 # decides that has exactly one copy - `revocation._covers`, the same text
@@ -855,11 +855,25 @@ async def gates(venture_id: str, conn: DB, _me: ME) -> dict[str, Any]:
         )
         unassignable = await cur.fetchone()
 
+    # ENTRY 167. This panel shows grants and sign-offs side by side, and it is the page
+    # somebody opens to ask whether a venture can pass its gates. A "signed" badge over
+    # departments certified on a declaration rather than an exam is the quiet pass the
+    # ruling is about.
+    simulation_certs = await certification.simulation_certifications(conn, venture_id)
     return {
         "venture_id": venture_id,
         "gate_15_pending_dispositions": int(pending["pending"]) if pending else 0,
         "signoffs": signoffs,
         "unassignable_grants": int(unassignable["unassignable"]) if unassignable else 0,
+        "simulation_only_certifications": [
+            {
+                "forge_id": row["forge_id"],
+                "department": row["department"],
+                "void": row["void"],
+                "declared_by": row["declared_by"],
+            }
+            for row in simulation_certs
+        ],
     }
 
 
@@ -1534,8 +1548,82 @@ class SignoffRequest(BaseModel):
     note: str | None = None
 
 
+class CertifyForSimulationRequest(BaseModel):
+    venture_id: str = Field(min_length=1)
+    department: str = Field(min_length=1)
+    forge_id: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+
+
+@app.post("/api/certifications/simulation", status_code=201)
+async def certify_for_simulation_route(
+    body: CertifyForSimulationRequest, conn: DB, me: ME
+) -> dict[str, Any]:
+    """Certify a department's context for simulation. `ivan` only.
+
+    **RULED 22 SEPTEMBER 2026, entry 167.** Entry 166 shut both routes to Unit B: the
+    tested one needs a SimForge department unit `submit_curriculum` reads nothing for,
+    and the attested one needs a TRUE compliance coupling that 166 refuses in simulation
+    by construction. Measured the same day - zero attested Unit B certifications have
+    ever existed.
+
+    **It is not an attestation and nobody is recorded as having verified anything.**
+    `basis = 'simulation'`, no verdict, no model, no score - migration 0059 refuses all
+    four on the row. `reason` says why the certification was issued; it is not a finding
+    about the department.
+
+    The certifier is `me`, never a field. `ivan`, the same authority that declares
+    simulation, because this spends exactly the permission that declaration grants.
+    """
+    humans.authorize(me, required_role="ivan")
+    try:
+        certified = await certification.certify_for_simulation(
+            conn, venture_id=body.venture_id, department=body.department,
+            forge_id=body.forge_id, human=me, reason=body.reason,
+        )
+    except certification.CertificationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    return {
+        "cert_id": str(certified.cert_id),
+        "unit": certified.unit,
+        "state": certified.state,
+        "certified_tier": certified.certified_tier,
+        "basis": certification.SIMULATION_BASIS,
+        "note": (
+            "SIMULATION ONLY. Gate 9 accepts this while the venture is in simulation "
+            "and refuses it the moment the venture leaves - at which point this "
+            "certification is void and the call path refuses every grant behind it. "
+            "It is bound to the department's instruction set, so republishing any of "
+            "those instructions decertifies it."
+        ),
+    }
+
+
+@app.get("/api/certifications/simulation")
+async def list_simulation_certifications(
+    conn: DB, _me: ME, venture_id: str | None = Query(default=None)
+) -> dict[str, Any]:
+    """Every simulation-only certification, and whether its permission still stands.
+
+    *"Any surface showing a grant, a gate or a sign-off says which of its certifications
+    are simulation-only."* This is what those surfaces read, so there is one answer to
+    the question rather than one per page.
+    """
+    rows = await certification.simulation_certifications(conn, venture_id)
+    return {
+        "certifications": [
+            {**row, "cert_id": str(row["cert_id"]),
+             "issued_at": row["issued_at"].isoformat()}
+            for row in rows
+        ],
+        "total": len(rows),
+        "void": sum(1 for row in rows if row["void"]),
+    }
+
+
 @app.post("/api/signoffs", status_code=201)
-async def create_signoff(body: SignoffRequest, conn: DB, me: ME) -> dict[str, str]:
+async def create_signoff(body: SignoffRequest, conn: DB, me: ME) -> dict[str, Any]:
     """Gate sign-off, bound to the artifact hash. Part 14."""
     signoff_id = await humans.sign_off(
         conn, gate=body.gate, venture_id=body.venture_id, human=me,
@@ -1543,11 +1631,33 @@ async def create_signoff(body: SignoffRequest, conn: DB, me: ME) -> dict[str, st
         required_role=body.required_role, distinct_humans=body.distinct_humans,
         note=body.note,
     )
+    # NAMED IN THE SIGNATURE'S OWN AUDIT ENTRY. Entry 167: what the signer's venture was
+    # resting on at the moment they signed is a fact about the signature, and it cannot
+    # be recovered later from a certification that may since have been re-earned.
+    simulation_certs = await certification.simulation_certifications(conn, body.venture_id)
+    simulation_only = [
+        f"{row['forge_id']}/{row['department']}" for row in simulation_certs
+    ]
     await _audit_human_action(
         me, "console_gate_signed",
-        {"gate": body.gate, "artifact_hash": body.artifact_hash}, body.venture_id,
+        {
+            "gate": body.gate,
+            "artifact_hash": body.artifact_hash,
+            "simulation_only_certifications": simulation_only,
+        },
+        body.venture_id,
     )
-    return {"signoff_id": str(signoff_id)}
+    return {
+        "signoff_id": str(signoff_id),
+        "simulation_only_certifications": simulation_only,
+        "note": (
+            f"{len(simulation_only)} of this venture's department certifications are "
+            "SIMULATION ONLY - certified on a declaration, not an exam, and void the "
+            "moment the venture leaves simulation."
+            if simulation_only else
+            "No department certification on this venture is simulation-only."
+        ),
+    }
 
 
 @app.get("/api/signoffs/{venture_id}/{gate}")
@@ -1563,12 +1673,27 @@ async def signoff_status(
         conn, gate=gate, venture_id=venture_id,
         current_artifact_hash=current_artifact_hash,
     )
+    # ENTRY 167. A signature binds a named human to a set of artifacts, and what those
+    # artifacts are worth depends on what the venture's certifications rest on. A
+    # sign-off surface that did not say which of them are simulation-only would let
+    # somebody sign a Gate 10 believing a department had passed an exam.
+    simulation_certs = await certification.simulation_certifications(conn, venture_id)
     return {
         "gate": status.gate,
         "venture_id": status.venture_id,
         "is_signed": status.is_signed,
         "valid": status.valid,
         "voided": status.voided,
+        "simulation_only_certifications": [
+            {
+                "forge_id": row["forge_id"],
+                "department": row["department"],
+                "void": row["void"],
+                "declared_by": row["declared_by"],
+                "reason": row["declared_reason"],
+            }
+            for row in simulation_certs
+        ],
     }
 
 

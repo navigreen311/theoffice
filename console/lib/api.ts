@@ -235,6 +235,13 @@ export type Gates = {
   venture_id: string;
   gate_15_pending_dispositions: number;
   signoffs: { gate: string; signatures: number }[];
+  /** Entry 167: departments certified on a declaration rather than an exam. */
+  simulation_only_certifications: {
+    forge_id: string;
+    department: string;
+    void: boolean;
+    declared_by: string;
+  }[];
   unassignable_grants: number;
 };
 

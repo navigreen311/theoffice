@@ -459,8 +459,40 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
         "/api/controls/audit-chain",
     }
 
+    # Routes that DO write one of these stores, by a ruling, through a guarded act.
+    #
+    # Separate from `verifies_without_editing` on purpose: that list says "this cannot
+    # change the store", and saying it here would be false. This one writes a
+    # certification. The argument is not that it is harmless, it is that the ruling
+    # names it and the write cannot be mistaken for an earned certification.
+    ruled_human_acts = {
+        # ENTRY 167. A department certified for simulation, by a named human with
+        # founder authority, on the strength of a declaration under entry 166.
+        #
+        # Why the guard's premise still holds - "certification state is an outcome of
+        # guarded functions, not human-editable":
+        #
+        #   * It writes `basis = 'simulation'`, a fourth value whose own CHECK refuses
+        #     a verdict, a model or a score on the row. It cannot be written as, or
+        #     mistaken for, `tested` or `attested`.
+        #   * It is VOID by derivation the moment the venture leaves simulation -
+        #     Gate 9 refuses it and `resolve_grant` raises
+        #     `SimulationCertificationVoid` on every call. Nothing has to remember to
+        #     revoke it.
+        #   * It names the declaration that permitted it, and that declaration names a
+        #     person, a reason and a date.
+        #   * It is bound to the department's instruction basis, so republishing any of
+        #     those instructions decertifies it exactly as it would a tested one.
+        #   * `ivan` only - the same authority that declares simulation. Nobody can
+        #     spend a permission they could not grant.
+        #
+        # Unit A is untouched and unreachable this way: `only_unit_b_is_certified_for_
+        # simulation` refuses it at the database.
+        "/api/certifications/simulation",
+    }
+
     for path in writes:
-        if path in verifies_without_editing:
+        if path in verifies_without_editing or path in ruled_human_acts:
             continue
         for fragment in forbidden_fragments:
             assert fragment not in path.lower(), (
@@ -470,9 +502,13 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
                 "this route cannot bypass a control before adding it here."
             )
 
-    # The exception list cannot outlive the routes it excuses. An entry for a route that
-    # no longer exists is an exemption nobody is checking, sitting ready for the next
-    # route that happens to take that path.
+    # The exception lists cannot outlive the routes they excuse. An entry for a route
+    # that no longer exists is an exemption nobody is checking, sitting ready for the
+    # next route that happens to take that path.
+    assert ruled_human_acts <= writes, (
+        f"ruled_human_acts names routes that no longer exist: "
+        f"{sorted(ruled_human_acts - writes)}"
+    )
     stale = verifies_without_editing - writes
     assert not stale, f"these routes are excused and do not exist: {sorted(stale)}"
 
@@ -625,6 +661,12 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
         # single toggle would make the two ends of the interval one decision.
         "/api/ventures/{venture_id}/simulation",
         "/api/ventures/{venture_id}/simulation/leave",
+        # A DEPARTMENT CERTIFIED FOR SIMULATION. Ruled 22 September 2026, entry 167.
+        #
+        # `ivan`, like the declaration it spends. A Unit B certification on the strength
+        # of a declaration rather than an exam is not something the role that writes
+        # compliance entries should be able to issue.
+        "/api/certifications/simulation",
     }, f"the write surface changed: {sorted(writes)}"
 
 

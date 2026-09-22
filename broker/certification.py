@@ -39,7 +39,9 @@ from psycopg.types.json import Jsonb
 #: which results may stamp `result_received_at`, and migration 0035's CHECK mirrors it.
 #: Three spellings of one set is how two of them drift; there are already two, and the
 #: SQL one cannot import.
+from broker import audit, humans, instructions, simulation
 from broker.simforge import TERMINAL_VERDICTS as ANSWERED_VERDICTS
+from broker.simforge import department_basis_hash
 
 CERTIFIED = "certified"
 PROVISIONAL = "provisional"
@@ -583,6 +585,22 @@ async def record_result(
               -- and one whose test is withdrawn stops claiming it was tested.
               basis = EXCLUDED.basis,
               attestation_ref = EXCLUDED.attestation_ref,
+              -- AND THE DECLARATION GOES WITH THE BASIS. Entry 167.
+              --
+              -- Without this line a tested PASS landing on a department that holds a
+              -- simulation certification writes `basis = 'tested'` over a row whose
+              -- `simulation_ref` survives, and
+              -- `a_simulation_certification_names_its_declaration` refuses the whole
+              -- statement. The constraint was right and the omission was mine: it
+              -- meant **a simulation certification blocked a real one from ever
+              -- landing**, and the verdict-ingest sweep would have died on a
+              -- CheckViolation rather than recording the PASS.
+              --
+              -- Replaced, not cleared: `EXCLUDED.simulation_ref` is NULL for every
+              -- caller of this function, because nothing that earns a certification
+              -- passes a declaration. Spelling it as a replacement keeps it true if one
+              -- ever does.
+              simulation_ref = EXCLUDED.simulation_ref,
               updated_at = now()
             RETURNING cert_id, unit, state, certified_tier
             """,
@@ -645,6 +663,315 @@ async def record_result(
     await conn.commit()
     assert row is not None
     return CertState(row["cert_id"], row["unit"], row["state"], row["certified_tier"])
+
+
+#: The fourth basis. Ruled 22 September 2026, entry 167.
+SIMULATION_BASIS = "simulation"
+
+#: The tier a simulation certification carries.
+#:
+#: The floor, and it is a floor rather than a judgement: nothing sat an exam, so nothing
+#: established that this department's agents may do more than suggest. `certified_tier`
+#: is NOT NULL on any certified row (`certified_records_its_basis`, 0050), so the column
+#: has to say something, and the most restrictive value is the only thing it can say
+#: honestly.
+#:
+#: Unit B's tier is not what caps a call - `resolve_grant` reads unit A's. This is the
+#: value a reader sees when they ask what a simulation certification claims, and the
+#: answer is: the least it could.
+SIMULATION_TIER = "suggest"
+
+#: Whether a certification is simulation-only, and whether that permission still stands.
+#:
+#: **Derived by join, never stored.** *"Every simulation certification is void at that
+#: point"* - the point being the moment its venture leaves simulation. A `voided_at`
+#: column would mean a row reading valid until somebody remembered to run a job, which
+#: is entry 158's argument about overdue escalations applied to a stronger claim.
+#:
+#: Written as a fragment rather than a view because every caller already joins
+#: `certification` under its own alias, and a view would be a second place for the rule
+#: to live. `{cert}` is that alias.
+SIMULATION_STANDING_SQL = """
+    ({cert}.basis = 'simulation')                                AS simulation_only,
+    ({cert}.basis = 'simulation' AND {sim}.left_at IS NOT NULL)   AS simulation_void
+"""
+
+SIMULATION_JOIN_SQL = (
+    "LEFT JOIN venture_simulation {sim} "
+    "       ON {sim}.simulation_id = {cert}.simulation_ref"
+)
+
+#: **Certified, and the permission behind it still stands.** Entry 167.
+#:
+#: The predicate every reader that asks "is this certification good" must use, as a
+#: correlated EXISTS so it needs no join and can be dropped into a WHERE clause anywhere.
+#:
+#: WHY THIS IS A SHARED CONSTANT AND NOT FIVE COPIES OF AN `AND`
+#: ============================================================
+#:
+#:     Because five copies is what it was, and two of them were missing. The first cut
+#:     of entry 167 put the void check in Gate 9 and in `resolve_grant` and stopped
+#:     there, which left **Gate 11 activating production grants on a void simulation
+#:     certification** - the gate whose own comment says it re-checks rather than
+#:     trusting Gate 9, "the same rule at the moment it becomes irreversible".
+#:
+#:     A void certification still reads `state = 'certified'`, because nothing in this
+#:     system rewrites a certification. That is the right design and it is exactly why
+#:     `state = 'certified'` is not a safe thing for a reader to write on its own.
+#:
+#: `{cert}` is the certification's alias in the caller's query.
+CERTIFIED_AND_LIVE_SQL = """
+    {cert}.state = 'certified'
+    AND NOT EXISTS (
+      SELECT 1 FROM venture_simulation vs_live
+       WHERE vs_live.simulation_id = {cert}.simulation_ref
+         AND vs_live.left_at IS NOT NULL
+    )
+"""
+
+
+def certified_and_live(cert: str) -> str:
+    """`CERTIFIED_AND_LIVE_SQL` for a certification aliased as `cert`."""
+    return CERTIFIED_AND_LIVE_SQL.format(cert=cert).strip()
+
+
+def simulation_columns(cert: str, sim: str) -> str:
+    """The two standing columns for a certification joined under `cert`."""
+    return SIMULATION_STANDING_SQL.format(cert=cert, sim=sim).strip()
+
+
+def simulation_join(cert: str, sim: str) -> str:
+    """The join those columns need."""
+    return SIMULATION_JOIN_SQL.format(cert=cert, sim=sim)
+
+
+async def certify_for_simulation(
+    conn: AsyncConnection,
+    *,
+    venture_id: str,
+    department: str,
+    forge_id: str,
+    human: humans.Human,
+    reason: str,
+) -> CertState:
+    """Certify a department's context for simulation, on the strength of a declaration.
+
+    RULED 22 SEPTEMBER 2026 (decisions entry 167)
+    =============================================
+
+        *"A department may be certified for simulation. A distinct Unit B basis, never
+        'verified', recorded with the declaration that permitted it. Gate 9 accepts it
+        while the venture is in simulation and refuses it the moment the venture leaves,
+        and every simulation certification is void at that point."*
+
+    THE DEAD END THIS OPENS
+    =======================
+
+        Unit B reaches a certification two ways and entry 166 shut both. `tested` needs
+        SimForge's `department_context` unit, which `submit_curriculum` reads nothing
+        for - Greenstone's three department units have sat at IN_PROGRESS since anybody
+        started watching. `attested` needs `passed = escalation AND coupling`, and 166
+        refuses a TRUE coupling in simulation by construction.
+
+        Measured 22 September 2026: three bootstrap Unit B rows serving 45 grants, three
+        tested rows at IN_PROGRESS, **zero attested, ever**.
+
+    WHAT IT IS NOT
+    ==============
+
+        It is not an attestation and it does not become one. `basis = 'simulation'` is
+        its own value, `attestation_ref` stays NULL, and migration 0059 refuses a
+        verdict, a model or a score on the row because nothing sat an exam.
+
+        Nobody is recorded as having verified anything. `reason` says why the
+        certification was issued; it is not a finding about the department.
+
+    WHY IT STILL BINDS TO THE INSTRUCTIONS
+    ======================================
+
+        `instruction_content_hash` is `department_basis_hash` over the live instruction
+        hash of every module the department holds on this Forge - the same composite
+        Gate 8 submits. So a simulation certification has the one property that makes a
+        certification worth anything: **it changes when the instructions change.**
+        Republishing decertifies, exactly as it does for a tested one.
+
+        Without it this would be a certification of nothing in particular, valid across
+        any rewrite of the very instructions the department operates under.
+
+    WHO
+    ===
+
+        `ivan`. The same founder authority that declares simulation, because this rests
+        entirely on that declaration - and requiring a lesser role would let somebody
+        who could not declare simulation spend the permission it grants.
+    """
+    if not reason.strip():
+        raise CertificationError(
+            "a simulation certification gives a reason. It is what a reader finds when "
+            "they ask why this department reads certified with no exam behind it."
+        )
+
+    humans.authorize(human, required_role="ivan", venture_id=None)
+    humans.assert_named_human(human, act="certify a department for simulation")
+
+    declaration = await simulation.current(conn, venture_id)
+    if declaration is None:
+        raise CertificationError(
+            f"{venture_id} is not in simulation, so nothing permits a simulation "
+            "certification. RULED 22 SEPTEMBER 2026, entry 167: the basis is recorded "
+            "WITH the declaration that permitted it, and there is no declaration to "
+            "record. Declare simulation first, or earn the Unit B certification."
+        )
+
+    modules = await _department_modules(
+        conn, venture_id=venture_id, department=department, forge_id=forge_id
+    )
+    if not modules:
+        raise CertificationError(
+            f"no module of {department!r} is granted on {forge_id} for {venture_id}, so "
+            "there is no instruction set this certification could be bound to. A "
+            "certification over the empty set is a stable value that stands for nothing."
+        )
+
+    hashes: dict[str, str] = {}
+    for module_id in modules:
+        current = await instructions.live(conn, forge_id=forge_id, module_id=module_id)
+        if current is None:
+            raise CertificationError(
+                f"{forge_id}/{module_id} has no Forge Operating Instruction in force, "
+                "so the department's basis cannot be composed. Gate 6 blocks on this "
+                "for the same reason."
+            )
+        hashes[module_id] = current.content_hash
+
+    basis_hash = department_basis_hash(hashes)
+    api_version = await _forge_api_version(conn, forge_id)
+
+    cert_id = uuid.uuid4()
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            """
+            INSERT INTO certification
+              (cert_id, unit, rubric_kind, forge_id, department, state,
+               certified_tier, instruction_content_hash, forge_api_version,
+               rubric_version, scenario_pack_ref, basis, simulation_ref, issued_at)
+            VALUES (%s, 'B', 'domain', %s, %s, 'certified', %s, %s, %s,
+                    %s, %s, 'simulation', %s, now())
+            ON CONFLICT (department, forge_id) WHERE unit = 'B'
+            DO UPDATE SET
+                state = EXCLUDED.state,
+                certified_tier = EXCLUDED.certified_tier,
+                instruction_content_hash = EXCLUDED.instruction_content_hash,
+                forge_api_version = EXCLUDED.forge_api_version,
+                scenario_pack_ref = EXCLUDED.scenario_pack_ref,
+                basis = EXCLUDED.basis,
+                simulation_ref = EXCLUDED.simulation_ref,
+                attestation_ref = NULL,
+                simforge_verdict = NULL,
+                agent_model = NULL,
+                model_digest = NULL,
+                score = NULL,
+                issued_at = now(),
+                updated_at = now()
+            RETURNING cert_id, unit, state, certified_tier
+            """,
+            (
+                cert_id, forge_id, department, SIMULATION_TIER, basis_hash,
+                api_version,
+                # The rubric nothing ran under, named as that rather than left NULL.
+                f"office/simulation/{declaration.simulation_id}",
+                # THE REASON GOES WHERE A BOOTSTRAP'S GOES. `record_result` writes
+                # `NO SCENARIO RUN - <reason>` into `scenario_pack_ref` for a bootstrap,
+                # and the same column answers the same question here: what stands where
+                # a scenario pack would be. A new column would be a second place a
+                # reader has to know to look.
+                f"NO EXAM - simulation: {reason.strip()}",
+                declaration.simulation_id,
+            ),
+        )
+        row = await cur.fetchone()
+    await conn.commit()
+    assert row is not None
+
+    await audit.write_event(
+        event_type="department_certified_for_simulation",
+        actor_type="human",
+        actor_id=human.human_id,
+        venture_id=venture_id,
+        subject={
+            "human": human.display_name,
+            "department": department,
+            "forge_id": forge_id,
+            "cert_id": str(row["cert_id"]),
+            "simulation_id": str(declaration.simulation_id),
+            "declared_by": declaration.declared_by_name,
+            "reason": reason.strip(),
+            "modules": sorted(hashes),
+            "instruction_content_hash": basis_hash,
+        },
+    )
+    return CertState(row["cert_id"], row["unit"], row["state"], row["certified_tier"])
+
+
+async def _department_modules(
+    conn: AsyncConnection, *, venture_id: str, department: str, forge_id: str
+) -> list[str]:
+    """Which modules this department holds on this Forge, from its live grants.
+
+    The same population Gate 8 composes a department basis over. Read from grants rather
+    than from the Pack because a grant is what an agent actually carries, and a Pack can
+    name a module no grant was issued for.
+    """
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "SELECT DISTINCT g.module_id "
+            "  FROM agent_forge_grant g "
+            "  JOIN office_agent_identity i ON i.office_agent_id = g.office_agent_id "
+            " WHERE g.venture_id = %s AND g.forge_id = %s AND i.department = %s "
+            "   AND g.superseded_at IS NULL "
+            " ORDER BY 1",
+            (venture_id, forge_id, department),
+        )
+        return [r[0] for r in await cur.fetchall()]
+
+
+async def _forge_api_version(conn: AsyncConnection, forge_id: str) -> str:
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "SELECT api_version FROM forge_registry WHERE forge_id = %s", (forge_id,)
+        )
+        row = await cur.fetchone()
+    if row is None:
+        raise CertificationError(f"{forge_id} is not a registered Forge")
+    return str(row[0])
+
+
+async def simulation_certifications(
+    conn: AsyncConnection, venture_id: str | None = None
+) -> list[dict[str, Any]]:
+    """Every simulation certification, with whether its permission still stands.
+
+    *"Any surface showing a grant, a gate or a sign-off says which of its certifications
+    are simulation-only."* This is what those surfaces read, so there is one answer to
+    the question rather than one per page.
+    """
+    where = "WHERE g.venture_id = %s " if venture_id else ""
+    params = (venture_id,) if venture_id else ()
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT DISTINCT c.cert_id, c.forge_id, c.department, c.issued_at, "
+            "       c.scenario_pack_ref AS reason, g.venture_id, "
+            "       vs.left_at IS NOT NULL AS void, "
+            "       h.display_name AS declared_by, vs.reason AS declared_reason "
+            "  FROM certification c "
+            "  JOIN venture_simulation vs ON vs.simulation_id = c.simulation_ref "
+            "  JOIN office_human h ON h.human_id = vs.declared_by "
+            "  LEFT JOIN agent_forge_grant g "
+            "    ON g.dept_context_cert_ref = c.cert_id::text AND g.superseded_at IS NULL "
+            f" {where}ORDER BY c.forge_id, c.department",
+            params,
+        )
+        return [dict(r) for r in await cur.fetchall()]
 
 
 async def recompute_staleness(
