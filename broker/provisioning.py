@@ -2117,7 +2117,15 @@ async def _gate_9(ctx: _Context) -> GateOutcome:
                    cb.model_digest AS unit_b_digest,
                    cb.basis AS unit_b_basis,
                    at.attested_by AS unit_b_attested_by,
-                   at.attested_by_name AS unit_b_attester
+                   at.attested_by_name AS unit_b_attester,
+                   -- Entry 167, read from the certification and its declaration.
+                   -- `simulation_void` is a join and not a column: a simulation
+                   -- certification is void the moment its venture leaves, and a stored
+                   -- flag would read valid until somebody ran a job.
+                   (cb.basis = 'simulation') AS unit_b_simulation,
+                   (vs.left_at IS NOT NULL) AS unit_b_simulation_void,
+                   vs.reason AS unit_b_simulation_reason,
+                   sh.display_name AS unit_b_simulation_declared_by
             FROM agent_forge_grant g
             LEFT JOIN certification ca
               ON ca.unit = 'A' AND ca.cert_id::text = g.operation_cert_ref
@@ -2125,6 +2133,9 @@ async def _gate_9(ctx: _Context) -> GateOutcome:
               ON cb.unit = 'B' AND cb.cert_id::text = g.dept_context_cert_ref
             LEFT JOIN department_attestation at
               ON at.attestation_id = cb.attestation_ref
+            LEFT JOIN venture_simulation vs
+              ON vs.simulation_id = cb.simulation_ref
+            LEFT JOIN office_human sh ON sh.human_id = vs.declared_by
             WHERE g.venture_id = %s AND g.superseded_at IS NULL
             ORDER BY g.grant_id
             """,
@@ -2183,9 +2194,34 @@ async def _gate_9(ctx: _Context) -> GateOutcome:
     unpinned: list[str] = []
     failing: list[dict[str, str]] = []
     attested_units: list[str] = []
+    simulation_units: list[str] = []
+    voided_units: list[str] = []
     for row in rows:
         for unit in ("a", "b"):
             state = row[f"unit_{unit}_state"]
+            if unit == "b" and row.get("unit_b_simulation"):
+                # ACCEPTED WHILE THE VENTURE IS IN SIMULATION, REFUSED THE MOMENT IT
+                # LEAVES. Ruled 22 September 2026, entry 167.
+                #
+                # The row is untouched either way - nothing in this gate edits a
+                # certification, the same discipline the attested branch below keeps.
+                # What changes is whether this gate counts it.
+                if row["unit_b_simulation_void"]:
+                    voided_units.append(
+                        f"{row['grant_id'][:8]}/unitB certified for a simulation "
+                        f"{row['unit_b_simulation_declared_by'] or 'somebody'} has "
+                        "since left"
+                    )
+                    state = "simulation_certification_void"
+                else:
+                    declarer = (
+                        row["unit_b_simulation_declared_by"]
+                        or "somebody no longer on file"
+                    )
+                    simulation_units.append(
+                        f"{row['grant_id'][:8]}/unitB SIMULATION ONLY - declared by "
+                        f"{declarer}: {row['unit_b_simulation_reason']}"
+                    )
             if unit == "b" and row.get("unit_b_basis") == "attested":
                 # NAMED WHEREVER IT COUNTS, which is the whole of the first ruling: a
                 # reader of this gate can always tell an attested unit from a tested
@@ -2205,6 +2241,12 @@ async def _gate_9(ctx: _Context) -> GateOutcome:
                     "grant_id": row["grant_id"], "module_id": row["module_id"],
                     "unit": unit.upper(), "state": state,
                 })
+            elif unit == "b" and row.get("unit_b_simulation"):
+                # NOT `unattested`. A simulation certification carries no SimForge
+                # verdict BY CONSTRUCTION - migration 0059 refuses one - so reporting it
+                # as "certified but carries no SimForge PASS" would be true and useless:
+                # it is already named, in its own list, with the declaration behind it.
+                pass
             elif row[f"unit_{unit}_verdict"] != "PASS":
                 # A certification carrying no SimForge PASS was not produced by a
                 # Readiness Gate, whatever its state column says.
@@ -2230,6 +2272,12 @@ async def _gate_9(ctx: _Context) -> GateOutcome:
         # "what is this venture's readiness resting on" gets the count and the names
         # without going to another table, and gets it on a PASS as well as a block.
         "attested_units": attested_units,
+        # ENTRY 167. WHICH UNITS ARE SIMULATION-ONLY, on the pass as well as the block,
+        # for the reason `attested_units` is here: a reader asking what this venture's
+        # readiness rests on gets the answer without going to another table.
+        "simulation_units": simulation_units,
+        "simulation_only_units": len(simulation_units),
+        "voided_simulation_units": voided_units,
         "handover_test_available": handover,
         # The key that was looked for, named. Entry 144's lesson: a guess about another
         # system's shape reads as that system's silence, so the guess is on the record
@@ -2245,6 +2293,19 @@ async def _gate_9(ctx: _Context) -> GateOutcome:
         )
         if attested_units else ""
     )
+    # NAMED IN THE VERDICT, not only in the evidence. Entry 167: any surface showing a
+    # gate says which of its certifications are simulation-only, and a gate that passed
+    # partly on a declaration and said so only in a JSON field has passed quietly.
+    simulation_note = (
+        f" {len(simulation_units)} unit(s) are SIMULATION-ONLY - certified on a "
+        "declaration, not an exam, and void the moment the venture leaves simulation."
+        if simulation_units else ""
+    )
+    if voided_units:
+        simulation_note += (
+            f" {len(voided_units)} simulation certification(s) are VOID: the venture "
+            "has left simulation and they must be re-earned."
+        )
 
     if failing:
         summary = "; ".join(
@@ -2256,7 +2317,7 @@ async def _gate_9(ctx: _Context) -> GateOutcome:
             f"{len(failing)} of {len(rows) * 2} certification unit(s) are not certified "
             f"({summary}). Every grant needs Unit A on its module and Unit B on its "
             f"department before the Readiness Gate is passed."
-            f"{withheld_note}{attested_note}",
+            f"{withheld_note}{attested_note}{simulation_note}",
             evidence,
         )
     if unattested:
@@ -2264,7 +2325,7 @@ async def _gate_9(ctx: _Context) -> GateOutcome:
             "9", BLOCKED,
             f"{len(unattested)} certification(s) read as certified but carry no SimForge "
             "PASS. A certification nothing external attested is a certification The "
-            f"Office wrote for itself.{withheld_note}{attested_note}",
+            f"Office wrote for itself.{withheld_note}{attested_note}{simulation_note}",
             evidence,
         )
     # A CERTIFICATION THAT CANNOT NAME THE MODEL CANNOT EXPIRE WHEN THE MODEL MOVES.
@@ -2285,7 +2346,8 @@ async def _gate_9(ctx: _Context) -> GateOutcome:
             f"{len(unpinned)} certification(s) carry a SimForge verdict and no model "
             "digest. A certification that cannot name the model it was earned on cannot "
             "be re-certified when the model changes - `agent_model` is a label and the "
-            f"same label describes different weights.{withheld_note}{attested_note}",
+            f"same label describes different weights."
+            f"{withheld_note}{attested_note}{simulation_note}",
             evidence,
         )
     # ON THE PASS TOO, and that is the sentence that matters most. A Readiness Gate that
@@ -2294,7 +2356,7 @@ async def _gate_9(ctx: _Context) -> GateOutcome:
     return GateOutcome(
         "9", PASSED,
         f"{len(rows) * 2} certification unit(s) certified across {len(rows)} grant(s)"
-        f"{withheld_note}{attested_note}",
+        f"{withheld_note}{attested_note}{simulation_note}",
         evidence,
     )
 

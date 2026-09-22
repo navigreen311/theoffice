@@ -14345,3 +14345,147 @@ laptop or quietly declare nothing.
     the coverage panel             agrees with Gate 6, and reports the deferred set
     attest                         refuses TRUE, and names the declaration
     /knowledge/compliance          DRAFT and DEFERRED, both, with what it costs
+
+
+## 167. A department may be certified for simulation
+
+**Ruling by Ivan Green, 22 September 2026:**
+
+> *"A department may be certified for simulation. A distinct Unit B basis, never
+> 'verified', recorded with the declaration that permitted it. Gate 9 accepts it while
+> the venture is in simulation and refuses it the moment the venture leaves, and every
+> simulation certification is void at that point. Any surface showing a grant, a gate or
+> a sign-off says which of its certifications are simulation-only. Measured: under entry
+> 166 coupling can never be TRUE, so Unit B has no route and Gate 9 cannot clear."*
+
+### The dead end 166 created, measured
+
+Unit B reaches a certification two ways, and entry 166 shut both:
+
+    tested     SimForge's `department_context` unit is read by nothing in
+               `routers/operation.py::submit_curriculum`. Greenstone's three department
+               units have sat at IN_PROGRESS for as long as anybody has watched, and a
+               run that never answers resolves to TIMEOUT.
+    attested   Gate 8 posts `passed = escalation_path AND compliance_coupling`. 166
+               refuses a TRUE coupling in simulation, so `passed` is false by
+               construction.
+
+Every Unit B certification in the system, measured 22 September:
+
+    basis       state         verdict       rows   serves
+    ---------   -----------   -----------   ----   --------------------------
+    bootstrap   certified     —                3   45 burkham-wickmont grants
+    tested      in_training   IN_PROGRESS      3   6 greenstone grants
+
+**Zero attested, ever.** `certification.attestation_ref` is NULL on every row in the
+table — the path entry 147 built has never produced a certification.
+
+So simulation, which exists so mock runs can happen before real clients, stopped the
+mock runs. This is the way out, and it is narrower than the thing it replaces.
+
+### A fourth basis, not a fourth way to say 'certified'
+
+`basis` has said `tested | attested | bootstrap` since entry 147, whose ruling was *"a
+reader can always tell them apart."* `simulation` joins it, and every constraint in
+migration 0059 exists so it cannot be mistaken for the other three:
+
+    simulation_ref    the declaration that permitted it. NOT NULL exactly when the basis
+                      is `simulation`, both directions — so nothing else may carry one
+                      and read as covered by it.
+    no exam           `simforge_verdict`, `agent_model`, `model_digest` and `score` are
+                      all refused. Two Phase 0.8 grants once carried a SimForge PASS
+                      against no scenario run, and that state is now unrepresentable for
+                      this basis rather than merely unwritten.
+    unit B only       mirrors `only_unit_b_is_attested`. Unit A is a per-agent,
+                      per-module exam and there is no version of that a declaration can
+                      stand in for.
+
+**Nobody is recorded as having verified anything.** The `reason` says why the
+certification was issued; it is not a finding about the department. It goes where a
+bootstrap's reason goes — `scenario_pack_ref`, as `NO EXAM - simulation: …` — so a
+reader finds "what stands where a scenario pack would be" in one place.
+
+### It still binds to the instructions
+
+`instruction_content_hash` is `department_basis_hash` over the live instruction hash of
+every module the department holds on that Forge — the same composite Gate 8 submits.
+
+So a simulation certification keeps the one property that makes a certification worth
+anything: **it changes when the instructions change.** Republishing decertifies, exactly
+as it does for a tested one. Without that this would be a certification of nothing in
+particular, valid across any rewrite of the very instructions the department operates
+under.
+
+`certified_tier` is `suggest` — the floor, and a floor rather than a judgement. The
+column is NOT NULL on any certified row and nothing established that these agents may do
+more than suggest. Unit B's tier is not what caps a call; `resolve_grant` reads Unit A's.
+
+### Void is derived, never stored
+
+*"Every simulation certification is void at that point."* A certification is void exactly
+when its own `simulation_ref` names a declaration that has been left. That is a join, and
+there is deliberately no `voided_at`: a stored flag would mean a row reading valid until
+somebody remembered to run a job — entry 158's argument about overdue escalations,
+applied to a stronger claim.
+
+**Nothing edits the row.** `state` still reads `certified` after the venture leaves,
+because this system does not rewrite a certification. What changes is every reader's
+answer, at once.
+
+It follows that a certification is bound to **one** declaration. A venture that leaves
+and declares again does not revive the old ones — the new declaration is a new row
+(entry 166) and needs new certifications. That is *"void at that point"* read as
+permanent, which is the only reading under which leaving means anything.
+
+### Void means void on the call path too
+
+`resolve_grant` raises `SimulationCertificationVoid` on every call behind a void
+certification. Gate 9 refusing it and the call path accepting it would mean a venture
+leaves simulation and its agents carry on.
+
+**Its own type**, for the reason `CertificationNamesNoModel` has one: `NotCertified`
+would say the certification is missing or stale and send the reader to re-run an exam.
+Nothing is stale. The certification is exactly what it always was, and what ended is the
+permission it rested on.
+
+### Which surfaces say so
+
+> *"Any surface showing a grant, a gate or a sign-off says which of its certifications
+> are simulation-only."*
+
+    a gate        Gate 9 names the units in its verdict AND in its evidence —
+                  `simulation_units`, `simulation_only_units`,
+                  `voided_simulation_units` — on the pass as well as the block. A gate
+                  that passed partly on a declaration and said so only in a JSON field
+                  has passed quietly.
+    a grant       `ResolvedGrant.unit_b_simulation_only`, which travels into the audit
+                  subject of every call the grant authorises. The audit entry is the
+                  surface that survives, and somebody asking later what an agent was
+                  cleared on needs it there.
+    a sign-off    `GET /api/signoffs/{venture}/{gate}` lists them, and `POST
+                  /api/signoffs` records them in the signature's own audit entry — what
+                  the venture was resting on at the moment somebody signed is a fact
+                  about the signature, and it cannot be recovered later from a
+                  certification that may since have been re-earned.
+
+### Who may issue one
+
+`ivan` — the same founder authority that declares simulation, because this spends
+exactly the permission that declaration grants. A lesser role would let somebody who
+could not declare simulation spend what it bought.
+
+This trips `test_the_api_exposes_no_route_that_bypasses_a_control`, whose premise is that
+certification state is an outcome of guarded functions and not human-editable through the
+console. **The guard was made precise rather than routed around.** The route is listed in
+a new `ruled_human_acts` set — separate from `verifies_without_editing`, because saying
+"this cannot change the store" there would be false — with the argument written out: a
+distinct basis that refuses a verdict, void by derivation with nothing to remember,
+naming a declaration that names a person, bound to the instruction set, `ivan` only, and
+Unit A unreachable by construction.
+
+### What it does not fix
+
+Gate 9 is no longer shut by entry 166. It is still shut by everything else: Greenstone
+has Unit A certified on **1 of 8** live grants — 5 FAIL, 20 TIMEOUT across the table —
+and Gate 9.5's held-out partition does not exist. Simulation now reaches Gate 9. It does
+not reach Gate 12.

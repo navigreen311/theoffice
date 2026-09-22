@@ -58,6 +58,28 @@ class NoTierPlanned(OfficeError):
     """
 
 
+class SimulationCertificationVoid(OfficeError):
+    """The Unit B certification was issued for a simulation the venture has left.
+
+    RULED 22 SEPTEMBER 2026 (decisions entry 167)
+    =============================================
+
+        *"Gate 9 accepts it while the venture is in simulation and refuses it the moment
+        the venture leaves, and every simulation certification is void at that point."*
+
+    **Its own type, for the reason `CertificationNamesNoModel` has one.** `NotCertified`
+    would say the certification is missing or not current, and send the reader to re-run
+    an exam. Nothing is stale: the certification is exactly what it always was, and what
+    ended is the permission it rested on. The remedy is a real Unit B, or a new
+    declaration of simulation - not a re-certification of this one.
+
+    The row still reads `certified`, because nothing in this system edits a
+    certification. Void is derived from the declaration, on every call.
+    """
+
+    audit_event = "call_refused_simulation_certification_void"
+
+
 class CertificationNamesNoModel(OfficeError):
     """The certification passed, and nothing can say which model passed it.
 
