@@ -171,7 +171,15 @@ function StopReason({ venture }: { venture: ProvisioningCard }) {
           to whoever kicked the run off days earlier.
         */}
         {run.stop.actor ? ` by ${run.stop.actor}` : ""}
-        {run.stop.at ? ` · $<Ago iso={run.stop.at} />` : ""}
+        {/* A TIME, not the source of one. This read `` · $<Ago iso={run.stop.at} />``
+            inside a template string, so the page printed the expression as text: the
+            literal characters `$<Ago iso=...`. JSX in a string is a string. */}
+        {run.stop.at ? (
+          <>
+            {" · "}
+            <Ago iso={run.stop.at} />
+          </>
+        ) : null}
       </p>
       <p className="mt-1 text-desc text-ink-secondary">
         {run.stop.reason}
