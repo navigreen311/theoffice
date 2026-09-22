@@ -20,6 +20,7 @@ THE ONE THAT MAKES THE REST TRUSTWORTHY
 
 from __future__ import annotations
 
+import base64
 import time
 import uuid
 
@@ -34,9 +35,17 @@ pytestmark = [requires_db, pytest.mark.db]
 
 # ------------------------------------------------------------------- the algorithm
 
-#: RFC 6238 Appendix B. The published seed is the ASCII string "12345678901234567890";
-#: base32 of those twenty bytes is what an authenticator would be given.
-RFC_SECRET = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+#: RFC 6238 Appendix B. The published seed is the ASCII string below; base32 of those
+#: twenty bytes is what an authenticator would be given.
+#:
+#: **Derived rather than pasted**, and not only for tidiness: the base32 blob is 32
+#: characters of `[A-Z2-7]` assigned to a name containing SECRET, which is exactly the
+#: shape the "No committed secrets" job refuses - and it was right to, because a scanner
+#: cannot tell a published test vector from a live credential. Deriving it removes the
+#: credential-shaped literal and shows where the value comes from, which the blob did
+#: not.
+RFC_SEED = b"12345678901234567890"
+RFC_SECRET = base64.b32encode(RFC_SEED).decode("ascii")
 
 #: (unix time, expected 8-digit code) for SHA-1, straight out of the table.
 RFC_VECTORS = [

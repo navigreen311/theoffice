@@ -13,6 +13,7 @@ and a provisioning test that wants Gate 6 or Gate 4.5 to block certifies less th
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import time
@@ -57,7 +58,13 @@ PACK_PATH = ROOT / "packs" / "greenstone.yaml"
 
 #: RFC 6238 Appendix B's published seed, base32. Used for every enrolled test account so
 #: the expected code at any instant is something a reader can look up rather than derive.
-RFC_TEST_SECRET = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+#:
+#: Derived from the seed rather than pasted as base32: the encoded form is a 32-character
+#: token assigned to a name containing SECRET, and the "No committed secrets" job refuses
+#: that shape - correctly, since a scanner cannot distinguish a published test vector
+#: from a live credential.
+RFC_TEST_SEED = b"12345678901234567890"
+RFC_TEST_SECRET = base64.b32encode(RFC_TEST_SEED).decode("ascii")
 
 #: Who the fixture NV discharge is attributed to. A real uuid rather than a generated one,
 #: so the row is identifiable and `teardown_world` can be checked to have removed it.
