@@ -21,6 +21,7 @@ from broker import knowledge, provisioning
 from broker.db import connection
 from tests.conftest import requires_db
 from tests.provisioning.conftest import VENTURE
+from tests.world import code_for
 
 pytestmark = [requires_db, pytest.mark.db]
 
@@ -234,6 +235,7 @@ async def test_a_completed_run_writes_a_historical_record(
             conn, gate="gate_10", venture_id=VENTURE, human=signer,
             artifact_kind="provisioning_artifacts",
             artifact_hash_value=gate_10.evidence["artifacts_hash"],
+            mfa_code=code_for(signer.human_id),
         )
         await provisioning.advance(
             conn, run_id=run_id, actor=operator.human_id, held_out=HeldOutPasses()

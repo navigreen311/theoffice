@@ -26,6 +26,7 @@ from broker import account_origin, humans
 from broker.app import app
 from broker.db import connection
 from tests.conftest import requires_db
+from tests.world import code_for_token
 
 pytestmark = [requires_db, pytest.mark.db]
 
@@ -345,7 +346,7 @@ async def test_revocations_are_listable_and_reinstatable(api, admin: psycopg.Con
     created = await api.post(
         "/api/revocations",
         json={"scope": "agent", "office_agent_id": str(agent_id),
-              "reason": "testing the loop"},
+              "reason": "testing the loop", "mfa_code": code_for_token(ivan_token)},
         headers=auth(ivan_token),
     )
     assert created.status_code == 201

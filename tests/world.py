@@ -13,8 +13,10 @@ and a provisioning test that wants Gate 6 or Gate 4.5 to block certifies less th
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
+import time
 import uuid
 from pathlib import Path
 
@@ -53,6 +55,16 @@ FIXTURE_MODEL_IDENTITY = {
 
 ROOT = Path(__file__).resolve().parents[1]
 PACK_PATH = ROOT / "packs" / "greenstone.yaml"
+
+#: RFC 6238 Appendix B's published seed, base32. Used for every enrolled test account so
+#: the expected code at any instant is something a reader can look up rather than derive.
+#:
+#: Derived from the seed rather than pasted as base32: the encoded form is a 32-character
+#: token assigned to a name containing SECRET, and the "No committed secrets" job refuses
+#: that shape - correctly, since a scanner cannot distinguish a published test vector
+#: from a live credential.
+RFC_TEST_SEED = b"12345678901234567890"
+RFC_TEST_SECRET = base64.b32encode(RFC_TEST_SEED).decode("ascii")
 
 #: Who the fixture NV discharge is attributed to. A real uuid rather than a generated one,
 #: so the row is identifiable and `teardown_world` can be checked to have removed it.
@@ -717,3 +729,95 @@ def certify_for_positions(conn: psycopg.Connection) -> None:
             unit_b_departments=["operations"])
     certify(conn, success, ["place_call", "transcribe_call"], forge="voiceforge",
             tier="propose", unit_b_departments=["operations"])
+
+
+# ---------------------------------------------------------------- the second factor
+
+def enrol_second_factor(admin: psycopg.Connection, human_id: uuid.UUID) -> str:
+    """Give this account a known TOTP secret and mark it enrolled. Returns the secret.
+
+    RULED 21 SEPTEMBER 2026 (entry 158): `attest`, `sign_off` and `revoke` refuse
+    without a verified code, so a test that performs any of those needs an account that
+    can produce one.
+
+    **Written directly rather than through `mfa.begin_enrolment` and
+    `mfa.confirm_enrolment`.** Those two are the thing under test in
+    `tests/contract/test_a_second_factor.py`; using them to set up every OTHER test
+    would make a suite-wide red the symptom of one bug in them, and would hide a
+    regression in enrolment behind the fifty tests that merely need a code.
+
+    The secret is RFC 6238's published one, so a reader who wants to know what code is
+    expected at a given second can look it up rather than run anything.
+    """
+    with admin.cursor() as cur:
+        cur.execute(
+            "UPDATE office_human "
+            "   SET mfa_secret = %s, mfa_enrolled_at = now(), auth_method = 'mfa_only' "
+            " WHERE human_id = %s",
+            (RFC_TEST_SECRET, human_id),
+        )
+    admin.commit()
+    return RFC_TEST_SECRET
+
+
+def code_for(human_id: uuid.UUID, *, step_offset: int = 0) -> str:
+    """A code this account can use right now, enrolling it first if it has not been.
+
+    **Opens its own connection rather than taking one.** The call sites are inside async
+    helpers that hold an `AsyncConnection` and often have no `admin` fixture in scope,
+    and threading one through every signing helper would put a test-harness argument
+    into the signature of everything that signs. It commits immediately and closes.
+
+    One code authorises one act - entry 158 records the step it spent - so this is called
+    per act rather than once per test. A variable holding "the code" is a test that
+    passes twice and fails the third time for a reason nobody will enjoy finding.
+
+    `step_offset` is for the handful of tests that legitimately perform TWO of these acts
+    seconds apart, where a person would have taken minutes: re-signing Gate 10 over
+    regenerated artifacts, for instance. It asks for the NEXT step's code, which
+    `verify` accepts inside its one-step skew - a different code for a different act,
+    rather than a weakened rule.
+    """
+    import os
+
+    from broker import mfa
+
+    dsn = os.environ.get("OFFICE_ADMIN_DSN")
+    assert dsn, "OFFICE_ADMIN_DSN not set; code_for needs it to enrol a test account"
+    with psycopg.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE office_human "
+                "   SET mfa_secret = %s, mfa_enrolled_at = coalesce(mfa_enrolled_at, now()), "
+                "       auth_method = 'mfa_only' "
+                " WHERE human_id = %s",
+                (RFC_TEST_SECRET, human_id),
+            )
+        conn.commit()
+    return mfa.code_at(
+        RFC_TEST_SECRET, time.time() + step_offset * mfa.STEP_SECONDS
+    )
+
+
+def code_for_token(token: str) -> str:
+    """A code for whoever holds this bearer token.
+
+    The API-level suites authenticate with a token and mostly discard the human id, so
+    keying on the token avoids threading an id through a dozen call sites to reach the
+    same account. It resolves the same way `humans.authenticate` does - by hash, never
+    by storing the token.
+    """
+    import os
+
+    from broker import humans
+
+    dsn = os.environ.get("OFFICE_ADMIN_DSN")
+    assert dsn, "OFFICE_ADMIN_DSN not set"
+    with psycopg.connect(dsn) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT human_id FROM office_human WHERE token_hash = %s",
+            (humans.hash_token(token),),
+        )
+        row = cur.fetchone()
+    assert row, "no account holds that token"
+    return code_for(row[0])

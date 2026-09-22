@@ -920,7 +920,15 @@ class HumanCapacity(Strict):
     #: review effort (B21). `provenance` is where that is said; V13 carries it into its evidence
     #: so a reader cannot act on a shortfall without meeting what the shortfall was computed from.
     median_review_minutes: float
-    auth_method: Literal["sso_mfa", "mfa_only"]
+    #: How this reviewer authenticates. **The Pack may only name what the platform can
+    #: enforce** - ruled 21 September 2026, entry 159, checked by V42.
+    #:
+    #: `bearer_token` joins the two that were here because it is what every account on
+    #: this platform actually had while both Packs declared `sso_mfa`: a token The Office
+    #: issued and stores hashed. `sso_mfa` stays SPELLABLE so an existing Pack still
+    #: parses and V42 can report it as the finding it is, rather than the document
+    #: failing to load with a schema error that says nothing about why.
+    auth_method: Literal["bearer_token", "sso_mfa", "mfa_only"]
     #: Required. See `CapacityProvenance` - no default, because a default is how the
     #: four numbers this field exists for became unattributed in the first place.
     provenance: CapacityProvenance

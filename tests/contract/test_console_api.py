@@ -24,6 +24,7 @@ from broker import account_origin, humans
 from broker.app import app
 from broker.db import connection
 from tests.conftest import requires_db
+from tests.world import code_for_token
 
 pytestmark = [requires_db, pytest.mark.db]
 
@@ -145,7 +146,8 @@ async def test_a_venture_operator_cannot_act_in_a_venture_they_do_not_operate(ap
     response = await api.post(
         "/api/revocations",
         headers=auth(token),
-        json={"scope": "venture", "reason": "test", "venture_id": VENTURE},
+        json={"scope": "venture", "reason": "test", "venture_id": VENTURE,
+              "mfa_code": code_for_token(token)},
     )
     assert response.status_code == 403
     assert response.json()["error"] == "NotAuthorized"
@@ -176,7 +178,10 @@ async def test_the_revocation_authority_matrix_is_enforced(
     if scope == "venture":
         payload["venture_id"] = VENTURE
 
-    response = await api.post("/api/revocations", headers=auth(token), json=payload)
+    response = await api.post(
+        "/api/revocations", headers=auth(token),
+        json={**payload, "mfa_code": code_for_token(token)},
+    )
     if allowed:
         assert response.status_code == 201, response.text
     else:
@@ -192,7 +197,12 @@ async def test_reinstatement_requires_the_same_authority_as_the_revocation(
     created = await api.post(
         "/api/revocations",
         headers=auth(compliance_token),
-        json={"scope": "venture", "reason": "hold", "venture_id": VENTURE},
+        json={
+            "scope": "venture",
+            "reason": "hold",
+            "venture_id": VENTURE,
+            "mfa_code": code_for_token(compliance_token),
+        },
     )
     assert created.status_code == 201
     revocation_id = created.json()["revocation_id"]
@@ -314,7 +324,7 @@ async def test_a_signoff_binds_to_the_artifact_hash_and_is_voided_by_a_change(ap
         "/api/signoffs",
         headers=auth(token),
         json={"gate": "gate_10", "venture_id": VENTURE, "artifact_kind": "pack",
-              "artifact_hash": original},
+              "artifact_hash": original, "mfa_code": code_for_token(token)},
     )
     assert created.status_code == 201
 
@@ -341,7 +351,7 @@ async def test_separation_of_duties_refuses_a_second_gate_from_the_same_human(ap
         "/api/signoffs",
         headers=auth(token),
         json={"gate": "gate_4", "venture_id": VENTURE, "artifact_kind": "pack",
-              "artifact_hash": "a" * 64},
+              "artifact_hash": "a" * 64, "mfa_code": code_for_token(token)},
     )
     assert first.status_code == 201
 
@@ -349,7 +359,7 @@ async def test_separation_of_duties_refuses_a_second_gate_from_the_same_human(ap
         "/api/signoffs",
         headers=auth(token),
         json={"gate": "gate_10", "venture_id": VENTURE, "artifact_kind": "pack",
-              "artifact_hash": "a" * 64},
+              "artifact_hash": "a" * 64, "mfa_code": code_for_token(token)},
     )
     assert second.status_code == 403
     assert second.json()["policy"] == "distinct_humans"
@@ -365,7 +375,7 @@ async def test_every_write_is_audited_with_the_human_as_actor(api, admin, seed_a
         "/api/revocations",
         headers=auth(token),
         json={"scope": "agent", "reason": "audit test",
-              "office_agent_id": str(seed_agent)},
+              "office_agent_id": str(seed_agent), "mfa_code": code_for_token(token)},
     )
 
     with admin.cursor() as cur:
@@ -540,6 +550,12 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
         # anywhere, because deleting an account destroys the record of who held what and
         # who granted it, which is what the Access page exists to protect.
         "/api/access/suspend-test-fixtures",
+        # THE TWO ENROLMENT ROUTES, and they are the write surface's own argument.
+        # Both take no human id - there is nothing in either request that could name
+        # somebody else - so "only the person writes their own enrolment" (entry 158)
+        # is a property of the shape rather than of a check that might be skipped.
+        "/api/access/mfa/begin",
+        "/api/access/mfa/confirm",
         # Running the chain verification and recording it as a control result. It
         # writes a `sweep_run` row and one audit entry, and touches the audit log in no
         # other way - the log itself refuses UPDATE and DELETE by trigger. Recording is

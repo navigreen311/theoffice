@@ -474,7 +474,17 @@ human_capacity:
     backup_human: Ira Green
     advisory_daily_approval_ceiling: 60
     median_review_minutes: 4
-    auth_method: sso_mfa
+    # RULED 21-22 SEPTEMBER 2026, entries 155 and 156. This read `sso_mfa`, which this
+    # platform has never been able to enforce: there is no identity provider and no
+    # assertion to validate, so the Pack asserted a control nobody had built - in a
+    # document signed at Gate 10 and reviewed by a person at Gate 4. V42 refuses it now.
+    #
+    # `mfa_only` is the stronger of the two things The Office CAN check, and it is what
+    # this role needs: these are the people who sign gates, and entry 155 makes
+    # `sign_off`, `attest` and `revoke` refuse without a TOTP code. The declaration is a
+    # requirement, and the requirement is now real - but it is not yet true of anybody:
+    # Ivan and Ira must enrol at /access/mfa before they can sign.
+    auth_method: mfa_only
     provenance:
       basis: declared
       established_by: Ivan
@@ -518,7 +528,7 @@ human_capacity:
     backup_human: Ivan Green
     advisory_daily_approval_ceiling: 12
     median_review_minutes: 10
-    auth_method: sso_mfa
+    auth_method: mfa_only
     provenance:
       basis: declared
       established_by: Ivan

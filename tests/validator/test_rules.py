@@ -92,6 +92,10 @@ MUST_FAIL: dict[str, Callable[[BusinessPack], None]] = {
             "cre-forge/assign_contract"
         ].model_copy(update={"role": "complaince_officer"}),
     ),
+    # THE DECLARATION BOTH PACKS CARRIED, unread, for as long as the field existed.
+    # `sso_mfa` is still spellable so an existing document parses - V42 is what refuses
+    # it, which is the point: the finding has to be reportable, not a schema error.
+    "V42": lambda p: setattr(p.human_capacity[0], "auth_method", "sso_mfa"),
     "V14": lambda p: setattr(p.human_capacity[1], "backup_human", None),
     "V15": lambda p: (
         setattr(p.separation_of_duties, "gate_signoff_policy", "single_human_permitted"),
@@ -193,8 +197,11 @@ def test_every_rule_from_v1_is_implemented_with_no_gaps():
     assert everything == [f"V{i}" for i in range(1, len(everything) + 1)], (
         f"implemented {ids}, reserved {sorted(reserved)}"
     )
-    assert len(ids) == 38, "38 rules implemented"
-    assert len(everything) == 41, "V1..V41 all accounted for, implemented or reserved"
+    # 39 with V42 (entry 159): no Pack declares an authentication method the platform
+    # does not enforce. V41 was already taken by the founder-policy discharge rule, so
+    # the new one is 42 and the sequence stays contiguous.
+    assert len(ids) == 39, "39 rules implemented"
+    assert len(everything) == 42, "V1..V42 all accounted for, implemented or reserved"
 
 
 @pytest.mark.parametrize("rule_id", DOCUMENT_RULES)

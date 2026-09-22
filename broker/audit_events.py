@@ -239,6 +239,18 @@ EVENTS: tuple[Event, ...] = (
           "broker.simforge", PROVISIONING),
 
     # -------------------------------------------------------------------- system
+    Event("mfa_enrolment_started", "Second factor: enrolment begun",
+          "Somebody generated a TOTP secret for their OWN account. Not yet enrolled - "
+          "the secret exists and nobody has proved they can use it, which is the state "
+          "entries 154 and 158 exist to distinguish from an enrolment. The secret is "
+          "never in this entry.",
+          "broker.mfa", SYSTEM),
+    Event("mfa_enrolled", "Second factor: enrolled",
+          "Somebody proved a TOTP secret with a code, so their account now has a second "
+          "factor. `attest`, `sign_off` and `revoke` ask them for a code from this "
+          "point on (entry 158). Always self-enrolled: there is no parameter anywhere "
+          "for whose enrolment it is.",
+          "broker.mfa", SYSTEM),
     Event("human_account_created", "Account created",
           "An account was created, with what it IS (origin) and what is actually "
           "enforced for it (`auth_method`) recorded at the one moment both are chosen. "

@@ -381,10 +381,14 @@ async def test_an_enrolled_account_may_claim_it(admin):
     human_id = uuid.uuid4()
     with admin.cursor() as cur:
         cur.execute(
+            # A SECRET BESIDE THE DATE. 0055 added `an_enrolment_has_a_secret`, so an
+            # enrolment can no longer stand on nothing - which is the same rule one
+            # layer down from the one this test is about.
             "INSERT INTO office_human (human_id, display_name, email, auth_method, "
-            "                          origin, token_hash, mfa_enrolled_at) "
-            "VALUES (%s, 'Enrolled', 'enrolled@mfa.invalid', 'sso_mfa', "
-            "        'test_fixture', %s, now())",
+            "                          origin, token_hash, mfa_enrolled_at, "
+            "                          mfa_secret) "
+            "VALUES (%s, 'Enrolled', 'enrolled@mfa.invalid', 'mfa_only', "
+            "        'test_fixture', %s, now(), 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ')",
             (human_id, f"enrolled-{human_id.hex}"),
         )
     admin.commit()
@@ -394,7 +398,7 @@ async def test_an_enrolled_account_may_claim_it(admin):
                 "SELECT auth_method, mfa_enrolled_at IS NOT NULL "
                 "  FROM office_human WHERE human_id = %s", (human_id,)
             )
-            assert cur.fetchone() == ("sso_mfa", True)
+            assert cur.fetchone() == ("mfa_only", True)
     finally:
         with admin.cursor() as cur:
             cur.execute("DELETE FROM office_human WHERE human_id = %s", (human_id,))
