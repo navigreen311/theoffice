@@ -85,11 +85,21 @@ def auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-async def make_human(name: str, role: str, venture: str | None = MINE) -> str:
+async def make_human(
+    name: str, role: str, venture: str | None = MINE,
+    origin: str = account_origin.TEST_FIXTURE,
+) -> str:
+    """A caller with a role. `origin` is a parameter since entry 162.
+
+    Most routes do not care what kind of account is calling, and a fixture is the honest
+    declaration for these. Authoring a compliance entry does care - `authored_by` is
+    `me.human_id` on that route - so the test that authors one declares a person, and the
+    test below it declares a fixture on purpose to check that it is refused.
+    """
     async with connection() as conn:
         human_id, token = await humans.create_human(
             conn,
-            origin=account_origin.TEST_FIXTURE,
+            origin=origin,
             display_name=name,
             email=f"{name.lower()}@kb.invalid",
         )
@@ -209,7 +219,9 @@ async def test_an_incomplete_compliance_entry_is_refused_by_the_schema(api):
 async def test_writing_an_entry_says_what_it_unblocks(api):
     """The consequence is not visible from the form: writing an entry changes what
     every Pack resolves and what Gate 6 considers explained."""
-    token = await make_human("Officer", "compliance_officer", None)
+    token = await make_human(
+        "Officer", "compliance_officer", None, origin=account_origin.HUMAN
+    )
     response = await api.post(
         "/api/knowledge/compliance",
         json={**ENTRY, "runtime_flag": "tsr_disclosure_required"},
@@ -220,6 +232,73 @@ async def test_writing_an_entry_says_what_it_unblocks(api):
 
     listed = (await api.get("/api/knowledge/compliance", headers=auth(token))).json()
     assert any(e["entry_ref"] == ENTRY["entry_ref"] for e in listed)
+
+
+async def test_a_fixture_with_the_role_still_cannot_author_an_entry(api):
+    """**Entry 162, at the HTTP boundary.**
+
+    The route writes `authored_by=me.human_id`, so the caller IS the author - and the
+    role check has never asked what kind of account holds the role. Burkham's nineteen
+    library entries were written by `smoke-operator-0eda802c`, which held
+    `compliance_officer` honestly and is not somebody who can be asked about the text.
+
+    403 and not 400: this is a refusal about who is calling, not about what they sent.
+    """
+    token = await make_human(
+        "Fixture Officer", "compliance_officer", None,
+        origin=account_origin.TEST_FIXTURE,
+    )
+    response = await api.post(
+        "/api/knowledge/compliance",
+        json={**ENTRY, "entry_ref": "test/fixture-authored-v1"},
+        headers=auth(token),
+    )
+    assert response.status_code == 403, response.text
+    assert "test_fixture" in response.text
+
+    listed = (await api.get("/api/knowledge/compliance", headers=auth(token))).json()
+    assert not any(e["entry_ref"] == "test/fixture-authored-v1" for e in listed), (
+        "the refusal left a row behind"
+    )
+
+
+async def test_the_authorship_report_names_every_entry_and_rewrites_none(api):
+    """*"Report the 21 existing rows; don't rewrite them."*
+
+    The report is the half of entry 162 that applies to what is already there. It counts
+    and never returns a verdict - a pass/fail would read `fail` for as long as the
+    twenty-one sit in the table, which is a signal that stops carrying information the
+    moment it is first seen.
+    """
+    token = await make_human(
+        "Officer", "compliance_officer", None, origin=account_origin.HUMAN
+    )
+    await api.post(
+        "/api/knowledge/compliance",
+        json={**ENTRY, "entry_ref": "test/authored-by-a-person-v1"},
+        headers=auth(token),
+    )
+
+    report = (
+        await api.get("/api/knowledge/compliance/authorship", headers=auth(token))
+    ).json()
+
+    mine = [
+        e for e in report["entries"]
+        if e["entry_ref"] == "test/authored-by-a-person-v1"
+    ]
+    assert len(mine) == 1
+    assert mine[0]["names_a_person"] is True
+    assert mine[0]["author_origin"] == account_origin.HUMAN
+    assert mine[0]["author_name"] == "Officer"
+
+    # Every row is described, and the two kinds of wrong are different words.
+    assert report["total"] == len(report["entries"])
+    assert set(report) >= {
+        "total", "names_a_person", "names_a_fixture", "names_a_service",
+        "author_unresolved",
+    }
+    assert "verdict" not in report and "passed" not in report
 
 
 async def test_a_venture_operator_cannot_write_a_portfolio_wide_entry(api):

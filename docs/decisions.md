@@ -13802,3 +13802,222 @@ the property that makes it worth having — a false entry is answered by a later
 by editing the record.
 
 This entry is that later one.
+
+
+## 160. cre-forge declares its couplings, and names what it cannot declare
+
+**Ruling by Ivan Green, 22 September 2026:**
+
+> *"cre-forge's coupling declarations are registered from its manuals. Use the four
+> NoFramework drafts as written. For assign_contract, register nothing and record it as
+> a pending counsel question: whether a Nevada wholesaling assignment requires a
+> licence."*
+
+### What was already written down, and where
+
+The four drafts were not invented for review. `scripts/author_cre_forge_instructions.py`
+holds the manuals for all five cre-forge modules, and every one of them carries
+
+    "compliance_coupling": NO_FRAMEWORK      # = ["no_framework_applies"]
+
+So the empty list these modules imply was never the absence of a reading. It was a
+reading, taken by whoever wrote the manuals, recorded in the only place that existed at
+the time — and then lost on the way into `compliance_flags_implied`, where an
+intentional `[]` and an accidental one look identical. That is the whole reason
+`compliance_couplings.py` exists: entry 153 measured eight of nine rows wrong, and *"an
+empty list written by default is a claim nobody made."*
+
+Registering them changes nothing a module does. What it changes is that the claim is now
+somewhere a reader can see it was made on purpose, with a reason attached.
+
+### assign_contract registers nothing, and that is the point
+
+Four modules get a declaration. The fifth gets a question:
+
+> **Does a Nevada wholesaling assignment require a licence?**
+
+`PENDING_COUNSEL` holds it, and `flags_for('cre-forge', 'assign_contract')` **raises**.
+It does not return `[]`.
+
+That distinction is the entry. An empty list is an answer — *no framework applies* — and
+it is an answer nobody is entitled to give here, because the module assigns a real estate
+contract for a fee in a state whose licensing statute nobody in this repository has read.
+A refusal at the call site is the only shape that cannot be mistaken for the answer
+later, and the only one that stops the module being bound while the question is open.
+
+Its manual says `no_framework_applies` like the other four. **This ruling overrides it
+for that module**, which is worth stating plainly: the manuals were the source for four
+of five, and for the fifth the source was wrong.
+
+### Where the answer will go when there is one
+
+`PENDING_COUNSEL` is a dict keyed `(forge_id, module_id)`, and the remedy is to delete
+the entry and add a declaration. There is no third state and no "answered" flag — a
+question that has been answered is a declaration, and a mechanism for recording an
+answer somewhere other than the declaration is a second place to look.
+
+### What is not done
+
+Nothing is registered into any database by this change. `DECLARATIONS` is a module-level
+constant validated at import, and `compliance_flags_implied` is still written by whatever
+writes it today. Binding the two is a separate act on a separate ruling.
+
+
+## 161. The framework vocabulary is Burkham's, and says so
+
+**Ruling by Ivan Green, 22 September 2026:**
+
+> *"The framework vocabulary is Burkham's and records that it is. FRAMEWORKS names its
+> provenance, and a NoFramework decision for a venture whose frameworks were never
+> surveyed says so in its reason. Measured: all 14 flags are consumer-lending,
+> telemarketing or credit-reporting; Greenstone is CRE."*
+
+### The measurement in the ruling is mine, and it is wrong. It is 20, not 14.
+
+`FRAMEWORKS` held **twenty** flags on main, not fourteen. The number came from my own
+earlier report, taken from a truncated listing, and the ruling repeats it in good faith.
+Correcting it here rather than leaving it to be found twice.
+
+Nor are all twenty "consumer-lending, telemarketing or credit-reporting" — the same loose
+reading. Accurately:
+
+    consumer lending   UDAAP x2, FALSE_STATEMENT_TO_LENDER x2, CROA,
+                       STATE_COMMERCIAL_FINANCING_DISCLOSURE, STATE_LENDER_LICENSURE,
+                       ECOA, REG_Z_ADVERTISING, CFPB_1071, CARD_NETWORK_RULES
+    credit reporting   FCRA x2
+    telemarketing      FTC_TSR, FTC_ACT
+    data handling      GLBA, CCPA / STATE_PRIVACY_COMPREHENSIVE
+    other              TWO_PARTY_CONSENT_RECORDING, REFERRAL_FEE_REGULATION,
+                       TAX_ADVICE_SCOPE
+
+**The finding survives the correction, and it is the finding the ruling rests on: not one
+of the twenty is specific to real-estate brokerage, agency, or the assignment of a
+contract.** The vocabulary was written for a lender. Greenstone is commercial real estate.
+
+### A twenty-first flag, and what adding it revealed
+
+`FRAMEWORKS` carried a comment claiming it held *"every flag any Pack declares"*. That
+was false. `packs/greenstone.yaml` declares `tsr_disclosure_required` at
+`market.compliance_surface` (line 59) and propagates it (line 330), and the map had no
+entry for it. It is added, and the comment now records that its own claim did not hold —
+because a map that says it is complete and is not is worse than one that says nothing.
+
+### What "no framework applies" actually meant
+
+Reached through `FRAMEWORKS`, *"no framework applies"* has always meant **"none of
+Burkham Wickmont's twenty applies"**. For a venture whose own frameworks have been
+surveyed those are the same sentence. For Greenstone they are not, and the gap is exactly
+the size of every Nevada real-estate statute nobody has read.
+
+So two constants carry the rule:
+
+    SURVEYED            the ventures whose frameworks have been written down.
+                        One member: burkham-wickmont.
+    UNSURVEYED_CAVEAT   "frameworks were never surveyed" — required, by `_validate()`,
+                        to appear in the reason of every NoFramework declaration for a
+                        venture outside SURVEYED.
+
+`_validate()` runs at import, so a declaration that overstates what was decided is an
+ImportError, not a review comment.
+
+### Why the caveat is in the reason and not a separate field
+
+A field would be read by whatever was written to read it. The reason is read by the
+person deciding whether to trust the declaration, which is the moment the caveat matters.
+`FORGE_VENTURE` maps a Forge to its venture so the check knows which question to ask.
+
+
+## 162. A compliance entry names a real author
+
+**Ruling by Ivan Green, 22 September 2026:**
+
+> *"A compliance entry names a real author. `authored_by` must resolve to an
+> `origin='human'` account. Report the 21 existing rows; don't rewrite them."*
+
+### Twenty-one of twenty-one, and none of them names a person
+
+Measured 22 September 2026 against every row in `compliance_library_entry`:
+
+    entries  venture            authored_by                           resolves to
+    -------  -----------------  ------------------------------------  ------------------
+         19  burkham-wickmont   87c873da-15ca-402b-9cad-c788f4539100  smoke-operator-
+                                                                      0eda802c
+                                                                      (test_fixture)
+          2  greenstone         00000000-0000-5000-8000-00000000aaaa  no such account
+
+Burkham's nineteen were authored by the console smoke script's operator fixture.
+Greenstone's two carry the placeholder `scripts/dev-up.sh` passes, which has never
+corresponded to a row in `office_human` — migration 0039 noted that id in a docstring and
+nothing acted on it.
+
+Also measured, and worth having in one place: **all 21 are `draft`, and zero carry
+`counsel_reviewed_at`.**
+
+### Why nothing caught it
+
+`authored_by UUID NOT NULL`, since migration 0012. No foreign key, no lookup, and no
+reader anywhere in the codebase that resolved it. NOT NULL guaranteed that *something*
+was written there, which is the weakest of the three things the column looks like it
+promises.
+
+`assert_named_human` has asked this question since entry 148 — but it takes a `Human`,
+the account that turned up with a token, and so it can only vouch for the caller.
+`authored_by` is not the caller. It is an id written *about* somebody, by somebody else,
+and nothing had ever looked it up.
+
+So `assert_named_human_by_id` goes beside it: the same rule, resolved from the database
+rather than accepted from the caller.
+
+### The twenty-one stay, and that shapes both controls
+
+*"Report the 21 existing rows; don't rewrite them."* There is no backfill in migration
+0056 and no `UPDATE` anywhere in this change. Nobody knows who wrote those entries, and
+assigning them to Ivan Green because he is the only person on the system would
+manufacture exactly the authorship this entry requires.
+
+So each control constrains writes and validates nothing at rest:
+
+    foreign key   `authored_by` → `office_human(human_id)`, added **NOT VALID** and left
+                  that way permanently. `VALIDATE CONSTRAINT` would fail on Greenstone's
+                  two, and the rows it fails on are the evidence.
+    trigger       BEFORE INSERT OR UPDATE, checking `origin = 'human'`. A trigger cannot
+                  examine a row at rest, which here is the property that is wanted.
+    Python        `author_compliance_entry` asks the same question and names the account
+                  in its message. Checked twice on purpose, as the six required fields
+                  are: the database is the control, the Python is the one an operator can
+                  read.
+
+A CHECK constraint could not do it — `origin` lives on another table, and denormalising
+it here would store a fact that goes stale the moment an account is reclassified, which
+is what migration 0053 was written to end.
+
+### What the trigger means for the loader
+
+`scripts/load_compliance_library.py` re-running over Burkham's nineteen is an UPDATE, so
+it is now **refused** until the file names a real author. That is a refusal, not a
+rewrite: the rows keep their text and their existing `authored_by`, and what stops is the
+pretence that a fixture re-authored them today.
+
+### Reported, in a surface that returns no verdict
+
+`knowledge.compliance_authorship()` and `GET /api/knowledge/compliance/authorship` list
+every entry with its author, that author's origin, and which of the two ways it is wrong
+— `test_fixture` and `unresolved` are separate words because they are separate mistakes
+with separate fixes.
+
+It returns counts and never a pass or a fail. A boolean would read `fail` today and for
+as long as the twenty-one sit there, which is a signal that stops carrying information
+the moment it is first seen.
+
+### What this does not rule on
+
+`author_playbook` and `author_persona` take the same unchecked `authored_by` and are
+untouched. The ruling is about compliance entries, and extending it by analogy would be
+inventing the scope of a rule rather than recording one.
+
+> **Still open: who may set `status = 'approved'`, and who may record
+> `counsel_reviewed_at`?** Measured today: nothing can. The `ON CONFLICT DO UPDATE` in
+> `author_compliance_entry` does not list `counsel_reviewed_at`, and no other statement
+> in the repository writes that column at all. `approved` is reachable only from a YAML
+> file loaded by a script over the admin DSN. Neither act has an author, a role, or an
+> audit event, and nothing here invents one.

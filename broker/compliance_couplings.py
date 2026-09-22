@@ -185,9 +185,40 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+#: THIS VOCABULARY IS BURKHAM'S, AND SAYS SO. Ruled 22 September 2026, entry 161.
+#:
 #: Every `runtime_flag` the Burkham Pack's `compliance_surface` declares, with the
 #: framework it belongs to. Read from `packs/burkham-wickmont.draft.yaml`; a flag not
 #: in this map is not a flag any Pack can propagate.
+#:
+#: **Measured 22 September 2026: TWENTY flags, not fourteen.** Entry 161's ruling cites
+#: fourteen and that number was mine, taken from a truncated listing; the count is
+#: corrected here and in the entry rather than left to be discovered twice.
+#:
+#: Nor are all twenty "consumer lending, telemarketing or credit reporting" - that was
+#: the same loose reading. Accurately:
+#:
+#:     consumer lending      UDAAP x2, FALSE_STATEMENT_TO_LENDER x2, CROA,
+#:                           STATE_COMMERCIAL_FINANCING_DISCLOSURE, STATE_LENDER_LICENSURE,
+#:                           ECOA, REG_Z_ADVERTISING, CFPB_1071, CARD_NETWORK_RULES
+#:     credit reporting      FCRA x2
+#:     telemarketing         FTC_TSR, FTC_ACT
+#:     data handling         GLBA, CCPA / STATE_PRIVACY_COMPREHENSIVE
+#:     other                 TWO_PARTY_CONSENT_RECORDING, REFERRAL_FEE_REGULATION,
+#:                           TAX_ADVICE_SCOPE
+#:
+#: The finding survives the correction and is what matters: **not one of the twenty is
+#: specific to real-estate brokerage, agency or the assignment of a contract.** The
+#: vocabulary was written for a lender.
+#:
+#: Greenstone is commercial-real-estate wholesaling. It declares two entries of its own -
+#: `tsr_disclosure_required` and `recording_consent_required` - and both are about
+#: CONTACTING PEOPLE, which is the one thing no cre-forge module does.
+#:
+#: So a `NoFramework` decision reached with this map is answering "does any of BURKHAM'S
+#: twenty apply", not "does any framework apply". `SURVEYED` below records which
+#: ventures have had their own frameworks written down, and `NoFramework.why` for an
+#: unsurveyed venture has to say so - `_validate` enforces it.
 FRAMEWORKS: dict[str, str] = {
     "croa_perimeter_required": "CROA",
     "own_claims_discipline_required": "FTC_ACT",
@@ -211,6 +242,18 @@ FRAMEWORKS: dict[str, str] = {
     "referral_fee_permitted_in_state": "REFERRAL_FEE_REGULATION",
     "trigger_term_disclosure_required": "REG_Z_ADVERTISING",
     "sb_lending_data_collection": "CFPB_1071",
+
+    # GREENSTONE'S, AND IT WAS MISSING. Found 22 September 2026 while registering
+    # cre-forge: this map's own comment claims to hold every flag any Pack declares,
+    # and `packs/greenstone.yaml` declares `tsr_disclosure_required` in
+    # `market.compliance_surface` (human_held) and propagates it at line 330. Excluding
+    # it from `buyer_match` was refused because the flag "is not a declared
+    # runtime_flag" - which was the map being wrong, not the exclusion.
+    #
+    # `recording_consent_required` above is declared by BOTH Packs and was already here.
+    # These two are the whole of Greenstone's surface, and both are about contacting
+    # people.
+    "tsr_disclosure_required": "FTC_TSR",
 }
 
 
@@ -644,8 +687,157 @@ CAPITALFORGE: dict[str, ModuleCouplings] = {
 }
 
 
+#: Which ventures have had their OWN frameworks surveyed and written down. Ruled
+#: 22 September 2026, entry 161.
+#:
+#: Burkham is here because `FRAMEWORKS` is its vocabulary. Greenstone is NOT: its two
+#: library entries are FTC TSR and Nevada two-party consent, both about contacting
+#: people, and nobody has yet asked which frameworks reach commercial-real-estate
+#: wholesaling. A `NoFramework` decision for an unsurveyed venture is a narrower claim
+#: than it looks, and `_validate` requires its reason to say so.
+SURVEYED: frozenset[str] = frozenset({"burkham-wickmont"})
+
+#: The sentence an unsurveyed venture's NoFramework reason must contain, so the
+#: narrowing is in the record rather than in this module's docstring.
+UNSURVEYED_CAVEAT = "frameworks were never surveyed"
+
+#: Which venture each Forge's modules are read against, for the caveat rule. A Forge
+#: serves one venture in this deployment; when that stops being true this becomes a
+#: per-Pack question rather than a per-Forge one.
+FORGE_VENTURE: dict[str, str] = {
+    "capitalforge": "burkham-wickmont",
+    "cre-forge": "greenstone",
+}
+
+
+#: RULED 22 SEPTEMBER 2026, entry 160: cre-forge's coupling declarations are registered
+#: from its manuals.
+#:
+#: All five manuals carry `compliance_coupling: ['no_framework_applies']` - a reading
+#: somebody made, not an absence. Four are registered here. **`assign_contract` is
+#: deliberately not**, and `flags_for` refuses it by name: see `PENDING_COUNSEL`.
+CRE_FORGE: dict[str, ModuleCouplings] = {
+    "property_lookup": ModuleCouplings(
+        couplings=NoFramework(
+            why=(
+                "Reads this tenant's own property records and returns a page of them. "
+                "No consumer, no credit, no contact, no write. Its whole never_do list "
+                "is accuracy - total versus page, empty results, result order - which "
+                "are duties of care rather than duties under a framework. NOTE: this "
+                "decides that none of Burkham's twenty flags applies. Greenstone's "
+                "own frameworks were never surveyed, so this is not a finding that no "
+                "law reaches commercial-real-estate wholesaling."
+            )
+        ),
+        excluded=(
+            Excluded(
+                flag="privacy_request_handling",
+                why=(
+                    "It reads property records, not consumer data. A property is not a "
+                    "data subject."
+                ),
+            ),
+        ),
+    ),
+    "comp_analysis": ModuleCouplings(
+        couplings=NoFramework(
+            why=(
+                "Returns comparable sales and explicitly does not turn them into a "
+                "value - underwrite_deal does that, and does not use these. Nothing is "
+                "offered, quoted or disclosed to anybody. NOTE: this decides that none "
+                "of Burkham's twenty flags applies. Greenstone's own frameworks were "
+                "never surveyed."
+            )
+        ),
+        excluded=(
+            Excluded(
+                flag="estimate_not_offer_required",
+                why=(
+                    "That is commercial-financing disclosure, about offers of finance. "
+                    "This module produces neither an estimate of finance nor an offer."
+                ),
+            ),
+        ),
+    ),
+    "buyer_match": ModuleCouplings(
+        couplings=NoFramework(
+            why=(
+                "Ranks buyers this tenant already holds and contacts none of them. No "
+                "buyer is approached, nothing is written to the deal or the buyer, and "
+                "two callers see the same list. NOTE: this decides that none of "
+                "Burkham's twenty flags applies. Greenstone's own frameworks were "
+                "never surveyed."
+            )
+        ),
+        excluded=(
+            Excluded(
+                flag="fair_treatment_required",
+                why=(
+                    "ECOA governs which lenders a CREDIT APPLICANT is shown. This ranks "
+                    "cash buyers for a property assignment; there is no applicant and "
+                    "no credit decision. Written down because the word 'match' invites "
+                    "exactly this inference - Burkham's Placement Strategist carries "
+                    "the flag for 'which lenders a client is shown', one step away."
+                ),
+            ),
+            Excluded(
+                flag="outbound_contact_boundary_required",
+                why=(
+                    "Nothing is sent. The module's first prohibition is never to report "
+                    "a ranked buyer as approached."
+                ),
+            ),
+            Excluded(
+                flag="tsr_disclosure_required",
+                why="Same: no buyer is contacted, so no telemarketing disclosure arises.",
+            ),
+        ),
+    ),
+    "underwrite_deal": ModuleCouplings(
+        couplings=NoFramework(
+            why=(
+                "Computes and stores one analysis of a deal. No consumer, no credit, no "
+                "contact. NOTE: this decides that none of Burkham's twenty flags "
+                "applies, and Greenstone's own frameworks were never surveyed - which "
+                "matters more here than elsewhere. The module's first prohibition is "
+                "never to report `arv` as a valuation or an appraisal, because through "
+                "this module the ARV is the asking price. Holding a number out as an "
+                "appraisal is a licensed activity in every state and THERE IS NO FLAG "
+                "FOR IT in this vocabulary."
+            )
+        ),
+    ),
+}
+
+#: Modules read and deliberately NOT registered, with the question that has to be
+#: answered first. Ruled 22 September 2026, entry 160.
+#:
+#: `flags_for` raises on these by name. A pending question is not an empty list, and it
+#: is not a NoFramework either - both of those are answers.
+PENDING_COUNSEL: dict[tuple[str, str], str] = {
+    ("cre-forge", "assign_contract"): (
+        "Pending counsel: does a Nevada wholesaling assignment require a licence? This "
+        "module creates a DRAFT assignment contract from a template and cannot send it, "
+        "which is relevant and not dispositive. Assignment of a real-estate contract is "
+        "the act state brokerage-licensure regimes are most likely to reach, and "
+        "`facilitator_status_required` (STATE_LENDER_LICENSURE) is the nearest flag in "
+        "a vocabulary written for a lender. Nothing is registered until that is "
+        "answered - a NoFramework here would be a legal conclusion drawn from a manual."
+    ),
+}
+
+
 class CouplingError(Exception):
     """A coupling declaration is malformed. Raised at import, not at call time."""
+
+
+#: Every Forge's declarations, by forge id. `flags_for` reads this and `_validate`
+#: checks all of it, so registering a Forge is adding one entry rather than editing
+#: three places.
+DECLARATIONS: dict[str, dict[str, ModuleCouplings]] = {
+    "capitalforge": CAPITALFORGE,
+    "cre-forge": CRE_FORGE,
+}
 
 
 def _validate() -> None:
@@ -654,13 +846,46 @@ def _validate() -> None:
     Every failure here is one of the ways the first pass went wrong, turned into
     something that stops the process rather than something a reviewer might notice.
     """
-    for module_id, decl in CAPITALFORGE.items():
+    for forge_id, declarations in DECLARATIONS.items():
+        _validate_forge(forge_id, declarations)
+
+    # A module cannot be both answered and pending: one of the two is then stale, and
+    # which one is stale is not something a reader can tell.
+    for (forge_id, module_id), question in PENDING_COUNSEL.items():
+        if not question.strip():
+            raise CouplingError(
+                f"{forge_id}/{module_id}: a pending question needs to say what is "
+                "being asked. 'Pending' alone is indistinguishable from forgotten."
+            )
+        if module_id in DECLARATIONS.get(forge_id, {}):
+            raise CouplingError(
+                f"{forge_id}/{module_id}: declared AND pending counsel. A question "
+                "that has an answer beside it is one nobody will go back to."
+            )
+
+
+def _validate_forge(forge_id: str, declarations: dict[str, ModuleCouplings]) -> None:
+    venture = FORGE_VENTURE.get(forge_id)
+    surveyed = venture in SURVEYED
+    for module_id, decl in declarations.items():
         if isinstance(decl.couplings, NoFramework):
             if not decl.couplings.why.strip():
                 raise CouplingError(
                     f"{module_id}: NoFramework needs a reason. An empty list is a "
                     "claim that this module implies no framework at all, and nothing "
                     "can tell an accidental empty from a considered one."
+                )
+            # RULED 22 SEPTEMBER 2026, entry 161. `FRAMEWORKS` is Burkham's vocabulary,
+            # so "no framework applies" reached with it is really "none of Burkham's
+            # twenty applies". For a venture nobody has surveyed, the reason has to
+            # carry that narrowing - otherwise the record overstates what was decided.
+            if not surveyed and UNSURVEYED_CAVEAT not in decl.couplings.why:
+                raise CouplingError(
+                    f"{forge_id}/{module_id}: {venture!r} is not in SURVEYED, so this "
+                    f"NoFramework reason must contain {UNSURVEYED_CAVEAT!r}. The "
+                    "decision is that none of Burkham's twenty flags applies, which "
+                    "is narrower than 'no framework applies', and the reason is where "
+                    "a reader finds that out."
                 )
         elif not decl.couplings:
             raise CouplingError(
@@ -708,12 +933,20 @@ def flags_for(forge_id: str, module_id: str) -> list[str]:
     module with no frameworks - it is a module nobody has read yet, and returning
     `[]` would write that reading into the database as though somebody had.
     """
-    if forge_id.lower() != "capitalforge":
+    key = forge_id.lower()
+    pending = PENDING_COUNSEL.get((key, module_id))
+    if pending is not None:
+        # NOT an empty list, and not a NoFramework. Both of those are answers, and this
+        # module does not have one yet - entry 160.
+        raise CouplingError(f"{forge_id}/{module_id}: {pending}")
+
+    declarations = DECLARATIONS.get(key)
+    if declarations is None:
         raise CouplingError(
             f"no coupling declarations for {forge_id!r}. Read its manuals' section 8 "
             "and write them down before registering rows."
         )
-    decl = CAPITALFORGE.get(module_id)
+    decl = declarations.get(module_id)
     if decl is None:
         raise CouplingError(
             f"{module_id!r} has no coupling declaration. Name the frameworks its "

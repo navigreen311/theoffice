@@ -58,6 +58,19 @@ PACK_PATH = ROOT / "packs" / "greenstone.yaml"
 #: so the row is identifiable and `teardown_world` can be checked to have removed it.
 DISCHARGE_HUMAN_ID = uuid.UUID("00000000-0000-5000-8000-00000000d15c")
 
+#: Whoever the prepared world's compliance entries name as their author.
+#:
+#: RULED 22 SEPTEMBER 2026, entry 162: *"A compliance entry names a real author.
+#: `authored_by` must resolve to an `origin='human'` account."* Until that ruling this
+#: world wrote both entries under `00000000-...-00000000aaaa`, which matches no row in
+#: `office_human` - the same id Greenstone's two LIVE entries carry, and the reason
+#: nobody noticed they carried it.
+#:
+#: `origin = 'human'`, declared. A world that has to satisfy a rule about people needs
+#: an account the rule accepts; entry 151 requires that origin be stated at creation,
+#: not that a fixture may never state this one.
+WORLD_AUTHOR_ID = uuid.UUID("00000000-0000-5000-8000-000000a17403")
+
 FORGE_ID = "cre-forge"
 # `generate_loi` was removed 2026-09-02 along with the Pack declaration. CRE Forge
 # has no letter-of-intent service, route or contract template, so a world that
@@ -477,6 +490,18 @@ def build_world(admin: psycopg.Connection) -> None:
         # Part 6.3. The Greenstone Pack names these two refs; without them V28 fails
         # and Gate 2 blocks - which is V28 working, and is why a prepared world has to
         # include the library rather than only the bridge.
+        # Entry 162: `authored_by` must resolve to an `origin='human'` account, and
+        # migration 0056 enforces it with a trigger, so this row comes first.
+        cur.execute(
+            """
+            INSERT INTO office_human
+              (human_id, display_name, email, auth_method, status, created_at, origin)
+            VALUES (%s, 'World Compliance Author', 'world-author@example.invalid',
+                    'bearer_token', 'active', now(), 'human')
+            ON CONFLICT (human_id) DO NOTHING
+            """,
+            (WORLD_AUTHOR_ID,),
+        )
         for entry in COMPLIANCE_ENTRIES:
             cur.execute(
                 """
@@ -487,10 +512,10 @@ def build_world(admin: psycopg.Connection) -> None:
                 VALUES ('greenstone', %(entry_ref)s, %(framework)s, %(jurisdiction)s,
                         %(applicability_rule)s, %(agent_behavior_implication)s,
                         %(escalation_trigger)s, %(citation)s, %(runtime_flag)s,
-                        '00000000-0000-5000-8000-00000000aaaa')
+                        %(authored_by)s)
                 ON CONFLICT (venture_id, entry_ref) DO NOTHING
                 """,
-                entry,
+                {**entry, "authored_by": WORLD_AUTHOR_ID},
             )
 
         for agent_id, name, dept in ROSTER:
@@ -659,6 +684,8 @@ def teardown_world(conn: psycopg.Connection) -> None:
                 "DELETE FROM compliance_library_entry WHERE entry_ref = %s",
                 (entry["entry_ref"],),
             )
+        # After the entries: the foreign key added by 0056 points this way.
+        cur.execute("DELETE FROM office_human WHERE human_id = %s", (WORLD_AUTHOR_ID,))
         cur.execute("DELETE FROM forge_operating_instruction")
         # Proposals reference the agents about to be removed. `wipe_venture` learned this
         # the hard way with provisioning_run; a teardown that names some dependents and

@@ -28,6 +28,8 @@ from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from broker import account_origin, humans
+
 
 class KnowledgeError(Exception):
     """The store refused. The message says which rule."""
@@ -274,6 +276,20 @@ async def author_compliance_entry(
             f"status must be one of {', '.join(ENTRY_STATUSES)}; got {status!r}"
         )
 
+    # A REAL AUTHOR. Ruled 22 September 2026, entry 162.
+    #
+    # `authored_by` is a UUID column with no foreign key, so until now any value at all
+    # was accepted - and every one of the 21 rows on the development database took
+    # advantage of that. Nineteen name the smoke script's operator fixture; two name a
+    # placeholder that resolves to no account. The lookup is the whole fix: the column
+    # was never wrong about what it held, only about what nobody checked.
+    #
+    # Before the INSERT rather than after, so a refusal leaves no row. Migration 0056
+    # asks the same question at the database, which is where the control is.
+    await humans.assert_named_human_by_id(
+        conn, human_id=authored_by, act="author a compliance library entry"
+    )
+
     async with conn.cursor() as cur:
         await cur.execute(
             """
@@ -326,6 +342,83 @@ async def compliance_entries(
             params,
         )
         return [dict(r) for r in await cur.fetchall()]
+
+
+#: What an entry's `authored_by` turned out to be, once somebody looked it up.
+#: `unresolved` is its own word rather than a missing origin, because an id that matches
+#: no row and an id that matches a fixture are different mistakes with different fixes.
+AUTHOR_UNRESOLVED = "unresolved"
+
+
+async def compliance_authorship(
+    conn: AsyncConnection, venture_id: str | None = None
+) -> dict[str, Any]:
+    """Who each compliance entry says wrote it, and whether that is a person.
+
+    RULED 22 SEPTEMBER 2026 (decisions entry 162)
+    =============================================
+
+        *"A compliance entry names a real author. `authored_by` must resolve to an
+        `origin='human'` account. **Report the 21 existing rows; don't rewrite them.**"*
+
+    This is the reporting half. `author_compliance_entry` and migration 0056 stop new
+    rows; nothing here changes an existing one, and there is deliberately no function in
+    this module that could.
+
+    **It reports rather than passing or failing.** A caller that wanted a boolean would
+    get `False` today and for as long as the twenty-one sit there, which is a signal
+    that stops carrying information the second it is first seen. What is useful is the
+    list: which entries, whose account, and which of the two ways it is wrong.
+
+    Measured on the development database, 22 September 2026:
+
+        19  burkham-wickmont  smoke-operator-0eda802c  test_fixture
+         2  greenstone        00000000-...-00000000aaaa   unresolved
+
+    A LEFT JOIN, so an author who is not an account still yields its row. An inner join
+    would drop Greenstone's two entries from a report whose subject is that they have no
+    author - the failure would hide in the shape of the query.
+    """
+    where = "WHERE e.venture_id = %s " if venture_id else ""
+    params = (venture_id,) if venture_id else ()
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT e.venture_id, e.entry_ref, e.status, e.authored_by, e.authored_at, "
+            "       h.display_name, h.origin, h.status AS account_status "
+            "  FROM compliance_library_entry e "
+            "  LEFT JOIN office_human h ON h.human_id = e.authored_by "
+            f"{where}ORDER BY e.venture_id, e.entry_ref",
+            params,
+        )
+        rows = [dict(r) for r in await cur.fetchall()]
+
+    entries = [
+        {
+            "venture_id": r["venture_id"],
+            "entry_ref": r["entry_ref"],
+            "status": r["status"],
+            "authored_by": str(r["authored_by"]),
+            "authored_at": r["authored_at"],
+            "author_name": r["display_name"],
+            "author_origin": r["origin"] or AUTHOR_UNRESOLVED,
+            "names_a_person": r["origin"] == account_origin.HUMAN,
+        }
+        for r in rows
+    ]
+    return {
+        "entries": entries,
+        "total": len(entries),
+        "names_a_person": sum(1 for e in entries if e["names_a_person"]),
+        "names_a_fixture": sum(
+            1 for e in entries if e["author_origin"] == account_origin.TEST_FIXTURE
+        ),
+        "names_a_service": sum(
+            1 for e in entries if e["author_origin"] == account_origin.SERVICE
+        ),
+        "author_unresolved": sum(
+            1 for e in entries if e["author_origin"] == AUTHOR_UNRESOLVED
+        ),
+    }
 
 
 async def resolve_entry_refs(

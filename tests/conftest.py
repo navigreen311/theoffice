@@ -126,6 +126,12 @@ VENTURE_DEPENDENTS = (
     # twenty-four contract suites delete wholesale - so the leak surfaced as a foreign
     # key error in suites that touch neither table.
     "obligation_discharge",
+    # The same shape as the line above, and found the same way. Venture-scoped since
+    # migration 0039, and never wiped because nothing referenced an account until entry
+    # 162 gave `authored_by` a foreign key - at which point the world's two entries held
+    # their author's row down and `DELETE FROM office_human` failed in suites that touch
+    # neither table.
+    "compliance_library_entry",
     "persona",
     "business_playbook",
     "business_pack",
@@ -236,6 +242,46 @@ def app(app_dsn: str) -> Iterator[psycopg.Connection]:
     with psycopg.connect(app_dsn) as conn:
         yield conn
         conn.rollback()
+
+
+def declare_author(
+    conn: psycopg.Connection, human_id: uuid.UUID, display_name: str = "Test Author"
+) -> uuid.UUID:
+    """An account a compliance entry may name as its author. Entry 162.
+
+    *"A compliance entry names a real author. `authored_by` must resolve to an
+    `origin='human'` account."* Before that ruling every test here passed a bare UUID
+    that matched no row at all, which is the same thing Greenstone's two library entries
+    do and the reason nobody noticed they did it.
+
+    **`origin = 'human'`, declared and not guessed.** Entry 151's rule is that origin is
+    stated at creation; it does not say a test may never state `human`. A test that has
+    to exercise a rule about people needs an account the rule accepts, and declaring it
+    is what makes the account's nature visible in the test rather than inferred from a
+    display name - which is the whole of 151.
+
+    Idempotent, and callers delete it themselves. It is not auto-wiped, because a test
+    that leaves one behind should say so in its own teardown rather than rely on a
+    fixture to tidy up after a rule about accountability.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO office_human (human_id, display_name, email, auth_method, "
+            "                          origin, token_hash) "
+            "VALUES (%s, %s, %s, 'bearer_token', 'human', %s) "
+            "ON CONFLICT (human_id) DO NOTHING",
+            (human_id, display_name, f"{human_id.hex[:12]}@author.invalid",
+             f"author-{human_id.hex}"),
+        )
+    conn.commit()
+    return human_id
+
+
+def undeclare_author(conn: psycopg.Connection, *human_ids: uuid.UUID) -> None:
+    """Remove accounts `declare_author` made."""
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM office_human WHERE human_id = ANY(%s)", (list(human_ids),))
+    conn.commit()
 
 
 @pytest.fixture

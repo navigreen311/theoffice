@@ -79,12 +79,21 @@ def test_a_module_with_no_declaration_raises_rather_than_defaulting():
 
     Returning [] for an unknown module writes 'no framework applies' into the
     database as though somebody had decided it.
+
+    **`cre-forge/property_lookup` used to be the second case here and is not any more.**
+    Entry 160 registered cre-forge's four declarations from its manuals, so that module
+    now returns `[]` because somebody decided it does - which is the distinction this
+    test is about, arriving at the answer from the other side. A Forge with nothing
+    declared at all is the case that remains, and `funnelforge` is one.
     """
     with pytest.raises(cc.CouplingError):
         cc.flags_for("capitalforge", "lender_match")
 
     with pytest.raises(cc.CouplingError):
-        cc.flags_for("cre-forge", "property_lookup")
+        cc.flags_for("funnelforge", "anything_at_all")
+
+    with pytest.raises(cc.CouplingError):
+        cc.flags_for("cre-forge", "a_module_nobody_declared")
 
 
 def test_the_two_flags_that_were_wrong_are_recorded_as_excluded():

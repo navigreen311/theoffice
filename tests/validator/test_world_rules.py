@@ -33,7 +33,7 @@ from tests.conftest import requires_db
 # `SIM_MODULES` is imported rather than restated: this file's own copy named
 # `run_scenario_pack`, which the real SimForge does not dispatch, and a second list of a
 # Forge's modules kept in step by hand is the shape `tests/world.py` exists to prevent.
-from tests.world import COMPLIANCE_ENTRIES, SIM_MODULES
+from tests.world import COMPLIANCE_ENTRIES, SIM_MODULES, WORLD_AUTHOR_ID
 
 pytestmark = [requires_db, pytest.mark.db]
 
@@ -60,6 +60,19 @@ def stocked_library(admin: psycopg.Connection):
     """
     _clear_library(admin)
     with admin.cursor() as cur:
+        # Entry 162: the author must resolve to an `origin='human'` account, so it is
+        # written first. `build_world` declares the same id; both use ON CONFLICT DO
+        # NOTHING because either may run first.
+        cur.execute(
+            """
+            INSERT INTO office_human
+              (human_id, display_name, email, auth_method, status, created_at, origin)
+            VALUES (%s, 'World Compliance Author', 'world-author@example.invalid',
+                    'bearer_token', 'active', now(), 'human')
+            ON CONFLICT (human_id) DO NOTHING
+            """,
+            (WORLD_AUTHOR_ID,),
+        )
         for entry in COMPLIANCE_ENTRIES:
             cur.execute(
                 """
@@ -70,9 +83,9 @@ def stocked_library(admin: psycopg.Connection):
                 VALUES ('greenstone', %(entry_ref)s, %(framework)s, %(jurisdiction)s,
                         %(applicability_rule)s, %(agent_behavior_implication)s,
                         %(escalation_trigger)s, %(citation)s, %(runtime_flag)s,
-                        '00000000-0000-5000-8000-00000000aaaa')
+                        %(authored_by)s)
                 """,
-                entry,
+                {**entry, "authored_by": WORLD_AUTHOR_ID},
             )
     admin.commit()
     yield
