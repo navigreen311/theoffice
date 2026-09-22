@@ -19,7 +19,7 @@ import pytest
 
 from broker import knowledge
 from broker.db import connection
-from tests.conftest import requires_db
+from tests.conftest import declare_author, requires_db, undeclare_author
 
 pytestmark = [requires_db, pytest.mark.db]
 
@@ -30,9 +30,13 @@ THEIRS = "burkham-wickmont"
 
 @pytest.fixture(autouse=True)
 def _clean(admin: psycopg.Connection):
+    # AUTHOR is an account now, not a bare id. Entry 162: a compliance entry names a
+    # real author, and until that ruling this file passed a UUID matching no row.
+    declare_author(admin, AUTHOR, "Stores Test Author")
     _wipe(admin)
     yield
     _wipe(admin)
+    undeclare_author(admin, AUTHOR)
 
 
 def _wipe(conn: psycopg.Connection) -> None:

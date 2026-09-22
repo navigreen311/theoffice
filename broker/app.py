@@ -91,7 +91,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0055"
+EXPECTED_SCHEMA_REVISION = "0056"
 
 # `live_grants` means "a grant no live revocation covers". The four-scope rule that
 # decides that has exactly one copy - `revocation._covers`, the same text
@@ -2265,6 +2265,27 @@ async def list_compliance_entries(
     """Every entry, or one venture's. Each carries its own `status`, so a draft an author
     wrote by hand does not read like a statute in whatever renders this."""
     return await knowledge.compliance_entries(conn, venture_id)
+
+
+@app.get("/api/knowledge/compliance/authorship")
+async def compliance_authorship_report(
+    conn: DB, _me: ME, venture_id: str | None = Query(default=None)
+) -> dict[str, Any]:
+    """Who each compliance entry names as its author, and whether that is a person.
+
+    **The reporting half of entry 162.** *"Report the 21 existing rows; don't rewrite
+    them."* `author_compliance_entry` and migration 0056 stop new rows naming a fixture
+    or an id that resolves to nothing; this is how the existing ones are seen.
+
+    Any authenticated reader, like every other `/api/knowledge` GET. The subject is that
+    the library's authorship is unattributed, and a report of that behind a role is a
+    report the people who would act on it cannot open.
+
+    It returns counts and never a verdict. A pass/fail would read `fail` today and for
+    as long as the twenty-one sit there - a signal that stops carrying information the
+    moment it is first seen.
+    """
+    return await knowledge.compliance_authorship(conn, venture_id)
 
 
 @app.get("/api/knowledge/personas")

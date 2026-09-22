@@ -19,12 +19,14 @@ import pytest
 
 from broker import knowledge, provisioning
 from broker.db import connection
-from tests.conftest import requires_db
+from tests.conftest import declare_author, requires_db, undeclare_author
 from tests.provisioning.conftest import VENTURE
 
 pytestmark = [requires_db, pytest.mark.db]
 
-AUTHOR = uuid.UUID("00000000-0000-5000-8000-00000000aaaa")
+#: Entry 162: a compliance entry names a real author, so this is an account now.
+#: It used to be `00000000-...-00000000aaaa`, which resolves to nobody.
+AUTHOR = uuid.UUID("00000000-0000-5000-8000-000000a17406")
 
 
 class HeldOutPasses:
@@ -159,9 +161,9 @@ async def test_gate_6_does_not_accept_another_ventures_entry_as_an_explanation(
             VALUES ('some-other-venture', 'test/their-tsr', 'FTC_TSR', ARRAY['FEDERAL'],
                     'Outbound cold calls.', 'State identity and purpose first.',
                     'A do-not-call assertion.', '16 CFR 310',
-                    'tsr_disclosure_required',
-                    '00000000-0000-5000-8000-00000000aaaa')
-            """
+                    'tsr_disclosure_required', %s)
+            """,
+            (declare_author(admin, AUTHOR, "Gate 6 Test Author"),),
         )
     admin.commit()
 
@@ -184,6 +186,7 @@ async def test_gate_6_does_not_accept_another_ventures_entry_as_an_explanation(
             "DELETE FROM compliance_library_entry WHERE venture_id = 'some-other-venture'"
         )
     admin.commit()
+    undeclare_author(admin, AUTHOR)
 
 
 async def test_gate_6_blocking_conditions_are_named_in_its_evidence(

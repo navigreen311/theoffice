@@ -24,7 +24,7 @@ import pytest
 
 from broker import knowledge
 from broker.db import connection
-from tests.conftest import requires_db
+from tests.conftest import declare_author, requires_db, undeclare_author
 
 pytestmark = [requires_db, pytest.mark.db]
 
@@ -52,9 +52,12 @@ def _clean(admin: psycopg.Connection):
             )
         admin.commit()
 
+    # Entry 162: `authored_by` must resolve to an `origin='human'` account.
+    declare_author(admin, AUTHOR, "Per-Venture Test Author")
     wipe()
     yield
     wipe()
+    undeclare_author(admin, AUTHOR)
 
 
 async def test_two_ventures_hold_the_same_ref_with_different_text():

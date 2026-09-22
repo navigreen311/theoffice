@@ -23,7 +23,7 @@ from scripts.check_compliance_library import (
     APPROVED_STATUS,
     DEFAULT_STATUS,
 )
-from tests.conftest import requires_db
+from tests.conftest import declare_author, requires_db, undeclare_author
 
 pytestmark = [requires_db, pytest.mark.db]
 
@@ -57,6 +57,8 @@ async def test_the_loader_path_does_not_read_a_missing_status_as_approved(admin)
     matters is the one that reaches the table - the column carries one too, and this
     fails if either drifts.
     """
+    # Entry 162: `authored_by` must resolve to an `origin='human'` account.
+    declare_author(admin, AUTHOR, "Missing-Status Test Author")
     try:
         async with connection() as conn:
             await knowledge.author_compliance_entry(
@@ -77,3 +79,4 @@ async def test_the_loader_path_does_not_read_a_missing_status_as_approved(admin)
                 "DELETE FROM compliance_library_entry WHERE venture_id = %s", (VENTURE,)
             )
         admin.commit()
+        undeclare_author(admin, AUTHOR)

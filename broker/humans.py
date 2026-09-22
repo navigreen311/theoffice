@@ -798,6 +798,70 @@ class NoAttributableActorError(Exception):
     """Nothing could sign this. There is no real account able to act."""
 
 
+async def assert_named_human_by_id(
+    conn: AsyncConnection, *, human_id: uuid.UUID, act: str
+) -> None:
+    """Refuse an act attributed to an id that is not a person's.
+
+    RULED 22 SEPTEMBER 2026 (decisions entry 162)
+    =============================================
+
+        *"A compliance entry names a real author. `authored_by` must resolve to an
+        `origin='human'` account. Report the 21 existing rows; don't rewrite them."*
+
+    THE HALF `assert_named_human` CANNOT ASK
+    ========================================
+
+        `assert_named_human` takes a `Human` - the account that turned up with a token -
+        and so it can only vouch for the caller. `authored_by` is not the caller: it is a
+        bare `uuid` in a column with **no foreign key**, written by whoever is authoring
+        on whoever's behalf. Nothing has ever looked it up.
+
+        Measured 22 September 2026, all 21 rows in `compliance_library_entry`:
+
+            19  burkham-wickmont   87c873da...  smoke-operator-0eda802c   test_fixture
+             2  greenstone         00000000-0000-5000-8000-00000000aaaa   NO SUCH ACCOUNT
+
+        Not one names a person. The 19 were authored by the smoke script's operator
+        fixture; the 2 carry the placeholder `scripts/dev-up.sh` passes, which resolves
+        to nothing at all - and resolved to nothing silently, because there is no FK to
+        say otherwise.
+
+    TWO REFUSALS, NOT ONE
+    =====================
+
+        *Resolves* and *is a person* are separate failures with separate remedies, so
+        they get separate messages. An id that matches no row is a typo or a placeholder;
+        an id that matches a fixture is a real account that cannot answer for the text.
+
+    `conn` rather than a `Human`, deliberately. The whole defect is that the id was
+    trusted without being looked up, and a signature that accepted a pre-fetched row
+    would let the next caller look it up somewhere this rule does not run.
+    """
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT human_id, display_name, origin, status "
+            "  FROM office_human WHERE human_id = %s",
+            (human_id,),
+        )
+        row = await cur.fetchone()
+
+    if row is None:
+        raise NotAuthorized(
+            f"{human_id} is not an account on this Office, so it may not {act}. "
+            "`authored_by` has no foreign key, so an id that resolves to nobody has "
+            "always been accepted in silence - Greenstone's two library entries carry "
+            "exactly such a placeholder (entry 162)."
+        )
+    if row["origin"] != account_origin.HUMAN:
+        raise NotAuthorized(
+            f"{row['display_name']} is a {row['origin']} and may not {act}. A "
+            "compliance entry is a claim about the law that somebody has to stand "
+            "behind, and a fixture is not somebody who can be asked about it.",
+            human_status=row["status"],
+        )
+
+
 async def attributable_actor(
     conn: AsyncConnection, *, required_role: str = "ivan"
 ) -> uuid.UUID:
