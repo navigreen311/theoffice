@@ -29,7 +29,7 @@ import psycopg
 import pytest
 import pytest_asyncio
 
-from broker import humans, provisioning, revocation
+from broker import account_origin, humans, provisioning, revocation
 from broker.db import connection
 from broker.errors import Revoked
 from tests.conftest import requires_db
@@ -95,7 +95,7 @@ def _grants(admin: psycopg.Connection) -> list[tuple]:
 async def _officer(name: str, email: str, role: str) -> humans.Human:
     async with connection() as conn:
         human_id, token = await humans.create_human(
-            conn, display_name=name, email=email
+            conn, origin=account_origin.TEST_FIXTURE, display_name=name, email=email
         )
         await humans.grant_role(
             conn, human_id=human_id, role=role, venture_id=VENTURE,

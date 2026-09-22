@@ -8,7 +8,7 @@ import httpx
 import psycopg
 import pytest
 
-from broker import humans, revocation
+from broker import account_origin, humans, revocation
 from broker.app import app
 from broker.db import connection
 from tests.conftest import requires_db, wipe_venture
@@ -65,7 +65,10 @@ async def api():
 async def make_human(name: str, role: str) -> tuple[uuid.UUID, str]:
     async with connection() as conn:
         human_id, token = await humans.create_human(
-            conn, display_name=name, email=f"{name.lower()}@revocation.invalid"
+            conn,
+            origin=account_origin.TEST_FIXTURE,
+            display_name=name,
+            email=f"{name.lower()}@revocation.invalid",
         )
         await humans.grant_role(
             conn, human_id=human_id, role=role, venture_id=None, granted_by=SEED
@@ -270,8 +273,8 @@ async def test_the_database_refuses_a_wide_lift_with_one_human(admin: psycopg.Co
     with admin.cursor() as cur:
         cur.execute(
             "INSERT INTO office_human (human_id, display_name, email, auth_method, "
-            "token_hash, status) VALUES (%s, 'Solo', 'solo@x.invalid', 'mfa_only', 'x', "
-            "'active')",
+            "token_hash, status, origin) VALUES (%s, 'Solo', 'solo@x.invalid', "
+            "'mfa_only', 'x', 'active', 'test_fixture')",
             (human,),
         )
         cur.execute(

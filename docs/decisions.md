@@ -13199,3 +13199,151 @@ Yesterday's revocation of `dev-all build check`'s `ivan` role was real but not y
 load-bearing: it resolved to Ivan Green only because he is older. Had the fixture been
 created first, taking its role away would have changed nothing about who governance
 escalations reach.
+
+
+## 151. A fixture is declared, never guessed
+
+**Ruling by Ivan Green, 21 September 2026:**
+
+> *"A fixture is declared, never guessed. `origin` is set explicitly at creation.
+> Reclassify `dev-all build check` as `test_fixture`. Measured: it read `origin='human'`,
+> so `assert_named_human` would not have refused it."*
+
+### What the classifier could see, and what it could not
+
+`account_origin.origin_of` answered from two patterns: a display name shaped like
+`smoke-1a2b3c4d`, or an address under a reserved `.invalid` domain. Both are good
+evidence and neither is a declaration.
+
+`dev-all build check` is created by `scripts/dev-all.sh` at **`dev-all@localhost`**.
+`@localhost` is not `.invalid` and `dev-all build check` is not `prefix-hex`, so it read
+as a person. The rule was not misapplied; a new caller simply did not follow the naming
+convention the rule was inferred from.
+
+### Why the stored column agreed with the guess
+
+0027 stored `origin` on `office_human` and backfilled it **with this same function**.
+Measured on the development database before 0053:
+
+    242 accounts
+      0 where the stored column disagrees with the read-time guess
+
+Not one. The column never contradicted the classifier because it was written by the
+classifier — one claim recorded twice. **Two sources that always agree look like
+corroboration**, which is what made this hard to see rather than easy: entry 147 named
+the account as a finding in passing, and the column beside it said `human` too.
+
+### What it cost, stated exactly
+
+`assert_named_human` (entry 148) refuses an act attempted by an `origin='test_fixture'`
+account. It is the control that stops a fixture deciding a proposal, receiving an
+escalation or attesting a department, and it reads `origin` and nothing else — so an
+account the classifier called a person passed it.
+
+`dev-all build check` held `ivan` — founder authority — from 17 September 16:27 to
+21 September 16:03. Measured across that window:
+
+    signoffs                 0   (`signoff_record` is empty, every venture, ever)
+    attestations             0   (`department_attestation` is empty)
+    proposals decided        0
+    audit_log events as actor 0
+
+**Nothing happened.** The finding is the permission, not the damage, and it is recorded
+that way rather than dressed up.
+
+### Three changes, and the smallest one is the schema
+
+**`create_human` requires `origin`.** No default, because a default is the caller not
+having to think about it. It validates against the same three values the column's CHECK
+allows, so a typo is a refusal with a sentence rather than a constraint violation.
+
+**`office_human.origin` loses `DEFAULT 'human'`.** This is the part that reaches callers
+the parameter cannot: the tests insert into `office_human` directly in several places,
+and while the default stood every one of them created a person silently. An INSERT that
+omits it now fails.
+
+**`origin_of` reads the column.** The regex and the domain list are gone. It raises on a
+row that carries no `origin` rather than assuming one — a missing origin is a query that
+forgot to select it, and answering `human` there would reopen the same hole one level up,
+in `audit_view` and the provisioning run list, which both used to pass a display name and
+an address to be classified.
+
+### What the migration does not do
+
+It does not re-derive the other 239. They are already `test_fixture`, the backfill agreed
+with the evidence in every one of those cases, and running the guess once more to confirm
+itself is exactly the shape of the error above.
+
+The downgrade restores the default and **does not** put `dev-all build check` back to
+`human`. A downgrade that re-grants the permission this entry removes would be worse than
+one that leaves a column stricter than it found it.
+
+
+## 152. Every Forge's manuals, not just the one that failed
+
+**Ruling by Ivan Green, 21 September 2026:**
+
+> *"The instruction comparator covers every Forge with authored instructions, and CI
+> fails on drift in any of them. Measured: it covers cre-forge only. CapitalForge was
+> checked by hand."*
+
+### The control entry 148 built, and the Forge it could not see
+
+`scripts/check_instructions_match.py` opened with one line:
+
+    from scripts.author_cre_forge_instructions import FORGE, MANUALS, VERSION
+
+One import, one Forge, singular constants. CapitalForge has **eleven** authored modules
+and eleven live rows, and nothing compared them — so the failure entry 148 exists to
+catch was fully available on the other Forge, under a green CI.
+
+They were compared by hand on 21 September and all eleven matched. That is a fact about
+one afternoon. A manual edited without a re-run would drift the next day and nothing
+would say so.
+
+### Why it could not simply be pointed at both
+
+`cre-forge`'s manuals are Python literals in `MANUALS`; importing the script is enough.
+CapitalForge's are **derived from `docs/instructions/*.md`**, inside `main`, behind an
+`argparse` call and a module-level `raise SystemExit`. There was no way to ask that
+script what it would author without running it.
+
+So the derivation moved into `derive(conn)`, which writes nothing, and `main` and the
+comparator both call it. One derivation, two readers — a second spelling of it would
+drift from the first exactly as the manuals drifted from the database.
+
+**The two shapes are not unified.** One's source is a script and the other's is a
+document (entry 39 on what a third copy costs); collapsing them would mean transcribing
+one into the other's format, which is the defect. They share the only thing the
+comparator needs — *what would be authored* — and agree on that.
+
+### The registry is checked, not trusted
+
+A loop over two derivers instead of one leaves the same hole one Forge further along:
+bind a third, author its instructions, forget to register it, green tick.
+
+So `uncovered()` asks the **database** which Forges carry live human-authored
+instructions and reports any with no deriver, and the comparator treats an answer as a
+failure. Forgetting to register a Forge breaks the build.
+
+### Where the line is drawn, and why entry 151 had to come first
+
+"Authored" means **a real account signed it**. A prepared test world inserts
+`forge_operating_instruction` rows for `simforge` and `voiceforge` so the gates have
+something to read; demanding an authoring script for those would be demanding a script to
+maintain fixtures, and the comparator would fail on every database the suite had touched.
+
+That distinction rests entirely on `office_human.origin` being trustworthy — which it
+became four paragraphs ago. **This check could not have been written on a classifier that
+read `dev-all@localhost` as a person.** The two rulings of 21 September hold each other
+up, and that is not a coincidence: both are the same instruction, that a thing is what it
+declares itself to be rather than what its shape suggests.
+
+### Measured after the change
+
+    11 capitalforge instruction(s) match docs/instructions/capitalforge-*.md
+     5 cre-forge instruction(s) match scripts/author_cre_forge_instructions.py
+
+No drift on either. CI gains no step: the suite already drives the comparator both ways
+with the world fixture, and it now drives it over both Forges and over a Forge registered
+nowhere.

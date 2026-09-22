@@ -130,9 +130,22 @@ def _fixture(row: dict[str, Any]) -> bool:
     runs does have a shape - persona, human, draft, proposal, incident, then a run that
     aborts at gate 4 - but a shape can be coincidental and an actor cannot: these rows
     were written by `smoke-1a2b3c4d`, and that is a fact rather than an inference.
+
+    **The actor's own declaration, since entry 151.** This used to pass the display name
+    and the email to a classifier that matched them against patterns. It got
+    `dev-all build check` wrong, and every entry that account wrote would have been
+    filed under "person".
+
+    An entry whose actor is not a row in `office_human` is not a fixture entry. That is
+    not a guess: `actor_id` is deliberately unconstrained - the agent that acted may be
+    an agent, or an account since removed - and `_fixture` answers a narrower question
+    than "who was this". Saying "not a fixture" for an actor there is no account for
+    keeps the row visible, which is the right failure direction for a log.
     """
+    if row.get("actor_origin") is None:
+        return False
     return account_origin.origin_of(
-        {"display_name": row.get("actor_name"), "email": row.get("actor_email")}
+        {"origin": row["actor_origin"]}
     ) == account_origin.TEST_FIXTURE
 
 
@@ -140,7 +153,10 @@ _SELECT = """
 SELECT a.audit_id, a.event_type, a.actor_type, a.actor_id::text AS actor_id,
        a.venture_id, a.trace_id::text AS trace_id, a.ts,
        a.prev_hash, a.entry_hash, a.subject,
-       h.display_name AS actor_name, h.email AS actor_email
+       h.display_name AS actor_name, h.email AS actor_email,
+       -- DECLARED, not derived from the two columns above (entry 151). `_fixture` read
+       -- the name and the address and inferred; this is the account saying what it is.
+       h.origin AS actor_origin
 FROM audit_log a
 LEFT JOIN office_human h ON h.human_id = a.actor_id
 """

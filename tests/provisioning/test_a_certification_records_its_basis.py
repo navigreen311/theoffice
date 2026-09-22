@@ -40,7 +40,7 @@ import psycopg
 import pytest
 import pytest_asyncio
 
-from broker import attestation, certification, escalation, humans
+from broker import account_origin, attestation, certification, escalation, humans
 from broker.db import connection
 from broker.errors import NotAuthorized
 from tests.conftest import requires_db
@@ -83,7 +83,7 @@ async def founder(world) -> humans.Human:
     """
     async with connection() as conn:
         human_id, token = await humans.create_human(
-            conn, display_name="Founder Under Test",
+            conn, origin=account_origin.TEST_FIXTURE, display_name="Founder Under Test",
             email="founder.under.test@provisioning.invalid",
         )
         await humans.grant_role(

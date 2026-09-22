@@ -19,7 +19,7 @@ import psycopg
 import pytest
 import pytest_asyncio
 
-from broker import humans, packs
+from broker import account_origin, humans, packs
 from broker.db import connection
 from tests.conftest import wipe_venture
 from tests.world import (
@@ -143,7 +143,7 @@ async def stored_pack(world, pack_yaml) -> packs.StoredPack:
 async def _make_human(name: str, role: str, venture: str | None = VENTURE) -> humans.Human:
     async with connection() as conn:
         human_id, token = await humans.create_human(
-            conn, display_name=name,
+            conn, origin=account_origin.TEST_FIXTURE, display_name=name,
             email=f"{name.lower().replace(' ', '.')}@provisioning.invalid",
         )
         await humans.grant_role(

@@ -8,7 +8,7 @@ import httpx
 import psycopg
 import pytest
 
-from broker import forge_map, humans, packs
+from broker import account_origin, forge_map, humans, packs
 from broker.app import app
 from broker.db import connection
 from tests.conftest import requires_db, wipe_venture
@@ -55,7 +55,10 @@ async def api():
 async def _operator() -> tuple[uuid.UUID, str]:
     async with connection() as conn:
         human_id, token = await humans.create_human(
-            conn, display_name="Ivan", email="ivan@forgemap.example.com"
+            conn,
+            origin=account_origin.HUMAN,
+            display_name="Ivan",
+            email="ivan@forgemap.example.com",
         )
         await humans.grant_role(
             conn, human_id=human_id, role="ivan", venture_id=None, granted_by=SEED

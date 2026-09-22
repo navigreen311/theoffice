@@ -166,8 +166,16 @@ jobs:
       - name: Pytest
         run: python -m pytest -q --junitxml=pytest-results.xml
 
-      # THE LIVE INSTRUCTIONS MUST MATCH THE AUTHORING SCRIPT - ruled 21 September
-      # 2026, decisions entry 148.
+      # THE LIVE INSTRUCTIONS MUST MATCH THE AUTHORING SCRIPT, ON EVERY FORGE - ruled
+      # 21 September 2026, decisions entries 148 and 152.
+      #
+      # ENTRY 152 WIDENED IT AND CHANGED NO STEP HERE, which is the sign the shape below
+      # was right. The comparator covered `cre-forge` alone - one import of one script's
+      # `MANUALS` - so CapitalForge's eleven authored modules were compared by nothing
+      # and were checked by hand once. `scripts/instruction_sources.py` now holds a
+      # deriver per Forge, and `differences` asks the DATABASE which Forges carry
+      # human-authored manuals and reports any with no deriver. Registering a Forge is
+      # therefore not something anybody has to remember: forgetting breaks the build.
       #
       # THERE IS NO STEP HERE, AND THAT IS THE SECOND ANSWER RATHER THAN THE ABSENCE OF
       # ONE. It was written as a step first: seed an author, run the authoring script,

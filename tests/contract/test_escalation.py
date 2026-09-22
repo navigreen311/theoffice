@@ -21,7 +21,7 @@ import uuid
 import psycopg
 import pytest
 
-from broker import escalation, humans
+from broker import account_origin, escalation, humans
 from broker.db import connection
 from broker.escalation import Path, SeatVacant, WrongPath
 
@@ -71,7 +71,10 @@ async def operator(admin: psycopg.Connection):
     """
     async with connection() as conn:
         human_id, _ = await humans.create_human(
-            conn, display_name="Escalation operator", email="esc@x.escalation.invalid"
+            conn,
+            origin=account_origin.TEST_FIXTURE,
+            display_name="Escalation operator",
+            email="esc@x.escalation.invalid",
         )
         await humans.grant_role(
             conn, human_id=human_id, role="ivan", venture_id=None, granted_by=human_id

@@ -33,7 +33,7 @@ import httpx
 import psycopg
 import pytest
 
-from broker import humans, proposals
+from broker import account_origin, humans, proposals
 from broker.app import app
 from broker.db import connection
 from tests.conftest import requires_db, wipe_venture
@@ -79,7 +79,10 @@ async def world(admin: psycopg.Connection):
         from broker import packs
 
         human_id, token = await humans.create_human(
-            conn, display_name="Ivan", email="ivan@approvals.invalid"
+            conn,
+            origin=account_origin.TEST_FIXTURE,
+            display_name="Ivan",
+            email="ivan@approvals.invalid",
         )
         await humans.grant_role(
             conn, human_id=human_id, role="venture_operator", venture_id=None,

@@ -76,7 +76,10 @@ async def _make(display_name: str, local: str, role: str = "ivan") -> uuid.UUID:
     """An account this test owns. The domain is what `_wipe` keys on."""
     async with connection() as conn:
         human_id, _ = await humans.create_human(
-            conn, display_name=display_name, email=f"{local}@x.sync-test.invalid"
+            conn,
+            origin=account_origin.TEST_FIXTURE,
+            display_name=display_name,
+            email=f"{local}@x.sync-test.invalid",
         )
         await humans.grant_role(
             conn, human_id=human_id, role=role, venture_id=None, granted_by=human_id

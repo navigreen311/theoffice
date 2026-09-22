@@ -2976,6 +2976,9 @@ async def list_runs(
                    r.status, r.current_gate, r.artifacts_hash, r.started_at,
                    r.completed_at, r.started_by::text AS started_by,
                    h.display_name AS started_by_name, h.email AS started_by_email,
+                   -- DECLARED (entry 151). This was inferred from the two columns
+                   -- above until `dev-all build check` showed what that costs.
+                   h.origin AS started_by_origin,
                    (SELECT count(*) FROM provisioning_gate_result g
                      WHERE g.run_id = r.run_id AND g.verdict = 'passed') AS gates_passed
             FROM provisioning_run r
@@ -2988,10 +2991,14 @@ async def list_runs(
         rows = [dict(r) for r in await cur.fetchall()]
 
     for row in rows:
-        row["fixture"] = account_origin.origin_of({
-            "display_name": row.get("started_by_name"),
-            "email": row.get("started_by_email"),
-        }) == account_origin.TEST_FIXTURE
+        # A run whose starter is no longer an account is not a fixture run. The join is
+        # a LEFT one because `started_by` outlives the row it names, and treating an
+        # absent account as a fixture would hide a real run rather than a test one.
+        row["fixture"] = (
+            row.get("started_by_origin") is not None
+            and account_origin.origin_of({"origin": row["started_by_origin"]})
+            == account_origin.TEST_FIXTURE
+        )
 
     excluded = 0
     if not include_fixtures:

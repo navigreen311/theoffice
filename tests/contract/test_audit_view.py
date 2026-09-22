@@ -10,7 +10,7 @@ import httpx
 import psycopg
 import pytest
 
-from broker import audit_events, audit_view, humans
+from broker import account_origin, audit_events, audit_view, humans
 from broker.app import app
 from broker.db import connection
 from tests.conftest import requires_db, wipe_venture
@@ -57,10 +57,21 @@ async def api():
         yield client
 
 
-async def make(name: str, email: str, role: str = "ivan") -> tuple[uuid.UUID, str]:
+async def make(
+    name: str,
+    email: str,
+    role: str = "ivan",
+    origin: str = account_origin.HUMAN,
+) -> tuple[uuid.UUID, str]:
+    """An account of a DECLARED origin (entry 151).
+
+    `_fixture` on the log used to read the actor's display name and address; it reads
+    `office_human.origin` now, so a test that wants a fixture entry says so here rather
+    than encoding it in an address.
+    """
     async with connection() as conn:
         human_id, token = await humans.create_human(
-            conn, display_name=name, email=email
+            conn, origin=origin, display_name=name, email=email
         )
         await humans.grant_role(
             conn, human_id=human_id, role=role, venture_id=None, granted_by=SEED
@@ -251,7 +262,10 @@ async def test_the_log_can_be_filtered_by_actor(api):
 async def test_fixture_entries_are_tagged_filtered_and_never_removed(api, admin):
     """Filtering changes the view. The record is append-only and stays whole."""
     _id, token = await make("Ivan", "ivan@audit.example.com")
-    _fid, fixture_token = await make("smoke-abcd1234", "smoke-abcd1234@example.invalid")
+    _fid, fixture_token = await make(
+        "smoke-abcd1234", "smoke-abcd1234@example.invalid",
+        origin=account_origin.TEST_FIXTURE,
+    )
 
     await api.post("/api/controls/audit-chain", json={}, headers=auth(token))
     await api.post("/api/controls/audit-chain", json={}, headers=auth(fixture_token))
@@ -342,7 +356,10 @@ async def test_the_first_entry_says_it_has_no_predecessor(api, admin):
 async def test_the_export_states_its_own_chain_state_and_fixture_inclusion(api):
     """An export that does not say those things looks like evidence and is not."""
     _id, token = await make("Ivan", "ivan@audit.example.com")
-    _fid, fixture_token = await make("smoke-99887766", "smoke-99887766@example.invalid")
+    _fid, fixture_token = await make(
+        "smoke-99887766", "smoke-99887766@example.invalid",
+        origin=account_origin.TEST_FIXTURE,
+    )
     await api.post("/api/controls/audit-chain", json={}, headers=auth(fixture_token))
 
     export = (await api.get("/api/audit/export", headers=auth(token))).json()

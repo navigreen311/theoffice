@@ -45,6 +45,7 @@ from pydantic import BaseModel, Field
 
 from broker import (
     access_overview,
+    account_origin,
     audit,
     audit_events,
     audit_view,
@@ -89,7 +90,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0052"
+EXPECTED_SCHEMA_REVISION = "0053"
 
 # `live_grants` means "a grant no live revocation covers". The four-scope rule that
 # decides that has exactly one copy - `revocation._covers`, the same text
@@ -2755,6 +2756,11 @@ async def create_human_route(body: HumanRequest, conn: DB, me: ME) -> dict[str, 
     human_id, token = await humans.create_human(
         conn, display_name=body.display_name, email=body.email,
         auth_method=body.auth_method,
+        # A PERSON, DECLARED (entry 151). This route creates a colleague: it requires
+        # `compliance_officer`, it returns a credential meant for somebody to use, and
+        # the account it makes is expected to sign things. Nothing reaches here to make
+        # a fixture, and a route that could would need a reason on the record.
+        origin=account_origin.HUMAN,
     )
     if body.role is not None:
         await humans.grant_role(

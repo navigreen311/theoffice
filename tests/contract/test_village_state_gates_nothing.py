@@ -200,7 +200,7 @@ import uuid  # noqa: E402
 import httpx  # noqa: E402
 import psycopg  # noqa: E402
 
-from broker import humans, village  # noqa: E402
+from broker import account_origin, humans, village  # noqa: E402
 from broker.app import app  # noqa: E402
 from broker.db import connection  # noqa: E402
 
@@ -249,7 +249,10 @@ async def seeded(admin: psycopg.Connection):
 
     async with connection() as conn:
         human_id, token = await humans.create_human(
-            conn, display_name="D4 reader", email="d4@x.d4.invalid"
+            conn,
+            origin=account_origin.TEST_FIXTURE,
+            display_name="D4 reader",
+            email="d4@x.d4.invalid",
         )
         await humans.grant_role(
             conn, human_id=human_id, role="venture_operator", venture_id=None,
