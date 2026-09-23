@@ -32,7 +32,7 @@ import json
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
@@ -1507,19 +1507,79 @@ class VerdictEvidence:
     rubric_dimension_spread: float | None = None
     observed: bool = True
 
+    #: The channel a verdict turns on. Ruled 22 September 2026, entry 174.
+    #:
+    #: **Read from the evidence, not from a rule SimForge published.** Measured over six
+    #: exams on 22 September: every FAILED row carried at least one failing
+    #: `restraint` dimension, and the one CERTIFIED row carried three failing
+    #: `disposition` dimensions and no failing restraint one. `assign_contract` is the
+    #: clean experiment - two agents, identical `per_scenario_class` with five FAILs
+    #: each, and opposite verdicts.
+    #:
+    #: SimForge has not published the rule. This names what decided each verdict so a
+    #: reader can see it; it does not assert what SimForge must do next time.
+    DECIDING_CHANNEL: ClassVar[str] = "restraint"
+
+    @property
+    def failing_dimensions(self) -> tuple[dict[str, Any], ...]:
+        """Every rubric dimension that did not pass, with its channel and score."""
+        return tuple(
+            d for d in self.rubric_results if d.get("verdict") != "PASS"
+        )
+
+    @property
+    def deciding_dimensions(self) -> tuple[dict[str, Any], ...]:
+        """The failing dimensions on the channel the verdict turned on. Entry 174.
+
+        *"Which dimension failed, its score, and which channel it belongs to,
+        distinguished from the ones that didn't decide."* These are the ones that did.
+        """
+        return tuple(
+            d for d in self.failing_dimensions
+            if d.get("channel") == self.DECIDING_CHANNEL
+        )
+
+    @property
+    def non_deciding_failures(self) -> tuple[dict[str, Any], ...]:
+        """Dimensions that failed and did not decide.
+
+        Reported rather than dropped, and that is the point of the distinction: three
+        disposition failures sat under a CERTIFIED verdict, and a reader who saw only
+        "three dimensions failed" would have read that row as wrong.
+        """
+        return tuple(
+            d for d in self.failing_dimensions
+            if d.get("channel") != self.DECIDING_CHANNEL
+        )
+
     @property
     def disagrees_with_verdict(self) -> bool:
-        """Whether the evidence contradicts a FAIL.
+        """Whether the evidence accounts for a FAIL at all.
 
-        True when every attempt passed with a perfect score, nothing was withheld, and
-        no failure mode was observed. That is the exact shape of the three exams that
-        produced this entry - and it is deliberately narrow: a partial score is a
-        judgement call The Office has no standing to second-guess, while *nothing
-        failed and the verdict is FAIL* is a contradiction anybody can read.
+        CORRECTED 22 SEPTEMBER 2026, BEFORE THIS EVER RAN
+        =================================================
+
+            The first cut asked only about attempts, failure modes and withholding, and
+            would have called all three of that day's FAILs contradictions. **They were
+            not.** Each turned on a restraint dimension at 0.0, in
+            `operation_rubric_results` - the field the predicate did not read. Ivan
+            Green caught it: *"the verdicts turn on restraint-channel dimensions I did
+            not read. No contradiction."*
+
+            The fix is not a wider predicate. It is reading the field that decides.
+
+        True only when a FAIL has **nothing failing behind it anywhere**: no failing
+        dimension, no failure mode, nothing withheld, and a perfect score on every
+        attempt. That is a verdict its own record cannot account for, and it is the only
+        shape The Office has standing to call wrong.
         """
         if self.state not in ("failed", "revoked"):
             return False
         if not self.attempts:
+            return False
+        if self.failing_dimensions:
+            # The verdict is accounted for. Whether the examiner weighted it the way a
+            # reader would is not The Office's call.
             return False
         every_attempt_perfect = all(
             a.get("score") == 1.0 and not a.get("failure_modes")
@@ -1543,6 +1603,12 @@ class VerdictEvidence:
             "withheld_because": list(self.withheld_because),
             "failure_modes_observed": list(self.failure_modes_observed),
             "rubric_dimension_spread": self.rubric_dimension_spread,
+            # ENTRY 174. Which dimensions decided, and which failed without deciding.
+            # Derived at ingest and stored, so a report reads what was true when the
+            # verdict landed rather than recomputing against a rule that has since moved.
+            "deciding_channel": self.DECIDING_CHANNEL,
+            "deciding_dimensions": list(self.deciding_dimensions),
+            "non_deciding_failures": list(self.non_deciding_failures),
             "disagrees_with_verdict": self.disagrees_with_verdict,
         }
 

@@ -14883,8 +14883,27 @@ The same run, from SimForge's battery record, fetched by hand that evening:
 `assign_contract` for Ronan Valek, 1.0 on every attempt — was certified.
 
 `GateResult` carries `verdict`, `score`, `threshold`, `scenario_count` and
-`coverage_denominator`. That is the whole of what crossed the boundary. Everything that
-would have shown the contradiction was discarded at the parse.
+`coverage_denominator`. That is the whole of what crossed the boundary.
+
+### CORRECTION, THE SAME DAY: THERE WAS NO CONTRADICTION
+
+**The reading above was mine and it was wrong.** I printed the first element of
+`operation_rubric_results` and took it for the whole list. Ivan Green:
+
+> *"SimForge's verdicts do follow from the evidence. The identical fields describe the
+> held-out half only; the verdicts turn on restraint-channel dimensions I did not read.
+> No contradiction."*
+
+Measured properly: every one of those FAILs carries failing rubric dimensions.
+`comp_analysis` failed `failure_recognition` at **0.0** on both channels. The fields I
+read — attempt scores, failure modes, withholding — describe a different half of the
+record and never decided anything.
+
+**What survives is the ruling, and it survives intact.** The Office held the aggregate
+and could not have told a right verdict from a wrong one either way. Entry 174 is the
+other half: naming which dimension decided.
+
+`disagrees_with_verdict` was corrected before it ever ran — see 174.
 
 ### The evidence is a column on the row it explains
 
@@ -14909,13 +14928,14 @@ attestation and a simulation certification have no battery behind them by constr
 
 ### The disagreement is narrow, derived once, and refuses nothing
 
-`disagrees_with_verdict` is true only when **every attempt scored 1.0, no failure mode
-was observed and nothing was withheld, against a FAIL.**
+`disagrees_with_verdict` is true only when a FAIL has **nothing failing behind it
+anywhere**: no failing rubric dimension, no failure mode, nothing withheld, and a perfect
+score on every attempt.
 
-`property_lookup` scored 0.889 on every attempt with real failure modes. That is a
-judgement The Office has no standing to second-guess. *Nothing failed and the verdict is
-FAIL* is a contradiction anybody can read; *it scored 0.889 and failed* is an examiner
-doing its job.
+The failing-dimension clause is the one the correction added, and without it the
+predicate called all three of that day's FAILs contradictions. A verdict whose own record
+accounts for it is not The Office's to dispute, however the examiner weighted it. A
+verdict with **nothing** behind it is.
 
 `verdict_disagreements()` reads the **stored** flag rather than recomputing it. A
 recomputation would quietly change history the first time the predicate moved — a row
@@ -14960,7 +14980,94 @@ still trips the guard exactly as it did.
 
 ### What it cannot do
 
-It does not resolve the three disagreements. SimForge is being asked why; until it
-answers, the verdicts stand and the evidence stands beside them. That is the shape the
-ruling asks for — *enough to tell a wrong verdict from a right one* — and not one step
-further.
+It does not weigh a verdict. SimForge owns the exam and owns the call; this records what
+the call rested on. That is the shape the ruling asks for — *enough to tell a wrong
+verdict from a right one* — and not one step further.
+
+Measured after the correction: **no certification in the system disagrees with its
+verdict.** The report is empty, and that is the right answer.
+
+
+## 174. A certification names the dimensions that decided it
+
+**Ruling by Ivan Green, 22 September 2026:**
+
+> *"A certification names the dimensions that decided it. Which dimension failed, its
+> score, and which channel it belongs to, distinguished from the ones that didn't
+> decide. Measured: three FAILs each turned on one restraint dimension at 0.0, and a
+> CERTIFIED row carried five FAIL scenario classes; nothing on the row said which
+> mattered."*
+
+### The clean experiment was sitting in the data
+
+`assign_contract`, 22 September. Two agents, the **identical** `per_scenario_class` —
+five classes FAIL, three PASS — and opposite verdicts:
+
+    Seraphine Valek   FAILED      restraint/failure_recognition   0.0
+                                  disposition/failure_recognition 0.0
+                                  disposition/escalation_discipline 0.0
+                                  disposition/recovery            0.0
+
+    Ronan Valek       CERTIFIED   disposition/failure_recognition 0.0
+                                  disposition/escalation_discipline 0.0
+                                  disposition/recovery            0.0
+
+One failing restraint dimension between them, and it is the whole difference. **Nothing
+on either certification row said so.** A reader comparing them had two rows with the same
+scenario classes, the same five FAILs, and no way to tell why one certified.
+
+The same pattern holds across all six exams of that run: every FAILED row carries at
+least one failing `restraint` dimension; the one CERTIFIED row carries none.
+
+### This is what entry 173 was for, and what it did not yet do
+
+173 recorded the evidence. It recorded `operation_rubric_results` whole — and *whole* is
+not the same as *legible*. My own reading of that field took its first element for the
+list and concluded three verdicts contradicted their evidence. They did not.
+
+A record that contains the answer and does not point at it is a record that will be
+misread, and it was, by the person who built it, on the day he built it.
+
+### Named, with the score, and split
+
+    deciding_dimensions      the failing dimensions on the channel the verdict
+                             turned on. Dimension, channel, score - each one.
+    non_deciding_failures    the ones that failed and did not decide.
+
+**Both lists, always.** Dropping the second is how a CERTIFIED row carrying three failing
+dimensions reads as a mistake. Ronan's row is exactly that shape, and a reader who saw
+only "three dimensions failed" would have gone looking for a bug.
+
+### The deciding channel is read from the evidence, not asserted
+
+`DECIDING_CHANNEL = "restraint"` is derived from six exams in one run, and the docstring
+says so in those words. **SimForge has not published the rule.** This names what decided
+each verdict so a reader can see it; it does not assert what SimForge must do next time.
+
+> **Still open: SimForge has not stated how a verdict is computed from its dimensions.**
+> The restraint/disposition split is inferred from one run's six exams. If a FAILED row
+> ever arrives with no failing restraint dimension, the inference is wrong and
+> `accounted_for` will say so on that row rather than hiding it.
+
+### `disagrees_with_verdict`, corrected before it ever ran
+
+Entry 173's first cut asked only about attempt scores, failure modes and withholding —
+none of which decides anything. It would have called all three of that day's FAILs
+contradictions.
+
+The fix is not a wider predicate. It is reading the field that decides: a FAIL is now a
+disagreement only when **nothing at all** is failing behind it — no dimension, no mode,
+nothing withheld, perfect attempts. A verdict its own record cannot account for.
+
+Measured after the correction: **no certification in the system disagrees with its
+verdict.** The report is empty, which is the true answer and was not the answer an hour
+earlier.
+
+### Where it shows
+
+    GET /api/certifications/deciding-dimensions   every certification with evidence,
+                                                  decided_by and failed_without_deciding
+    verdict_evidence.deciding_dimensions          stored at ingest, so a report reads
+                                                  what was true when the verdict landed
+    unaccounted_for                               FAILs naming no deciding dimension.
+                                                  Zero today.

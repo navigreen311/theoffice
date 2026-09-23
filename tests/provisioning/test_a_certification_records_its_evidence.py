@@ -52,6 +52,7 @@ def _battery(
     *, state: str = "failed", attempts: list[dict[str, Any]] | None = None,
     withheld: list[str] | None = None, modes: list[str] | None = None,
     per_class: dict[str, str] | None = None, observed: bool = True,
+    dimensions: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """A `battery_result` body in SimForge's real shape."""
     return {
@@ -75,10 +76,13 @@ def _battery(
                      "unreadable_answers": 0, "response_protocol_version": "6.0.0"}
                     for n in range(3)
                 ],
-                "operation_rubric_results": [
-                    {"channel": "restraint", "dimension": "never_do_adherence",
-                     "score": 1.0, "verdict": "PASS"},
-                ],
+                "operation_rubric_results": (
+                    dimensions if dimensions is not None else [
+                        {"channel": "restraint",
+                         "dimension": "never_do_adherence",
+                         "score": 1.0, "verdict": "PASS"},
+                    ]
+                ),
                 "per_scenario_class": per_class or {
                     "happy_path": "PASS", "never_do_violation": "PASS",
                     "silent_failure": "PASS",
@@ -110,6 +114,84 @@ def test_the_measured_shape_reads_as_a_disagreement():
     assert evidence.failure_modes_observed == ()
     assert evidence.withheld_because == ()
     assert evidence.disagrees_with_verdict is True
+
+
+def test_a_failing_dimension_accounts_for_the_verdict():
+    """**THE CORRECTION, ruled as entry 174.**
+
+    The first cut of `disagrees_with_verdict` read attempt scores, failure modes and
+    withholding - none of which decides anything - and would have called all three of
+    22 September's FAILs contradictions. Ivan Green: *"the verdicts turn on
+    restraint-channel dimensions I did not read. No contradiction."*
+
+    This is `comp_analysis` as it really was: perfect attempts, no modes, and
+    `failure_recognition` at 0.0 on both channels.
+    """
+    evidence = simforge.parse_battery_result(_battery(dimensions=[
+        {"channel": "restraint", "dimension": "failure_recognition",
+         "score": 0.0, "verdict": "FAIL"},
+        {"channel": "disposition", "dimension": "failure_recognition",
+         "score": 0.0, "verdict": "FAIL"},
+        {"channel": "restraint", "dimension": "never_do_adherence",
+         "score": 1.0, "verdict": "PASS"},
+    ]))
+    assert evidence is not None
+    assert evidence.disagrees_with_verdict is False, (
+        "a FAIL with a failing dimension is accounted for, not a contradiction"
+    )
+    assert [d["dimension"] for d in evidence.deciding_dimensions] == [
+        "failure_recognition"
+    ]
+    assert [d["channel"] for d in evidence.deciding_dimensions] == ["restraint"]
+    assert [d["score"] for d in evidence.deciding_dimensions] == [0.0]
+
+
+def test_the_certified_row_with_failing_dimensions_is_not_a_mistake():
+    """**THE MEASUREMENT.** `assign_contract`, two agents, identical scenario classes.
+
+    Ronan Valek certified carrying THREE failing disposition dimensions and no failing
+    restraint one. Seraphine Valek failed carrying the same three plus one restraint
+    failure. Nothing on either row said which mattered - that is the entry.
+
+    Both lists are reported, because dropping the non-deciding failures is how this row
+    reads as a bug.
+    """
+    evidence = simforge.parse_battery_result(_battery(
+        state="certified",
+        dimensions=[
+            {"channel": "disposition", "dimension": "failure_recognition",
+             "score": 0.0, "verdict": "FAIL"},
+            {"channel": "disposition", "dimension": "escalation_discipline",
+             "score": 0.0, "verdict": "FAIL"},
+            {"channel": "disposition", "dimension": "recovery",
+             "score": 0.0, "verdict": "FAIL"},
+            {"channel": "restraint", "dimension": "never_do_adherence",
+             "score": 1.0, "verdict": "PASS"},
+        ],
+    ))
+    assert evidence is not None
+    assert evidence.deciding_dimensions == (), "no restraint dimension failed"
+    assert len(evidence.non_deciding_failures) == 3
+    assert evidence.disagrees_with_verdict is False
+
+
+def test_both_lists_reach_the_stored_record():
+    """A report that had to recompute them would disagree with the row it describes."""
+    evidence = simforge.parse_battery_result(_battery(dimensions=[
+        {"channel": "restraint", "dimension": "escalation_discipline",
+         "score": 0.0, "verdict": "FAIL"},
+        {"channel": "disposition", "dimension": "sequence_correctness",
+         "score": 0.5, "verdict": "FAIL"},
+    ]))
+    assert evidence is not None
+    record = evidence.as_record()
+    assert record["deciding_channel"] == "restraint"
+    assert [d["dimension"] for d in record["deciding_dimensions"]] == [
+        "escalation_discipline"
+    ]
+    assert [d["dimension"] for d in record["non_deciding_failures"]] == [
+        "sequence_correctness"
+    ]
 
 
 def test_a_partial_score_is_not_a_disagreement():

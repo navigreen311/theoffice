@@ -1047,12 +1047,95 @@ async def verdict_disagreements(
                 row["verdict_evidence"].get("failure_modes_observed") or []
             ),
             "withheld_because": row["verdict_evidence"].get("withheld_because") or [],
+            "deciding_dimensions": (
+                row["verdict_evidence"].get("deciding_dimensions") or []
+            ),
             "per_scenario_class": (
                 row["verdict_evidence"].get("per_scenario_class") or {}
             ),
         }
         for row in rows
     ]
+
+
+async def deciding_dimensions(
+    conn: AsyncConnection, venture_id: str | None = None
+) -> list[dict[str, Any]]:
+    """What decided each certification, and what failed without deciding. Entry 174.
+
+    RULED 22 SEPTEMBER 2026 (decisions entry 174)
+    =============================================
+
+        *"A certification names the dimensions that decided it. Which dimension failed,
+        its score, and which channel it belongs to, distinguished from the ones that
+        didn't decide."*
+
+    THE MEASUREMENT
+    ===============
+
+        `assign_contract`, 22 September, two agents with the IDENTICAL
+        `per_scenario_class` - five classes FAIL, three PASS:
+
+            Seraphine Valek   FAILED     restraint/failure_recognition 0.0
+                                         + 3 disposition failures
+            Ronan Valek       CERTIFIED  no failing restraint dimension
+                                         + 3 disposition failures
+
+        Nothing on either certification row said which of those mattered. A reader
+        comparing them had two rows with the same scenario classes and opposite
+        verdicts, and no way to tell why.
+
+    **Both lists, always.** The non-deciding failures are reported rather than dropped
+    because dropping them is how a CERTIFIED row with three failing dimensions reads as
+    a mistake.
+    """
+    where = "AND g.venture_id = %s " if venture_id else ""
+    params: tuple[Any, ...] = (venture_id,) if venture_id else ()
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT DISTINCT c.cert_id, c.unit, c.module_id, c.department, c.forge_id, "
+            "       c.state, c.simforge_verdict, c.score, c.rubric_version, "
+            "       c.verdict_evidence, i.agent_name "
+            "  FROM certification c "
+            "  LEFT JOIN office_agent_identity i "
+            "         ON i.office_agent_id = c.office_agent_id "
+            "  LEFT JOIN agent_forge_grant g "
+            "         ON g.office_agent_id = c.office_agent_id "
+            "        AND g.superseded_at IS NULL "
+            " WHERE c.verdict_evidence IS NOT NULL "
+            f"   {where}ORDER BY c.forge_id, c.module_id, i.agent_name",
+            params,
+        )
+        rows = [dict(r) for r in await cur.fetchall()]
+
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        evidence = row["verdict_evidence"] or {}
+        deciding = evidence.get("deciding_dimensions") or []
+        out.append({
+            "cert_id": str(row["cert_id"]),
+            "target": row["module_id"] or row["department"],
+            "forge_id": row["forge_id"],
+            "agent_name": row["agent_name"],
+            "verdict": row["simforge_verdict"],
+            "state": row["state"],
+            "score": float(row["score"]) if row["score"] is not None else None,
+            "deciding_channel": evidence.get("deciding_channel"),
+            # Named one by one, with the score. "Three dimensions failed" is the
+            # sentence this exists to replace.
+            "decided_by": [
+                {"dimension": d.get("dimension"), "channel": d.get("channel"),
+                 "score": d.get("score")}
+                for d in deciding
+            ],
+            "failed_without_deciding": [
+                {"dimension": d.get("dimension"), "channel": d.get("channel"),
+                 "score": d.get("score")}
+                for d in (evidence.get("non_deciding_failures") or [])
+            ],
+            "accounted_for": bool(deciding) or row["state"] != "failed",
+        })
+    return out
 
 
 async def recompute_staleness(
