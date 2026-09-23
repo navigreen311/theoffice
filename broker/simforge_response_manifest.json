@@ -98,7 +98,7 @@
       "module_id": "The module examined. NULL on a department unit.",
       "agent_id": "The agent examined.",
       "observed": "Whether SimForge has a battery record at all. False is a real answer and not an error: a run may exist with no battery behind it.",
-      "certifications": "One per certification this battery produced. Each carries the per-attempt record, the rubric dimensions, the per-class verdicts, and what was withheld - which together are what let a reader disagree with the verdict.",
+      "certifications": "One per certification this battery produced. Each carries the per-attempt record, the rubric dimensions, the per-class verdicts, and what was withheld - which together are what let a reader disagree with the verdict. Since SimForge ADR-0112 each also carries instruction_sections {shown, required_by_keys, missing}: section names only, null when nothing was recorded.",
       "join": "SimForge's own statement of how it matched this battery to the run. Prose, and deliberately read as a label rather than parsed."
     }
   }
