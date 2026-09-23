@@ -600,9 +600,11 @@ def v13(pack: BusinessPack) -> tuple[bool, str]:
     except VolumeNotDeclaredError as gap:
         if gap.missing:
             return (False,
-                    f"volume not declared: {_join(gap.missing)}. Every module below "
-                    "auto_execute needs an expected_weekly_volume, because demand is that "
-                    "rate and nothing stands in for it.")
+                    f"volume not declared: {_join(gap.missing)}. Every module a filled "
+                    "position operates needs an expected_weekly_volume, because demand is "
+                    "that rate and nothing stands in for it - including one declared "
+                    "auto_execute, which an agent certifying lower turns into a rate this "
+                    "gate has already passed without (entry 178).")
         return (False, f"volume not declared: {gap.reason}.")
 
     unsplit = _humans_without_a_split(pack)

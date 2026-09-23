@@ -8,7 +8,10 @@
         "Produce a first-pass value estimate"
       ],
       "effective_compliance_flags": [],
-      "expected_weekly_volume": {},
+      "expected_weekly_volume": {
+        "cre-forge/comp_analysis": 8.0,
+        "cre-forge/property_lookup": 20.0
+      },
       "forge_modules_operated": [
         "cre-forge/comp_analysis",
         "cre-forge/property_lookup"
@@ -41,7 +44,8 @@
       ],
       "effective_compliance_flags": [],
       "expected_weekly_volume": {
-        "cre-forge/assign_contract": 1.0
+        "cre-forge/assign_contract": 1.0,
+        "cre-forge/buyer_match": 8.0
       },
       "forge_modules_operated": [
         "cre-forge/assign_contract",

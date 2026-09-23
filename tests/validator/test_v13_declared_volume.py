@@ -94,24 +94,49 @@ def _gate_4_5(pack):
 # --------------------------------------------------------------- an undeclared volume
 
 def test_gate_2_blocks_on_an_undeclared_volume_and_names_the_module():
-    """Burkham's live Pack, unedited. This is the whole of its Gate 2 verdict today."""
+    """Burkham's live Pack, unedited. This is the whole of its Gate 2 verdict today.
+
+    REVISED 23 SEPTEMBER 2026 (entry 178). It used to assert that the four modules
+    declared below `auto_execute` were named and the six at `auto_execute` were NOT -
+    "a rate for one of those would multiply by zero". That exemption is gone, and the
+    reason is in `modules_needing_volume`'s docstring: certification lowers the tier,
+    and the Pack has no number when it does.
+
+    So all ten are missing now. `_join` caps the rendered list at five and says how many
+    more, which is why this asserts in two places: the MESSAGE is what an operator reads
+    and is deliberately short, and `gap.missing` is the whole list.
+    """
     pack = load_pack(BURKHAM)
     ok, message = v13(pack)
 
     assert not ok
     assert message.startswith("volume not declared:")
+    # Five named and the count of the rest. `_join`'s limit, not a truncation defect.
+    assert "(+5 more)" in message
+
+    with pytest.raises(VolumeNotDeclaredError) as raised:
+        demand_from_the_pack(pack)
+    missing = set(raised.value.missing)
+
     for module in (
         "Intake Concierge/capitalforge/record_consent",
         "Placement Strategist/capitalforge/submit_application",
         "Compliance Reviewer/capitalforge/scan_communication",
         "Compliance Reviewer/capitalforge/regulator_dossier_export",
     ):
-        assert module in message, f"{module} is not named in the refusal"
+        assert module in missing, f"{module} is not named in the refusal"
 
-    # Named, and named ONLY - a module at auto_execute asks nobody, so a rate for it would
-    # multiply by zero. Requiring one would be requiring a number nobody can act on.
-    assert "capitalforge/client_read" not in message
-    assert "capitalforge/portfolio_health" not in message
+    # THE SIX THAT ARE NEW, every one declared `auto_execute`. Each was exempt until an
+    # agent certified below it, which is the whole of the ruling.
+    for module in (
+        "Intake Concierge/capitalforge/client_read",
+        "Intake Concierge/capitalforge/client_read_pii",
+        "Diagnostic Analyst/capitalforge/statement_pull",
+        "Stack Manager/capitalforge/portfolio_health",
+        "Stack Manager/capitalforge/restack_recommend",
+        "Compliance Reviewer/capitalforge/compliance_manifest_assemble",
+    ):
+        assert module in missing, f"{module} should now need a rate"
 
 
 def test_gate_4_5_blocks_on_the_same_undeclared_volume():
@@ -127,27 +152,47 @@ def test_gate_4_5_blocks_on_the_same_undeclared_volume():
     assert "Intake Concierge/capitalforge/record_consent" in raised.value.missing
 
 
-def test_an_auto_execute_module_needs_no_volume_and_lowering_its_tier_requires_one():
-    """The exemption is a consequence of the tier, and it expires with the tier.
+def test_an_auto_execute_module_needs_a_volume_because_certification_can_lower_it():
+    """**THE RULING**, and the case that produced it. Entry 178.
 
-    Greenstone declares `buyer_match` auto_execute and no volume for it. Drop it to
-    `propose` and the same Pack is refused, naming that module - which is what stops the
-    exemption becoming a place to park a module nobody wants to size.
+    This used to assert the opposite - that `auto_execute` exempts a module, and the
+    exemption expires only when the PACK lowers the tier. The Pack is not the only thing
+    that lowers it. `_effective_tier` takes the lower of declared and certified, so an
+    agent certifying at `propose` lowers it without the Pack changing a byte.
+
+    Measured: Greenstone declared `buyer_match` auto_execute with no volume, Gate 2
+    passed, Ronan Valek certified at `propose`, and the next run blocked at Gate 3 -
+    after Gate 2 had reported the same Pack sound twenty seconds earlier.
+
+    So the declared tier no longer decides the question, and lowering it changes
+    nothing, because the rate was already required.
     """
     pack = load_pack(GREENSTONE)
+    # Declared as of entry 178, which is what makes the live Pack valid at all.
     assert modules_needing_volume(pack) == []
 
-    lowered = _with_position(
+    stripped = _with_position(
         pack,
+        "Buyer Network Manager",
+        expected_weekly_volume={"cre-forge/assign_contract": 1},
+    )
+    assert modules_needing_volume(stripped) == [
+        "Buyer Network Manager/cre-forge/buyer_match"
+    ]
+    ok, message = v13(stripped)
+    assert not ok
+    assert "Buyer Network Manager/cre-forge/buyer_match" in message
+
+    # AND LOWERING THE DECLARED TIER CHANGES NOTHING. Under the old rule that was the
+    # only way to make the rate required. It was required already.
+    lowered = _with_position(
+        stripped,
         "Buyer Network Manager",
         module_trust_tiers={"cre-forge/buyer_match": "propose"},
     )
     assert modules_needing_volume(lowered) == [
         "Buyer Network Manager/cre-forge/buyer_match"
     ]
-    ok, message = v13(lowered)
-    assert not ok
-    assert "Buyer Network Manager/cre-forge/buyer_match" in message
 
 
 def test_an_undeclared_divisor_blocks_rather_than_assuming_a_week():
@@ -181,7 +226,12 @@ def test_the_declared_rate_is_used_and_is_not_multiplied_by_headcount():
     extra deal. A rate is a property of the business.
     """
     pack = load_pack(GREENSTONE)
-    assert _bnm(pack).expected_weekly_volume == {"cre-forge/assign_contract": 1}
+    assert _bnm(pack).expected_weekly_volume == {
+        "cre-forge/assign_contract": 1,
+        # Added 23 September 2026, entry 178. Simulation scale, from the 5-10 active
+        # deals this Pack already declares.
+        "cre-forge/buyer_match": 8,
+    }
     assert pack.capacity_demand.operating_days_per_week == 5
 
     demand = demand_from_the_pack(pack)
