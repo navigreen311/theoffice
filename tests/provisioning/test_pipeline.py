@@ -125,8 +125,13 @@ async def test_a_run_stops_at_the_first_blocking_gate_and_names_it(
         await provisioning.record_human_review(
             conn, run_id=run_id, human=operator, note="reviewed"
         )
+        # `PartitionAbsent` EXPLICITLY. The default asks SimForge now (their ADR-0111),
+        # and with no Forge in the room that blocks on "nobody was able to ask" - true
+        # about this test, and not the fact it is making. What this test pins is a run
+        # reaching the ceiling and stopping there, which needs the ceiling's own reason.
         outcomes = await provisioning.advance(
-            conn, run_id=run_id, actor=operator.human_id
+            conn, run_id=run_id, actor=operator.human_id,
+            held_out=provisioning.PartitionAbsent(),
         )
         state = await provisioning.get_run(conn, run_id)
 
@@ -414,9 +419,16 @@ async def test_gates_9_and_9_5_block_they_are_never_skipped(feasible_pack, opera
         await provisioning.record_human_review(
             conn, run_id=run_id, human=operator, note="reviewed"
         )
-        # No `held_out` argument: the default is the truth about this deployment.
+        # `PartitionAbsent` EXPLICITLY, which is what this test has always been about.
+        #
+        # It used to be the default and this line read "no held_out argument: the
+        # default is the truth about this deployment". The default asks SimForge now
+        # (their ADR-0111), so a test with no Forge in the room would block on "nobody
+        # was able to ask" - a true statement about the test and not the one this test
+        # is making, which is about a run reaching the ceiling and stopping there.
         outcomes = await provisioning.advance(
-            conn, run_id=run_id, actor=operator.human_id
+            conn, run_id=run_id, actor=operator.human_id,
+            held_out=provisioning.PartitionAbsent(),
         )
         state = await provisioning.get_run(conn, run_id)
 

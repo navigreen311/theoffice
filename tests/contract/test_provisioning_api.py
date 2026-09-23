@@ -337,7 +337,21 @@ async def test_the_real_pack_clears_gate_4_5_through_the_api(world, api, pack_ya
 
     # And the reason it stops is the ceiling's own, not a capacity one. See
     # test_pipeline.py for the full arc of the figure that used to stop it here.
-    assert "held-out adversarial partition" in result["outcomes"][-1]["reason"]
+    #
+    # THE CEILING NOW HAS TWO WORDINGS, and this asserts the pair rather than one.
+    # Gate 9.5 used to answer from `PartitionAbsent`, which could only say "the
+    # partition does not exist". It asks SimForge now, so a Forge this test environment
+    # cannot reach blocks on "nobody was able to ask" instead - a different fact, and
+    # the reason it is a different sentence.
+    #
+    # Both are the deployment ceiling and neither is a capacity finding, which is what
+    # this line is here to pin. Narrowing it to one wording would make the test pass or
+    # fail on whether SimForge happened to be running.
+    reason = result["outcomes"][-1]["reason"]
+    assert (
+        "held-out adversarial partition" in reason
+        or "held-out verdict could not be read" in reason
+    ), reason
 
 
 async def test_a_run_from_the_console_stops_at_gate_9_5(world, api, feasible_yaml):

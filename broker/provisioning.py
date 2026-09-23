@@ -164,7 +164,22 @@ class SimForgeHeldOut:
         self._conn = conn
 
     async def verdict(self, venture_id: str) -> str | None:
-        answer = await self._client.gate_9_5_verdict(self._conn, venture_id)
+        # A CLIENT THAT CANNOT BE ASKED IS NOT AN ABSENT PARTITION. The same shape
+        # `_forge_build` uses for a client with no `build` method, and its docstring
+        # gives the reason: "A missing method is recorded as 'this client could not be
+        # asked', which is true, and is not the same finding as a Forge that would not
+        # answer." Every fake in the suite predates this method.
+        #
+        # It raises rather than returning None, so the gate blocks on
+        # `held_out_verdict_unreadable` - nobody asked - instead of recording that
+        # SimForge has no partition.
+        ask = getattr(self._client, "gate_9_5_verdict", None)
+        if ask is None:
+            raise SimForgeError(
+                "this SimForge client cannot be asked for a held-out verdict: it "
+                "dispatches no gate_9_5_verdict"
+            )
+        answer = await ask(self._conn, venture_id)
         # `client` is Any so a fake can stand in, which means this boundary is where the
         # port's own type is asserted rather than inherited.
         if answer is not None and not isinstance(answer, str):
@@ -2957,6 +2972,39 @@ async def start_run(
     return run_id
 
 
+def _held_out_source(
+    conn: AsyncConnection, simforge: SimForgeClient | None
+) -> HeldOutSource:
+    """Ask SimForge, rather than assert on its behalf.
+
+    **`PartitionAbsent` was true about this deployment and is no longer the honest
+    default.** It answered "there is no partition" without asking anybody, which was
+    correct while SimForge had no route to ask and is a claim about another system now
+    that it does - SimForge's ADR-0111 published `gate_9_5_verdict`, and its contract
+    page names the adapter The Office is to put in front of it.
+
+    The answer is unchanged today: SimForge has no sealed partition for either venture,
+    so it reports `partition_exists: false`, `SimForgeHeldOut` returns None, and Gate 9.5
+    blocks exactly as it did. **What changed is where the None comes from** - a measured
+    absence instead of an assumed one, and a Forge that cannot be reached now blocks with
+    its own reason instead of being indistinguishable from an empty partition.
+
+    The client is built here when the caller passed none, the same way `_gate_8` builds
+    one and for the same reason: `ctx.simforge` is injectable so a test can supply a
+    fake, and a gate that cannot run without one would make every caller construct it.
+
+    `PartitionAbsent` stays, and is still the right thing to pass explicitly for a test
+    that wants the partition to be absent without a Forge in the room.
+    """
+    client = simforge
+    if client is None:
+        # Imported here, not at module scope, for the cycle `_gate_8` documents.
+        from client.office_client import OfficeClient
+
+        client = SimForgeClient(OfficeClient())
+    return SimForgeHeldOut(client, conn)
+
+
 async def advance(
     conn: AsyncConnection, *, run_id: uuid.UUID, actor: uuid.UUID,
     held_out: HeldOutSource | None = None,
@@ -2983,7 +3031,7 @@ async def advance(
     reviewed = await _human_review_recorded(conn, run_id)
     ctx = _Context(
         conn, run_id, state.venture_id, pack, actor, reviewed,
-        held_out or PartitionAbsent(), simforge, build_identity,
+        held_out or _held_out_source(conn, simforge), simforge, build_identity,
     )
 
     outcomes: list[GateOutcome] = []
