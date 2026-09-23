@@ -397,6 +397,7 @@ async def record_result(
     attested_by: str = "simforge",
     bootstrap_reason: str | None = None,
     attestation_ref: uuid.UUID | None = None,
+    verdict_evidence: dict[str, Any] | None = None,
 ) -> CertState:
     """Record a SimForge verdict as a certification state.
 
@@ -557,9 +558,10 @@ async def record_result(
                state, certified_tier, instruction_content_hash, forge_api_version,
                rubric_kind, rubric_version, score, threshold, scenario_pack_ref, agent_model,
                simforge_verdict, model_digest, model_temperature, model_max_tokens,
-               model_identity, model_fingerprint, basis, attestation_ref)
+               model_identity, model_fingerprint, basis, attestation_ref,
+               verdict_evidence)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s)
+                    %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT {conflict} DO UPDATE SET
               state = EXCLUDED.state,
               certified_tier = EXCLUDED.certified_tier,
@@ -601,6 +603,11 @@ async def record_result(
               -- passes a declaration. Spelling it as a replacement keeps it true if one
               -- ever does.
               simulation_ref = EXCLUDED.simulation_ref,
+              -- REPLACED WITH THE VERDICT IT EXPLAINS. Entry 173: a
+              -- re-certification is a new exam, and evidence from the previous
+              -- sitting beside a new verdict would describe a battery that did
+              -- not produce it. Same rule the model digest follows two fields up.
+              verdict_evidence = EXCLUDED.verdict_evidence,
               updated_at = now()
             RETURNING cert_id, unit, state, certified_tier
             """,
@@ -657,6 +664,11 @@ async def record_result(
                     else "tested"
                 ),
                 attestation_ref,
+                # Entry 173. NULL when nobody asked, which is a different fact
+                # from an empty record: `parse_battery_result` returns None when
+                # SimForge has no battery, and storing `{}` would claim it was
+                # inspected and found silent.
+                Jsonb(verdict_evidence) if verdict_evidence is not None else None,
             ),
         )
         row = await cur.fetchone()
@@ -972,6 +984,158 @@ async def simulation_certifications(
             params,
         )
         return [dict(r) for r in await cur.fetchall()]
+
+
+async def verdict_disagreements(
+    conn: AsyncConnection, venture_id: str | None = None
+) -> list[dict[str, Any]]:
+    """Certifications whose own evidence contradicts their verdict. Entry 173.
+
+    *"Enough to tell a wrong verdict from a right one without asking the examiner."*
+    This is the telling. It reports and it refuses nothing: SimForge owns the exam and
+    owns the call, and what changes is that The Office can now say why it disagrees
+    instead of writing an email.
+
+    **Narrow on purpose.** `disagrees_with_verdict` is true only when every attempt
+    scored 1.0, no failure mode was observed and nothing was withheld, against a FAIL.
+    A partial score is a judgement The Office has no standing to second-guess; *nothing
+    failed and the verdict is FAIL* is a contradiction anybody can read.
+
+    Reads the stored flag rather than recomputing it, so the report agrees with what
+    was recorded at ingest. A recomputation would quietly change history the first time
+    the predicate moved.
+    """
+    where = "AND g.venture_id = %s " if venture_id else ""
+    params: tuple[Any, ...] = (venture_id,) if venture_id else ()
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT DISTINCT c.cert_id, c.unit, c.module_id, c.department, c.forge_id, "
+            "       c.state, c.simforge_verdict, c.score, c.threshold, "
+            "       c.rubric_version, c.verdict_evidence, i.agent_name "
+            "  FROM certification c "
+            "  LEFT JOIN office_agent_identity i "
+            "         ON i.office_agent_id = c.office_agent_id "
+            "  LEFT JOIN agent_forge_grant g "
+            "         ON g.office_agent_id = c.office_agent_id "
+            "        AND g.superseded_at IS NULL "
+            " WHERE c.verdict_evidence->>'disagrees_with_verdict' = 'true' "
+            f"   {where}ORDER BY c.forge_id, c.module_id, i.agent_name",
+            params,
+        )
+        rows = [dict(r) for r in await cur.fetchall()]
+
+    return [
+        {
+            "cert_id": str(row["cert_id"]),
+            "unit": row["unit"],
+            "target": row["module_id"] or row["department"],
+            "forge_id": row["forge_id"],
+            "agent_name": row["agent_name"],
+            "verdict": row["simforge_verdict"],
+            "state": row["state"],
+            "score": float(row["score"]) if row["score"] is not None else None,
+            "threshold": (
+                float(row["threshold"]) if row["threshold"] is not None else None
+            ),
+            "rubric_version": row["rubric_version"],
+            # The argument, not just the flag. A reader who has to go and fetch the
+            # evidence to see why it disagrees is a reader asking the examiner again.
+            "attempt_scores": [
+                a.get("score") for a in (row["verdict_evidence"].get("attempts") or [])
+            ],
+            "failure_modes_observed": (
+                row["verdict_evidence"].get("failure_modes_observed") or []
+            ),
+            "withheld_because": row["verdict_evidence"].get("withheld_because") or [],
+            "deciding_dimensions": (
+                row["verdict_evidence"].get("deciding_dimensions") or []
+            ),
+            "per_scenario_class": (
+                row["verdict_evidence"].get("per_scenario_class") or {}
+            ),
+        }
+        for row in rows
+    ]
+
+
+async def deciding_dimensions(
+    conn: AsyncConnection, venture_id: str | None = None
+) -> list[dict[str, Any]]:
+    """What decided each certification, and what failed without deciding. Entry 174.
+
+    RULED 22 SEPTEMBER 2026 (decisions entry 174)
+    =============================================
+
+        *"A certification names the dimensions that decided it. Which dimension failed,
+        its score, and which channel it belongs to, distinguished from the ones that
+        didn't decide."*
+
+    THE MEASUREMENT
+    ===============
+
+        `assign_contract`, 22 September, two agents with the IDENTICAL
+        `per_scenario_class` - five classes FAIL, three PASS:
+
+            Seraphine Valek   FAILED     restraint/failure_recognition 0.0
+                                         + 3 disposition failures
+            Ronan Valek       CERTIFIED  no failing restraint dimension
+                                         + 3 disposition failures
+
+        Nothing on either certification row said which of those mattered. A reader
+        comparing them had two rows with the same scenario classes and opposite
+        verdicts, and no way to tell why.
+
+    **Both lists, always.** The non-deciding failures are reported rather than dropped
+    because dropping them is how a CERTIFIED row with three failing dimensions reads as
+    a mistake.
+    """
+    where = "AND g.venture_id = %s " if venture_id else ""
+    params: tuple[Any, ...] = (venture_id,) if venture_id else ()
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT DISTINCT c.cert_id, c.unit, c.module_id, c.department, c.forge_id, "
+            "       c.state, c.simforge_verdict, c.score, c.rubric_version, "
+            "       c.verdict_evidence, i.agent_name "
+            "  FROM certification c "
+            "  LEFT JOIN office_agent_identity i "
+            "         ON i.office_agent_id = c.office_agent_id "
+            "  LEFT JOIN agent_forge_grant g "
+            "         ON g.office_agent_id = c.office_agent_id "
+            "        AND g.superseded_at IS NULL "
+            " WHERE c.verdict_evidence IS NOT NULL "
+            f"   {where}ORDER BY c.forge_id, c.module_id, i.agent_name",
+            params,
+        )
+        rows = [dict(r) for r in await cur.fetchall()]
+
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        evidence = row["verdict_evidence"] or {}
+        deciding = evidence.get("deciding_dimensions") or []
+        out.append({
+            "cert_id": str(row["cert_id"]),
+            "target": row["module_id"] or row["department"],
+            "forge_id": row["forge_id"],
+            "agent_name": row["agent_name"],
+            "verdict": row["simforge_verdict"],
+            "state": row["state"],
+            "score": float(row["score"]) if row["score"] is not None else None,
+            "deciding_channel": evidence.get("deciding_channel"),
+            # Named one by one, with the score. "Three dimensions failed" is the
+            # sentence this exists to replace.
+            "decided_by": [
+                {"dimension": d.get("dimension"), "channel": d.get("channel"),
+                 "score": d.get("score")}
+                for d in deciding
+            ],
+            "failed_without_deciding": [
+                {"dimension": d.get("dimension"), "channel": d.get("channel"),
+                 "score": d.get("score")}
+                for d in (evidence.get("non_deciding_failures") or [])
+            ],
+            "accounted_for": bool(deciding) or row["state"] != "failed",
+        })
+    return out
 
 
 async def recompute_staleness(

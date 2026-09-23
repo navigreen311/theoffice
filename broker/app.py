@@ -92,7 +92,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0060"
+EXPECTED_SCHEMA_REVISION = "0061"
 
 # `live_grants` means "a grant no live revocation covers". The four-scope rule that
 # decides that has exactly one copy - `revocation._covers`, the same text
@@ -1616,6 +1616,64 @@ async def certify_for_simulation_route(
             "certification is void and the call path refuses every grant behind it. "
             "It is bound to the department's instruction set, so republishing any of "
             "those instructions decertifies it."
+        ),
+    }
+
+
+@app.get("/api/certifications/deciding-dimensions")
+async def deciding_dimensions_report(
+    conn: DB, _me: ME, venture_id: str | None = Query(default=None)
+) -> dict[str, Any]:
+    """What decided each certification, and what failed without deciding. Entry 174.
+
+    On 22 September two `assign_contract` exams carried the identical
+    `per_scenario_class` - five classes FAIL - and opposite verdicts. The one that
+    failed carried a restraint dimension at 0.0; the one that certified did not.
+    Nothing on either row said so.
+
+    Both lists always. Dropping the non-deciding failures is how a CERTIFIED row with
+    three failing dimensions reads as a mistake.
+    """
+    found = await certification.deciding_dimensions(conn, venture_id)
+    unaccounted = [row for row in found if not row["accounted_for"]]
+    return {
+        "certifications": found,
+        "total": len(found),
+        "unaccounted_for": len(unaccounted),
+        "note": (
+            f"{len(unaccounted)} FAIL(s) name no deciding dimension. That is a verdict "
+            "its own record cannot account for."
+            if unaccounted else
+            "Every verdict here names the dimensions that decided it."
+        ),
+    }
+
+
+@app.get("/api/certifications/verdict-disagreements")
+async def verdict_disagreements_report(
+    conn: DB, _me: ME, venture_id: str | None = Query(default=None)
+) -> dict[str, Any]:
+    """Certifications whose own evidence contradicts their verdict. Entry 173.
+
+    *"Enough to tell a wrong verdict from a right one without asking the examiner."*
+
+    It reports and refuses nothing. SimForge owns the exam and owns the call; what
+    changed is that The Office can now say **why** it disagrees, with the attempt
+    scores and the failure modes in hand, instead of writing an email and waiting.
+
+    Any authenticated reader. A report that a verdict may be wrong is not a secret from
+    the people who would act on it.
+    """
+    found = await certification.verdict_disagreements(conn, venture_id)
+    return {
+        "disagreements": found,
+        "total": len(found),
+        "note": (
+            "Each of these was recorded FAILED while every attempt scored 1.0, no "
+            "failure mode was observed and nothing was withheld. The verdict stands "
+            "until SimForge changes it; this says what disagrees with it."
+            if found else
+            "No certification's evidence contradicts its verdict."
         ),
     }
 

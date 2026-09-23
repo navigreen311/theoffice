@@ -733,6 +733,8 @@ async def _ingest_one(
         targets = [{"office_agent_id": None, "department": sub["department"]}]
 
     written = 0
+    evidence = await _evidence_for(client, conn, sub.get("simforge_run_ref"))
+
     for target in targets:
         try:
             await certification.record_result(
@@ -766,6 +768,13 @@ async def _ingest_one(
                 # `attestation_id` is written by Gate 8 only when the outcome actually
                 # went over the wire.
                 attestation_ref=sub.get("attestation_id"),
+                # THE EVIDENCE, FETCHED BESIDE THE VERDICT. Entry 173.
+                #
+                # Non-fatal by construction: `_evidence_for` returns None on any
+                # SimForge trouble, because a battery record that cannot be read must
+                # not stop a verdict being recorded. NULL then means nobody could ask,
+                # which the column's comment says out loud.
+                verdict_evidence=evidence,
                 # The candidate in full, straight from the verdict and never
                 # defaulted - same rule as `agent_model` on the line above. A model
                 # identity this sweep assembled would be a guess about what answered,
@@ -982,6 +991,30 @@ _SWEEPS = {
     MANIFEST_RECONCILIATION: sweep_manifest_reconciliation,
     VERDICT_INGEST: sweep_verdict_ingest,
 }
+
+
+async def _evidence_for(
+    client: Any, conn: AsyncConnection, run_ref: str | None
+) -> dict[str, Any] | None:
+    """The battery record behind a verdict, or None. Entry 173.
+
+    **Every failure here is None, not a raise.** The verdict is the thing being
+    ingested; the evidence explains it. A SimForge that answers about one and not the
+    other must not cost the run its certification - which is the same argument the
+    hand-over makes for being non-fatal, at the other end of the exam.
+
+    A `None` is recorded as `verdict_evidence IS NULL`, and the column's comment says
+    what that means: nobody asked, or nobody could. It is not "nothing was found".
+    """
+    if not run_ref or client is None:
+        return None
+    try:
+        evidence = await client.read_battery_result(conn, run_ref)
+    except SimForgeError:
+        return None
+    except Exception:
+        return None
+    return evidence.as_record() if evidence is not None else None
 
 
 async def run_all(*, include_restore_drill: bool = False) -> dict[str, SweepResult]:

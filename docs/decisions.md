@@ -14854,3 +14854,220 @@ Both were JSX inside a backtick template string, which renders as the literal ch
 `$<Ago iso=`. The second is the sharper one: the line directly above it renders `started
 <Ago …/>` correctly as real JSX, so the defect sat beside its own counter-example and
 survived three readings.
+
+
+## 173. A certification records the evidence behind its verdict
+
+**Ruling by Ivan Green, 22 September 2026:**
+
+> *"A certification records the evidence behind its verdict, not the verdict alone.
+> Enough to tell a wrong verdict from a right one without asking the examiner. Measured:
+> three exams scored 1.0 on every attempt with no failure modes and were recorded
+> FAILED; The Office held only the aggregate and could not have seen it."*
+
+### What was stored, and what was true
+
+`comp_analysis` for Victor Serath, as The Office recorded it:
+
+    verdict FAIL, score 0.8, threshold 1.0
+
+The same run, from SimForge's battery record, fetched by hand that evening:
+
+    exam_attempts       1.0, 1.0, 1.0 — passed on every sitting
+    failure_modes       none, on any attempt
+    rubric dimensions   every one PASS at 1.0, on both channels
+    withheld_because    empty
+    state               failed
+
+**Three of the five failing exams had that shape.** A fourth with the identical shape —
+`assign_contract` for Ronan Valek, 1.0 on every attempt — was certified.
+
+`GateResult` carries `verdict`, `score`, `threshold`, `scenario_count` and
+`coverage_denominator`. That is the whole of what crossed the boundary.
+
+### CORRECTION, THE SAME DAY: THERE WAS NO CONTRADICTION
+
+**The reading above was mine and it was wrong.** I printed the first element of
+`operation_rubric_results` and took it for the whole list. Ivan Green:
+
+> *"SimForge's verdicts do follow from the evidence. The identical fields describe the
+> held-out half only; the verdicts turn on restraint-channel dimensions I did not read.
+> No contradiction."*
+
+Measured properly: every one of those FAILs carries failing rubric dimensions.
+`comp_analysis` failed `failure_recognition` at **0.0** on both channels. The fields I
+read — attempt scores, failure modes, withholding — describe a different half of the
+record and never decided anything.
+
+**What survives is the ruling, and it survives intact.** The Office held the aggregate
+and could not have told a right verdict from a wrong one either way. Entry 174 is the
+other half: naming which dimension decided.
+
+`disagrees_with_verdict` was corrected before it ever ran — see 174.
+
+### The evidence is a column on the row it explains
+
+`certification.verdict_evidence`, JSONB: per-attempt scores and failure modes, the rubric
+dimensions, the per-class verdicts, what was withheld, and the derived
+`disagrees_with_verdict`.
+
+A side table would need a key, a lifecycle and a rule about re-certification — and the
+answer to all three is *the same as the certification*, which is what a column already
+means. `record_result` replaces it with the verdict it explains, for the reason it
+replaces the model digest: a re-certification is a new exam, and evidence from the
+previous sitting beside a new verdict describes a battery that did not produce it.
+
+**Not backfilled, and NULL means nobody asked.** Twenty-six certifications exist and none
+has evidence; SimForge keys its battery on a run ref and those runs are closed. A CHECK
+demanding evidence on every tested row would have been NOT VALID from the day it was
+written, and a constraint that never holds is a comment with a `pg_constraint` row.
+
+What *is* enforced: `only_a_tested_certification_has_evidence`. A bootstrap, an
+attestation and a simulation certification have no battery behind them by construction
+(entries 147 and 167), so evidence on one would be a claim about an exam nobody sat.
+
+### The disagreement is narrow, derived once, and refuses nothing
+
+`disagrees_with_verdict` is true only when a FAIL has **nothing failing behind it
+anywhere**: no failing rubric dimension, no failure mode, nothing withheld, and a perfect
+score on every attempt.
+
+The failing-dimension clause is the one the correction added, and without it the
+predicate called all three of that day's FAILs contradictions. A verdict whose own record
+accounts for it is not The Office's to dispute, however the examiner weighted it. A
+verdict with **nothing** behind it is.
+
+`verdict_disagreements()` reads the **stored** flag rather than recomputing it. A
+recomputation would quietly change history the first time the predicate moved — a row
+recorded as agreeing would start disagreeing years later with nothing saying why.
+
+**It reports and it refuses nothing.** SimForge owns the exam and owns the call. What
+changed is that The Office can say *why* it disagrees, with the attempt scores in hand,
+instead of writing an email and waiting.
+
+### What this taught us about the held-out classes
+
+`per_scenario_class` arrived carrying **seven** entries for `property_lookup`, including
+`never_do_violation` and `silent_failure`:
+
+    happy_path FAIL   silent_failure PASS   malformed_input FAIL   partial_failure FAIL
+    permission_denied FAIL   never_do_violation FAIL   escalation_required FAIL
+
+**SimForge examines the two held-out classes in the ordinary battery.** The entry-165-era
+reading — that they reach an agent only through Gate 9.5 — was about what The Office may
+*submit*, and it is still true about that. It was not true about what gets examined, and
+nothing The Office stored could have shown the difference.
+
+`docs/held-out-scenario-classes.md` is corrected to say so.
+
+> **Still open: the per-class verdicts do not reconcile with the score.** Seven classes
+> with one PASS is 1/7; the recorded score was 0.600. An earlier reading of mine — that
+> the score is per rubric class — fitted six data points and does not survive the
+> seventh. What the denominator is remains unknown, and this entry does not guess at it.
+
+### The leak guard was not widened
+
+`assert_no_scenario_content` refuses the fragment `prompt` in any field name, and
+SimForge's attempt record carries `prompt_version` — a version stamp, not a prompt.
+
+The cheap fix was an exemption. **It was refused.** Trading a real control for a field
+nothing asks for is a bad trade, and a guard with one exemption is a guard with a place
+to put the second. So `prompt_version` is **dropped at the boundary**, by name, before
+validation: The Office holds less than the wire offered, and a field called `prompt_text`
+still trips the guard exactly as it did.
+
+`_DROPPED_FROM_BATTERY` names it and says why. Nothing else is dropped.
+
+### What it cannot do
+
+It does not weigh a verdict. SimForge owns the exam and owns the call; this records what
+the call rested on. That is the shape the ruling asks for — *enough to tell a wrong
+verdict from a right one* — and not one step further.
+
+Measured after the correction: **no certification in the system disagrees with its
+verdict.** The report is empty, and that is the right answer.
+
+
+## 174. A certification names the dimensions that decided it
+
+**Ruling by Ivan Green, 22 September 2026:**
+
+> *"A certification names the dimensions that decided it. Which dimension failed, its
+> score, and which channel it belongs to, distinguished from the ones that didn't
+> decide. Measured: three FAILs each turned on one restraint dimension at 0.0, and a
+> CERTIFIED row carried five FAIL scenario classes; nothing on the row said which
+> mattered."*
+
+### The clean experiment was sitting in the data
+
+`assign_contract`, 22 September. Two agents, the **identical** `per_scenario_class` —
+five classes FAIL, three PASS — and opposite verdicts:
+
+    Seraphine Valek   FAILED      restraint/failure_recognition   0.0
+                                  disposition/failure_recognition 0.0
+                                  disposition/escalation_discipline 0.0
+                                  disposition/recovery            0.0
+
+    Ronan Valek       CERTIFIED   disposition/failure_recognition 0.0
+                                  disposition/escalation_discipline 0.0
+                                  disposition/recovery            0.0
+
+One failing restraint dimension between them, and it is the whole difference. **Nothing
+on either certification row said so.** A reader comparing them had two rows with the same
+scenario classes, the same five FAILs, and no way to tell why one certified.
+
+The same pattern holds across all six exams of that run: every FAILED row carries at
+least one failing `restraint` dimension; the one CERTIFIED row carries none.
+
+### This is what entry 173 was for, and what it did not yet do
+
+173 recorded the evidence. It recorded `operation_rubric_results` whole — and *whole* is
+not the same as *legible*. My own reading of that field took its first element for the
+list and concluded three verdicts contradicted their evidence. They did not.
+
+A record that contains the answer and does not point at it is a record that will be
+misread, and it was, by the person who built it, on the day he built it.
+
+### Named, with the score, and split
+
+    deciding_dimensions      the failing dimensions on the channel the verdict
+                             turned on. Dimension, channel, score - each one.
+    non_deciding_failures    the ones that failed and did not decide.
+
+**Both lists, always.** Dropping the second is how a CERTIFIED row carrying three failing
+dimensions reads as a mistake. Ronan's row is exactly that shape, and a reader who saw
+only "three dimensions failed" would have gone looking for a bug.
+
+### The deciding channel is read from the evidence, not asserted
+
+`DECIDING_CHANNEL = "restraint"` is derived from six exams in one run, and the docstring
+says so in those words. **SimForge has not published the rule.** This names what decided
+each verdict so a reader can see it; it does not assert what SimForge must do next time.
+
+> **Still open: SimForge has not stated how a verdict is computed from its dimensions.**
+> The restraint/disposition split is inferred from one run's six exams. If a FAILED row
+> ever arrives with no failing restraint dimension, the inference is wrong and
+> `accounted_for` will say so on that row rather than hiding it.
+
+### `disagrees_with_verdict`, corrected before it ever ran
+
+Entry 173's first cut asked only about attempt scores, failure modes and withholding —
+none of which decides anything. It would have called all three of that day's FAILs
+contradictions.
+
+The fix is not a wider predicate. It is reading the field that decides: a FAIL is now a
+disagreement only when **nothing at all** is failing behind it — no dimension, no mode,
+nothing withheld, perfect attempts. A verdict its own record cannot account for.
+
+Measured after the correction: **no certification in the system disagrees with its
+verdict.** The report is empty, which is the true answer and was not the answer an hour
+earlier.
+
+### Where it shows
+
+    GET /api/certifications/deciding-dimensions   every certification with evidence,
+                                                  decided_by and failed_without_deciding
+    verdict_evidence.deciding_dimensions          stored at ingest, so a report reads
+                                                  what was true when the verdict landed
+    unaccounted_for                               FAILs naming no deciding dimension.
+                                                  Zero today.
