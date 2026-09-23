@@ -530,7 +530,7 @@ async def test_the_ref_gate_8_mints_is_derived_from_the_submission(at_gate_8, op
             """
             SELECT venture_id, forge_id, module_id, department,
                    instruction_content_hash, simforge_run_ref, office_agent_id,
-                   scenario_set_hash
+                   scenario_set_hash, sections_shown_hash
             FROM curriculum_submission WHERE venture_id = %s
             """,
             (VENTURE,),
@@ -550,12 +550,18 @@ async def test_the_ref_gate_8_mints_is_derived_from_the_submission(at_gate_8, op
     # the row stores the full hash for exactly this: the ref carries twelve characters
     # of it, and a reader must be able to recompute the ref from the row rather than
     # from the payload that has long since gone.
+    #
+    # AND IT NAMES THE TEXT THE EXAM SHOWED, as of 23 September 2026 (entry 176). The
+    # full hash is on the row for the same reason and this line is what it is for: the
+    # first handover carrying instruction prose minted the ref of the exam graded
+    # without it, and that collision was invisible from both sides.
     for (venture_id, forge_id, module_id, department, content_hash, stored,
-         agent_id, scenario_hash) in rows:
+         agent_id, scenario_hash, sections_hash) in rows:
         assert stored == mint_run_ref(
             venture_id=venture_id, forge_id=forge_id,
             module_id=module_id, department=department, content_hash=content_hash,
             office_agent_id=agent_id, scenario_hash=scenario_hash,
+            sections_hash=sections_hash,
         ), f"{module_id or department}: the ref is not a function of the submission"
         if module_id:
             assert scenario_hash, (

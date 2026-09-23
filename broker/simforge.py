@@ -242,6 +242,92 @@ def scenario_set_hash(payload: dict[str, Any]) -> str:
     ).hexdigest()
 
 
+def sections_shown_hash(payload: dict[str, Any]) -> str | None:
+    """The identity of the instruction text a curriculum handover SHOWS the agent.
+
+    RULED 23 SEPTEMBER 2026 (decisions entry 176)
+    =============================================
+
+        *"A run ref names what the exam showed. The instruction sections in the
+        handover are part of the ref derivation, so a handover that shows the agent
+        different text mints a different ref."*
+
+    WHAT WENT WRONG, AND WHY NOTHING CAUGHT IT
+    ==========================================
+
+        Entry 175 made `_curriculum_payload` carry the prose of every section the keys
+        cite. It is new text in the exam room and it changes what the agent can be
+        expected to know - and it moved NO segment of the ref. Measured on run
+        `4637b946` the morning after: six modules, six refs, six identical to the ones
+        already graded.
+
+        And the collision is SILENT. `open_run` is idempotent on `run_ref` and returns
+        the existing row untouched; the battery sweep selects on `verdict IS NULL`, so
+        a graded row is never re-scored. Gate 8 would report success, the sweep would
+        ingest the verdicts already on those rows, and a re-exam that never ran would
+        read as a re-exam that changed nothing.
+
+    IT IS NOT REDUNDANT WITH THE TWO HASHES BESIDE IT, AND THE REASON IS EXACT
+    ==========================================================================
+
+        The sections map is a function of three things: which sections the keys cite,
+        the instruction content those names are looked up in, and THE CODE THAT DOES
+        THE LOOKING.
+
+        The first is already in `scenario_set_hash` - `instruction_section` is a field
+        on every `operation_scenarios` row. The second is already in `content_hash`.
+        **The third is in neither, and the third is what changed yesterday.**
+
+        `scenario_set_hash` says in writing why it excludes `instruction_set_ref`:
+        "the third is the instruction, which the ref already names in its own segment."
+        That was true while `instruction_set_ref` held a hash and two version strings.
+        It stopped being true when prose moved into it, because a hash of the whole
+        instruction cannot say which PART of it was put in front of the agent.
+
+        This is entry 143's shape, one field over. A rubric bump changes how an answer
+        is graded without changing the answer key; a renderer change changes what the
+        agent was shown without changing the instruction. Both are changes to the exam
+        that no hash of the exam's inputs can express.
+
+    TAKEN OVER WHAT GOES ON THE WIRE
+    ================================
+
+        Read back out of the built payload, like `scenario_set_hash` and for the same
+        argument: hash the thing itself so the hash cannot drift from what it names. A
+        second call to `_sections_cited_by` would be a second spelling of the rule, and
+        the two would agree until one of them was changed.
+
+    NONE WHEN NOTHING IS SHOWN, AND THE SEGMENT IS THEN OMITTED
+    ===========================================================
+
+        Entry 122's rule, and it is what keeps every already-open ref resolving. A run
+        minted before this - every run in the system today - showed no sections and
+        gets no segment, so its ref keeps the shape it was opened under.
+
+        The consequence that matters is the one this entry exists for: the FIRST
+        handover that shows sections goes from no segment to a segment, which is a
+        different ref, which is a new run. The collision closes on the transition, not
+        on some later edit.
+
+        A module whose keys cite nothing, or whose instruction has none of the sections
+        they cite, also mints no segment - and should. Nothing is being shown, which is
+        the state the old ref already describes.
+
+    Carries no scenario content and no prose: a 12-character prefix of a digest,
+    domain-separated so it cannot be mistaken for an instruction hash.
+    """
+    ref = payload.get("instruction_set_ref")
+    sections = ref.get("sections") if isinstance(ref, dict) else None
+    if not sections:
+        return None
+    return hashlib.sha256(
+        b"office/sections/v1\n"
+        + json.dumps(
+            sections, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        ).encode("utf-8")
+    ).hexdigest()
+
+
 def operation_scenario_rows(scenarios: list[Any]) -> list[dict[str, Any]]:
     """The `operation_scenarios` rows one module's curriculum sends, in order.
 
@@ -349,6 +435,7 @@ def mint_run_ref(
     department: str | None = None,
     office_agent_id: uuid.UUID | None = None,
     scenario_hash: str | None = None,
+    sections_hash: str | None = None,
     protocol_version: str | None = None,
     rubric_version: str | None = None,
 ) -> str:
@@ -441,6 +528,26 @@ def mint_run_ref(
         A ref minted without one keeps its old shape, so every ref already open still
         resolves - the same rule the agent segment was added under.
 
+    A UNIT-A REF NAMES THE TEXT THE EXAM SHOWED
+    ===========================================
+
+        Ruled 23 September 2026 (entry 176): *"A run ref names what the exam showed.
+        The instruction sections in the handover are part of the ref derivation, so a
+        handover that shows the agent different text mints a different ref."*
+
+        `sections_hash` is `sections_shown_hash` over the `instruction_set_ref.sections`
+        that went on the wire - the prose entry 175 started sending. See that function
+        for why it is not implied by the two hashes beside it: those cover the keys and
+        the instruction, and neither can say which PART of the instruction was put in
+        front of the agent.
+
+        Measured the morning after 175 landed: showing all four sections for the first
+        time minted six refs identical to six already graded, and the collision reads
+        as success from both sides.
+
+        Omitted when nothing is shown, so every ref already open keeps its shape - the
+        rule the agent and answer-key segments were added under.
+
     THE EXAM NAMES THE VERSIONS IT IS SET UNDER
     ===========================================
 
@@ -486,6 +593,17 @@ def mint_run_ref(
         # instruction hash beside it without counting colons - and so a ref that has
         # one is distinguishable at a glance from the pre-ruling refs that do not.
         segments.append(f"k{scenario_hash[:12]}")
+    # AND WHAT THE EXAM SHOWED. Entry 176. The sections the keys cite travel in the
+    # handover as of entry 175, and nothing in `content_hash` or the `k` segment can
+    # say which part of the instruction was put in front of the agent - the first is
+    # the whole instruction and the second is the questions. A handover that shows
+    # different text is a different exam and has to be a different run.
+    #
+    # UNIT A ONLY, for the reason the scenario hash is: a department run submits no
+    # curriculum, so it shows no sections, and a segment there would be the hash of
+    # nothing claiming something was shown.
+    if module_id and sections_hash:
+        segments.append(f"s{sections_hash[:12]}")
     # ON BOTH UNITS, unlike the scenario hash. A department run submits no curriculum
     # and so has no answer key, but it IS graded - `rubric_kind` is `domain` and a
     # rubric version is stamped on it exactly as on unit A. Excluding unit B here would
