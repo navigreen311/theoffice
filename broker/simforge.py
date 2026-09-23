@@ -30,7 +30,7 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit, urlunsplit
@@ -961,6 +961,64 @@ class SimForgeClient:
             )
         return parse_gate_result(body)
 
+    async def read_battery_result(
+        self, conn: Any, run_ref: str
+    ) -> VerdictEvidence | None:
+        """The evidence behind a verdict. Ruled 22 September 2026, entry 173.
+
+        Beside `read_gate_result` and against the same adapter surface, with the same
+        credential and the same leak guard. What differs is only what is asked for: the
+        verdict, and then what the verdict rests on.
+
+        **Returns None rather than raising when SimForge has nothing.** A 404 here is
+        not the refusal it is for a verdict - a run may legitimately have no battery
+        record, and `observed: false` is SimForge's own way of saying so. The caller
+        stores no evidence and the certification says why, which is a different fact
+        from a certification whose evidence was never asked for.
+
+        Non-fatal by construction for the reason the hand-over is: this runs inside the
+        verdict sweep, and a SimForge that cannot answer about evidence must not stop a
+        verdict being recorded.
+        """
+        credential = await self._tenant_credential(conn)
+        base_url, api_version = await self._registry(conn)
+
+        url = f"{base_url.rstrip('/')}/battery_result"
+        try:
+            response = await self._http.post(
+                url,
+                json={"run_ref": run_ref},
+                headers={
+                    "Authorization": f"Bearer {credential.reveal()}",
+                    "X-Office-Forge-Api-Version": api_version,
+                    "Content-Type": "application/json",
+                },
+                timeout=self._timeout,
+            )
+        except httpx.HTTPError as exc:
+            # type(exc).__name__, never str(exc): the message can carry the URL, and
+            # this request carried a credential.
+            raise SimForgeError(
+                f"could not reach SimForge: {type(exc).__name__}"
+            ) from exc
+
+        if response.status_code == 404:
+            return None
+        if response.status_code >= 400:
+            raise SimForgeError(
+                f"battery_result for {run_ref!r} returned {response.status_code}"
+            )
+        try:
+            body = response.json()
+        except ValueError as exc:
+            raise SimForgeError("battery_result returned a non-JSON body") from exc
+        if not isinstance(body, dict):
+            raise SimForgeError(
+                f"battery_result for {run_ref!r} returned "
+                f"{type(body).__name__}, not an object"
+            )
+        return parse_battery_result(body)
+
     # ----------------------------------------------------------- internals
 
     async def _tenant_credential(self, conn: Any) -> Credential:
@@ -1399,6 +1457,168 @@ def validate_response(
         )
     assert_no_scenario_content(
         endpoint, body, echoed=sent_values(sent) if sent is not None else None
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class VerdictEvidence:
+    """What SimForge's battery observed, beside the verdict it issued.
+
+    RULED 22 SEPTEMBER 2026 (decisions entry 173)
+    =============================================
+
+        *"A certification records the evidence behind its verdict, not the verdict
+        alone. Enough to tell a wrong verdict from a right one without asking the
+        examiner."*
+
+    **The measurement that produced the ruling.** Three exams on 22 September scored
+    1.0 on every attempt, reported no failure modes, withheld nothing, and were
+    recorded FAILED. `GateResult` carries `score` and `verdict` and nothing else, so
+    The Office held `0.8 / FAIL` and could not have seen the contradiction at all.
+
+    NOT A SECOND VERDICT
+    ====================
+
+        Nothing here overrides `verdict`. SimForge owns the exam and owns the call;
+        what changes is that The Office can now say *why it disagrees* instead of
+        asking. `disagrees_with_verdict` is a report, and it refuses nothing.
+
+    `attempts` and `per_scenario_class` are the two that carry the argument, and they
+    are different arguments: an attempt is a whole sitting, a class is one kind of
+    question across sittings.
+    """
+
+    run_ref: str
+    state: str
+    #: One entry per sitting: `seed`, `score`, `passed`, `failure_modes`, `probes_put`,
+    #: `unreadable_answers`. Names and numbers - no scenario text.
+    attempts: tuple[dict[str, Any], ...] = ()
+    #: `dimension` x `channel` -> `verdict` and `score`, as SimForge graded them.
+    rubric_results: tuple[dict[str, Any], ...] = ()
+    #: scenario class -> PASS | FAIL. **Includes the two held-out classes**, which is
+    #: how The Office learned they are examined in the ordinary battery rather than
+    #: only behind Gate 9.5. Class NAMES only; `ALL_SCENARIO_CLASSES` already holds
+    #: every one of them, so nothing here is content The Office did not have.
+    per_scenario_class: dict[str, str] = field(default_factory=dict)
+    #: Why SimForge held something back. Empty is the common case and is not silence:
+    #: it means nothing was withheld, which is itself evidence.
+    withheld_because: tuple[str, ...] = ()
+    failure_modes_observed: tuple[str, ...] = ()
+    rubric_dimension_spread: float | None = None
+    observed: bool = True
+
+    @property
+    def disagrees_with_verdict(self) -> bool:
+        """Whether the evidence contradicts a FAIL.
+
+        True when every attempt passed with a perfect score, nothing was withheld, and
+        no failure mode was observed. That is the exact shape of the three exams that
+        produced this entry - and it is deliberately narrow: a partial score is a
+        judgement call The Office has no standing to second-guess, while *nothing
+        failed and the verdict is FAIL* is a contradiction anybody can read.
+        """
+        if self.state not in ("failed", "revoked"):
+            return False
+        if not self.attempts:
+            return False
+        every_attempt_perfect = all(
+            a.get("score") == 1.0 and not a.get("failure_modes")
+            for a in self.attempts
+        )
+        return (
+            every_attempt_perfect
+            and not self.withheld_because
+            and not self.failure_modes_observed
+        )
+
+    def as_record(self) -> dict[str, Any]:
+        """What is stored on the certification. Plain JSON, no dataclass."""
+        return {
+            "run_ref": self.run_ref,
+            "state": self.state,
+            "observed": self.observed,
+            "attempts": list(self.attempts),
+            "rubric_results": list(self.rubric_results),
+            "per_scenario_class": dict(self.per_scenario_class),
+            "withheld_because": list(self.withheld_because),
+            "failure_modes_observed": list(self.failure_modes_observed),
+            "rubric_dimension_spread": self.rubric_dimension_spread,
+            "disagrees_with_verdict": self.disagrees_with_verdict,
+        }
+
+
+#: Fields dropped at the boundary before the body is validated. Entry 173.
+#:
+#: `prompt_version` is a version stamp and not a prompt - but `assert_no_scenario_content`
+#: forbids the fragment `prompt` in a field name, and it is right to. **The guard is not
+#: widened.** Exempting a fragment named `prompt` to admit a field The Office has no use
+#: for would trade a real control for nothing.
+#:
+#: So the field is removed rather than permitted, and The Office ends up holding LESS
+#: than the wire offered. What it costs is the ability to say which prompt template a
+#: sitting used, which nothing here asks.
+#:
+#: Dropped BY NAME. A field called `prompt_text` still trips the guard, because only
+#: these exact keys are removed and everything else is validated as it arrived.
+_DROPPED_FROM_BATTERY: frozenset[str] = frozenset({"prompt_version"})
+
+
+def _without_dropped_fields(body: dict[str, Any]) -> dict[str, Any]:
+    """The body minus `_DROPPED_FROM_BATTERY`, structurally copied.
+
+    The original is not mutated: it belongs to the caller, and a validator that edited
+    its input would make the thing that was checked different from the thing that
+    arrived.
+    """
+    trimmed = dict(body)
+    certifications = []
+    for cert in body.get("certifications") or []:
+        if not isinstance(cert, dict):
+            certifications.append(cert)
+            continue
+        copy = dict(cert)
+        copy["exam_attempts"] = [
+            {k: v for k, v in attempt.items() if k not in _DROPPED_FROM_BATTERY}
+            if isinstance(attempt, dict) else attempt
+            for attempt in (cert.get("exam_attempts") or [])
+        ]
+        certifications.append(copy)
+    if certifications:
+        trimmed["certifications"] = certifications
+    return trimmed
+
+
+def parse_battery_result(body: dict[str, Any]) -> VerdictEvidence | None:
+    """Validate then narrow, the same order `parse_gate_result` uses.
+
+    Returns None when SimForge has no battery record - `observed: false`, or no
+    certification in the payload. **None is an answer and not an error**: a run can
+    exist with nothing behind it, and storing an empty evidence record would be a
+    claim that the battery was inspected and found silent.
+    """
+    body = _without_dropped_fields(body)
+    validate_response("get_battery_result", body)
+    if not body.get("observed"):
+        return None
+    certifications = body.get("certifications") or []
+    if not certifications:
+        return None
+
+    # The first, and the reason that is right: this endpoint is keyed on
+    # (forge_id, module_id, agent_id) bounded by the run - SimForge says so in `join` -
+    # so a second entry would be a second certification for one agent on one module in
+    # one run, which the unit-A natural key already refuses.
+    cert = certifications[0]
+    return VerdictEvidence(
+        run_ref=str(body["run_ref"]),
+        state=str(cert.get("state") or ""),
+        attempts=tuple(cert.get("exam_attempts") or ()),
+        rubric_results=tuple(cert.get("operation_rubric_results") or ()),
+        per_scenario_class=dict(cert.get("per_scenario_class") or {}),
+        withheld_because=tuple(cert.get("withheld_because") or ()),
+        failure_modes_observed=tuple(cert.get("failure_modes_observed") or ()),
+        rubric_dimension_spread=cert.get("rubric_dimension_spread"),
+        observed=True,
     )
 
 

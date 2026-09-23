@@ -14854,3 +14854,113 @@ Both were JSX inside a backtick template string, which renders as the literal ch
 `$<Ago iso=`. The second is the sharper one: the line directly above it renders `started
 <Ago …/>` correctly as real JSX, so the defect sat beside its own counter-example and
 survived three readings.
+
+
+## 173. A certification records the evidence behind its verdict
+
+**Ruling by Ivan Green, 22 September 2026:**
+
+> *"A certification records the evidence behind its verdict, not the verdict alone.
+> Enough to tell a wrong verdict from a right one without asking the examiner. Measured:
+> three exams scored 1.0 on every attempt with no failure modes and were recorded
+> FAILED; The Office held only the aggregate and could not have seen it."*
+
+### What was stored, and what was true
+
+`comp_analysis` for Victor Serath, as The Office recorded it:
+
+    verdict FAIL, score 0.8, threshold 1.0
+
+The same run, from SimForge's battery record, fetched by hand that evening:
+
+    exam_attempts       1.0, 1.0, 1.0 — passed on every sitting
+    failure_modes       none, on any attempt
+    rubric dimensions   every one PASS at 1.0, on both channels
+    withheld_because    empty
+    state               failed
+
+**Three of the five failing exams had that shape.** A fourth with the identical shape —
+`assign_contract` for Ronan Valek, 1.0 on every attempt — was certified.
+
+`GateResult` carries `verdict`, `score`, `threshold`, `scenario_count` and
+`coverage_denominator`. That is the whole of what crossed the boundary. Everything that
+would have shown the contradiction was discarded at the parse.
+
+### The evidence is a column on the row it explains
+
+`certification.verdict_evidence`, JSONB: per-attempt scores and failure modes, the rubric
+dimensions, the per-class verdicts, what was withheld, and the derived
+`disagrees_with_verdict`.
+
+A side table would need a key, a lifecycle and a rule about re-certification — and the
+answer to all three is *the same as the certification*, which is what a column already
+means. `record_result` replaces it with the verdict it explains, for the reason it
+replaces the model digest: a re-certification is a new exam, and evidence from the
+previous sitting beside a new verdict describes a battery that did not produce it.
+
+**Not backfilled, and NULL means nobody asked.** Twenty-six certifications exist and none
+has evidence; SimForge keys its battery on a run ref and those runs are closed. A CHECK
+demanding evidence on every tested row would have been NOT VALID from the day it was
+written, and a constraint that never holds is a comment with a `pg_constraint` row.
+
+What *is* enforced: `only_a_tested_certification_has_evidence`. A bootstrap, an
+attestation and a simulation certification have no battery behind them by construction
+(entries 147 and 167), so evidence on one would be a claim about an exam nobody sat.
+
+### The disagreement is narrow, derived once, and refuses nothing
+
+`disagrees_with_verdict` is true only when **every attempt scored 1.0, no failure mode
+was observed and nothing was withheld, against a FAIL.**
+
+`property_lookup` scored 0.889 on every attempt with real failure modes. That is a
+judgement The Office has no standing to second-guess. *Nothing failed and the verdict is
+FAIL* is a contradiction anybody can read; *it scored 0.889 and failed* is an examiner
+doing its job.
+
+`verdict_disagreements()` reads the **stored** flag rather than recomputing it. A
+recomputation would quietly change history the first time the predicate moved — a row
+recorded as agreeing would start disagreeing years later with nothing saying why.
+
+**It reports and it refuses nothing.** SimForge owns the exam and owns the call. What
+changed is that The Office can say *why* it disagrees, with the attempt scores in hand,
+instead of writing an email and waiting.
+
+### What this taught us about the held-out classes
+
+`per_scenario_class` arrived carrying **seven** entries for `property_lookup`, including
+`never_do_violation` and `silent_failure`:
+
+    happy_path FAIL   silent_failure PASS   malformed_input FAIL   partial_failure FAIL
+    permission_denied FAIL   never_do_violation FAIL   escalation_required FAIL
+
+**SimForge examines the two held-out classes in the ordinary battery.** The entry-165-era
+reading — that they reach an agent only through Gate 9.5 — was about what The Office may
+*submit*, and it is still true about that. It was not true about what gets examined, and
+nothing The Office stored could have shown the difference.
+
+`docs/held-out-scenario-classes.md` is corrected to say so.
+
+> **Still open: the per-class verdicts do not reconcile with the score.** Seven classes
+> with one PASS is 1/7; the recorded score was 0.600. An earlier reading of mine — that
+> the score is per rubric class — fitted six data points and does not survive the
+> seventh. What the denominator is remains unknown, and this entry does not guess at it.
+
+### The leak guard was not widened
+
+`assert_no_scenario_content` refuses the fragment `prompt` in any field name, and
+SimForge's attempt record carries `prompt_version` — a version stamp, not a prompt.
+
+The cheap fix was an exemption. **It was refused.** Trading a real control for a field
+nothing asks for is a bad trade, and a guard with one exemption is a guard with a place
+to put the second. So `prompt_version` is **dropped at the boundary**, by name, before
+validation: The Office holds less than the wire offered, and a field called `prompt_text`
+still trips the guard exactly as it did.
+
+`_DROPPED_FROM_BATTERY` names it and says why. Nothing else is dropped.
+
+### What it cannot do
+
+It does not resolve the three disagreements. SimForge is being asked why; until it
+answers, the verdicts stand and the evidence stands beside them. That is the shape the
+ruling asks for — *enough to tell a wrong verdict from a right one* — and not one step
+further.

@@ -92,7 +92,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0060"
+EXPECTED_SCHEMA_REVISION = "0061"
 
 # `live_grants` means "a grant no live revocation covers". The four-scope rule that
 # decides that has exactly one copy - `revocation._covers`, the same text
@@ -1616,6 +1616,35 @@ async def certify_for_simulation_route(
             "certification is void and the call path refuses every grant behind it. "
             "It is bound to the department's instruction set, so republishing any of "
             "those instructions decertifies it."
+        ),
+    }
+
+
+@app.get("/api/certifications/verdict-disagreements")
+async def verdict_disagreements_report(
+    conn: DB, _me: ME, venture_id: str | None = Query(default=None)
+) -> dict[str, Any]:
+    """Certifications whose own evidence contradicts their verdict. Entry 173.
+
+    *"Enough to tell a wrong verdict from a right one without asking the examiner."*
+
+    It reports and refuses nothing. SimForge owns the exam and owns the call; what
+    changed is that The Office can now say **why** it disagrees, with the attempt
+    scores and the failure modes in hand, instead of writing an email and waiting.
+
+    Any authenticated reader. A report that a verdict may be wrong is not a secret from
+    the people who would act on it.
+    """
+    found = await certification.verdict_disagreements(conn, venture_id)
+    return {
+        "disagreements": found,
+        "total": len(found),
+        "note": (
+            "Each of these was recorded FAILED while every attempt scored 1.0, no "
+            "failure mode was observed and nothing was withheld. The verdict stands "
+            "until SimForge changes it; this says what disagrees with it."
+            if found else
+            "No certification's evidence contradicts its verdict."
         ),
     }
 
