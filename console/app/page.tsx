@@ -282,9 +282,17 @@ export default async function CompliancePage() {
                   <p className="mt-1 text-meta text-ink-muted">
                     {control.cadence}
                     {" · "}
-                    {control.last_run
-                      ? `last run $<Ago iso={control.last_run} />`
-                      : "never run"}
+                    {/* A TIME, not the source of one. This read
+                        `` `last run $<Ago iso={control.last_run} />` ``, and a template
+                        string does not render JSX - the reader saw the literal
+                        characters `$<Ago iso=...`. Entry 171's sibling fix. */}
+                    {control.last_run ? (
+                      <>
+                        last run <Ago iso={control.last_run} />
+                      </>
+                    ) : (
+                      "never run"
+                    )}
                     {control.denominator !== undefined &&
                     control.denominator !== null ? (
                       <> {" · "}checked {control.denominator} item(s)</>

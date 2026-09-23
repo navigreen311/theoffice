@@ -2419,10 +2419,23 @@ async def _gate_10(ctx: _Context) -> GateOutcome:
         "valid_signatures": len(status.valid),
         "voided_signatures": len(status.voided),
     }
+    # ENTRY 170. *"Gate 10's signature binds to the note plus its corrections."*
+    #
+    # So the corrections are IN THIS GATE'S EVIDENCE, on the pass as well as the block.
+    # A signature over a note whose corrections live somewhere else is a signature over
+    # half the record - and the correction this was built for is the one that stops a
+    # reader taking a note's "me" for the account that recorded it.
+    corrections = await gate_review_corrections(ctx.conn, run_id=ctx.run_id, gate="4")
+    evidence["gate_4_review_corrections"] = corrections
+
     if status.valid:
         return GateOutcome(
             "10", PASSED,
-            f"{len(status.valid)} valid signature(s) bound to the current artifacts",
+            f"{len(status.valid)} valid signature(s) bound to the current artifacts"
+            + (
+                f"; the Gate 4 review carries {len(corrections)} correction(s), which "
+                "this signature covers" if corrections else ""
+            ),
             evidence,
         )
     if status.voided:
@@ -2894,6 +2907,124 @@ async def record_human_review(
         actor_type="human", actor_id=human.human_id, venture_id=state.venture_id,
         subject={"run_id": str(run_id), "note": note},
     )
+
+
+async def correct_gate_review(
+    conn: AsyncConnection,
+    *,
+    run_id: uuid.UUID,
+    gate: str,
+    reviewer_named: uuid.UUID,
+    correction: str,
+    corrected_by: humans.Human,
+) -> dict[str, Any]:
+    """Correct a gate review by a later entry. Never by editing.
+
+    RULED 22 SEPTEMBER 2026 (decisions entry 170)
+    =============================================
+
+        *"A gate review may be corrected by a later entry, never by editing. A
+        correction names the reviewer, the correction and who made it. Gate 10's
+        signature binds to the note plus its corrections."*
+
+    THE RECORD THIS EXISTS FOR IS NOT WRONG
+    =======================================
+
+        Ira Green recorded the Gate 4 review on run 4637b946 from a note drafted for
+        Ivan Green. Every fact in it is true - her account, her human_id, her text. What
+        it lacks is the sentence that stops a reader taking the note's "me" for the
+        account that recorded it, and there was no way to add one.
+
+    `reviewer_named` IS WHO THE NOTE WAS DRAFTED FOR, and it is a separate argument from
+    `corrected_by` because on the correction this was built for they are three different
+    people between them: Ira recorded, Ivan is who "me" meant, and whoever writes the
+    correction is the third. A correction naming only its author would leave the reader
+    to infer whose reading it fixes.
+
+    The review must exist. A correction to a review nobody recorded is a note about
+    nothing, and there is a different thing to do about that: record the review.
+    """
+    if not correction.strip():
+        raise ProvisioningError(
+            "a correction says what it corrects. An empty one is an edit with no "
+            "content, which is the thing entry 170 refuses."
+        )
+
+    state = await get_run(conn, run_id)
+    if state is None:
+        raise ProvisioningError(f"no such run {run_id}")
+    humans.authorize(
+        corrected_by, required_role="venture_operator", venture_id=state.venture_id
+    )
+    await humans.assert_named_human_by_id(
+        conn, human_id=reviewer_named, act="be named in a gate review correction"
+    )
+
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "SELECT count(*) FROM provisioning_gate_result "
+            " WHERE run_id = %s AND gate = %s AND verdict = 'passed'",
+            (run_id, gate),
+        )
+        row = await cur.fetchone()
+    if not row or not row[0]:
+        raise ProvisioningError(
+            f"gate {gate} on run {run_id} has no recorded review to correct. A "
+            "correction answers a record; record the review first."
+        )
+
+    correction_id = uuid.uuid4()
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "INSERT INTO gate_review_correction "
+            "  (correction_id, run_id, gate, reviewer_named, correction, corrected_by) "
+            "VALUES (%s, %s, %s, %s, %s, %s)",
+            (correction_id, run_id, gate, reviewer_named, correction.strip(),
+             corrected_by.human_id),
+        )
+    await conn.commit()
+
+    await audit.write_event(
+        event_type="provisioning_gate_review_corrected",
+        actor_type="human", actor_id=corrected_by.human_id,
+        venture_id=state.venture_id,
+        subject={
+            "run_id": str(run_id), "gate": gate,
+            "correction_id": str(correction_id),
+            "reviewer_named": str(reviewer_named),
+            "correction": correction.strip(),
+        },
+    )
+    return {"correction_id": str(correction_id), "run_id": str(run_id), "gate": gate}
+
+
+async def gate_review_corrections(
+    conn: AsyncConnection, *, run_id: uuid.UUID, gate: str | None = None
+) -> list[dict[str, Any]]:
+    """Every correction on this run's reviews, oldest first.
+
+    **All of them are in force; none replaces another.** There is no `supersedes`
+    column, so a reader of a note reads the note and then every correction in order -
+    and that is what Gate 10's signature covers.
+    """
+    where = "AND c.gate = %s " if gate else ""
+    params: tuple[Any, ...] = (run_id, gate) if gate else (run_id,)
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT c.correction_id, c.gate, c.correction, c.corrected_at, "
+            "       named.display_name AS reviewer_named, "
+            "       author.display_name AS corrected_by "
+            "  FROM gate_review_correction c "
+            "  JOIN office_human named ON named.human_id = c.reviewer_named "
+            "  JOIN office_human author ON author.human_id = c.corrected_by "
+            f" WHERE c.run_id = %s {where}ORDER BY c.corrected_at",
+            params,
+        )
+        return [
+            {**dict(r), "correction_id": str(r["correction_id"]),
+             "corrected_at": r["corrected_at"].isoformat()}
+            for r in await cur.fetchall()
+        ]
 
 
 async def abort_run(

@@ -1051,7 +1051,52 @@ async def due(conn: AsyncConnection) -> list[str]:
         reading = state.get(kind)
         if reading is None or reading["state"] in ("never_run", "stale"):
             overdue.append(kind)
+
+    # AND SOONER WHEN SOMEBODY IS WAITING. Ruled 22 September 2026, entry 172:
+    # *"A sweep polls every 5 minutes while a submission awaits a verdict, and daily
+    # otherwise."*
+    #
+    # `MAX_AGE` answers *is this control stale* and a day is right for that - a missed
+    # REVOKED is silent and a day is the tolerance. A run blocked at Gate 9 asks a
+    # different question: *is anybody waiting*. Measured 22 September: exams opened at
+    # 17:16, the sweep had run at 16:54, and nine verdicts would have sat 23.6 hours
+    # with a run blocked behind them.
+    #
+    # A CONDITION, NOT A SECOND INTERVAL. It collapses to nothing the moment no
+    # submission is open, so the sweep is self-limiting by the state of the work rather
+    # than by a timer somebody has to remember to turn off.
+    if VERDICT_INGEST not in overdue and await awaiting_a_verdict(conn):
+        reading = state.get(VERDICT_INGEST) or {}
+        age_hours = reading.get("age_hours")
+        if age_hours is None or age_hours * 3600 >= AWAITING_VERDICT_INTERVAL_SECONDS:
+            overdue.append(VERDICT_INGEST)
     return overdue
+
+
+#: Five minutes, while anything is waiting. Entry 172.
+#:
+#: An exam resolves in minutes, so five is the granularity the thing being waited on
+#: actually has. It is twelve requests an hour against SimForge at the very most, and
+#: zero when nothing is open.
+AWAITING_VERDICT_INTERVAL_SECONDS = 300.0
+
+
+async def awaiting_a_verdict(conn: AsyncConnection) -> bool:
+    """Whether any submission has an open run and no result yet.
+
+    `simforge_run_ref IS NOT NULL` is the half that matters: a submission that never
+    reached SimForge has no verdict coming, and polling faster for it would be polling
+    faster for nothing. Thirty of seventy-five submissions were in exactly that state
+    when this was written.
+    """
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "SELECT EXISTS (SELECT 1 FROM curriculum_submission "
+            "                WHERE simforge_run_ref IS NOT NULL "
+            "                  AND result_received_at IS NULL)"
+        )
+        row = await cur.fetchone()
+        return bool(row and row[0])
 
 
 #: The kinds the runner drives. `restore_drill` is NOT among them, deliberately.

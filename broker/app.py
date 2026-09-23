@@ -92,7 +92,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0059"
+EXPECTED_SCHEMA_REVISION = "0060"
 
 # `live_grants` means "a grant no live revocation covers". The four-scope rule that
 # decides that has exactly one copy - `revocation._covers`, the same text
@@ -1640,6 +1640,56 @@ async def list_simulation_certifications(
         "total": len(rows),
         "void": sum(1 for row in rows if row["void"]),
     }
+
+
+class GateReviewCorrectionRequest(BaseModel):
+    gate: str = Field(min_length=1)
+    reviewer_named: uuid.UUID
+    correction: str = Field(min_length=1)
+
+
+@app.post("/api/provisioning/runs/{run_id}/review-correction", status_code=201)
+async def correct_gate_review_route(
+    run_id: uuid.UUID, body: GateReviewCorrectionRequest, conn: DB, me: ME
+) -> dict[str, Any]:
+    """Correct a recorded gate review by a later entry. Never by editing.
+
+    **RULED 22 SEPTEMBER 2026, entry 170.** `audit_log` is append-only by trigger and
+    the review note lives inside a gate result's evidence, so until now a record that
+    was true but readable two ways had no remedy at all.
+
+    `reviewer_named` is a FIELD here, unlike every other actor on this API. It is not
+    who is acting - that is `me` - it is who the note being corrected was drafted for,
+    and on the correction this was built for those are two different people.
+    """
+    humans.authorize(me, required_role="venture_operator")
+    try:
+        written = await provisioning.correct_gate_review(
+            conn, run_id=run_id, gate=body.gate,
+            reviewer_named=body.reviewer_named,
+            correction=body.correction, corrected_by=me,
+        )
+    except provisioning.ProvisioningError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {
+        **written,
+        "note": (
+            "Recorded as a later entry; the original note is untouched. Gate 10's "
+            "signature covers the note plus every correction on it."
+        ),
+    }
+
+
+@app.get("/api/provisioning/runs/{run_id}/review-corrections")
+async def read_gate_review_corrections(
+    run_id: uuid.UUID, conn: DB, _me: ME, gate: str | None = Query(default=None)
+) -> dict[str, Any]:
+    """Every correction on this run's reviews, oldest first. All are in force."""
+    corrections = await provisioning.gate_review_corrections(
+        conn, run_id=run_id, gate=gate
+    )
+    return {"run_id": str(run_id), "corrections": corrections,
+            "total": len(corrections)}
 
 
 @app.post("/api/signoffs", status_code=201)
