@@ -15167,3 +15167,119 @@ when SimForge runs a build that has it.
 > checkout at `dad3d84a`.** The running build has neither the field nor the renderer. A
 > handover today would send the sections and change nothing. This has been true, with
 > different commits, at every check this week.
+
+
+## 176. A run ref names what the exam showed
+
+**Ruling by Ivan Green, 23 September 2026:**
+
+> *"A run ref names what the exam showed. The instruction sections in the handover are
+> part of the ref derivation, so a handover that shows the agent different text mints a
+> different ref. Measured: showing all four sections for the first time collided with
+> six existing refs, and the collision is silent — `open_run` returns the graded row and
+> the battery skips it, so Gate 8 would report success and the old verdicts would return
+> as new."*
+
+### The measurement, the morning after 175 landed
+
+Entry 175 put the prose of every cited section into the handover. It is new text in the
+exam room and it changes what an agent can be expected to know. It moved **no segment of
+the ref.**
+
+Computed against the six refs stored on run `4637b946`:
+
+    SAME   assign_contract cc49a49c      SAME   buyer_match     c8afb0e6
+    SAME   assign_contract c8afb0e6      SAME   comp_analysis   e27fc174
+    SAME   buyer_match     cc49a49c      SAME   property_lookup e27fc174
+
+Six of six. And `mint_run_ref` takes no `run_id`, so **abandoning the run and opening a
+fresh one mints the identical six.** The stated fallback would not have produced a
+re-exam either.
+
+### The collision reads as success from both sides
+
+    open_run            idempotent on run_ref; "returns the row untouched rather
+                        than restarting its clock"
+    battery_sweep       unscored_runs selects on verdict IS NULL, so a graded row
+                        is never re-scored
+
+So Gate 8 would record `already_open`, no battery would run, the verdict sweep would
+ingest the verdicts already on those rows, and the re-exam would report **no change** —
+indistinguishable from *showing the sections made no difference.* That is the exact class
+of false evidence this week has been spent on, arriving one layer lower.
+
+Nothing was advanced. The collision was checked before the handover, which is the only
+place it is visible.
+
+### Why it is not the two hashes beside it
+
+The sections map is a function of three things: **which** sections the keys cite, the
+instruction content those names are looked up in, and **the code that does the looking.**
+
+The first is already in `scenario_set_hash` — `instruction_section` is a field on every
+`operation_scenarios` row. The second is already in `content_hash`. The third is in
+neither, and the third is what changed.
+
+`scenario_set_hash` says in writing why it excludes `instruction_set_ref`: *"the third is
+the instruction, which the ref already names in its own segment."* True while that key
+held a hash and two version strings. It stopped being true when prose moved into it,
+because a hash of the whole instruction cannot say which **part** of it was put in front
+of the agent.
+
+This is entry 143's shape one field over. A rubric bump changes how an answer is graded
+without changing the answer key; a renderer change changes what the agent was shown
+without changing the instruction. Both are changes to the exam that no hash of the exam's
+inputs can express.
+
+`test_the_key_hash_does_not_move_when_only_the_prose_does` is the load-bearing test: the
+same four section names, different prose, byte-identical `scenario_set_hash`. If it ever
+fails, this segment is redundant and should go.
+
+### The segment
+
+    s<12 chars>     sections_shown_hash, unit A only, after the k segment
+
+Taken over the payload that goes on the wire, like the scenario hash and for the same
+argument: hash the thing itself so the hash cannot drift from what it names. A second
+call to `_sections_cited_by` would be a second spelling of the rule, and two spellings
+agree until one of them moves.
+
+Domain-separated by `office/sections/v1`, for the reason `department_basis_hash` is: a
+value that looks like a `forge_operating_instruction.content_hash` will eventually be
+looked up as one.
+
+**Unit A only.** A department run submits no curriculum and so shows no sections; a
+segment there would be a hash of nothing claiming something was shown. The reason the
+answer-key segment is unit A only, one field over.
+
+### Absent, not blank — and that is what closes the collision
+
+`None` when nothing is shown, and the segment is then omitted. Entry 122's rule, and the
+rule the agent and answer-key segments were both added under: every ref already open
+keeps the shape it was opened under and still resolves.
+
+The consequence this entry exists for is the transition. A handover that showed nothing
+has no segment; the first that shows four sections has one. **Different ref, new run,
+real battery.**
+
+A module whose keys cite nothing — or whose instruction has none of the sections they
+cite — still mints no segment, and should. Nothing is being shown, which is exactly the
+state the old ref already describes.
+
+### `curriculum_submission.sections_shown_hash`, migration 0062
+
+The full digest beside the ref's twelve characters, for the reason 0046 put the full
+scenario-set hash on the row: a prefix in a ref is for recognising a run in a log line,
+and a reader asking *why did this ref change* needs the whole value.
+
+**Nullable and not backfilled.** NULL means the handover showed no sections, which is
+true of every submission written before 22 September 2026 — so NULL is a fact here, not a
+missing one, and this column never gets a NOT NULL.
+
+`test_the_ref_gate_8_mints_is_derived_from_the_submission` now recomputes through it.
+That test is the one that proves the column is sufficient: the ref is recoverable from
+the row after the payload is gone.
+
+> **Still open: nothing has been re-examined.** This lands the ref. The six exams on
+> `4637b946` are still graded against instructions their agents were never shown, and
+> advancing waits on Ivan.

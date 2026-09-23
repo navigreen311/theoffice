@@ -61,6 +61,7 @@ from broker.simforge import (
     mint_run_ref,
     operation_scenario_rows,
     scenario_set_hash,
+    sections_shown_hash,
     submission_unit,
     supersede_run_submissions,
 )
@@ -1302,6 +1303,16 @@ async def _submit_one_module(
     # other than what was sent. Ruled 18 September 2026, entry 129.
     scenario_hash = scenario_set_hash(payload)
 
+    # AND WHAT IT SHOWED. Entry 176, and taken over the same payload for the same
+    # reason: entry 175 put the cited instruction prose in `instruction_set_ref`, and
+    # `scenario_set_hash` deliberately excludes that key - it says so in writing,
+    # because until yesterday the only thing in there was the instruction the ref
+    # already names. Prose moved in, and the exclusion became a hole.
+    #
+    # `None` until a handover actually shows something, so the segment is absent on
+    # every ref opened before this and those refs still resolve.
+    sections_hash = sections_shown_hash(payload)
+
     unit, rubric_kind = submission_unit(module_id)
     opened: list[dict[str, Any]] = []
     try:
@@ -1342,6 +1353,12 @@ async def _submit_one_module(
                 # this changes the ref STRING, and `runRef` is already the whole of a
                 # run's identity over there.
                 scenario_hash=scenario_hash,
+                # AND THE TEXT IT WAS SHOWN. Entry 176. Showing the agent the four
+                # sections its keys cite is a change to the exam, and without this
+                # segment it was a change no ref could express: the first handover
+                # carrying them minted the ref of the exam graded without them, and
+                # `open_run` would have returned that graded row in silence.
+                sections_hash=sections_hash,
                 # AND THE TWO VERSIONS IT IS GRADED UNDER. Entry 143. Both are None
                 # until SimForge publishes them on `/api/version`, and `mint_run_ref`
                 # omits an absent segment rather than defaulting it.
@@ -1442,6 +1459,7 @@ async def _submit_one_module(
                 instruction_content_hash=instruction.content_hash,
                 run_ref=entry["run_ref"],
                 scenario_hash=scenario_hash,
+                sections_hash=sections_hash,
                 protocol_version=forge_build.get("response_protocol_version"),
                 rubric_version=forge_build.get("operation_rubric_version"),
             )
@@ -1477,6 +1495,9 @@ async def _submit_one_module(
             # been sat, which is what makes a refused submission comparable with the
             # one that replaces it.
             scenario_hash=scenario_hash,
+            # Recorded on a refused submission too, for the same reason the key hash
+            # is: the row says what WOULD have been shown.
+            sections_hash=sections_hash,
             protocol_version=forge_build.get("response_protocol_version"),
             rubric_version=forge_build.get("operation_rubric_version"),
         )
@@ -1532,6 +1553,7 @@ async def _record_submission(
     office_agent_id: Any | None = None,
     members: dict[str, str] | None = None,
     scenario_hash: str | None = None,
+    sections_hash: str | None = None,
     protocol_version: str | None = None,
     rubric_version: str | None = None,
     attestation_id: Any | None = None,
@@ -1570,8 +1592,10 @@ async def _record_submission(
                scenario_pack_ref, scenario_count, coverage_denominator,
                instruction_content_hash, submitted_by, simforge_run_ref,
                office_agent_id, scenario_set_hash, run_id,
-               protocol_version, rubric_version, attestation_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               protocol_version, rubric_version, attestation_id,
+               sections_shown_hash)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s)
             """,
             (
                 submission_id, ctx.venture_id, forge_id, module_id, department,
@@ -1592,6 +1616,10 @@ async def _record_submission(
                 protocol_version,
                 rubric_version,
                 attestation_id,
+                # WHAT THIS HANDOVER SHOWED, in full beside the ref's twelve
+                # characters. Entry 176. NULL means it showed nothing, which is the
+                # true answer for every row written before entry 175 landed.
+                sections_hash,
             ),
         )
         if members:
