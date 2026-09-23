@@ -33,7 +33,7 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import quote, urlsplit, urlunsplit
 
 import httpx
 from psycopg.rows import dict_row
@@ -106,6 +106,25 @@ class ResponseRefusedError(SimForgeError):
 
     The response to this one is a third thing too: shorten what The Office sends, or
     narrow the guard. Never widen it - the guard is the read-path control.
+    """
+
+
+class RouteMissingError(SimForgeError):
+    """The URL this side built was not answered by anything. Entry 177.
+
+    **Its own type because the caller has to tell it from an absence.** Every other
+    `SimForgeError` means SimForge was asked and something went wrong. This one means
+    the question was never put: a 404 from a route that is not there, which looks
+    exactly like a 404 from a resource that does not exist and means the opposite.
+
+    It happened. `read_battery_result` asked the `/office` adapter for a
+    `battery_result` module that has never existed, read the 404 as "no battery
+    record", and returned None - so `verdict_evidence` would have been NULL on every
+    certification, for ever, with nothing anywhere saying the read had failed.
+
+    The response to this one is to fix the URL, which is a different act from waiting
+    for a service to come back and a different act again from accepting that a run has
+    no battery behind it.
     """
 
 
@@ -1084,33 +1103,57 @@ class SimForgeClient:
     ) -> VerdictEvidence | None:
         """The evidence behind a verdict. Ruled 22 September 2026, entry 173.
 
-        Beside `read_gate_result` and against the same adapter surface, with the same
-        credential and the same leak guard. What differs is only what is asked for: the
-        verdict, and then what the verdict rests on.
+        THE ROUTE IS SIMFORGE'S OWN, NOT THE BROKERED ADAPTER
+        =====================================================
 
-        **Returns None rather than raising when SimForge has nothing.** A 404 here is
-        not the refusal it is for a verdict - a run may legitimately have no battery
-        record, and `observed: false` is SimForge's own way of saying so. The caller
-        stores no evidence and the certification says why, which is a different fact
-        from a certification whose evidence was never asked for.
+            Corrected 23 September 2026 (entry 177). This asked the `/office` adapter
+            for a `battery_result` module, and **SimForge dispatches three modules -
+            `gate_result`, `run_start`, `submit_curriculum` - and never had a fourth.**
+            Every call 404'd, every 404 was read as "no battery record", and
+            `verdict_evidence` would have been NULL on every certification for ever
+            with nothing saying why.
 
-        Non-fatal by construction for the reason the hand-over is: this runs inside the
-        verdict sweep, and a SimForge that cannot answer about evidence must not stop a
-        verdict being recorded.
+            The evidence lives at `GET /api/operation/battery-result/{run_ref}`, a
+            direct route at the host root. So the base URL is stripped to its ORIGIN
+            and the path appended - the same thing `build` does for `/api/version`, and
+            for the reason its docstring gives: the registry's `base_url` is an adapter
+            mount, not the service.
+
+            `run_ref` is percent-encoded. Today's refs carry `:` and `@`, which travel
+            fine unencoded; a ref carrying `/` would silently address a different
+            route, and the minter has added a segment twice this month.
+
+        A 404 IS AN ANSWER ONLY WHEN SIMFORGE NAMES THE REF
+        ===================================================
+
+            Ruled 23 September 2026 (entry 177): *"A read that cannot find its source
+            says so."*
+
+            An unknown ref answers `{"detail": {"error": "unknown_run_ref", ...}}` -
+            measured. A route that is not there answers `{"detail": "Not Found"}` -
+            also measured, and that is what this call got for a day.
+
+            So `unknown_run_ref` returns None, which is the honest absence: SimForge
+            was asked and has no such run. **Any other 404 raises**, because this side
+            cannot tell a missing route from a moved one and both mean the question was
+            never put. A read that returns "nothing found" from a URL nobody answered
+            is the defect this paragraph exists to stop.
+
+        **None still means SimForge has nothing**, which it says two ways: this 404,
+        and `observed: false` on a 200. Both are answers and neither is an error - a
+        run can exist with no battery behind it.
         """
         credential = await self._tenant_credential(conn)
-        base_url, api_version = await self._registry(conn)
+        base_url, _api_version = await self._registry(conn)
 
-        url = f"{base_url.rstrip('/')}/battery_result"
+        parts = urlsplit(base_url)
+        origin = urlunsplit((parts.scheme, parts.netloc, "", "", ""))
+        quoted = quote(run_ref, safe="")
+        url = f"{origin}/api/operation/battery-result/{quoted}"
         try:
-            response = await self._http.post(
+            response = await self._http.get(
                 url,
-                json={"run_ref": run_ref},
-                headers={
-                    "Authorization": f"Bearer {credential.reveal()}",
-                    "X-Office-Forge-Api-Version": api_version,
-                    "Content-Type": "application/json",
-                },
+                headers={"Authorization": f"Bearer {credential.reveal()}"},
                 timeout=self._timeout,
             )
         except httpx.HTTPError as exc:
@@ -1121,18 +1164,25 @@ class SimForgeClient:
             ) from exc
 
         if response.status_code == 404:
-            return None
+            if _names_the_unknown_ref(response):
+                return None
+            raise RouteMissingError(
+                f"SimForge answered 404 for the battery-result route without naming "
+                f"{run_ref!r}, so this is a route that is not there rather than a run "
+                f"SimForge has no record of. Nothing was read and no evidence is "
+                f"stored; do not read this as an absent battery record."
+            )
         if response.status_code >= 400:
             raise SimForgeError(
-                f"battery_result for {run_ref!r} returned {response.status_code}"
+                f"battery-result for {run_ref!r} returned {response.status_code}"
             )
         try:
             body = response.json()
         except ValueError as exc:
-            raise SimForgeError("battery_result returned a non-JSON body") from exc
+            raise SimForgeError("battery-result returned a non-JSON body") from exc
         if not isinstance(body, dict):
             raise SimForgeError(
-                f"battery_result for {run_ref!r} returned "
+                f"battery-result for {run_ref!r} returned "
                 f"{type(body).__name__}, not an object"
             )
         return parse_battery_result(body)
@@ -1770,6 +1820,31 @@ def _without_dropped_fields(body: dict[str, Any]) -> dict[str, Any]:
     if certifications:
         trimmed["certifications"] = certifications
     return trimmed
+
+
+def _names_the_unknown_ref(response: Any) -> bool:
+    """Did SimForge's 404 name the ref, or is this a route that is not there?
+
+    Measured 23 September 2026, both shapes, against the running build:
+
+        unknown ref     {"detail": {"error": "unknown_run_ref", "detail": "..."}}
+        missing route   {"detail": "Not Found"}
+
+    **Only the first is an answer.** The second is FastAPI saying nothing is mounted
+    there, and reading it as "no record" is how a wrong URL becomes a NULL column.
+
+    Read as a marker and nothing else: the prose beside it is not parsed, and a body
+    this cannot understand is treated as the route being absent - the direction that
+    raises rather than the direction that invents an absence.
+    """
+    try:
+        body = response.json()
+    except ValueError:
+        return False
+    if not isinstance(body, dict):
+        return False
+    detail = body.get("detail")
+    return isinstance(detail, dict) and detail.get("error") == "unknown_run_ref"
 
 
 def parse_battery_result(body: dict[str, Any]) -> VerdictEvidence | None:
