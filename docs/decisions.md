@@ -15283,3 +15283,101 @@ the row after the payload is gone.
 > **Still open: nothing has been re-examined.** This lands the ref. The six exams on
 > `4637b946` are still graded against instructions their agents were never shown, and
 > advancing waits on Ivan.
+
+
+## 177. A read that cannot find its source says so
+
+**Ruling by Ivan Green, 23 September 2026:**
+
+> *"A read that cannot find its source says so. `read_battery_result`'s 404 handler
+> returned None as 'no record', so a wrong route would have left `verdict_evidence` NULL
+> on every certification, silently. A missing route and an absent record are different
+> answers."*
+
+### The route was never there
+
+`GET /office/_modules` on the running build lists exactly three:
+
+    gate_result    run_start    submit_curriculum
+
+`read_battery_result`, built for entry 173, POSTed a fourth — `battery_result` — to that
+same adapter. **SimForge has never dispatched it.** Every call returned
+
+    {"detail": "SimForge dispatches no module 'battery_result'."}
+
+and the handler read 404 as *no battery record* and returned `None`.
+
+The evidence was at **`GET /api/operation/battery-result/{run_ref}`** the whole time — a
+direct route at the host root, not a brokered module. Measured: it answers 200 with the
+rubric dimensions, the per-attempt record and the per-class verdicts.
+
+### Why nothing caught it, and why that is the ruling
+
+Three layers of designed-in silence, each defensible alone:
+
+    read_battery_result   404 -> None, because a run may have no battery
+    _evidence_for         every exception -> None, because evidence must not
+                          cost a run its certification
+    certification         verdict_evidence NULL, documented as "nobody asked"
+
+So a wrong URL produced a NULL column whose published meaning is *nobody asked* — which
+is precisely what a reader would have concluded, correctly reading a record that was
+wrong. Entries 173 and 174 both rest on evidence this path could never have fetched.
+
+Nothing failed. That is the defect.
+
+### A 404 is an answer only when SimForge names the ref
+
+Both shapes measured against the running build:
+
+    unknown ref     {"detail": {"error": "unknown_run_ref", "detail": "..."}}
+    missing route   {"detail": "Not Found"}
+
+The first returns `None` — SimForge was asked and has no such run. **Every other 404
+raises `RouteMissingError`**, including a body this side cannot parse. This side cannot
+tell a missing route from a moved one, and both mean the question was never put.
+
+The direction matters more than the discriminator: an unrecognised shape fails toward
+*the route is absent*, never toward *the record is absent*. Inventing an absence is how a
+NULL column acquires a meaning nobody checked.
+
+### Its own exception type, for the reason the others have one
+
+`RouteMissingError` sits beside `CurriculumRejectedError` and `ResponseRefusedError`, and
+the argument is theirs: the response differs. An unreachable Forge is a service to wait
+for. A missing route is a line of code to change, and it will not heal on its own.
+
+It subclasses `SimForgeError`, so every handler written for the parent still catches it —
+a new exception escaping those would turn a logged finding into a failed verdict sweep.
+
+### The sweep says which kind of nothing this was
+
+`_evidence_for` returned a bare `None` for five outcomes: no ref, no client, unreachable,
+wrong URL, and a run that genuinely has no battery. All five were written identically.
+
+It now returns `(record, note)`. `None, None` is an honest absence; a note is a read that
+failed, and `_ingest_one` puts it in `findings["evidence_unreadable"]` with the run ref.
+
+**The verdict still lands.** That is unchanged and is the point of the original shape: a
+certification with no evidence is recorded and usable, and the sweep row beside it now
+says whether anybody could look.
+
+### The manifest was never wrong
+
+`get_battery_result`'s declared fields — `run_ref`, `unit`, `forge_id`, `module_id`,
+`agent_id`, `observed`, `certifications`, `join` — are **exactly** the keys the real route
+returns. The shape was measured against the right body; only the URL was built wrong.
+
+Pinned by a test, because it says where the defect was and where it was not.
+
+### Verified live, not only in fixtures
+
+    real ref      ('failed', 10 rubric dimensions)
+                  deciding: restraint/failure_recognition 0.0
+    unknown ref   None
+
+> **Still open: `instruction_sections` is on no read SimForge exposes.** It is recorded
+> on the result row — `{shown, required_by_keys, missing}` — and neither
+> `gate_result_for` nor `battery_result_for` serializes it. All six Greenstone exams read
+> back `None`. Nothing in this entry can fix that; it is a field for SimForge to publish,
+> and the manifest has room for it the day they do.

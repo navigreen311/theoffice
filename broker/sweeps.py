@@ -38,7 +38,7 @@ from psycopg.types.json import Jsonb
 
 from broker import certification, incidents, shifts, simforge
 from broker.db import connection
-from broker.simforge import SimForgeError
+from broker.simforge import RouteMissingError, SimForgeError
 
 AUDIT_CHAIN = "audit_chain"
 CERTIFICATION_STALENESS = "certification_staleness"
@@ -494,6 +494,10 @@ async def sweep_verdict_ingest(
         "refused": [],
         "no_grant_holders": [],
         "unreadable": [],
+        # Entry 177. A verdict that WAS read, whose evidence was not. Apart from
+        # `unreadable`, which is the verdict itself: a certification with no evidence
+        # is recorded and usable, and one with no verdict is not recorded at all.
+        "evidence_unreadable": [],
         # Entry 142's two. `scenario_set_stale` is a verdict this sweep read and would
         # not write; `scenario_set_unverifiable` is one it could not ask the question
         # about. Neither is `refused`, which is reserved for a write `record_result`
@@ -733,7 +737,18 @@ async def _ingest_one(
         targets = [{"office_agent_id": None, "department": sub["department"]}]
 
     written = 0
-    evidence = await _evidence_for(client, conn, sub.get("simforge_run_ref"))
+    evidence, evidence_note = await _evidence_for(
+        client, conn, sub.get("simforge_run_ref")
+    )
+    if evidence_note:
+        # REPORTED, NEVER SWALLOWED. Entry 177. The verdict is still recorded below -
+        # what must not happen is that a read which failed is indistinguishable from a
+        # run that had no battery behind it.
+        findings["evidence_unreadable"].append({
+            "submission_id": str(submission_id),
+            "run_ref": sub.get("simforge_run_ref"),
+            "reason": evidence_note,
+        })
 
     for target in targets:
         try:
@@ -995,26 +1010,48 @@ _SWEEPS = {
 
 async def _evidence_for(
     client: Any, conn: AsyncConnection, run_ref: str | None
-) -> dict[str, Any] | None:
-    """The battery record behind a verdict, or None. Entry 173.
+) -> tuple[dict[str, Any] | None, str | None]:
+    """The battery record behind a verdict, and why there is none. Entry 173.
 
-    **Every failure here is None, not a raise.** The verdict is the thing being
-    ingested; the evidence explains it. A SimForge that answers about one and not the
-    other must not cost the run its certification - which is the same argument the
-    hand-over makes for being non-fatal, at the other end of the exam.
+    **Still never raises.** The verdict is the thing being ingested; the evidence
+    explains it. A SimForge that answers about one and not the other must not cost the
+    run its certification - the same argument the hand-over makes for being non-fatal,
+    at the other end of the exam.
 
-    A `None` is recorded as `verdict_evidence IS NULL`, and the column's comment says
-    what that means: nobody asked, or nobody could. It is not "nothing was found".
+    WHAT CHANGED, AND WHY IT HAD TO. Ruled 23 September 2026, entry 177
+    ===================================================================
+
+        *"A read that cannot find its source says so."*
+
+        This returned a bare `None` for every outcome: no ref, no client, SimForge
+        unreachable, a wrong URL, and a run that genuinely has no battery. All five
+        were written as `verdict_evidence IS NULL` and no reader could tell them apart.
+
+        One of them was true for a day. `read_battery_result` asked a route that has
+        never existed, and the only trace was a NULL column that already had a
+        published meaning - "nobody asked" - which is exactly what a reader would have
+        concluded.
+
+        So the second element is the note: None when nothing went wrong, and a sentence
+        when something did. The caller puts it in the sweep's findings. NULL still
+        means what the column comment says; what is new is that the sweep row beside it
+        says which kind of nothing this was.
     """
-    if not run_ref or client is None:
-        return None
+    if client is None:
+        return None, "this sweep was given no SimForge client, so nothing was asked"
+    if not run_ref:
+        return None, None  # no run, no battery. Not a failure to read anything.
     try:
         evidence = await client.read_battery_result(conn, run_ref)
-    except SimForgeError:
-        return None
-    except Exception:
-        return None
-    return evidence.as_record() if evidence is not None else None
+    except RouteMissingError as exc:
+        # NAMED ON ITS OWN, because it is the one an operator must act on. The others
+        # are a service to wait for; this is a URL to fix, and it will not heal.
+        return None, f"the battery-result route did not answer: {exc}"
+    except SimForgeError as exc:
+        return None, f"SimForge could not be read for evidence: {exc}"
+    except Exception as exc:  # belt and braces; the verdict still lands
+        return None, f"reading the evidence raised {type(exc).__name__}: {exc}"[:300]
+    return (evidence.as_record() if evidence is not None else None), None
 
 
 async def run_all(*, include_restore_drill: bool = False) -> dict[str, SweepResult]:
