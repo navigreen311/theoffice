@@ -113,6 +113,13 @@ NOT_AGENT_FACING: dict[tuple[str, str], str] = {
         "Opens the OperationRun a verdict is later read by. Bookkeeping between the two "
         "systems, on the same footing as the hand-over that precedes it."
     ),
+    ("simforge", "gate_9_5_verdict"): (
+        "Asks whether a venture's held-out partition passed. Gate 9.5 runs during "
+        "provisioning, the actor is the human who provisioned, and the answer is about "
+        "the VENTURE rather than about any agent - so there is no agent a grant could "
+        "name. SimForge's contract page specifies the call with the tenant credential "
+        "for the same reason."
+    ),
 }
 
 

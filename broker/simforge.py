@@ -1098,6 +1098,159 @@ class SimForgeClient:
             )
         return parse_gate_result(body)
 
+    async def gate_9_5_verdict(self, conn: Any, venture_id: str) -> str | None:
+        """Whether the held-out partition passed. **Whether, never why.**
+
+        THE SHAPE IS SIMFORGE'S, AND THIS PAGE IS THE ONLY SOURCE FOR IT
+        ===============================================================
+
+            `docs/contracts/gate-9-5-verdict.md` in SimForge's tree, decided in their
+            ADR-0108 and implemented in ADR-0111. Its own words: *"SimForge names this.
+            The Office records it, in that order. Nothing on The Office's side may guess
+            past this page."*
+
+            That rule is written there because a guess about another system's response
+            once read as that system's silence and cost two days (entry 144). So every
+            behaviour below is quoted from the page, and where the page is silent this
+            refuses rather than deciding.
+
+        THE ANSWER, VERBATIM FROM THE CONTRACT
+        ======================================
+
+            Always 200. Always these four keys. Never any other.
+
+                venture_id        echoed
+                partition_exists  true | false
+                verdict           PASS | FAIL | NOT_RUN | IN_PROGRESS | TIMEOUT | null
+                decided_at        ISO-8601 UTC | null
+
+            And the adapter the page specifies, in full:
+
+                partition_exists == false  ->  None   (Gate 9.5: at ceiling)
+                otherwise                  ->  verdict verbatim
+
+            **`verdict` is not interpreted here.** `_gate_9_5` already holds the rule
+            that only `PASS` advances, that `NOT_RUN` is not a pass and `TIMEOUT` is not
+            a failure. A second place deciding what a verdict means is how two spellings
+            of one rule start disagreeing.
+
+            **`decided_at` is read and not returned.** `HeldOutSource.verdict` answers
+            one question and the contract's adapter section names one value. Threading a
+            timestamp nothing asks for through the port would be the first guess past the
+            page.
+
+        THE ONE INVARIANT THIS CHECKS, AND WHY IT IS NOT A GUESS
+        ========================================================
+
+            *"`verdict` is null if and only if `partition_exists` is false."* Written on
+            the page, enforced in SimForge's own schema, and checked here because the two
+            branches below read one field each: a body with `partition_exists: true` and
+            a null verdict would return `None` from the second branch and be
+            indistinguishable from an absent partition.
+
+            Refused rather than resolved. Which of the two fields is wrong is not
+            knowable from this side.
+
+        WHETHER, NOT WHY - AND THE GUARD STILL RUNS
+        ===========================================
+
+            The page: *"The answer carries nothing about the partition. No counts,
+            classes, modules, scenario ids, digests, reasons or scores."* The Office does
+            not take that on trust. `validate_response` refuses any field not in the
+            manifest, and `assert_no_scenario_content` runs on the body exactly as it
+            does on every other answer from this Forge.
+
+        SIMULATION IS NOT THIS CALL'S BUSINESS
+        ======================================
+
+            The page again: *"A venture in simulation gets the same answer. SimForge is
+            blind to simulation. The Office's gate decides."* So nothing here reads
+            `venture_simulation`, and a simulation rule at this layer would be a decision
+            taken in the adapter for a gate that owns it.
+
+        NOT AGENT FACING, so it travels the hand-over's path rather than the brokered
+        one: signed with The Office's own tenant credential and posted to
+        `{base_url}/gate_9_5_verdict`, the same adapter surface `submit_curriculum` and
+        `run_start` use. Gate 9.5 runs during provisioning and the actor is a human; a
+        grant over this would name an agent for an act no agent performs.
+
+        **Raises rather than answering None when the call fails.** Entry 177's rule: a
+        read that cannot find its source says so. `None` here is a statement that
+        SimForge has no partition, and an unreachable Forge reported as an absent
+        partition is a false fact about SimForge arriving in a gate's evidence.
+        """
+        credential = await self._tenant_credential(conn)
+        base_url, api_version = await self._registry(conn)
+
+        sent = {"venture_id": venture_id}
+        url = f"{base_url.rstrip('/')}/gate_9_5_verdict"
+        try:
+            response = await self._http.post(
+                url,
+                json=sent,
+                headers={
+                    "Authorization": f"Bearer {credential.reveal()}",
+                    "X-Office-Forge-Api-Version": api_version,
+                    "Content-Type": "application/json",
+                },
+                timeout=self._timeout,
+            )
+        except httpx.HTTPError as exc:
+            # type(exc).__name__, never str(exc): the message can carry the URL, and
+            # this request carried a credential.
+            raise SimForgeError(
+                f"could not reach SimForge: {type(exc).__name__}"
+            ) from exc
+
+        if response.status_code >= 400:
+            # The page: "A 4xx is auth or a malformed body only. It never depends on the
+            # venture." So a 4xx is a fault on this side and is reported as one; it is
+            # never read as an answer about the partition. The body is not echoed, for
+            # the reason the other two calls do not echo one: an error body has not been
+            # through `validate_response`.
+            raise SimForgeError(
+                f"gate_9_5_verdict returned {response.status_code}; the contract says "
+                "this status is auth or a malformed body and never depends on the "
+                "venture, so it is not an answer about the partition"
+            )
+        try:
+            body = response.json()
+        except ValueError as exc:
+            raise SimForgeError("gate_9_5_verdict returned a non-JSON body") from exc
+        if not isinstance(body, dict):
+            raise SimForgeError(
+                f"gate_9_5_verdict returned {type(body).__name__}, not an object"
+            )
+
+        # `sent` so the echoed `venture_id` is exempt from the prose check, the same
+        # exemption `submit_curriculum` and `run_start` are given. The field-set check
+        # above is unaffected by it - entry 132.
+        validate_response("gate_9_5_verdict", body, sent=sent)
+
+        exists = body.get("partition_exists")
+        if not isinstance(exists, bool):
+            raise SimForgeError(
+                "gate_9_5_verdict: partition_exists is not a boolean, and the contract "
+                "admits only true or false"
+            )
+        verdict = body.get("verdict")
+        if verdict is not None and not isinstance(verdict, str):
+            raise SimForgeError(
+                f"gate_9_5_verdict: verdict is {type(verdict).__name__}, not a string "
+                "or null"
+            )
+        if (verdict is None) != (not exists):
+            raise SimForgeError(
+                "gate_9_5_verdict: the contract says verdict is null if and only if "
+                f"partition_exists is false; got partition_exists={exists} with "
+                f"verdict={verdict!r}"
+            )
+
+        if not exists:
+            return None
+        return verdict
+
+
     async def read_battery_result(
         self, conn: Any, run_ref: str
     ) -> VerdictEvidence | None:
