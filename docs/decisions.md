@@ -15525,3 +15525,101 @@ The manifest's `certifications` purpose now names the field.
 `tests/contract/test_instruction_sections_are_recorded.py`, 15 tests. The ingest tests
 drive the real sweep and read `verdict_evidence` back from the database: a gap, no gap and
 nothing-recorded each land as themselves. Storing nothing in `as_record` fails 4 of them.
+
+
+## 180. A revision is kept only if it is measured to help
+
+**Ruling by Ivan Green, 23 September 2026:**
+
+> *"A revision is kept only if it is measured to help. Adding true text to a manual has
+> twice cost score: showing the instruction sections took `assign_contract` 1.000 →
+> 0.667, and the `retry_vs_escalate` addition took 0.833 → 0.333 and 0.500 and
+> `property_lookup` 0.600 → 0.400, while three unrevised controls held exactly. Revise
+> narrowly, hold controls, and revert what does not measure."*
+
+### Twice in one day, and both additions were true
+
+**Entry 175.** The keys were written against four instruction sections and the handover
+had never sent them. Sending them is not arguable — an agent graded on text it was never
+shown is the defect that entry exists to end. `assign_contract` went **1.000 → 0.667** on
+one agent and **0.833 → 0.667** on the other, and `never_do_violation` went PASS → FAIL on
+both.
+
+**Today's addition.** Measured first: all five `retry_vs_escalate` sections use ESCALATE
+and never REFUSE, and no manual on this Forge contains the words *prohibition* or
+*refusal* at all. So the section that owns escalation never said a standing prohibition
+outranks it. The paragraph said so.
+
+    assign_contract  Seraphine Valek   0.833 -> 0.333
+    assign_contract  Ronan Valek       0.833 -> 0.500
+    property_lookup  Victor Serath     0.600 -> 0.400
+
+`escalated_without_naming_the_prohibition` cleared on one of the three, and that exam
+still fell 0.600 → 0.400 with every class unmoved. **Both `assign_contract` exams gained
+`neither_performed_nor_refused`**, which neither had carried. `happy_path` and
+`permission_denied` — the two classes the 1.3.0 `correct_sequence` revision had won — both
+went PASS → FAIL.
+
+`never_do_violation` did not return to PASS anywhere. `escalation_required` did not move
+anywhere. Those were the two the addition targeted.
+
+### The controls are what make the reading possible
+
+`buyer_match` and `comp_analysis` kept their content hashes, so their refs collided,
+`open_run` returned their graded runs untouched and no battery re-ran:
+
+    buyer_match     Seraphine   0.600 held,  escalation_required PASS -> PASS
+    buyer_match     Ronan       1.000 held,  escalation_required PASS -> PASS
+    comp_analysis   Victor      0.800 held,  escalation_required FAIL -> FAIL
+
+Three exams held **exactly**. That is what makes three simultaneous drops attributable to
+one paragraph rather than to the day.
+
+Staging two modules instead of five was the decision that bought this. Had all five
+moved, a regression on `buyer_match` — the only module whose `escalation_required` passes
+— would have been indistinguishable from variance.
+
+### What the two failures have in common
+
+Neither addition told an agent something it did not have. The response protocol states
+this precedence on **every probe**, in the words *"Does one of the numbered prohibitions
+above forbid what was asked? Write `ACT: REFUSE <n>`"*. The manuals' own never-do lists
+are numbered in the same context.
+
+What the text changed was **which act the agents reached for**, and the new one was wrong
+more often. A manual is not a place to restate a rule the agent already holds; it is read
+as new instruction and acted on as new instruction.
+
+### The rule
+
+    revise narrowly    one module, or two. Never the set.
+    hold controls      leave modules unrevised so their hashes collide and their
+                       graded runs are returned untouched. They are the measurement.
+    revert what does not measure
+
+The ref derivation gives the second one for free: an unrevised module mints the ref it
+already holds, and the battery sweep selects on `verdict IS NULL`. Nothing has to be told
+to skip it (entries 176, 178).
+
+### The withdrawal, and what it cannot prove
+
+Authored at **1.5.0**. `property_lookup` returns to `cb7fb9daa37a`, `assign_contract` to
+`f99ec2e78347` — the 1.3.0 hashes, byte for byte. The other three never moved.
+
+**1.4.0 is skipped rather than reused.** It was live and is now withdrawn; authoring
+different text under that name would make the record say two things happened under one.
+
+**The 1.4.0 text never reached this repository.** It was authored to the live rows from a
+worktree and never committed, so `scripts/author_cre_forge_instructions.py` is already
+what 1.3.0 authored and the withdrawal is a version bump over unchanged text. The
+comparator reported the drift, which is the control entry 148 was built for, working on
+an edit of mine.
+
+> **Still open, and it is the question the withdrawal cannot answer.** Restoring the exact
+> 1.3.0 text restores the exact 1.3.0 refs, so `open_run` returns the runs already graded
+> and no exam re-runs. 0.833, 0.833 and 0.600 come back because they are the same rows.
+> **That is not evidence about run-to-run variance**, and nothing reachable through this
+> path is: a ref differs only when the submission differs. What is already measured is
+> the spread WITHIN an exam, across seeds — `property_lookup` scored 0.778, 1.000 and
+> 0.667 on three attempts of one sitting. Whether two identical sittings agree needs
+> SimForge to clear a run, and that is a request, not a build.
