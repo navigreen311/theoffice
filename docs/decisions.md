@@ -15381,3 +15381,99 @@ Pinned by a test, because it says where the defect was and where it was not.
 > `gate_result_for` nor `battery_result_for` serializes it. All six Greenstone exams read
 > back `None`. Nothing in this entry can fix that; it is a field for SimForge to publish,
 > and the manifest has room for it the day they do.
+
+
+## 178. A module declares a weekly volume if any certifiable tier would need one
+
+**Ruling by Ivan Green, 23 September 2026:**
+
+> *"A module declares a weekly volume if any certifiable tier would need one. Gate 2 asks
+> on the declared tier, Gate 3 on the effective one, so a Pack is Gate-2-valid and
+> Gate-3-invalid the moment an agent certifies below a declared `auto_execute`. Measured:
+> `buyer_match` blocked Gate 3 because Ronan Valek certified at `propose`;
+> `property_lookup` and `comp_analysis` are one certification away from the same."*
+
+### The exemption was true about the declared tier and false about the one the work runs at
+
+`modules_needing_volume` skipped `auto_execute`, and said why in writing: *"Such a module
+asks nobody, so no volume of it can reach a reviewer; requiring a rate for it would be
+requiring a number that multiplies by zero."*
+
+`_effective_tier` takes the **lower** of declared and certified. So a declared
+`auto_execute` module whose holder certifies at `propose` runs at `propose` — it reaches
+a reviewer, `daily_rate_of` is called, and the Pack has no number.
+
+**The exemption held only while nobody was certified for the module** — which is to say,
+only while the module could not be run at all.
+
+### Measured, in the gap between two gates twenty seconds apart
+
+Run `8ed01378`, 23 September:
+
+    gate 0  passed      gate 2  passed
+    gate 1  passed      gate 3  BLOCKED - no expected_weekly_volume declared
+
+Nothing about the Pack had changed. What changed was that `buyer_match`/Ronan Valek went
+from `failed` to `certified` at tier `propose` at 10:23 — **the re-exam succeeding is what
+broke the next run.**
+
+Gate 2 passed on the same Pack, in the same pass, seconds earlier.
+
+### Asked of every module a filled position operates
+
+There is no tier a Pack can declare that a certification cannot lower, so there is no
+module for which *"no certifiable tier would need a rate"* is true. The declared tier
+stops deciding the question and the tier test is gone.
+
+That makes **Gate 2 the stricter check rather than the looser one**, which is the
+direction a gate ordered before another should err: a finding at Gate 2 costs a Pack edit;
+the same finding at Gate 3 arrives after Gate 2 has already reported the Pack sound.
+
+**A pending position stays exempt, and that is a different rule.** It adds no agent demand
+at all — the work is real and humans do it — and entry 92 settled it against `other_hours`
+rather than an approval queue. `Deal Underwriter` is the live case.
+
+### What it newly requires, both ventures
+
+    greenstone    3 modules   property_lookup, comp_analysis, buyer_match
+    burkham       6 modules   client_read, client_read_pii, statement_pull,
+                              portfolio_health, restack_recommend,
+                              compliance_manifest_assemble
+
+Burkham already failed on four declared below `auto_execute` — `record_consent`,
+`submit_application`, `scan_communication`, `regulator_dossier_export` — and its last
+three runs aborted at Gate 2 on 16 September. This takes it from four to ten. Its Pack is
+a draft and nothing regressed; the six are named so they are declared rather than
+discovered.
+
+### Greenstone's three, and what they are not
+
+    property_lookup  20      comp_analysis  8      buyer_match  8
+
+**Simulation scale, and revisable.** Declared by Ivan Green. Greenstone is in simulation
+(entry 166) and has no real clients, so none of these is observed.
+
+They are **derived from figures this Pack already declares** rather than invented: the
+`volume_provenance` beside the closing rate records *"5-10 active deals and 4-8 in-flight
+MAOs"*. Comp analysis runs about once per in-flight MAO and buyer matching about once per
+deal reaching buyers, both taken at the upper end; property lookup is the sourcing pass
+that feeds them.
+
+That distinction is the point. The same block says every other figure once offered for
+this Pack — *"buyer-match runs per deal, an MAO cycle time"* — **was an assumption made
+while planning and was withdrawn.** Re-introducing one under a provenance naming a human
+is exactly what B20 and B21 were about, so these come from the Pack's own numbers and say
+so.
+
+> **`basis` is `declared`, not `simulation`, and that was not the intent.**
+> `CapacityProvenance.basis` is `Literal["declared", "inherited", "measured"]` — checked,
+> not assumed. The simulation scope is stated in `detail` instead. Whether the schema
+> should carry a fourth basis for a venture in simulation is open and is a ruling, not a
+> fix: it would touch every Pack and it overlaps entry 166's own vocabulary.
+
+### The message names the rule that refused
+
+V13 said *"Every module below `auto_execute` needs an expected_weekly_volume"* — a
+sentence that is now false and would send a reader to check a tier that no longer decides.
+It names the new rule and the reason, and `_join`'s five-item cap is left alone: the
+message is what an operator reads, and `VolumeNotDeclaredError.missing` carries all ten.

@@ -99,12 +99,52 @@ def daily_rate_of(pack: BusinessPack, position: DefinedPosition | Any, qualified
 
 
 def modules_needing_volume(pack: BusinessPack) -> list[str]:
-    """Every `position/forge/module` below `auto_execute` with no declared volume.
+    """Every `position/forge/module` a filled position operates with no declared volume.
 
-    **`auto_execute` modules are exempt and that is not a loophole.** Such a module asks
-    nobody, so no volume of it can reach a reviewer; requiring a rate for it would be
-    requiring a number that multiplies by zero. Lowering a module's tier later makes its
-    volume newly required, and this is what names it.
+    RULED 23 SEPTEMBER 2026 (decisions entry 178)
+    =============================================
+
+        *"A module declares a weekly volume if any certifiable tier would need one. Gate
+        2 asks on the declared tier, Gate 3 on the effective one, so a Pack is
+        Gate-2-valid and Gate-3-invalid the moment an agent certifies below a declared
+        `auto_execute`."*
+
+    THE EXEMPTION THIS REMOVES, AND WHY IT READ AS SOUND FOR AS LONG AS IT DID
+    =========================================================================
+
+        It used to skip `auto_execute`, on an argument that was true about the DECLARED
+        tier and false about the one the work runs at: such a module asks nobody, so a
+        rate for it would multiply by zero.
+
+        `_effective_tier` takes the LOWER of declared and certified. A declared
+        `auto_execute` module whose agent certifies at `propose` runs at `propose` - it
+        reaches a reviewer, `daily_rate_of` is called, and the Pack has no number. So the
+        exemption held only while nobody was certified for the module, which is to say it
+        held only while the module could not be run at all.
+
+        **Measured, and it is what produced the ruling.** Greenstone's `buyer_match` is
+        declared `auto_execute` with no volume. Ronan Valek certified at `propose` on 23
+        September, and the very next provisioning run blocked at Gate 3 - after Gate 2
+        had passed on the same Pack twenty seconds earlier. `property_lookup` and
+        `comp_analysis` are declared the same way and are one certification away from it.
+
+    ASKED OF EVERY MODULE A FILLED POSITION OPERATES
+    ================================================
+
+        There is no tier a Pack can declare that a certification cannot lower, so there
+        is no module for which "no certifiable tier would need a rate" is true. The
+        honest consequence is that the declared tier stops deciding the question, and
+        this asks about every module the position actually operates.
+
+        That makes Gate 2 the STRICTER check rather than the looser one, which is the
+        direction a gate ordered before another should err: a finding that arrives at
+        Gate 2 costs a Pack edit, and the same finding at Gate 3 arrives after Gate 2 has
+        already reported the Pack sound.
+
+    **A pending position is still exempt, and that is a different rule.** It adds no
+    agent demand at all - the work is real and humans do it - and entry 92 settled it
+    against `other_hours` rather than against an approval queue. A rate there would size
+    a queue nobody is in.
 
     Read from the Pack alone, so Gate 2 and Gate 4.5 ask the same question.
     """
@@ -115,9 +155,9 @@ def modules_needing_volume(pack: BusinessPack) -> list[str]:
             # it; what it does not do is queue an approval.
             continue
         for qualified in position.forge_modules_operated:
-            tier = position.module_trust_tiers.get(qualified, position.trust_tier_ceiling)
-            if tier == "auto_execute":
-                continue
+            # NO TIER TEST. Entry 178: the declared tier cannot answer this, because
+            # certification lowers it and a lowered tier needs the rate the Pack does not
+            # have. See the docstring for the case that proved it.
             if qualified not in position.expected_weekly_volume:
                 missing.append(f"{position.position_title}/{qualified}")
     return sorted(missing)

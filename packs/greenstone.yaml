@@ -135,9 +135,30 @@ positions_required:
     module_stages:
       cre-forge/property_lookup: Source
       cre-forge/comp_analysis: Qualify
-    # No expected_weekly_volume: every module here is auto_execute, so none of it reaches
-    # a reviewer and a rate would multiply by zero. Lowering either tier makes a volume
-    # newly required, and V13 names the module.
+    # DECLARED 23 SEPTEMBER 2026 (decisions entry 178). This block used to read "no
+    # expected_weekly_volume: every module here is auto_execute, so none of it reaches a
+    # reviewer and a rate would multiply by zero."
+    #
+    # That was true of the DECLARED tier and false of the one the work runs at.
+    # `_effective_tier` takes the lower of declared and certified, so an agent certifying
+    # at `propose` makes the rate newly required - and Gate 2 had already passed. It
+    # happened to `buyer_match` below, at 10:23 on 23 September, and blocked Gate 3.
+    expected_weekly_volume:
+      cre-forge/property_lookup: 20
+      cre-forge/comp_analysis: 8
+    volume_provenance:
+      basis: declared
+      established_by: Ivan Green
+      detail: >
+        SIMULATION SCALE, AND REVISABLE. Greenstone is in simulation (decisions entry
+        166) and has no real clients, so these are not observed rates. They are derived
+        from the two figures this Pack already declares beside the closing rate - 5-10
+        active deals and 4-8 in-flight MAOs - rather than from a new assumption: comp
+        analysis runs about once per in-flight MAO, taken at the upper end, and property
+        lookup is the sourcing pass that feeds them. `basis` is `declared` rather than
+        `simulation` because the schema admits only declared, inherited and measured; the
+        simulation scope is stated here instead, and these figures should be replaced by
+        measured ones before Greenstone leaves simulation.
 
   - position_title: Deal Underwriter
     reports_to: venture_operator
@@ -258,6 +279,11 @@ positions_required:
     # assumption made while planning and was withdrawn. None of them is in this file.
     expected_weekly_volume:
       cre-forge/assign_contract: 1
+      # ADDED 23 SEPTEMBER 2026 (decisions entry 178). Declared `auto_execute` above and
+      # exempt from a rate on that basis until Ronan Valek certified at `propose` - at
+      # which point the same Pack that had just passed Gate 2 blocked Gate 3. This is the
+      # module that produced the ruling.
+      cre-forge/buyer_match: 8
     volume_provenance:
       basis: declared
       established_by: Ivan Green
@@ -267,6 +293,13 @@ positions_required:
         because assign_contract runs once per closing. The Month 12 figure is 2 and is NOT
         declared yet: this Pack states today's rate, and raising it is an edit somebody
         makes deliberately rather than a ramp the validator applies on a date.
+
+        THE BUYER-MATCH RATE IS SIMULATION SCALE AND REVISABLE, added 23 September 2026
+        under entry 178. It is the upper end of the 5-10 active deals declared in the
+        sentence above - buyer matching runs about once per deal that reaches buyers -
+        and not a new assumption. Greenstone is in simulation (entry 166) and has no real
+        clients, so nothing here is observed. Replace it with a measured rate before the
+        venture leaves simulation.
 
 capacity_demand:
   # The divisor that turns every expected_weekly_volume into a daily rate.
