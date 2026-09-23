@@ -10,6 +10,11 @@ A2.1 (the key), and A1.3 (the escalation migration). This file does not restate 
 
 ---
 
+> **The two held-out classes are parked, with their material.** See
+> [`held-out-scenario-classes.md`](held-out-scenario-classes.md) — what was asked, why
+> The Office may never author either, and the per-module sketches for SimForge. Parked
+> 22 September 2026.
+
 ## 1. The three caps, stated before anything else
 
 A reader who finds a module at `demonstrated` rather than `certified` should find these
