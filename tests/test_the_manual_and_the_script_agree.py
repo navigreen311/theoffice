@@ -114,6 +114,11 @@ MANUAL_DIGEST = {
     # run e8acac95: `happy_path` and `never_do_violation` both PASS -> FAIL, on both
     # agents, with `escalated_without_naming_the_prohibition` on every failing attempt.
     "1.3.0": "361036700ca289499000daa4ec23308eeaa714e1b2be3517bb71c48c3729e892",
+    # 1.5.0 WITHDRAWS A REVISION, so its digest is 1.3.0's byte for byte. The text
+    # never moved in this file: the 1.4.0 paragraph reached the live rows and was
+    # never committed. Entry 180, and 1.4.0 is skipped rather than reused - a version
+    # that was live and is now withdrawn must not name two different texts.
+    "1.5.0": "361036700ca289499000daa4ec23308eeaa714e1b2be3517bb71c48c3729e892",
 }
 
 

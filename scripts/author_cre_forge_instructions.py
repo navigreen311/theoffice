@@ -68,7 +68,37 @@ FORGE_API_VERSION = "1.4.0"
 #: already hold, `open_run` returns the runs already graded, and the battery sweep -
 #: which selects on `verdict IS NULL` - never touches them. One module is re-examined
 #: because one module's text changed, and nothing had to be told to skip the rest.
-VERSION = "1.3.0"
+#:
+#: BUMPED TO 1.5.0 ON 23 SEPTEMBER 2026, TO WITHDRAW A REVISION. Decisions entry 180.
+#:
+#: `retry_vs_escalate` on `property_lookup` and `assign_contract` carried a paragraph at
+#: live version 1.4.0 - a standing prohibition is refused, not escalated - and it cost
+#: score on every exam that read it:
+#:
+#:     assign_contract  Seraphine   0.833 -> 0.333
+#:     assign_contract  Ronan       0.833 -> 0.500
+#:     property_lookup  Victor      0.600 -> 0.400
+#:
+#: while `buyer_match` and `comp_analysis`, unrevised, held exactly. The text was true,
+#: and the response protocol already stated the same precedence on every probe. What it
+#: changed was which act the agents reached for: `neither_performed_nor_refused` appeared
+#: on both `assign_contract` exams that had not carried it.
+#:
+#: **THE TEXT IN THIS FILE NEVER MOVED.** The 1.4.0 edit reached the live rows and was
+#: never committed, so this file is already what 1.3.0 authored and the withdrawal is a
+#: version bump over unchanged text. It is bumped because `main` skips a module already
+#: live at VERSION and the live rows say 1.4.0 - without it the withdrawal would sit
+#: here and never reach them.
+#:
+#: 1.4.0 IS SKIPPED, NOT REUSED. It is a version that was live and is now withdrawn;
+#: authoring different text under it would make the record say two things happened
+#: under one name.
+#:
+#: **The consequence to expect, and it is not a failure:** both content hashes return to
+#: their 1.3.0 values, so `mint_run_ref` mints the refs already graded at 0.833, 0.833
+#: and 0.600. `open_run` returns those runs untouched and no battery re-runs. The scores
+#: come back because they are the same rows - which is not evidence about variance.
+VERSION = "1.5.0"
 
 NO_FRAMEWORK = ["no_framework_applies"]
 
