@@ -164,7 +164,15 @@ export function RunHistoryTable({ runs }: { runs: RunSummary[] }) {
             </span>
             <span className="ml-auto text-meta text-ink-muted">
               started <Ago iso={run.started_at} />
-              {run.completed_at ? ` · ended $<Ago iso={run.completed_at} />` : ""}
+              {/* Same defect as the `started` line above does NOT have: JSX inside a
+                  template string is a string. The reader saw `$<Ago iso=...` here while
+                  the line directly above rendered correctly, which is what made it
+                  survive three readings. */}
+              {run.completed_at ? (
+                <>
+                  {" · "}ended <Ago iso={run.completed_at} />
+                </>
+              ) : null}
             </span>
           </li>
         ))}

@@ -539,6 +539,12 @@ async def test_the_api_exposes_no_route_that_bypasses_a_control():
         "/api/provisioning/runs",
         "/api/provisioning/runs/{run_id}/advance",
         "/api/provisioning/runs/{run_id}/review",
+        # CORRECTING A GATE REVIEW. Ruled 22 September 2026, entry 170.
+        #
+        # It passes no gate and edits nothing. `gate_review_correction` is append-only
+        # by trigger, and the whole purpose of the row is that the record it corrects
+        # stays exactly as it was - which is why the review it answers is untouched.
+        "/api/provisioning/runs/{run_id}/review-correction",
         # Stops a run; it cannot start or advance one. Added deliberately: Gate 4
         # review could previously only approve, so the only way for a human to say no
         # was to abandon the run - which means something different to the next person

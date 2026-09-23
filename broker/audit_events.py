@@ -111,6 +111,32 @@ EVENTS: tuple[Event, ...] = (
           "simulation. Carries the modules its instruction basis was composed over, so "
           "republishing any of them decertifies it exactly as it would a tested one.",
           "broker.certification", CONSOLE),
+    # THE THREE THE WALKER HAD NEVER SEEN. Ruled 22 September 2026, entry 171.
+    #
+    # `test_every_audit_event_written_in_the_source_is_published` matched
+    # `event_type="([a-z_]+)"` - no digits - so `gate_4` and `gate_10` never matched and
+    # the two most consequential human acts in the ladder rendered on /audit as raw
+    # identifiers. The third is entry 170's, added in the same change and published
+    # here because the fixed walker would otherwise have caught it immediately.
+    Event("provisioning_gate_4_reviewed", "Gate 4 reviewed",
+          "A named venture operator stated, with a note, that they had read the "
+          "artifacts, the bill of materials and the appointment gap report. Gate 4 "
+          "waits; it does not pass on its own. The note is required - 'reviewed' with "
+          "nothing attached is a checkbox - and it may be corrected by a later entry "
+          "but never edited (entry 170).",
+          "broker.provisioning", PROVISIONING),
+    Event("provisioning_gate_10_signed", "Gate 10 signed",
+          "A named human bound their signature to a set of artifact hashes. A "
+          "signature made against different artifacts is VOID rather than missing - "
+          "the distinction that matters after a Pack edit. Since entry 170 the "
+          "signature covers the Gate 4 note PLUS its corrections.",
+          "broker.provisioning", PROVISIONING),
+    Event("provisioning_gate_review_corrected", "Gate review corrected",
+          "A later entry correcting a recorded gate review - naming who the note was "
+          "drafted for, the correction, and who wrote it down. RULED 22 September "
+          "2026, entry 170: a review is corrected by a later entry, never by editing. "
+          "Every correction on a review stays in force; none replaces another.",
+          "broker.provisioning", PROVISIONING),
     Event("console_role_granted", "Role granted",
           "Somebody was given a role by somebody holding a stronger one.",
           "broker.app", CONSOLE),

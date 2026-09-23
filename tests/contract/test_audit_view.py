@@ -94,8 +94,20 @@ async def test_every_audit_event_written_in_the_source_is_published():
         if source.name == "audit_events.py":
             continue
         text = source.read_text(encoding="utf-8")
-        written |= set(re.findall(r'event_type=\s*"([a-z_]+)"', text))
-        written |= set(re.findall(r'_audit_human_action\(\s*me,\s*"([a-z_]+)"', text, re.S))
+        # `[a-z0-9_]`, NOT `[a-z_]`. RULED 22 SEPTEMBER 2026, entry 171.
+        #
+        # The class had no digits, so no event with one in its name had ever been
+        # matched - and the two it missed are the two most consequential human acts in
+        # the ladder: `provisioning_gate_4_reviewed` and `provisioning_gate_10_signed`.
+        # Both were written, neither was published, and both rendered on /audit as raw
+        # identifiers for as long as they have existed.
+        #
+        # The guard was not weak. It was blind in exactly one place, and nothing about
+        # a passing run said so.
+        written |= set(re.findall(r'event_type=\s*"([a-z0-9_]+)"', text))
+        written |= set(
+            re.findall(r'_audit_human_action\(\s*me,\s*"([a-z0-9_]+)"', text, re.S)
+        )
 
     assert written, "the walker matched no audit write; the pattern is stale"
     missing = sorted(name for name in written if name not in audit_events.BY_TYPE)

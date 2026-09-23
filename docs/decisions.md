@@ -14688,3 +14688,169 @@ itself — which is the point of the entry, and is why there is no script here t
 by hand.
 
 > **Open until then: greenstone's three shifts of 16 September are still unflushed.**
+
+
+## 170. A gate review is corrected by a later entry
+
+**Ruling by Ivan Green, 22 September 2026:**
+
+> *"A gate review may be corrected by a later entry, never by editing. A correction
+> names the reviewer, the correction and who made it. Gate 10's signature binds to the
+> note plus its corrections."*
+
+### The record this was built for is not wrong
+
+Ira Green recorded the Gate 4 review on run `4637b946` at 17:16 on 22 September, on her
+own account, from a note drafted for Ivan Green. The note reads *"Greenstone is in
+simulation, declared by me today"* — and the declaration names Ivan.
+
+Every fact in the record is true: her account, her `human_id`, her text. What it lacks is
+the one sentence that stops a reader taking *me* for the account that recorded it.
+
+**There was no way to add that sentence.** `audit_log` is append-only by trigger, the
+note lives inside a gate result's `evidence`, and nothing in the repository wrote a
+correction to either. The only remedy available was an edit, and entry 159 settled that
+on a smaller record: *"a false entry is answered by a later one, never by editing the
+record."*
+
+This note is not even false. It still may not be touched.
+
+### Three parties, because on this correction there are three
+
+    reviewer_named    who the note was drafted FOR. Ivan Green.
+    corrected_by      who wrote the correction down.
+    the review        (run_id, gate) — the act being corrected.
+
+`reviewer_named` is a field on the API route, and it is the only actor field on this
+system that is not `me`. That is deliberate and it is the content of the correction: who
+acted and who the note spoke for are different people here, and a correction naming only
+its author would leave the reader to infer whose reading it fixes.
+
+### Named by (run_id, gate), not by a row id
+
+A review writes **two** rows on `provisioning_gate_result` — the `awaiting_human` one and
+the `passed` one — so a foreign key to either would be a foreign key to half the record.
+The review is the act.
+
+### Every correction stays in force
+
+There is no `supersedes` column. A correction that is itself wrong gets another
+correction, and the chain reads in `corrected_at` order. A reader reads the note and then
+every correction.
+
+That is exactly what *"Gate 10's signature binds to the note plus its corrections"*
+requires, so Gate 10 puts them in its own evidence — `gate_4_review_corrections`, on the
+pass as well as the block, and named in the verdict when there are any. A signature over
+a note whose corrections live somewhere else is a signature over half the record.
+
+### The correction itself
+
+Recorded against run `4637b946`'s Gate 4 review, naming Ivan Green as the reviewer the
+note was drafted for:
+
+> *"The Gate 4 note on 4637b946 was drafted for Ivan Green and recorded by Ira Green on
+> his own account; 'declared by me' refers to Ivan, who declared the simulation. The
+> review stands."*
+
+**The review stands.** Ira holds `venture_operator` and read the artifacts. Nothing about
+the advance is in question.
+
+
+## 171. Every audit event written in the source is published
+
+**Ruling by Ivan Green, 22 September 2026:**
+
+> *"Every audit event written in the source is published. Fix the walker's regex; it
+> never matched an event with a digit, so provisioning_gate_4_reviewed and
+> provisioning_gate_10_signed have never been checked. Report every other event the
+> fixed walker finds missing."*
+
+### One character class, and a whole shape of name
+
+`test_every_audit_event_written_in_the_source_is_published` walks `broker/` and fails on
+an event the glossary does not describe. It matched:
+
+    r'event_type=\s*"([a-z_]+)"'
+
+**No digits.** So `gate_4` and `gate_10` never matched, and the two most consequential
+human acts in the ladder — the review a run waits on, and the signature Gate 10 binds to
+artifacts — had never once been checked. Both rendered on `/audit` as raw identifiers,
+which is the exact defect `audit_events.py` was written to end.
+
+The guard was not weak. It was blind in one place, and nothing about a passing run said
+so.
+
+### What the fixed walker finds: three, and no others
+
+    provisioning_gate_4_reviewed        written since the gate was built
+    provisioning_gate_10_signed         written since the gate was built
+    provisioning_gate_review_corrected  entry 170's, added in this same change
+
+The third is the interesting one: it was written minutes before the walker was fixed, and
+the fixed walker caught it immediately. That is the guard doing its job on its first pass.
+
+**Nothing else is missing.** Every other event this system writes was already published.
+
+### The test asserts the pattern, not today's list
+
+`test_the_walker_matches_an_event_with_a_digit` reads the walker's own regexes out of the
+source and requires a digit in the character class, then proves the pattern matches both
+names. A test that only asserted "these two are published" would pass while the next
+`gate_12_something` slipped through the same hole.
+
+
+## 172. A sweep polls sooner while somebody is waiting
+
+**Ruling by Ivan Green, 22 September 2026:**
+
+> *"A sweep polls every 5 minutes while a submission awaits a verdict, and daily
+> otherwise. Measured: 9 verdicts would have sat 23.6 hours with a run blocked behind
+> them."*
+
+### Two questions, and `MAX_AGE` only answers one
+
+Entry 168 put the sweeps in the API's lifespan and kept each kind's declared `MAX_AGE`.
+That interval answers *is this control stale?*, and a day is right for it — a missed
+REVOKED is silent, and a day is the tolerance for finding out.
+
+A run blocked at Gate 9 asks something else: **is anybody waiting?**
+
+Measured 22 September: Gate 8 opened six exams and three department units at 17:16. The
+sweep had last run at 16:54. Its next pass would have been ~16:54 the following day, so
+nine verdicts — including the re-exam that answered whether five failures described the
+agents or the manuals — would have sat **23.6 hours** with the run blocked behind them.
+
+### A condition, not a second interval
+
+`due()` gains one clause: `verdict_ingest` is also due when any submission has an open
+run and no result yet, and the last pass was five minutes ago or more.
+
+    AWAITING_VERDICT_INTERVAL_SECONDS = 300.0
+
+Five minutes because an exam resolves in minutes — that is the granularity the thing
+being waited on actually has. Twelve requests an hour at the very most, and **zero when
+nothing is open.** The sweep is self-limiting by the state of the work rather than by a
+timer somebody has to remember to turn off.
+
+`simforge_run_ref IS NOT NULL` is the half that matters. Thirty of seventy-five
+submissions have never reached SimForge, so no verdict is coming for them, and polling
+faster on their account would be polling faster for nothing.
+
+### The declared interval did not move
+
+`MAX_AGE[verdict_ingest]` is still one day, and
+`test_the_interval_is_five_minutes_and_says_so_once` asserts it — entries 168 and 172
+both say keep it. `test_nothing_waiting_means_the_daily_interval_stands` is the other
+half: with nothing open, a ten-minute-old sweep is not due.
+
+### Alongside: the two remaining raw `$<Ago …>`
+
+Fixed in the same change, and not a ruling of their own:
+
+    console/app/page.tsx:286                        `last run $<Ago iso={...} />`
+    console/app/provisioning/[venture]/panels.tsx   ` · ended $<Ago iso={...} />`
+
+Both were JSX inside a backtick template string, which renders as the literal characters
+`$<Ago iso=`. The second is the sharper one: the line directly above it renders `started
+<Ago …/>` correctly as real JSX, so the defect sat beside its own counter-example and
+survived three readings.

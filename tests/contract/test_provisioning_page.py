@@ -144,9 +144,14 @@ async def test_no_route_can_pass_a_gate_that_blocked():
         "/api/provisioning/runs/{run_id}/reject",
         "/api/provisioning/runs/{run_id}/abort",
         "/api/provisioning/runs/{run_id}/signoff",
+        # Entry 170. It answers a review that is already recorded; it cannot pass a
+        # gate, and it cannot change the review it answers - `gate_review_correction`
+        # is append-only by trigger and the note stays byte for byte what it was.
+        "/api/provisioning/runs/{run_id}/review-correction",
     }, (
         "the provisioning write surface changed. Every one of these either starts a run, "
-        "runs gates in order, or stops a run. None of them passes a gate."
+        "runs gates in order, stops a run, or answers a review that is already "
+        "recorded. None of them passes a gate."
     )
 
 
