@@ -15071,3 +15071,99 @@ earlier.
                                                   what was true when the verdict landed
     unaccounted_for                               FAILs naming no deciding dimension.
                                                   Zero today.
+
+
+## 175. The exam sees the instructions
+
+**Ruling by Ivan Green, 22 September 2026:**
+
+> *"The Office sends the instruction sections its keys are written against. A curriculum
+> handover carries the prose of every section a key cites, from the live instruction row.
+> Measured: it has never sent them, so every exam graded an agent on four sections it was
+> never shown."*
+
+### Measured on both sides, and they agree exactly
+
+**SimForge** now renders instruction sections into the exam context and records which
+were missing. Every Greenstone exam so far recorded all four as missing:
+`correct_sequence`, `failure_signatures`, `inputs`, `retry_vs_escalate`.
+
+**The Office**, read out of `_curriculum_payload`: the only prose it has ever sent is
+`module_never_do`. `instruction_set_ref` carried a hash, a version and an api version.
+Every `operation_scenario` row named the `instruction_section` it probes — and carried
+none of that section's text.
+
+And the third measurement, from this side: every one of Greenstone's five modules cites
+**exactly those four sections** in its keys and no others.
+
+So the agent saw a numbered never-do list and an answer grammar, and was graded on four
+sections nobody had sent it.
+
+### This is the root of everything we have been reading all day
+
+Entry 174 named the dimensions that decided the verdicts. This says why they decided that
+way. Every failure mode legible from SimForge's battery record is a mode about following
+an instruction that was not in the room:
+
+    escalated_without_naming_the_prohibition       property_lookup
+    neither_performed_nor_refused                  property_lookup
+    agent_answer_did_not_conform_to_the_response_protocol   buyer_match
+    answered_with_more_than_one_act_line           buyer_match
+
+The reading I offered on the 22nd — that the rubric grades *answer form* and the manuals
+never specify it — was the right observation with the wrong cause. The manuals do specify
+it. `assign_contract` says *"Say what was attempted, on which deal, with which signers,
+and that it is unknown whether a draft was created."* The agent was never shown that
+sentence.
+
+**Three drafts of instruction revisions were prepared on the 22nd and never authored.**
+They would have added text to manuals that already said the right thing, to fix a
+transport bug. Nothing was authored, and that was luck as much as discipline — the reason
+given at the time was that revising on an inferred rubric would spend the re-exam's
+signal on a guess.
+
+### Cited, not enumerated
+
+`_sections_cited_by` reads `instruction_section` off the keys actually being submitted,
+rather than from a constant naming four.
+
+The four are today's measurement, not a definition. A key that begins probing a fifth
+section brings that section with it and nobody has to notice — and the noticing is
+precisely the part that failed for as long as this payload has existed.
+
+It is also the honest denominator: SimForge computes `required_by_keys` from the same
+field on the same keys, so what The Office sends and what SimForge expects are derived
+from one fact rather than two that can drift.
+
+### From the row the hash names
+
+`instruction.content` is the object `content_hash` was computed over, in the same
+function, from the same live row. Prose read from a file or a second query could disagree
+with the hash the certification binds to — and a certification naming text the agent
+never saw is exactly the failure this entry exists to end, arriving from the other
+direction.
+
+**A cited section the instruction lacks is omitted, never blanked.** An empty string would
+be sent, shown, and recorded as *present*, and `missing` would stop naming it. That is
+worse than sending nothing.
+
+The first cut got this wrong for a whitespace-only section: it fell through to the
+structured-rendering branch and would have sent `'"   "'`. `test_a_blank_section_is_
+omitted_too` caught it before it ran.
+
+### `InstructionSetRef.sections`, read from SimForge's schema
+
+The field name was **measured, not chosen** — `dict[str, str]`, optional, on
+`InstructionSetRef`. Entry 144 cost a day to a guess about another system's shape reading
+as that system's silence, which is why `HANDOVER_TEST_KEY` is written down rather than
+assumed.
+
+**Safe to ship before SimForge restarts.** `InstructionSetRef` does not set
+`extra="forbid"` — checked at the running commit as well as at the checkout — so a build
+without the field ignores it and sets the same exam it sets today. The field takes effect
+when SimForge runs a build that has it.
+
+> **Still open, and it gates the re-exam: SimForge is running `04c9ae15` against a
+> checkout at `dad3d84a`.** The running build has neither the field nor the renderer. A
+> handover today would send the sections and change nothing. This has been true, with
+> different commits, at every check this week.

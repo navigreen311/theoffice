@@ -29,6 +29,7 @@ Part 14's artifact-hash binding is for, and this is the first place it does real
 from __future__ import annotations
 
 import hashlib
+import json
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -1903,6 +1904,18 @@ def _curriculum_payload(
     if isinstance(never_do, str):
         never_do = [never_do]
 
+    # THE SECTIONS THE KEYS ARE WRITTEN AGAINST. Ruled 22 September 2026, entry 175.
+    #
+    # Measured: every Greenstone exam recorded all four of `correct_sequence`,
+    # `failure_signatures`, `inputs` and `retry_vs_escalate` as MISSING, because this
+    # payload has never carried one of them. The agent saw a never-do list and an
+    # answer grammar, and was graded on four sections nobody had sent it.
+    #
+    # Cited, not enumerated. `_sections_cited_by(scenarios)` reads the
+    # `instruction_section` off the keys actually being submitted, so a key that starts
+    # probing a fifth section brings that section with it and nobody has to remember.
+    sections = _sections_cited_by(scenarios, instruction)
+
     # A declared `not_applicable` is a statement about a (module, class) pair, not a
     # scenario, and contract A1.1 gives it a curriculum-level map rather than a row -
     # structurally parallel to `module_never_do` below. So the rows carrying one are
@@ -1921,6 +1934,11 @@ def _curriculum_payload(
             # authors instructions under a human's id, and sending it would put a
             # person's uuid in another system for no purpose this call has.
             "authored_by": None,
+            # ENTRY 175. `InstructionSetRef.sections`, `{name: prose}`, optional on
+            # SimForge's side and read from THE LIVE INSTRUCTION ROW - the same row
+            # `content_hash` above is taken from, so the prose and the hash cannot
+            # describe different text.
+            **({"sections": sections} if sections else {}),
         },
         "certification_units_requested": [
             {
@@ -1966,6 +1984,68 @@ def _curriculum_payload(
         # absent with nothing said about it, and that is the whole point.
         "module_not_applicable": {instruction.module_id: absent},
     }
+
+
+def _sections_cited_by(scenarios: list[Any], instruction: Any) -> dict[str, str]:
+    """The prose of every instruction section the submitted keys cite. Entry 175.
+
+    RULED 22 SEPTEMBER 2026 (decisions entry 175)
+    =============================================
+
+        *"The Office sends the instruction sections its keys are written against. A
+        curriculum handover carries the prose of every section a key cites, from the
+        live instruction row. Measured: it has never sent them, so every exam graded an
+        agent on four sections it was never shown."*
+
+    CITED, NOT ENUMERATED
+    =====================
+
+        Read off `instruction_section` on the keys actually in this submission, rather
+        than from a hardcoded list of four. Today every Greenstone module cites exactly
+        `correct_sequence`, `failure_signatures`, `inputs` and `retry_vs_escalate` - but
+        a key that begins probing a fifth section brings that section with it, and
+        nobody has to remember to widen a constant.
+
+        It is also the honest denominator: SimForge computes `required_by_keys` from the
+        same field on the same keys, so what The Office sends and what SimForge expects
+        are derived from one fact rather than two that can drift.
+
+    FROM THE LIVE ROW, WHICH IS THE ROW THE HASH NAMES
+    ==================================================
+
+        `instruction.content` is the same object `content_hash` was computed over, so
+        the prose and the hash cannot describe different text. A section read from
+        anywhere else - a file, a second query - could disagree with the hash the
+        certification binds to, and nothing downstream would catch it.
+
+    A SECTION A KEY CITES AND THE INSTRUCTION LACKS IS OMITTED, NOT BLANKED. An empty
+    string would be sent, shown, and recorded as present - and `missing` would stop
+    naming it. The eight required sections are non-empty by CHECK constraint, so this
+    is reachable only for a section outside that set.
+    """
+    cited: set[str] = set()
+    for scenario in scenarios:
+        name = str(getattr(scenario, "instruction_section", "") or "")
+        if name:
+            cited.add(name)
+
+    content = instruction.content or {}
+    sections: dict[str, str] = {}
+    for name in sorted(cited):
+        prose = content.get(name)
+        if isinstance(prose, str):
+            # A BLANK STRING IS OMITTED, NOT RENDERED. Tested, because the first cut
+            # fell through to the branch below and sent `'"   "'` - which SimForge
+            # would have shown, recorded as PRESENT, and dropped from `missing`. An
+            # empty section that reads as sent is worse than one that reads as absent.
+            if prose.strip():
+                sections[name] = prose
+        elif prose:
+            # `never_do` is a list and is already sent whole as `module_never_do`; any
+            # other structured section is rendered rather than dropped, because a key
+            # citing it is a key asking the agent to have read it.
+            sections[name] = json.dumps(prose, indent=2, sort_keys=True)
+    return sections
 
 
 def _certification_candidates(artifacts: Any) -> dict[str, list[dict[str, str]]]:
