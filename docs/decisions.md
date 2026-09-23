@@ -15479,7 +15479,7 @@ It names the new rule and the reason, and `_join`'s five-item cap is left alone:
 message is what an operator reads, and `VolumeNotDeclaredError.missing` carries all ten.
 
 
-## NEXT. A certification records which instruction sections its exam showed
+## 179. A certification records which instruction sections its exam showed
 
 **Ruling by Ivan Green, 23 September 2026** (SimForge ADR-0112):
 
