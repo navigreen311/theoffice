@@ -101,5 +101,14 @@
       "certifications": "One per certification this battery produced. Each carries the per-attempt record, the rubric dimensions, the per-class verdicts, and what was withheld - which together are what let a reader disagree with the verdict. Since SimForge ADR-0112 each also carries instruction_sections {shown, required_by_keys, missing}: section names only, null when nothing was recorded.",
       "join": "SimForge's own statement of how it matched this battery to the run. Prose, and deliberately read as a label rather than parsed."
     }
+  },
+  "gate_9_5_verdict": {
+    "purpose": "WHETHER THE HELD-OUT PARTITION PASSED, AND NOTHING ABOUT IT. SimForge's docs/contracts/gate-9-5-verdict.md names this shape (their ADR-0108, implemented in ADR-0111) and says in its own words that nothing on The Office's side may guess past that page. Four keys, always 200, never any other key - so an added field fails here rather than arriving unreviewed. The page's own rule for why it is this thin: 'A rich enough explanation of a failure reconstructs the scenario.'",
+    "fields": {
+      "venture_id": "Echoed from the request.",
+      "partition_exists": "Whether a sealed held-out partition exists for this venture. FALSE is the answer for an unknown venture too - the contract makes the two indistinguishable on purpose.",
+      "verdict": "PASS, FAIL, NOT_RUN, IN_PROGRESS, TIMEOUT, or null. Null if and only if partition_exists is false. The weakest verdict across agents when several were graded; only PASS advances Gate 9.5, and that rule lives in the gate.",
+      "decided_at": "When the named verdict was decided, ISO-8601 UTC, or null. Read and not returned by the adapter: HeldOutSource answers one question and the contract's adapter section names one value."
+    }
   }
 }

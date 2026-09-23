@@ -132,6 +132,48 @@ class PartitionAbsent:
         return None
 
 
+class SimForgeHeldOut:
+    """The real implementation, against SimForge's published contract.
+
+    RULED 23 SEPTEMBER 2026 (SimForge ADR-0108, implemented in their ADR-0111)
+    ==========================================================================
+
+        `docs/contracts/gate-9-5-verdict.md` in SimForge's tree specifies this adapter
+        in two lines, and they are the whole of it:
+
+            partition_exists == false  ->  None   (Gate 9.5: at ceiling)
+            otherwise                  ->  verdict verbatim
+
+        `SimForgeClient.gate_9_5_verdict` does exactly that and nothing else. This class
+        exists to satisfy `HeldOutSource` without the gate knowing which Forge answered.
+
+    **It replaces `PartitionAbsent`, it does not extend it.** `PartitionAbsent` answers
+    None unconditionally, which was true of a deployment with no partition and is a lie
+    about one that has a partition and could not be asked. This asks.
+
+    Both keep the same meaning for `None`: SimForge has no sealed partition for this
+    venture. What is new is that a failure to read is an exception rather than a None -
+    entry 177's rule, and the reason `_gate_9_5` now has a branch for it.
+    """
+
+    def __init__(self, client: Any, conn: AsyncConnection) -> None:
+        self._client = client
+        # HELD, because `HeldOutSource.verdict` takes a venture and nothing else, and the
+        # client needs a connection for the tenant credential and the registry row. The
+        # gate's own connection, for the life of one run - not a second lifetime.
+        self._conn = conn
+
+    async def verdict(self, venture_id: str) -> str | None:
+        answer = await self._client.gate_9_5_verdict(self._conn, venture_id)
+        # `client` is Any so a fake can stand in, which means this boundary is where the
+        # port's own type is asserted rather than inherited.
+        if answer is not None and not isinstance(answer, str):
+            raise SimForgeError(
+                f"gate_9_5_verdict answered {type(answer).__name__}, not a verdict"
+            )
+        return answer
+
+
 @dataclass(frozen=True, slots=True)
 class GateOutcome:
     gate: str
@@ -2487,7 +2529,24 @@ async def _gate_9_5(ctx: _Context) -> GateOutcome:
     not a pass, and TIMEOUT is not a failure - the same rule the rest of the system
     follows about never collapsing states.
     """
-    verdict = await ctx.held_out.verdict(ctx.venture_id)
+    # A READ THAT CANNOT FIND ITS SOURCE SAYS SO. Entry 177, and it arrives here the
+    # moment the source stops being a constant: `PartitionAbsent` could not fail, and
+    # `SimForgeHeldOut` can. Both answer None for "there is no sealed partition", so a
+    # SimForge that could not be reached must not reach that branch - an unreachable
+    # Forge recorded as an absent partition is a false fact about SimForge, written into
+    # a gate's evidence and indistinguishable from the true one.
+    #
+    # It still BLOCKS. Gate 9.5 has no verdict either way, and the difference the
+    # operator needs is what to do next: stand the partition up, or look at a service.
+    try:
+        verdict = await ctx.held_out.verdict(ctx.venture_id)
+    except SimForgeError as exc:
+        return GateOutcome(
+            "9.5", BLOCKED,
+            f"the held-out verdict could not be read: {exc}. This is not a statement "
+            "that the partition is absent - nobody was able to ask.",
+            {"blocked_by": "held_out_verdict_unreadable", "detail": str(exc)},
+        )
     if verdict is None:
         return GateOutcome(
             "9.5", BLOCKED,
