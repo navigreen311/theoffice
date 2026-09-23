@@ -1674,6 +1674,11 @@ class VerdictEvidence:
     failure_modes_observed: tuple[str, ...] = ()
     rubric_dimension_spread: float | None = None
     observed: bool = True
+    #: What the exam showed, what the keys needed, and what was missing. Section
+    #: NAMES only (SimForge ADR-0112). `missing` says whether a 0.0 on a
+    #: key is the agent's fault or the submitter's omission. None when SimForge
+    #: recorded nothing - not the same fact as `missing: []`.
+    instruction_sections: dict[str, list[str]] | None = None
 
     #: The channel a verdict turns on. Ruled 22 September 2026, entry 174.
     #:
@@ -1771,6 +1776,7 @@ class VerdictEvidence:
             "withheld_because": list(self.withheld_because),
             "failure_modes_observed": list(self.failure_modes_observed),
             "rubric_dimension_spread": self.rubric_dimension_spread,
+            "instruction_sections": self.instruction_sections,
             # ENTRY 174. Which dimensions decided, and which failed without deciding.
             # Derived at ingest and stored, so a report reads what was true when the
             # verdict landed rather than recomputing against a rule that has since moved.
@@ -1877,8 +1883,41 @@ def parse_battery_result(body: dict[str, Any]) -> VerdictEvidence | None:
         withheld_because=tuple(cert.get("withheld_because") or ()),
         failure_modes_observed=tuple(cert.get("failure_modes_observed") or ()),
         rubric_dimension_spread=cert.get("rubric_dimension_spread"),
+        instruction_sections=_instruction_sections(cert.get("instruction_sections")),
         observed=True,
     )
+
+
+#: The shape SimForge named in ADR-0112, recorded here and nowhere guessed.
+INSTRUCTION_SECTION_FIELDS: tuple[str, ...] = ("shown", "required_by_keys", "missing")
+
+
+def _instruction_sections(value: Any) -> dict[str, list[str]] | None:
+    """Narrow `instruction_sections` to the three lists SimForge publishes.
+
+    Absent or null is None: SimForge recorded nothing, or predates ADR-0112.
+    Anything else that is not exactly three lists of names is refused, not
+    coerced. A guess about another system's response reads as its silence,
+    and a coerced `missing: []` would read as "nothing was missing".
+    """
+    if value is None:
+        return None
+    if not isinstance(value, dict) or set(value) != set(INSTRUCTION_SECTION_FIELDS):
+        raise SimForgeError(
+            "get_battery_result: instruction_sections is not "
+            f"{{{', '.join(INSTRUCTION_SECTION_FIELDS)}}} (SimForge ADR-0112): "
+            f"got {sorted(value) if isinstance(value, dict) else type(value).__name__}"
+        )
+    out: dict[str, list[str]] = {}
+    for name in INSTRUCTION_SECTION_FIELDS:
+        items = value[name]
+        if not isinstance(items, list) or not all(isinstance(i, str) for i in items):
+            raise SimForgeError(
+                f"get_battery_result: instruction_sections.{name} is not a list of "
+                "section names (SimForge ADR-0112)"
+            )
+        out[name] = list(items)
+    return out
 
 
 def parse_gate_result(body: dict[str, Any]) -> GateResult:

@@ -15477,3 +15477,51 @@ V13 said *"Every module below `auto_execute` needs an expected_weekly_volume"* â
 sentence that is now false and would send a reader to check a tier that no longer decides.
 It names the new rule and the reason, and `_join`'s five-item cap is left alone: the
 message is what an operator reads, and `VolumeNotDeclaredError.missing` carries all ten.
+
+
+## NEXT. A certification records which instruction sections its exam showed
+
+**Ruling by Ivan Green, 23 September 2026** (SimForge ADR-0112):
+
+> *"A certification's instruction_sections is readable. The field is recorded on the
+> result row and serialized by nothing ... so The Office holds NULL on every
+> certification and the only way to read it is direct SQL against SimForge's database.
+> Measured, 23 September: all six Greenstone exams recorded `missing: []` for the first
+> time, and The Office's `verdict_evidence.instruction_sections` is None on all six."*
+
+This closes the "still open" note at the end of entry 177.
+
+### SimForge named the shape first
+
+SimForge published it in ADR-0112 (simforge #204), on the battery-result route The Office
+already reads. Each certification carries:
+
+    "instruction_sections": {"shown": [...], "required_by_keys": [...], "missing": [...]}
+
+Section names only. `null` when SimForge recorded nothing. This side records that shape;
+it does not guess past it.
+
+### What The Office does with it
+
+- `parse_battery_result` narrows it onto `VerdictEvidence.instruction_sections`, and
+  `as_record` stores it in `verdict_evidence`.
+- **Three lists, kept distinct.** `missing` is the one that says whether a 0.0 on a
+  `failure_signatures` key is the agent's fault or the submitter's omission.
+- **Null stays null.** Absent or null is None, not `missing: []`, which would claim a
+  check that never ran.
+- **A shape nobody agreed is refused, not coerced.** Anything other than exactly the three
+  lists of names raises `SimForgeError`. The verdict still lands; the sweep names the
+  unreadable evidence in `evidence_unreadable` (entry 177's rule).
+
+### The guard, unchanged
+
+The field is nested in `certifications[]`, so `validate_response`'s top-level manifest
+check is untouched. `assert_no_scenario_content` runs on it with `echoed=None` and passes:
+no forbidden fragment in any name, and section names are far below the prose threshold.
+The manifest's `certifications` purpose now names the field.
+
+### Tested
+
+`tests/contract/test_instruction_sections_are_recorded.py`, 15 tests. The ingest tests
+drive the real sweep and read `verdict_evidence` back from the database: a gap, no gap and
+nothing-recorded each land as themselves. Storing nothing in `as_record` fails 4 of them.
