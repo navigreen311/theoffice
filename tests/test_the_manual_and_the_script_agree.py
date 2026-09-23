@@ -108,6 +108,12 @@ def _drop_author(admin: psycopg.Connection) -> None:
 #: record an edit that the script will still skip.
 MANUAL_DIGEST = {
     "1.2.0": "865032e7214b22dc60462ed12127eedd5c664918c584ddee55a369b0f044a8dd",
+    # 1.3.0: `assign_contract`'s `correct_sequence`. Both items were preconditions on
+    # CALLING, and the first exam ever to SHOW them handed the agent a call that had
+    # already returned 200 - so it escalated where the key expects PROCEED. Measured on
+    # run e8acac95: `happy_path` and `never_do_violation` both PASS -> FAIL, on both
+    # agents, with `escalated_without_naming_the_prohibition` on every failing attempt.
+    "1.3.0": "361036700ca289499000daa4ec23308eeaa714e1b2be3517bb71c48c3729e892",
 }
 
 
