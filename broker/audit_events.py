@@ -347,6 +347,16 @@ EVENTS: tuple[Event, ...] = (
           "mechanism - Phase 0 issues grants active because no ladder exists to "
           "activate them - being routed through the ladder once it arrives.",
           "broker.grants", CONSOLE),
+    Event("grant_retired", "Grant retired",
+          "A named human ended a grant: it is no longer the row that answers, and "
+          "`superseded_at` says when it stopped. NOT a revocation - nothing is claimed "
+          "about whether the authority should have existed, and no revocation row is "
+          "written - and not a deactivation, which is about Gate 11 and touches "
+          "`activated_at`. Entry 182. Grants are named individually and never matched "
+          "by a rule: the one automatic retirement in this system takes only bootstrap "
+          "rows a ladder grant replaced, and says in its own comment that nothing else "
+          "is retired on a guess.",
+          "broker.grants", CONSOLE),
     Event("office_identity_reinstated", "Office identity reinstated",
           "A named human returned a suspended identity to active, with a reason. It is the "
           "inverse of the suspension half of a departure cascade and NOT of the revocation "

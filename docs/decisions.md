@@ -15723,3 +15723,95 @@ questions. `test_unit_a_is_deliberately_untouched` pins the omission as delibera
 > department is renamed.** Neither happens today — no path deletes a certification, and
 > `office_agent_identity.department` has one writer — but the guarantee this entry makes
 > holds only at issue time.
+
+
+## 182. A grant may be retired
+
+**Ruling by Ivan Green, 23 September 2026:**
+
+> *"A grant may be retired by a named human, with a reason and an audit event. Sets
+> `superseded_at`; never a guess and never automatic. Measured: `superseded_at` has one
+> writer, which retires only bootstrap grants a ladder grant replaced, so a revoked
+> `origin='unknown'` grant cannot be retired at all."*
+
+### The column had one writer, and it was right to be narrow
+
+`agent_forge_grant.superseded_at` is written in exactly one place:
+`generators/runtime_config.py`, retiring `origin = 'bootstrap'` rows that an
+`origin = 'ladder'` row replaced. Its own comment says why it goes no further —
+
+> *"An `unknown` row must not retire anything - nothing is retired on a guess."*
+
+That is correct about an **automatic rule** and says nothing about a judgement. The gap
+was not that the rule was too narrow; it was that there was no deliberate act beside it.
+
+Measured: Amelie Wystan's two engineering grants are `origin = 'unknown'`, have no ladder
+replacement, are covered by live revocations of 15 September, and **could not be retired
+by anything in this repository.**
+
+### Three verbs, one table, a keystroke apart
+
+    revoke      the authority was WRONG. Its own table, consulted on every call,
+                liftable by a named human at the same scope.
+    deactivate  the grant has not passed Gate 11 yet. `activated_at` only.
+    retire      the grant is FINISHED. Not the row that answers any more, and
+                nothing is claimed about whether it should have existed.
+
+Retiring does not revoke and revoking does not retire. Amelie's two grants are **both** —
+revoked in September because the authority was wrong, retired now because the row should
+stop being one Gate 9 counts. Either without the other would be half the record.
+
+`retire` writes no revocation row and does not touch `activated_at`, which records that
+the grant passed Gate 11 — a fact about its history, not about whether it still answers.
+
+### Named individually, never matched
+
+`grant_ids`, not a predicate. A retirement that selects rows by a rule **is** the
+automatic path this exists beside, and the ruling's words are *never a guess*. A caller
+that wants twenty rows names twenty; `test_it_takes_ids_and_never_a_predicate` refuses a
+signature that could grow a matcher.
+
+**Every id must exist and be live, and the whole call refuses if one is not.** A partial
+retirement leaves the operator deciding which half happened. An already-retired grant
+refuses rather than moving its date, because `superseded_at` is when the row actually
+stopped answering and a second call would overwrite that.
+
+### Who, and per venture
+
+`venture_operator` — the same authority `deactivate` takes, because the effect is the
+same size. Not the `ivan` that `certify_for_simulation` needs, which spends a founder's
+declaration.
+
+**Checked in every venture the list spans**, not once. Checking the first would let one
+venture's operator retire another's.
+
+And `assert_named_human`: entry 148's rule, because a fixture names nobody who can answer
+for a grant that stopped answering. One of the two grants being retired today was issued
+and activated by `smoke-e4fc20ff`, which is exactly why.
+
+### What it retired
+
+    2d9cd4ca   Amelie Wystan   cre-forge/property_lookup   origin unknown
+    74317f7d   Amelie Wystan   simforge/gate_result        origin unknown
+
+Ivan Green's reason, recorded on the event: *"Revoked 15 September: no Greenstone position
+draws from engineering, and the Pack does not name the department. `simforge/gate_result`
+was issued and activated by a test fixture. Retired rather than certified."*
+
+**Retired rather than certified**, and that is the whole decision. Entry 181 made a
+department certification reachable by the gate; this says these two grants are not what
+it should be made reachable for. Certifying `engineering` would have bound a certification
+to `property_lookup`, on the strength of a simulation declaration, for a department
+`packs/greenstone.yaml` never names.
+
+### The event is published
+
+`grant_retired` is in `audit_events.py`. Entry 171's walker refused the build until it
+was — the control working on a new event the same day it was written, which is what it is
+for.
+
+> **Still open: `gate_result` is not excluded, it is unused.** The Gate 4 advisory names
+> it under V25 — *"Declared and paid for, used by nothing"* — which is a fact about the
+> Pack's `forge_dependencies`, not a prohibition. `forge_module_exclusion` holds 21 rows
+> and none of them is on SimForge. Retiring the grant does not change that; the
+> declaration is still in the Pack.
