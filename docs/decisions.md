@@ -15815,3 +15815,80 @@ for.
 > Pack's `forge_dependencies`, not a prohibition. `forge_module_exclusion` holds 21 rows
 > and none of them is on SimForge. Retiring the grant does not change that; the
 > declaration is still in the Pack.
+
+
+## 183. A TIMEOUT replaces nothing
+
+**Ruling by Ivan Green, 23 September 2026:**
+
+> *"A TIMEOUT replaces nothing. It is the absence of an answer, not an answer. Ingest
+> records it without overwriting a certification's basis, state or references. A PASS or
+> FAIL still supersedes, per entry 167. Measured: three unit-B TIMEOUTs from a blocked
+> run erased two simulation certifications within three minutes of a named human writing
+> them, and had been doing so every three minutes."*
+
+### What it did, measured while doing it
+
+`operations` and `research` were certified for simulation at **19:32**, both rows
+`certified / simulation / suggest`, both audited, both naming the declaration. Read back
+minutes later they said `in_training / tested / TIMEOUT`, `scenario_pack_ref =
+run:d59650aa/departments`, updated **19:41:53**.
+
+    verdict_ingest  19:32:52  ingested 3, rows_written 3
+    verdict_ingest  19:35:53  ingested 3, rows_written 3
+    verdict_ingest  19:38:53  ingested 3, rows_written 3
+    verdict_ingest  19:41:53  ingested 3, rows_written 3
+
+Run `d59650aa` is blocked at Gate 9 and will not advance. Its three department
+submissions stay open, pass The Office's own deadline, and `timeout_gate_result`
+synthesises a TIMEOUT for each — every three minutes, indefinitely.
+
+**The act was correct, the record was correct, and the record did not survive the
+afternoon.**
+
+### The upsert was right, and still is, for every other verdict
+
+Entry 167 settled it in its own words: *"a re-certification is a new answer to the same
+question, and the basis of the new answer is the new basis."* A PASS or a FAIL supersedes
+whatever stood before it, simulation basis included. That is unchanged and is tested.
+
+**A TIMEOUT is not an answer.** It is this sweep saying nobody replied — and the sweep
+already knows that about itself, twice over:
+
+    it does not stamp the submission on a TIMEOUT      the question is still being asked
+    entry 142 refuses a TIMEOUT for staleness          "a submission set from withdrawn
+                                                        text has nothing to say about an
+                                                        agent - not even that it did not
+                                                        answer"
+
+That second sentence is the whole ruling, one table over. It was already written down
+about the answer key and had not been applied to the certification.
+
+### Where the guard sits, and what it does not read
+
+In `record_result`, before the upsert, on **the same natural key the upsert conflicts
+on** — so it asks about exactly the row the INSERT would have replaced.
+
+A standing row is returned untouched and nothing is written. **The guard does not read
+`basis`**, deliberately: `tested`, `attested`, `bootstrap` and `simulation` take one path,
+and a branch on basis would be a second rule to keep in step with the first.
+
+**Both units.** The ruling names a certification, not a unit. A `certified` agent whose
+re-exam timed out has not been shown to have got worse; `recompute_staleness` is what
+moves a certification the instructions have outrun, and it is not this.
+
+**A first certification is still written.** A department or agent with no row at all,
+whose run timed out, *is* `in_training` — there is nothing to preserve and the row says
+the honest thing. This is about replacement, not about recording.
+
+### What it does not fix
+
+The submissions stay open and the sweep keeps synthesising TIMEOUTs; they are simply
+harmless now. The run that owns them is `d59650aa`, abandoned separately so the sweep
+stops being asked the question at all.
+
+> **Still open: nothing expires a submission whose run was abandoned before the deadline
+> passed.** `supersede_run_submissions` closes the open ones at abandon time (entry 142),
+> which is why abandoning works — but a submission that times out *first* and is
+> abandoned *after* keeps being ingested until somebody notices. Not reachable today;
+> written down because the three that caused this were a day old.
