@@ -672,9 +672,103 @@ async def record_result(
             ),
         )
         row = await cur.fetchone()
-    await conn.commit()
     assert row is not None
+
+    # ENTRY 181. The reference follows the certification, on every Unit B write and not
+    # only the simulation one - a tested department certification lands through this
+    # function and has the same defect. Unit A is untouched: `operation_cert_ref` is
+    # keyed per (agent, forge, module) and is a separate question, named in the entry.
+    #
+    # BEFORE THE COMMIT, so the certification and the references it is read through land
+    # in one transaction. A certification that exists while the grants still name the
+    # row it replaced is precisely the state this closes.
+    #
+    # NO EVENT OF ITS OWN HERE, and that is a decision rather than an omission.
+    # `write_event` requires an `actor_id`, and every `actor_type="system"` entry in
+    # this repository names the real subject it acted on. This write has no subject to
+    # name - it follows a certification whose own act is already audited by whoever
+    # asked for it, and the verdict sweep records the ingest that caused it.
+    #
+    # Inventing an actor to satisfy a column would put a fiction in the ledger for a
+    # consequence, which is the shape entries 148 and 162 both refuse. The effect is
+    # readable where it lands: on the grant rows, against the certification they name.
+    #
+    # `certify_for_simulation` DOES record the count, because that act has an event of
+    # its own and a named human behind it.
+    if unit == "B" and department:
+        await repoint_department_grants(
+            conn, department=department, forge_id=forge_id, cert_id=row["cert_id"]
+        )
+    await conn.commit()
     return CertState(row["cert_id"], row["unit"], row["state"], row["certified_tier"])
+
+
+async def repoint_department_grants(
+    conn: AsyncConnection, *, department: str, forge_id: str, cert_id: uuid.UUID
+) -> int:
+    """Point every live grant in this department and Forge at the certification in force.
+
+    RULED 23 SEPTEMBER 2026 (decisions entry 181)
+    =============================================
+
+        *"A grant's department certification reference points at the certification in
+        force. Issuing a Unit B certification re-points every grant in that department
+        and Forge."*
+
+    WHAT IT WAS, AND WHY IT LOOKED FINE
+    ===================================
+
+        `dept_context_cert_ref` is written once, when the grant is issued, and nothing
+        ever moved it. Gate 9 reads the Unit B certification THROUGH that column -
+        `ON cb.cert_id::text = g.dept_context_cert_ref` - so a certification the column
+        does not name is a certification the gate cannot see.
+
+        It survived because both writers upsert on `(department, forge_id) WHERE
+        unit = 'B'`, and an upsert that hits an existing row keeps its `cert_id`. So the
+        reference stayed correct **by coincidence**, for as long as a department never
+        got its first certification after its grants were issued.
+
+        Measured 23 September 2026: `operations` (4 grants) and `research` (2) resolve
+        only because of that coincidence. `engineering` has SIX live grants across three
+        Forges whose refs name `cert_id`s no row holds - and certifying engineering would
+        write a perfectly valid certification that Gate 9 would still read as
+        `never_certified`.
+
+    EVERY LIVE GRANT, AND THE KEY IS THE CERTIFICATION'S OWN
+    ========================================================
+
+        A Unit B certification is unique on `(department, forge_id)` - `ux_cert_unit_b`,
+        no venture - so one department on one Forge has exactly one, and every grant in
+        that department on that Forge is about it. The update takes the same key rather
+        than a narrower one; scoping by venture here would leave a grant in a second
+        venture pointing at a row that is no longer in force.
+
+        **Live grants only.** A superseded grant confers nothing and its reference is
+        part of what was true when it was retired. Rewriting it would edit the record.
+
+        **A revoked grant IS re-pointed.** Revocation is a separate table and does not
+        touch this column; the reference should be true whether or not the authority is
+        currently withheld, and `covered_grants` is what withholds it.
+
+    IDEMPOTENT, AND SILENT WHEN THERE IS NOTHING TO DO. `IS DISTINCT FROM` means a
+    re-certification that keeps its `cert_id` updates no rows and returns 0, so the
+    count a caller records is the number of references that actually moved.
+    """
+    async with conn.cursor() as cur:
+        await cur.execute(
+            """
+            UPDATE agent_forge_grant g
+               SET dept_context_cert_ref = %s
+              FROM office_agent_identity i
+             WHERE i.office_agent_id = g.office_agent_id
+               AND i.department = %s
+               AND g.forge_id = %s
+               AND g.superseded_at IS NULL
+               AND g.dept_context_cert_ref IS DISTINCT FROM %s
+            """,
+            (str(cert_id), department, forge_id, str(cert_id)),
+        )
+        return cur.rowcount
 
 
 #: The fourth basis. Ruled 22 September 2026, entry 167.
@@ -902,8 +996,21 @@ async def certify_for_simulation(
             ),
         )
         row = await cur.fetchone()
-    await conn.commit()
     assert row is not None
+
+    # ENTRY 181, and this is the call that produced the ruling. `engineering` has no
+    # Unit B row, so the INSERT above mints a fresh `cert_id` and its six live grants
+    # would keep naming the ids they were issued with - none of which any row holds.
+    # `operations` and `research` resolve today only because their upsert hits an
+    # existing row and keeps it.
+    #
+    # BEFORE THE COMMIT: the certification and the references it is read through are one
+    # transaction, so there is no instant at which a valid certification exists that the
+    # gate cannot see.
+    repointed = await repoint_department_grants(
+        conn, department=department, forge_id=forge_id, cert_id=row["cert_id"]
+    )
+    await conn.commit()
 
     await audit.write_event(
         event_type="department_certified_for_simulation",
@@ -920,6 +1027,11 @@ async def certify_for_simulation(
             "reason": reason.strip(),
             "modules": sorted(hashes),
             "instruction_content_hash": basis_hash,
+            # ENTRY 181. How many grant references this act moved. On the event that
+            # names the act rather than as a second event: one act, one entry, and a
+            # reader asking whether Gate 9 can see this certification finds the answer
+            # beside the certification itself.
+            "grants_repointed": repointed,
         },
     )
     return CertState(row["cert_id"], row["unit"], row["state"], row["certified_tier"])

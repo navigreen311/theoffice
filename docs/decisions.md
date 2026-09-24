@@ -15623,3 +15623,103 @@ an edit of mine.
 > the spread WITHIN an exam, across seeds — `property_lookup` scored 0.778, 1.000 and
 > 0.667 on three attempts of one sitting. Whether two identical sittings agree needs
 > SimForge to clear a run, and that is a request, not a build.
+
+
+## 181. A grant points at the certification in force
+
+**Ruling by Ivan Green, 23 September 2026:**
+
+> *"A grant's department certification reference points at the certification in force.
+> Issuing a Unit B certification re-points every grant in that department and Forge.
+> Measured: engineering's two grants reference cert ids no row holds, so certifying
+> engineering would write a valid certification the gate cannot see; operations and
+> research are reachable only because an upsert happens to preserve their ids."*
+
+### The reference was written once and never moved
+
+`agent_forge_grant.dept_context_cert_ref` is set when the grant is issued. Nothing has
+ever updated it. Gate 9 reads the Unit B certification **through** that column —
+
+    LEFT JOIN certification cb
+      ON cb.unit = 'B' AND cb.cert_id::text = g.dept_context_cert_ref
+
+— so a certification the column does not name is a certification the gate cannot see.
+
+### It survived on a coincidence, and the coincidence is nameable
+
+Both Unit B writers upsert on `(department, forge_id) WHERE unit = 'B'`. An upsert that
+hits an existing row **keeps its `cert_id`**, so the reference stayed correct for as long
+as a department never received its first certification after its grants were issued.
+
+Measured 23 September 2026, every venture:
+
+    operations    cre-forge     4 grants   ref resolves    (upsert kept the id)
+    research      cre-forge     2 grants   ref resolves    (upsert kept the id)
+    engineering   capitalforge  4 grants   ref resolves NOTHING
+    engineering   cre-forge     1 grant    ref resolves NOTHING
+    engineering   simforge      1 grant    ref resolves NOTHING
+
+Six dangling references, all `engineering`. Certifying it under entry 167 would insert a
+row with a fresh `cert_id` and leave all six naming ids nothing holds — **a valid
+certification, correctly issued, invisible to the gate that reads it.**
+
+### `is_assignable` does not catch it, and says why in its own definition
+
+    GENERATED ALWAYS AS (operation_cert_ref IS NOT NULL
+                     AND dept_context_cert_ref IS NOT NULL
+                     AND activated_at IS NOT NULL
+                     AND superseded_at IS NULL) STORED
+
+A NOT NULL test on a text column, not a join. Both engineering grants read
+`is_assignable = true` today while referencing nothing. The revocation covering them is
+what actually withholds the authority — and the 15 September revocation reason already
+recorded the fact, in writing: *"Both certification refs point at certification rows that
+do not exist."* It was known and it was not fixed, because nothing asked.
+
+### Every live grant, on the certification's own key
+
+`repoint_department_grants(department, forge_id, cert_id)`, called by **both** Unit B
+writers before the commit — so there is no instant at which a valid certification exists
+that the gate cannot see.
+
+`ux_cert_unit_b` is unique on `(department, forge_id)` and carries **no venture**, so one
+department on one Forge has exactly one certification and every grant in it is about that
+row. The update takes the same key. Scoping by venture would leave a second venture's
+grant naming a row no longer in force.
+
+    live grants only        a superseded grant confers nothing, and its reference is
+                            part of what was true when it was retired. Rewriting it
+                            edits the record rather than correcting it - entry 72's
+                            distinction, one column over.
+    a revoked grant moves   revocation is a separate table and does not touch this
+                            column. The reference should be true whether or not the
+                            authority is currently withheld; `covered_grants` is what
+                            withholds it.
+    idempotent              `IS DISTINCT FROM`, so a re-certification that keeps its id
+                            updates nothing and returns 0. The count is references that
+                            MOVED, not grants looked at.
+
+### One act, one entry
+
+`certify_for_simulation` records `grants_repointed` on the event that names the act. A
+reader asking whether Gate 9 can see this certification finds the answer beside the
+certification itself.
+
+`record_result` writes **no event for it**, and that is a decision. `write_event` requires
+an `actor_id`, and every `actor_type="system"` entry in this repository names the real
+subject it acted on. This write has no subject to name: it follows a certification whose
+own act is already audited by whoever asked for it. Inventing an actor to satisfy a column
+would put a fiction in the ledger for a consequence, which is what entries 148 and 162
+both refuse.
+
+### Unit A is named, not fixed
+
+`operation_cert_ref` has the same shape and the same six dangling rows. It is keyed per
+`(agent, forge, module)` rather than per department, so the repair is a different query
+with a different population, and folding it in here would make one ruling cover two
+questions. `test_unit_a_is_deliberately_untouched` pins the omission as deliberate.
+
+> **Still open: nothing re-points a reference when a certification is DELETED or a
+> department is renamed.** Neither happens today — no path deletes a certification, and
+> `office_agent_identity.department` has one writer — but the guarantee this entry makes
+> holds only at issue time.
