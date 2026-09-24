@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from typing import Any
 
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
@@ -403,6 +404,158 @@ async def resolve_grant(
         compliance_flags=tuple(row["compliance_flags_implied"] or ()),
         unit_b_simulation_only=bool(row["unit_b_simulation_only"]),
     )
+
+
+async def retire(
+    conn: AsyncConnection,
+    *,
+    grant_ids: list[uuid.UUID],
+    human: humans.Human,
+    reason: str,
+) -> list[dict[str, Any]]:
+    """Retire named grants. A named human, a reason, and an audit event.
+
+    RULED 23 SEPTEMBER 2026 (decisions entry 182)
+    =============================================
+
+        *"A grant may be retired by a named human, with a reason and an audit event.
+        Sets `superseded_at`; never a guess and never automatic. Measured:
+        `superseded_at` has one writer, which retires only bootstrap grants a ladder
+        grant replaced, so a revoked `origin='unknown'` grant cannot be retired at
+        all."*
+
+    WHAT WAS THERE, AND WHY IT COULD NOT REACH THESE ROWS
+    ====================================================
+
+        `agent_forge_grant.superseded_at` had exactly one writer:
+        `generators/runtime_config.py`, retiring `origin = 'bootstrap'` rows that a
+        `origin = 'ladder'` row replaced. Its own comment says why it will not go
+        further - *"An `unknown` row must not retire anything - nothing is retired on a
+        guess"* - and that is right about an AUTOMATIC rule.
+
+        It leaves no path at all for a row that should be retired on a judgement.
+        Measured: Amelie Wystan's two engineering grants are `origin = 'unknown'`, have
+        no ladder replacement, are covered by live revocations of 15 September, and
+        could not be retired by anything in this repository.
+
+        So the gap is not in the automatic rule. It is that there was no deliberate one.
+
+    RETIRED IS NOT REVOKED, AND NOT DEACTIVATED
+    ===========================================
+
+        Three verbs, one table, and they are a keystroke apart:
+
+            revoke      the authority was WRONG. Its own table, consulted on every
+                        call, liftable by a named human at the same scope.
+            deactivate  the grant has not passed Gate 11 yet. `activated_at` only.
+            retire      the grant is FINISHED. It is not the row that answers any
+                        more, and nothing is claimed about whether it should have
+                        existed.
+
+        Retiring does not revoke and revoking does not retire. These two grants are
+        both - revoked on 15 September because the authority was wrong, retired now
+        because the row should stop being one Gate 9 counts. Either without the other
+        would be half the record.
+
+    NAMED INDIVIDUALLY, NEVER MATCHED
+    =================================
+
+        `grant_ids`, not a predicate. A retirement that selects rows by a rule is the
+        automatic path this exists beside, and the ruling's words are *never a guess*.
+        A caller that wants twenty rows names twenty.
+
+        **Every id must exist and be live**, and the whole call refuses if one is not.
+        A partial retirement would leave the operator deciding which half happened -
+        the failure mode `author_cre_forge_instructions` calls out for the same reason.
+
+    WHO
+    ===
+
+        `venture_operator`, scoped to each grant's own venture - the same authority
+        `deactivate` takes, because the effect is the same size: a grant stops being
+        the one that answers. It is NOT the `ivan` that `certify_for_simulation`
+        needs, which spends a founder's declaration.
+
+    Returns the rows it retired, so the caller reports what changed rather than a
+    count nobody can check.
+    """
+    if not reason.strip():
+        raise NotAuthorized("retiring a grant requires a documented reason")
+    if not grant_ids:
+        raise NotAuthorized(
+            "retiring no grants is not an act. A retirement reporting success without "
+            "naming a row is a record of something that did not happen."
+        )
+
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            "SELECT g.grant_id::text AS grant_id, g.venture_id, g.forge_id, "
+            "       g.module_id, g.origin, g.superseded_at, i.agent_name "
+            "  FROM agent_forge_grant g "
+            "  JOIN office_agent_identity i ON i.office_agent_id = g.office_agent_id "
+            " WHERE g.grant_id = ANY(%s) ORDER BY g.forge_id, g.module_id",
+            ([str(g) for g in grant_ids],),
+        )
+        found = [dict(r) for r in await cur.fetchall()]
+
+    seen = {r["grant_id"] for r in found}
+    missing = [str(g) for g in grant_ids if str(g) not in seen]
+    if missing:
+        raise NotAuthorized(
+            f"no grant with id(s) {', '.join(sorted(missing))}. Nothing was retired: a "
+            "call that names a row this table does not hold is a call about something "
+            "else."
+        )
+    already = [r["grant_id"] for r in found if r["superseded_at"] is not None]
+    if already:
+        raise NotAuthorized(
+            f"grant(s) {', '.join(sorted(already))} are already retired. Nothing was "
+            "written - re-retiring would move `superseded_at` and overwrite the date "
+            "the row actually stopped answering."
+        )
+
+    # AUTHORIZED PER VENTURE, not once. A list spanning two ventures needs the role in
+    # both, and checking the first would let one venture's operator retire another's.
+    for venture_id in sorted({r["venture_id"] for r in found}):
+        humans.authorize(human, required_role="venture_operator", venture_id=venture_id)
+    humans.assert_named_human(human, act="retire a grant")
+
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "UPDATE agent_forge_grant SET superseded_at = now() "
+            " WHERE grant_id = ANY(%s) AND superseded_at IS NULL",
+            ([str(g) for g in grant_ids],),
+        )
+    await conn.commit()
+
+    await audit.write_event(
+        event_type="grant_retired",
+        actor_type="human",
+        actor_id=human.human_id,
+        # The venture when they share one, NULL when they do not - rather than picking
+        # the first, which would file the act under a venture it was only half about.
+        venture_id=(
+            found[0]["venture_id"]
+            if len({r["venture_id"] for r in found}) == 1
+            else None
+        ),
+        subject={
+            "human": human.display_name,
+            "reason": reason.strip(),
+            # Named individually. "2 grants" is not something a reader can check.
+            "grants": [
+                {
+                    "grant_id": r["grant_id"],
+                    "agent": r["agent_name"],
+                    "venture_id": r["venture_id"],
+                    "module": f"{r['forge_id']}/{r['module_id']}",
+                    "origin": r["origin"],
+                }
+                for r in found
+            ],
+        },
+    )
+    return found
 
 
 async def deactivate(
