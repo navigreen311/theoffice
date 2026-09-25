@@ -550,6 +550,69 @@ async def record_result(
         else "(department, forge_id) WHERE unit = 'B'"
     )
 
+    # ================================================================ entry 183
+    #
+    # A TIMEOUT REPLACES NOTHING.
+    #
+    # Ruled 23 September 2026: *"A TIMEOUT replaces nothing. It is the absence of an
+    # answer, not an answer. Ingest records it without overwriting a certification's
+    # basis, state or references. A PASS or FAIL still supersedes, per entry 167."*
+    #
+    # WHAT IT DID. `verdict_ingest` synthesises a TIMEOUT for a submission past The
+    # Office's own deadline, and the upsert below replaced everything: `basis`, `state`,
+    # `scenario_pack_ref`, `simulation_ref`, `certified_tier`. Measured 23 September:
+    # three unit-B TIMEOUTs from run `d59650aa`, blocked at Gate 9 and never advancing,
+    # erased two simulation certifications within three minutes of a named human writing
+    # them - and had been doing it every three minutes since the run blocked.
+    #
+    # WHY THE UPSERT WAS RIGHT AND STILL IS, FOR EVERY OTHER VERDICT. Entry 167 settled
+    # it: *"a re-certification is a new answer to the same question, and the basis of the
+    # new answer is the new basis."* A PASS or a FAIL is an answer and supersedes
+    # whatever stood before it, simulation basis included.
+    #
+    # A TIMEOUT is not an answer. It is this sweep saying nobody replied - and this sweep
+    # already knows that about itself: it refuses to stamp the submission on a TIMEOUT
+    # ("a stamp on a TIMEOUT would close the..."), and entry 142's staleness check
+    # refuses a TIMEOUT because *"a submission set from withdrawn text has nothing to say
+    # about an agent - not even that it did not answer."* The same sentence applies to
+    # the certification, one table over.
+    #
+    # BOTH UNITS. The ruling names a certification, not a unit, and the argument does not
+    # change: a `certified` agent whose re-exam timed out has not been shown to have got
+    # worse. `recompute_staleness` is what moves a certification the instructions have
+    # outrun, and it is not this.
+    #
+    # A FIRST CERTIFICATION IS STILL WRITTEN. A department or agent with no row at all,
+    # whose run timed out, IS `in_training` - there is nothing to preserve and the row
+    # says the honest thing. This guard is about replacement, not about recording.
+    if verdict == "TIMEOUT":
+        # The same natural key the upsert conflicts on, so this asks about exactly the
+        # row the INSERT below would have replaced.
+        if unit == "A":
+            target = "office_agent_id = %s AND module_id = %s"
+            params: tuple[Any, ...] = (unit, forge_id, office_agent_id, module_id)
+        else:
+            target = "department = %s"
+            params = (unit, forge_id, department)
+        async with conn.cursor(row_factory=dict_row) as cur:
+            await cur.execute(
+                # `basis` is deliberately not read: the guard preserves every standing
+# row alike, and a branch on it would be a second rule.
+                "SELECT cert_id, unit, state, certified_tier "
+                "  FROM certification "
+                f" WHERE unit = %s AND forge_id = %s AND {target}",
+                params,
+            )
+            standing = await cur.fetchone()
+        if standing is not None:
+            # Nothing is written. The submission stays open - the sweep does not stamp
+            # it on a TIMEOUT - so the question is still being asked, and the answer,
+            # when it comes, supersedes through the path below.
+            return CertState(
+                standing["cert_id"], standing["unit"], standing["state"],
+                standing["certified_tier"],
+            )
+
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
             f"""
