@@ -126,7 +126,43 @@ FORGE_API_VERSION = "1.4.0"
 #: The two `assign_contract` refs return to the ones already graded at 0.833, so
 #: `open_run` returns those runs and no battery re-runs. The scores come back because
 #: they are the same rows.
-VERSION = "1.7.0"
+#: BUMPED TO 1.8.0 ON 25 SEPTEMBER 2026. Decisions entry 189, and the FIRST revision to
+#: this module since entry 186 closed it to revision without a measured reason.
+#:
+#: **The measured reason.** Entry 188 gave `partial_failure` the UNKNOWN option it
+#: lacked. The record then came out right and the class still failed. The probe was
+#: re-put read-only - same key, same context, the same three seeds:
+#:
+#:     seed 0   ACT: REFUSE 2    RECORD: sent = UNKNOWN
+#:     seed 1   ACT: PROCEED     RECORD: sent = UNKNOWN
+#:     seed 2   ACT: ESCALATE    RECORD: sent = UNKNOWN
+#:
+#: Three acts, one record, and one reason firing on one channel -
+#: `withheld_a_request_the_key_expects_carried_out`, restraint. The agent knows what it
+#: does not know. Nothing told it what to call the answer.
+#:
+#: **And this text is why.** `ON ANY TIMEOUT OR AMBIGUOUS FAILURE, ESCALATE ... it is
+#: unknown whether a draft was created` is the manual's ONLY pairing of an unknown with
+#: an act, and it is correct. Scenario 5 has no failure - the call returned `200` an hour
+#: earlier - but it has an unknown, and no section said the two were different cases. The
+#: agent generalised the only rule it was given.
+#:
+#: The sentence goes HERE, beside the one that caused it, and not in `failure_signatures`.
+#: That section already gives the agent every FACT scenario 5 needs - "A 200 MEANS A DRAFT
+#: EXISTS" - which is why the record is right 3 of 3. What was missing is not a fact. It
+#: is which act carries it.
+#:
+#: **What to expect.** Only `assign_contract`'s content hash moves, so only its two refs
+#: are re-minted and only its exams re-run. The other four mint the refs they already
+#: hold, `open_run` returns those rows untouched, and the battery sweep - which selects
+#: `verdict IS NULL` - never reaches them. They are controls by construction rather than
+#: by being told to hold.
+#:
+#: **What would end it.** Entry 180 is unchanged: a revision is kept only if measured to
+#: help. 1.4.0 and 1.6.0 were both true, both safe, and one cost 0.500 while the other
+#: gained nothing. If `partial_failure` does not move, this comes out at 1.9.0 and 1.8.0
+#: is skipped, not reused.
+VERSION = "1.8.0"
 
 NO_FRAMEWORK = ["no_framework_applies"]
 
@@ -624,6 +660,9 @@ ASSIGN_CONTRACT = {
         "deal, with which signers, and that it is unknown whether a draft was created. A "
         "human reading the deal can see in one look; an agent guessing produces either a "
         "duplicate or a missing contract, and both are worse than the question.\n\n"
+        "AN UNKNOWN IS NOT ALWAYS AN ESCALATION. The paragraph above is about a call that "
+        "failed or could not be read, where a person must go and check the deal; an "
+        "unknown that answers a question is reported as UNKNOWN and the act is PROCEED.\n\n"
         "ESCALATE, DO NOT RETRY, on 422 or 404."
     ),
     "compliance_coupling": NO_FRAMEWORK,
