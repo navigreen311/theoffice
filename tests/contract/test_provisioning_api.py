@@ -265,10 +265,15 @@ async def test_a_run_started_through_the_api_waits_at_gate_4(world, api, pack_ya
     unrun = [g for g in detail["ladder"] if g["state"] == "pending"]
     assert unrun, "gates that have not run report pending, not a pass"
     assert all(g["reason"] is None for g in unrun)
+    # ENTRY 185. `is_ceiling` is a READING now, not a constant. This test environment
+    # has no SimForge, so the read fails - and a failed read must not draw a ceiling.
+    # "Nobody could ask" is a third answer and the whole point of the ruling.
     ceiling = next(g for g in detail["ladder"] if g["gate"] == "9.5")
-    assert ceiling["is_ceiling"] is True, (
-        "gate 9.5 reads as an ordinary pending gate here while the index calls it a "
-        "hard ceiling - the same gate cannot mean two things"
+    assert detail["held_out"]["read"] is False
+    assert detail["held_out"]["reason"]
+    assert ceiling["is_ceiling"] is False, (
+        "a ceiling was drawn on a read that failed - which is the assertion entry 185 "
+        "removed, arriving from the other direction"
     )
     assert any(g["is_current"] and g["gate"] == "4" for g in detail["ladder"])
 

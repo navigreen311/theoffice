@@ -270,9 +270,13 @@ async def test_the_ceiling_gate_is_marked_in_every_ladder(api, world):
     ).json()
     venture = next(v for v in body["ventures"] if v["venture_id"] == VENTURE)
 
-    ceiling = [row for row in venture["ladder"] if row["is_ceiling"]]
-    assert len(ceiling) == 1
-    assert ceiling[0]["gate"] == body["ceiling_gate"] == "9.5"
+    # ENTRY 185. Which gate CAN be the ceiling is still a constant - that is what
+    # `ceiling_gate` names. Whether it IS one is read per venture, and this environment
+    # cannot reach SimForge, so nothing is marked and the card says why.
+    assert body["ceiling_gate"] == "9.5"
+    assert [row for row in venture["ladder"] if row["is_ceiling"]] == []
+    assert venture["held_out"]["read"] is False
+    assert venture["held_out"]["reason"]
 
 
 async def test_a_stopped_run_says_what_happened_not_what_the_gate_checks(api, world):

@@ -533,6 +533,21 @@ export type LadderRow = {
   downstream_of_stop: boolean;
 };
 
+/**
+ * What Gate 9.5 would find for a venture, READ rather than asserted (entry 185).
+ *
+ * Three shapes, and a surface must not render any of them as another:
+ *   { read: false, reason }                      nobody could ask
+ *   { read: true, partition_exists: false }      the deployment ceiling
+ *   { read: true, partition_exists: true, verdict }  the gate answered
+ */
+export type HeldOutReading = {
+  read: boolean;
+  reason?: string;
+  partition_exists?: boolean;
+  verdict?: string | null;
+};
+
 /** Who ended a run, when, and the reason they gave. Read from the audit log. */
 export type Disposition = {
   actor: string | null;
@@ -592,6 +607,8 @@ export type ProvisioningCard = {
   run: RunCard | null;
   ladder: LadderRow[];
   runs_total: number;
+  /** Entry 185. What Gate 9.5 reads for this venture, or why it could not be read. */
+  held_out?: HeldOutReading;
   resumable: boolean;
   resume_blocked_because: string | null;
   pack_changed: boolean;

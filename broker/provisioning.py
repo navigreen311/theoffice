@@ -3651,7 +3651,12 @@ GATE_DESCRIPTIONS = {
     "7": "Registers the engagement and appoints agents with grants still inactive.",
     "8": "Submits the curriculum to SimForge for scenario training.",
     "9": "Runs the readiness gate per role per domain.",
-    "9.5": "Runs the held-out adversarial set. No deployment can pass this yet.",
+    # ENTRY 185. This read "No deployment can pass this yet" until 24 September 2026,
+    # when the partition was sealed and the endpoint began answering PASS. A gate
+    # description states what the gate DOES; whether it can be passed is a reading, and
+    # it travels beside the ladder rather than inside a constant.
+    "9.5": "Runs the held-out adversarial set that SimForge owns and The Office cannot "
+           "see. The Office learns whether, never why.",
     "10": "Takes a named human signature bound to the artifact hashes.",
     "11": "Activates production grants against the signed artifacts.",
     "12": "Venture is live, tiers active, revocation armed.",
@@ -3696,12 +3701,21 @@ def display_status(
 
 
 def ladder_for(
-    results: list[dict[str, Any]], current_gate: str | None, status: str | None
+    results: list[dict[str, Any]],
+    current_gate: str | None,
+    status: str | None,
+    held_out: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Every gate, in order, whether or not it ran.
 
     A ladder that lists only what has happened cannot show what is still ahead of a
     stopped run - which is most of the reason to draw one.
+
+    `held_out` is `held_out_reading`'s answer, or None when the caller did not ask.
+    **`is_ceiling` is now a reading, not a constant.** Entry 185: a gate is the ceiling
+    when the partition does not exist, and it stops being one the moment a verdict
+    exists - PASS or otherwise. A caller that passes nothing gets `is_ceiling: false`,
+    because a surface that did not ask has nothing to assert.
     """
     latest: dict[str, dict[str, Any]] = {}
     for row in results:
@@ -3719,6 +3733,17 @@ def ladder_for(
         if prior is not None:
             seconds[row["gate"]] = (row["recorded_at"] - prior).total_seconds()
         previous = row
+
+    # ENTRY 185, computed once. The gate is the ceiling only while the reading says the
+    # partition is absent. A verdict - PASS or FAIL - means the gate is reachable and
+    # answering, and `CEILING_GATE`'s own comment already required that distinction. An
+    # unreadable Forge is NOT a ceiling either: nobody asked, and a lock drawn on a
+    # failed read is the assertion this entry exists to remove.
+    at_ceiling = (
+        held_out is not None
+        and held_out.get("read") is True
+        and held_out.get("partition_exists") is False
+    )
 
     live = status in ("running", AWAITING_HUMAN)
     reached = False
@@ -3752,12 +3777,61 @@ def ladder_for(
                            else record["recorded_at"].isoformat(),
             "seconds": seconds.get(gate),
             "is_current": is_current,
-            "is_ceiling": gate == CEILING_GATE,
+            # ENTRY 185. The gate is the ceiling only while the reading says the
+            # partition is absent. A verdict - PASS or FAIL - means the gate is
+            # reachable and answering, and `CEILING_GATE`'s own comment already
+            # required that distinction. An unreadable Forge is NOT a ceiling either:
+            # nobody asked, and a lock drawn on a failed read is the assertion this
+            # entry exists to remove.
+            "is_ceiling": gate == CEILING_GATE and at_ceiling,
             # Everything past the gate a run stopped at never ran, and saying so is the
             # difference between "not yet" and "we do not know".
             "downstream_of_stop": reached and not is_current and not live,
         })
     return ladder
+
+
+async def held_out_reading(
+    conn: AsyncConnection, venture_id: str, simforge: SimForgeClient | None = None
+) -> dict[str, Any]:
+    """What Gate 9.5 would find for this venture, ASKED rather than asserted.
+
+    RULED 24 SEPTEMBER 2026 (decisions entry 185)
+    =============================================
+
+        *"A surface states what it read, never what was true when it was written. The
+        Gate 9.5 ceiling block on both provisioning pages is static prose from
+        ~15 September, asserting the partition does not exist while the endpoint returns
+        PASS. Read the gate or say nothing."*
+
+    THREE ANSWERS, AND THEY ARE NOT THE SAME
+    ========================================
+
+        ceiling      no sealed partition. Gate 9.5 cannot be passed and this IS the
+                     deployment ceiling - the statement the console has been making
+                     since ~15 September, now true only when it is true.
+        verdict      a partition exists and has been graded. PASS clears the gate; a
+                     FAIL is a real failure AT the gate and is not a ceiling. The
+                     comment on `CEILING_GATE` has said so since it was written: "a
+                     held-out verdict of FAIL is a real failure at the same gate, and
+                     reading the two the same way would report a venture that failed
+                     adversarial testing as merely waiting for infrastructure."
+        unreadable   nobody could ask. Entry 177's rule, and the one thing a surface
+                     must not render as either of the other two.
+
+    NON-FATAL, like `_forge_build` and for the same reason: this is drawn on a page, and
+    a Forge that cannot be reached must not take the page down with it. The caller gets
+    `read: false` and a reason, and the console says it could not ask.
+    """
+    try:
+        verdict = await _held_out_source(conn, simforge).verdict(venture_id)
+    except SimForgeError as exc:
+        return {"read": False, "reason": str(exc)[:300]}
+    except Exception as exc:  # belt and braces; a page must still render
+        return {"read": False, "reason": f"{type(exc).__name__}: {exc}"[:300]}
+    if verdict is None:
+        return {"read": True, "partition_exists": False, "verdict": None}
+    return {"read": True, "partition_exists": True, "verdict": verdict}
 
 
 # A run a human ended does not have its reason in `provisioning_gate_result`. The gate
