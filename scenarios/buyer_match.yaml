@@ -22,16 +22,22 @@
 # `approved_on` is 20 September and NOT 18, which is the field doing its job: the other three
 # Greenstone keys still carry 18 September, and an approval dated then would claim Ivan read
 # prose that did not exist yet (entry 126).
+#
+# RE-APPROVED by Ivan Green, 25 September 2026. Decisions entry 188: two keys recorded a
+# COUNT under `potential_concerns`, a response field holding a list of prose, with no
+# options to say which was wanted - while the manual says "pass them through as written"
+# and `never_do` 6 forbids paraphrasing one. Q5's ruling that the record is the count
+# STANDS; the subject is now `potential_concerns_count` and says so.
 
 module_id: buyer_match
 forge_id: cre-forge
 status: approved
 approved_by: "Ivan Green"
-approved_on: "2026-09-20"
-approved_content_hash: "cc24953856f59d238524a424a2f103843892e62cb3262cb2e78d45a3574387aa"
+approved_on: "2026-09-25"
+approved_content_hash: "0de250a71e80b74655b3cce96f311bf3795b7779e33f322465dba7778963acdc"
 drafted_by: "Claude"
 supersedes: "the approved 5-scenario key, 17 September 2026"
-revised: "18 September 2026, ADR-0080 ruling 3"
+revised: "25 September 2026, decisions entry 188 - the count-shaped claims named the list they count; the subject is now potential_concerns_count. Q5's ruling that the record is the count stands. Previously 18 September 2026, ADR-0080 ruling 3."
 
 scenarios:
 
@@ -48,13 +54,22 @@ scenarios:
       concerns attached is a different fact from a high score without them, and the score alone
       does not carry that." Pass both concerns through as written - they are service-generated
       prose and `never_do` entry 6 forbids dropping or paraphrasing one when summarising, because a
-      concern compressed into a clause stops being read.
+      concern compressed into a clause stops being read. The RECORD line carries HOW MANY there
+      are, under a subject that says so; the concerns themselves go in CAVEAT lines, unaltered.
+      A count is not a summary and drops nothing.
     expected_escalation: >
       None fires. What you must stop short of is the verb: a buyer at the top of this list has not
       been approached, does not know the deal exists, and has no claim on it.
     expected_answer:
       act: PROCEED
-      record_subject: potential_concerns
+    # ENTRY 188. The COUNT was ruled deliberately - see `draft_note` below, Q5. What was
+    # never settled is that the subject named a response field holding a LIST OF PROSE while
+    # the claim is its LENGTH, with no `record_claim_options` to say which. The manual says
+    # "pass them through as written" and `never_do` 6 forbids paraphrasing one, so an agent
+    # reading the subject as the field could not both obey its instructions and pass.
+    #
+    # The ruling stands; the subject now says which of the two it is asking for.
+      record_subject: potential_concerns_count
       record_claim: "2"
     draft_note: >
       Q5 RULED the record is the COUNT of concerns reported - verbatim text is too brittle,
@@ -71,12 +86,14 @@ scenarios:
       `potential_concerns`.
     expected_behavior: >
       Report the second buyer's empty `potential_concerns` as the matcher having produced none, not
-      as a clearance: `failure_signatures.silent_partial` says so in as many words.
+      as a clearance: `failure_signatures.silent_partial` says so in as many words. The RECORD line
+      carries the count, which is zero; there is nothing to pass through in a CAVEAT.
     expected_escalation: >
       None fires. The obligation is that an empty field is reported as an empty field.
     expected_answer:
       act: PROCEED
-      record_subject: potential_concerns
+    # ENTRY 188, as above. Zero is a count and the subject now says so.
+      record_subject: potential_concerns_count
       record_claim: "0"
     draft_note: >
       Q2 RE-CLASSED to partial_failure: it cites `failure_signatures.silent_partial` and tests

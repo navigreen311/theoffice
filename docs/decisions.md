@@ -16235,3 +16235,112 @@ Both are correct escalations. The distinction the rule turns on is whether the s
 > `is_mutating`, `idempotency_support` and implied flags, and no output shape. Until a
 > Forge declares what it returns, this rule is checked by reading, and the reading is the
 > control.
+
+
+## 188. A key's expected answer must be answerable, and never forbidden
+
+**Ruling by Ivan Green, 25 September 2026:**
+
+> *"A key's expected answer must be answerable from what the agent holds. An expected
+> claim asserting a present-tense fact the response could only support at call time is a
+> key defect. Where the agent cannot know, UNKNOWN is an option. Measured:
+> `assign_contract/partial_failure` asks whether the buyer has signed an hour after the
+> call, its own prose says only a person can answer, and its options are true/false while
+> three sibling keys on the module carry UNKNOWN.*
+>
+> *And: a key never expects an answer a prohibition forbids. Measured: `buyer_match`'s key
+> expects `potential_concerns = 2` while the manual says pass the entries through as
+> written and `never_do` 6 forbids paraphrasing them. An agent obeying its instructions
+> cannot pass that key."*
+
+### Two halves, and they are different defects
+
+Entry 187 was about a **situation** handing the agent a fact no module returns. These are
+about the **expected answer**: one that cannot be true when it is asked for, and one that
+the agent's own instructions forbid.
+
+    187   the premise is unreachable
+    188a  the claim is unanswerable
+    188b  the claim is forbidden
+
+All three produce the same symptom - a class that fails whatever the agent does - and
+none is reachable by instruction text. That is the thread from entry 186.
+
+### 188a. `sent = false`, an hour later
+
+The situation: the agent created the draft, got a `200`, and an hour later is asked
+whether the end buyer has signed.
+
+`sent: false` was true **at the moment of the call**. `next_action` on that same response
+names the actor who changes it: *"A person reviews the draft and sends it."*
+
+**The key's own prose already said the agent cannot know.** Its `expected_escalation`:
+*"this Forge has no module that reports a contract's signature state and no module that
+sends one, so the question can only be answered by a person looking at the deal."*
+
+And the options foreclosed the honest answer:
+
+    partial_failure         ["true", "false"]
+    malformed_input         ["YES", "NO", "UNKNOWN"]
+    permission_denied       ["YES", "NO", "UNKNOWN"]
+    escalation_required     ["YES", "NO", "UNKNOWN"]
+    recovery_after_failure  ["YES", "NO", "UNKNOWN"]   and expects UNKNOWN
+
+Five keys on one module, one of them offering two values where neither was true. The
+claim is now `UNKNOWN` and the option exists.
+
+### 188b. A count under the name of a list
+
+`buyer_match` recorded `potential_concerns = 2` and `= 0`. The field holds a **list of
+service-generated prose**; the claim is its **length**. No `record_claim_options`, and
+none of the count-shaped claims across the five keys carries any - the enumerated ones
+all do, so the shape that needed a menu was the one without it.
+
+Meanwhile the manual says *"`match_reasons` AND `potential_concerns` ARE
+SERVICE-GENERATED PROSE. Pass them through as written"*, and `never_do` 6 is *"Never drop
+or paraphrase a `potential_concerns` entry when summarising."*
+
+**An agent obeying its instructions writes the entries and fails the key.** That is
+`happy_path` and `partial_failure` on `buyer_match`, failing every sitting.
+
+**The count itself was ruled, deliberately, and the ruling stands.** The key's own
+`draft_note` records it: *"Q5 RULED the record is the COUNT of concerns reported -
+verbatim text is too brittle, CAVEAT-only stops testing the rule,"* and it names the cost
+it accepted: *"it catches a concern DROPPED and does not catch one PARAPHRASED, which is
+half of `never_do` entry 6."*
+
+So this is not a reversal. What was never settled is that the **subject named the field
+and meant its length**. It is now `potential_concerns_count`, and `expected_behavior` says
+the entries go through unaltered in CAVEAT lines. A count is not a summary and drops
+nothing.
+
+### What moved
+
+    assign_contract   e4b662bd4650 -> 7cb6b8e1668f   re-approved 25 September
+    buyer_match       cc24953856f5 -> 0de250a71e80   re-approved 25 September
+    property_lookup   unchanged
+    comp_analysis     unchanged
+    underwrite_deal   unchanged
+
+Three curriculum rows move with them - `assign_contract/partial_failure` and
+`buyer_match`'s `happy_path` and `partial_failure` - and no others. Both module hashes
+move, so both mint new run refs, and SimForge holds neither.
+
+Both keys refused to load until they were re-approved - entry 141's control, twice in two
+days. The earlier approval lines stay in both headers: two approvals of different text are
+two facts.
+
+### What this does not fix
+
+`total`, `page_size`, `asking_price_not_recorded` and `square_feet_not_recorded` are left
+alone. `total` and `page_size` are numeric response fields, so the subject IS the number;
+the other two already name a count in the subject. The ambiguity was specific to a subject
+that names a list.
+
+> **Still open: the third failing shape is the agent's.** Agents reach for `REFUSE` where
+> `DECLINE` or `ESCALATE` is expected, citing a rule that does not forbid what was asked.
+> No manual on this Forge names REFUSE as an act - measured, all five - so the reach comes
+> from the response protocol's ordered test, correctly. What misfires is step 1, and the
+> prohibitions make it easy: almost every one is a rule about HOW TO REPORT, and every
+> scenario ends in a report. Entry 186 forbids further manual revision here without a
+> measured reason, and this is not yet one.

@@ -195,8 +195,14 @@ STILL_APPROVED = {
     # RE-APPROVED 24 September 2026, entry 187: escalation_required's situation
     # gave the agent contact details `buyer_match` does not return. One scenario
     # changed, the expected act did not.
-    "assign_contract": "2026-09-24",
-    "buyer_match": "2026-09-20",
+    #
+    # RE-APPROVED AGAIN 25 September 2026, entry 188, both modules. partial_failure
+    # expected `sent = false` an hour after the only call that could say so; it is
+    # UNKNOWN, and the option now exists. buyer_match recorded a COUNT under the name
+    # of the LIST it counts, which the manual says to pass through unaltered - the
+    # subject is now `potential_concerns_count`.
+    "assign_contract": "2026-09-25",
+    "buyer_match": "2026-09-25",
     "comp_analysis": "2026-09-21",
     "property_lookup": "2026-09-21",
     "underwrite_deal": "2026-09-18",
