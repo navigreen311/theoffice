@@ -119,6 +119,11 @@ MANUAL_DIGEST = {
     # never committed. Entry 180, and 1.4.0 is skipped rather than reused - a version
     # that was live and is now withdrawn must not name two different texts.
     "1.5.0": "361036700ca289499000daa4ec23308eeaa714e1b2be3517bb71c48c3729e892",
+    # 1.7.0 WITHDRAWS THE SECOND REVISION, so its digest is 1.5.0's byte for byte -
+    # and 1.5.0's was 1.3.0's, because that withdrew the first. The text in this file
+    # has not moved since 1.3.0; both revisions reached the live rows from a worktree
+    # and neither PR merged. Entry 186. 1.6.0 is skipped, not reused.
+    "1.7.0": "361036700ca289499000daa4ec23308eeaa714e1b2be3517bb71c48c3729e892",
 }
 
 
