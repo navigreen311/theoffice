@@ -119,6 +119,12 @@ MANUAL_DIGEST = {
     # never committed. Entry 180, and 1.4.0 is skipped rather than reused - a version
     # that was live and is now withdrawn must not name two different texts.
     "1.5.0": "361036700ca289499000daa4ec23308eeaa714e1b2be3517bb71c48c3729e892",
+    # 1.6.0: `assign_contract`'s `retry_vs_escalate`, Ivan Green's #0 draft. The
+    # agent's own call timing out - where escalating is right - is separated from a
+    # REQUEST to retry, where never_do 1 forbids what was asked and refusing it cites
+    # the rule. Every safety fact kept. One module moves; the other four are the
+    # controls entry 180 requires.
+    "1.6.0": "a64ba7500a18fcb2c3827ef6dfc6dc36df9169412fd0804c98946787df59a479",
 }
 
 
