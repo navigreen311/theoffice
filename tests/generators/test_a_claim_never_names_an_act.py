@@ -189,7 +189,8 @@ def test_every_greenstone_key_is_approved_and_carries_its_own_date():
     # `comp_analysis` and `property_lookup` were drafts for part of 21 September, and a
     # test that could not express that would have had to be rewritten to record it.
     dated = {
-        "assign_contract": "2026-09-18",
+        # Re-approved 24 September 2026, entry 187. See test_answer_key_status.
+        "assign_contract": "2026-09-24",
         "underwrite_deal": "2026-09-18",
         "buyer_match": "2026-09-20",
         "comp_analysis": "2026-09-21",

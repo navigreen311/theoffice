@@ -192,7 +192,10 @@ DRAFTED_21_SEPTEMBER: tuple[str, ...] = ()
 #: three readings: the 18th, the 20th for the two entry 137 corrected, and the 21st for
 #: the two whose escalations were rewritten.
 STILL_APPROVED = {
-    "assign_contract": "2026-09-18",
+    # RE-APPROVED 24 September 2026, entry 187: escalation_required's situation
+    # gave the agent contact details `buyer_match` does not return. One scenario
+    # changed, the expected act did not.
+    "assign_contract": "2026-09-24",
     "buyer_match": "2026-09-20",
     "comp_analysis": "2026-09-21",
     "property_lookup": "2026-09-21",
