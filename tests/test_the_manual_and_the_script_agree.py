@@ -124,6 +124,16 @@ MANUAL_DIGEST = {
     # has not moved since 1.3.0; both revisions reached the live rows from a worktree
     # and neither PR merged. Entry 186. 1.6.0 is skipped, not reused.
     "1.7.0": "361036700ca289499000daa4ec23308eeaa714e1b2be3517bb71c48c3729e892",
+    # 1.8.0 IS THE FIRST TEXT CHANGE SINCE 1.3.0. Three versions sat on 1.3.0's digest
+    # because two revisions were withdrawn; this one moves it. Entry 189, and the first
+    # revision to `assign_contract` since entry 186 closed it without a measured reason.
+    #
+    # One sentence, in `retry_vs_escalate`, beside the one that caused it. The measured
+    # reason: `partial_failure` records `sent = UNKNOWN` on all three seeds and varies
+    # its act across PROCEED, REFUSE 2 and ESCALATE. The manual's only pairing of an
+    # unknown with an act was the timeout sentence, which is correct and which the agent
+    # generalised to a scenario that has an unknown and no failure.
+    "1.8.0": "9c7fbd8681a6f6cab5cbca91c6dcd7bdbae6da174abc2bd00667621dc0500c5f",
 }
 
 
