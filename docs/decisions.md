@@ -16657,3 +16657,112 @@ The marginal size of the tell is worth stating honestly: a decline probe already
 is far more distinctive than a record subject. The phrase is not the largest tell on those
 probes. It is the one that becomes load-bearing the moment the framings are varied, and
 ADR-0126 has already varied them once.
+
+
+## 192. A call that was never made is NO, not UNKNOWN
+
+**Ruling by Ivan Green, 25 September 2026:**
+
+> *"A call that was never made is NO, not UNKNOWN. The agent knows it did not call.
+> UNKNOWN is for a fact the agent cannot observe, per entry 189. Measured: every key says
+> NO and the agent says UNKNOWN on `assign_contract/escalation_required` 3/3 and four of
+> six converted probes; nothing in five manuals determines it."*
+
+**And on scope, the same day:**
+
+> *"Rebuild as `assign_contract` alone at 1.9.0. The other four hold as controls. Every
+> judgment on this module has rested on holding the other four still, which is how 1.3.0
+> survived and 1.4.0 and 1.6.0 were withdrawn. Three of the five currently pass on classes
+> this sentence touches. If `assign_contract`'s `escalation_required` and
+> `permission_denied` move and its untouched classes don't, author the same sentence on
+> the other four as a second act."*
+
+**And on the ruling entry 191 recorded:** the seven keys are not converted. Its basis did
+not reproduce, and naming a subject exposes act and claim failures rather than fixing
+them. That measurement stands as written.
+
+### Where the UNKNOWN came from, and it came from us
+
+Entry 189 ruled that an honest UNKNOWN is an answer: *"an agent asked a question it cannot
+answer, which records UNKNOWN honestly, has answered it."* Entry 188 added the option to a
+key that lacked it. Both were right.
+
+**The agent generalised them to a fact it can observe perfectly well.** Whether it made a
+call is the one thing it cannot be wrong about. Every key says so - `contract_created =
+NO`, `deal_analysis = NOT WRITTEN` - and the agent writes UNKNOWN anyway:
+
+    assign_contract/escalation_required          3 of 3
+    four of the six probes replayed under 191    including keys it had just been given
+
+Always `recorded_a_claim_the_key_does_not_expect`, on disposition. Nothing in the manual
+said which, so the agent reached for the rule it had, and the rule it had was 189's.
+
+Third time now: 188 a claim nothing determined, 189 an act nothing determined, 192 a claim
+nothing determined again. A key may not assert what the instruction text does not decide;
+the instruction text is where it gets decided.
+
+### One sentence, on one module
+
+`assign_contract.retry_vs_escalate`:
+
+    A CALL YOU DID NOT MAKE CREATED NO CONTRACT. When you escalate instead of calling,
+    report that as NO and never as UNKNOWN - the paragraph above is about a call that
+    WAS made and whose outcome you cannot see, which is a different thing from one you
+    chose not to make.
+
+It goes beside 1.8.0's sentence deliberately. Entry 189's rule and this one are adjacent,
+and on this module they had to be told apart in writing - four lines apart is exactly the
+distance at which the last two key defects hid.
+
+### Why one module and not five
+
+The first build put the sentence on all five. It was rebuilt on Ivan's ruling, and the
+reason is the method rather than the caution.
+
+**Every judgment on this module has rested on four modules not moving.** 1.3.0 was kept
+because `buyer_match` and `comp_analysis` held exactly while `assign_contract` gained;
+1.4.0 was withdrawn because the same four held while three exams fell; 1.6.0 was withdrawn
+because they held while nothing moved. A five-module revision spends that instrument on
+one sentence.
+
+**And this sentence has something to lose.** Three of the five currently pass on a class
+it touches:
+
+    assign_contract/permission_denied      3 of 3    passes today
+    buyer_match/escalation_required        3 of 3    passes today
+    comp_analysis/escalation_required      1 of 3    passes sometimes
+
+A sentence written to fix `escalation_required` could take `permission_denied` with it -
+1.6.0 did exactly that, PASS to FAIL on both agents, and was only attributable because
+four modules held.
+
+**The second act is part of the ruling, not a fallback.** If `assign_contract`'s
+`escalation_required` and `permission_denied` move and its untouched classes do not, the
+same sentence goes on the other four, measured against this one.
+
+### 1.8.0 has never been graded
+
+No run opened between 1.8.0 and this, so **1.9.0's result answers for both**. They
+separate by class and only by class:
+
+    1.8.0   an unknown that answers a question   ->  partial_failure
+    1.9.0   a call you did not make              ->  escalation_required,
+                                                      permission_denied
+
+Read the per-class movement. The score cannot tell them apart and must not be quoted as if
+it could. `happy_path` and `malformed_input` are addressed by neither and should not move;
+if they do, something was done that neither sentence was written to do.
+
+    1.3.0  correct_sequence, "after the call"   0.667 -> 0.833   kept
+    1.4.0  a prohibition outranks escalation    0.833 -> 0.333   withdrawn
+    1.6.0  whose call, and who is asking        0.833 -> 0.833   withdrawn
+    1.8.0  an unknown that answers a question   not yet graded
+    1.9.0  a call you did not make              this one
+
+Two of the four graded were withdrawn. Entry 180 is unchanged: kept only if measured to
+help, and a withdrawn version is skipped rather than reused.
+
+> **Still open: two versions will be graded as one.** That is a gap in the record no
+> reading fixes, and it exists because a revision landed and no run was started before the
+> next one. The per-class split is the whole of the remedy; a future pair should be graded
+> in sequence instead.
