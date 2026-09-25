@@ -273,18 +273,35 @@ def test_the_guard_asks_the_same_key_the_upsert_conflicts_on():
     assert 'target = "department = %s"' in source
 
 
-def test_only_timeout_is_guarded():
-    """Every other verdict goes through the upsert, including NOT_RUN and IN_PROGRESS.
+def test_the_guard_is_the_rule_and_not_the_word():
+    """**Entry 184 corrects entry 183, and this test is where it was wrong.**
 
-    Those are states SimForge reports about a run it HAS - a different fact from this
-    sweep saying nobody replied - and entry 167's rule covers them.
+    183 shipped `if verdict == "TIMEOUT"` and a test asserting that IN_PROGRESS and
+    NOT_RUN were deliberately NOT guarded - on the reasoning that those are "states
+    SimForge reports about a run it HAS", a different fact from the sweep saying
+    nobody replied.
+
+    That distinction is true about provenance and was wrong about consequence.
+    Measured within the hour: three IN_PROGRESS department units from run `844a5b01`
+    erased both simulation certifications, and Gate 9 went from five blockers to ten.
     """
-    import inspect
+    assert {"TIMEOUT", "IN_PROGRESS", "NOT_RUN"} == certification.NOT_AN_ANSWER
 
-    source = inspect.getsource(certification.record_result)
-    assert 'if verdict == "TIMEOUT":' in source
-    for other in ("NOT_RUN", "IN_PROGRESS", "PROVISIONAL"):
-        assert f'verdict == "{other}"' not in source
+
+def test_an_answer_still_supersedes():
+    """PROVISIONAL and REVOKED are answers and are not guarded.
+
+    A PROVISIONAL is a battery that ran and WITHHELD; a REVOKED is a withdrawal. Both
+    reduce standing, and a guard against erasure must not become a guard against
+    demotion - `buyer_match`/Ronan went `certified` -> `provisional` today carrying
+    `the_competence_half_did_not_run`, and blocking that would have left the row
+    reading certified while SimForge had withheld it.
+    """
+    for answer in ("PASS", "FAIL", "PROVISIONAL", "REVOKED"):
+        assert answer not in certification.NOT_AN_ANSWER
+    # And every one of them still maps to a state, so none is silently unreachable.
+    for answer in certification.NOT_AN_ANSWER:
+        assert answer in certification.VERDICT_TO_STATE
 
 
 async def test_the_guard_does_not_look_at_the_basis():
@@ -298,7 +315,7 @@ async def test_the_guard_does_not_look_at_the_basis():
     import inspect
 
     source = inspect.getsource(certification.record_result)
-    guard = source[source.index('if verdict == "TIMEOUT":'):]
+    guard = source[source.index("if verdict in NOT_AN_ANSWER:"):]
     guard = guard[:guard.index("return CertState")]
     # Comments stripped: the rule is about what the code reads, and the comment there
     # says `basis` is deliberately not read.
@@ -324,3 +341,41 @@ async def test_the_guard_does_not_look_at_the_basis():
                 scenario_pack_ref="run:d59650aa/departments")
 
             assert await _row(conn, department=department) == before, basis
+
+
+@pytest.mark.parametrize("verdict", sorted(certification.NOT_AN_ANSWER))
+async def test_no_non_answer_replaces_a_standing_certification(verdict):
+    """**THE RULING.** All three, against the same standing row.
+
+    IN_PROGRESS is the one that was measured erasing two simulation certifications
+    while the guard for TIMEOUT was already merged.
+    """
+    department = f"probe-{uuid.uuid4().hex[:8]}"
+    async with connection() as conn:
+        await _standing_cert(conn, department)
+        await conn.commit()
+        before = await _row(conn, department=department)
+
+        await certification.record_result(
+            conn, unit="B", forge_id=FORGE, department=department,
+            verdict=verdict, rubric_version="none: the run did not answer",
+            instruction_content_hash=HASH_A,
+            scenario_pack_ref="run:844a5b01/departments")
+
+        assert await _row(conn, department=department) == before, verdict
+
+
+@pytest.mark.parametrize("verdict", sorted(certification.NOT_AN_ANSWER))
+async def test_a_first_certification_is_still_written_for_each(verdict):
+    """Replacement, not recording - and that holds for all three."""
+    department = f"probe-{uuid.uuid4().hex[:8]}"
+    async with connection() as conn:
+        await certification.record_result(
+            conn, unit="B", forge_id=FORGE, department=department,
+            verdict=verdict, rubric_version="none: the run did not answer",
+            instruction_content_hash=HASH_A,
+            scenario_pack_ref="run:probe/departments")
+
+        row = await _row(conn, department=department)
+        assert row is not None, verdict
+        assert row[4] == verdict
