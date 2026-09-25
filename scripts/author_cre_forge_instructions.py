@@ -39,6 +39,7 @@ import asyncio
 import sys
 import uuid
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -721,7 +722,7 @@ MANUALS = {
 }
 
 
-async def retire_place_call(conn) -> int:
+async def retire_place_call(conn: Any) -> int:
     """Supersede `voiceforge/place_call`'s placeholder without replacing it.
 
     Decisions entry 20: no operating instruction is to be authored for this module. The
@@ -743,7 +744,7 @@ async def retire_place_call(conn) -> int:
             "WHERE forge_id = 'voiceforge' AND module_id = 'place_call' "
             "AND superseded_at IS NULL"
         )
-        retired = cur.rowcount
+        retired = int(cur.rowcount)
     await conn.commit()
     return retired
 

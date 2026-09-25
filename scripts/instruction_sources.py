@@ -70,7 +70,20 @@ class Authored:
     """One module's instruction as its authoring script would write it."""
 
     version: str
-    content: dict[str, str]
+    content: dict[str, Any]
+    """Section name to section, and the values are NOT all strings.
+
+    `cre-forge`'s `inputs` is a dict, its `correct_sequence` is a list, and its
+    `failure_signatures` is a dict; CapitalForge's are strings throughout. This was
+    annotated `dict[str, str]` and nothing checked it until `broker.provisioning` imported
+    this module and brought it inside strict mypy (entry 193).
+
+    **The annotation was the wrong one to fix.** Narrowing the values here - `str(v)` at
+    the point of construction - makes the comparator compare a Python repr against the
+    JSON the live row holds, and it reported all 25 modules as differing. The values are
+    genuinely heterogeneous, the comparator compares them with `!=` and needs no more than
+    that, and the type now says so.
+    """
 
 
 #: Where each Forge's manuals actually live, for a message that tells a reader what to

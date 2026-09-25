@@ -127,7 +127,7 @@ def _refs(laws_body: str) -> tuple[set[str], set[str]]:
     return declared, ruled_out - declared
 
 
-async def derive(conn: Any) -> tuple[list[dict], list[str]]:
+async def derive(conn: Any) -> tuple[list[dict[str, Any]], list[str]]:
     """(ready, stops) — what this script would author. **Writes nothing.**
 
     EXTRACTED SO THE COMPARATOR CAN CALL IT. Ruled 21 September 2026, entry 152:
@@ -158,7 +158,7 @@ async def derive(conn: Any) -> tuple[list[dict], list[str]]:
 
     flag_to_ref = {v: k for k, v in lib.items()}
     stops: list[str] = []
-    ready: list[dict] = []
+    ready: list[dict[str, Any]] = []
 
     for path in sorted(MANUALS.glob(f"{FORGE_ID}-*.md")):
         text = path.read_text(encoding="utf-8")
@@ -232,6 +232,13 @@ async def main() -> int:
     async with connection() as conn:
         ready, stops = await derive(conn)
         version = await api_version(conn)
+        if version is None:
+            # THE FORGE IS NOT REGISTERED, so there is no API version to stamp. Authoring
+            # with a blank one would record a claim about a Forge nobody bridged, which is
+            # the shape entry 39 calls a third copy: a value invented at the point of
+            # writing because the real one was missing.
+            print(f"  {FORGE_ID} has no api_version in forge_registry - nothing authored")
+            return 1
 
     print(f"\n{len(ready)} ready, {len(stops)} stopped\n")
     for r in ready:
