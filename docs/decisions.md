@@ -15892,3 +15892,83 @@ stops being asked the question at all.
 > which is why abandoning works — but a submission that times out *first* and is
 > abandoned *after* keeps being ingested until somebody notices. Not reachable today;
 > written down because the three that caused this were a day old.
+
+
+## 184. Any verdict that is not an answer replaces nothing
+
+**Ruling by Ivan Green, 24 September 2026:**
+
+> *"Any verdict that is not an answer replaces nothing. TIMEOUT and IN_PROGRESS alike.
+> Only PASS or FAIL supersedes a certification's basis, state or references. Entry 183
+> named TIMEOUT because TIMEOUT was what I had measured; the rule was the absence of an
+> answer, not the word. Measured: three IN_PROGRESS department units from run 844a5b01
+> erased both simulation certifications within minutes, and Gate 9 went from 5 blockers
+> to 10."*
+
+### Entry 183 guarded the word. This guards the rule.
+
+183 shipped `if verdict == "TIMEOUT"` and a test — `test_only_timeout_is_guarded` —
+asserting that IN_PROGRESS and NOT_RUN were **deliberately** not guarded. Its stated
+reasoning:
+
+> *"Those are states SimForge reports about a run it HAS - a different fact from this
+> sweep saying nobody replied."*
+
+True about provenance. Wrong about consequence, and the cost was measured inside the
+hour it was merged.
+
+    18:06:46   Gate 8 on run 844a5b01 opens three department runs
+    18:22-25   the six unit-A verdicts land
+    18:28:35   verdict_ingest: 3 examined, 3 written
+    18:31:35   verdict_ingest: 3 examined, 3 written
+               operations  in_training / tested / IN_PROGRESS
+               research    in_training / tested / IN_PROGRESS
+
+Both simulation certifications gone. **Gate 9 went from 5 blockers to 10**, and
+`simulation_only_units` from 6 to 0. The guard built the day before did not fire,
+because the verdict said IN_PROGRESS and the guard said TIMEOUT.
+
+Writing the narrow rule was right — it was what had been measured. Leaving it narrow
+after a second shape appeared would not be.
+
+### `NOT_AN_ANSWER`, and what each member means
+
+    TIMEOUT      The Office's own deadline passed. `verdict_ingest` synthesised it;
+                 SimForge said nothing.
+    IN_PROGRESS  SimForge has the run and it is still going.
+    NOT_RUN      SimForge has the run and no battery has been put to it.
+
+Three different sentences, one shared fact: **nothing was learned about the agent or the
+department.** A certification records what an examination found, and none of these is a
+finding.
+
+`NOT_RUN` is in the set although nobody has seen it erase anything. It is the same
+statement as the other two and leaving it out would be guarding two words instead of one.
+
+### PROVISIONAL and REVOKED are answers, and this set is narrower than the ruling's words
+
+**Flagged rather than resolved quietly.** The ruling's second sentence says *"only PASS
+or FAIL supersedes"*; `NOT_AN_ANSWER` lets PROVISIONAL and REVOKED through. The reason is
+the ruling's first sentence, and a measurement from the same afternoon.
+
+A PROVISIONAL is a battery that **ran, scored, and withheld**. It happened at 18:25:
+`buyer_match` / Ronan Valek went `certified` → `provisional` carrying
+`the_competence_half_did_not_run`. Under the literal reading that write would have been
+blocked and the row would still read `certified` — **a certification standing on an
+examination that declined to grant it.**
+
+A REVOKED is a withdrawal. Blocking it leaves authority in place that SimForge has taken
+away.
+
+Both **reduce** standing. A guard against erasure must not become a guard against
+demotion, and that is the only reading under which the two sentences of the ruling agree.
+
+> **If the literal reading is meant, this set gains two members** and a `certified` row
+> can outlive the verdict that withheld it. One line, and it is Ivan's.
+
+### Unchanged from 183
+
+The guard sits before the upsert, on the same natural key it conflicts on. It does not
+read `basis`. Both units. A first certification is still written — a row that does not
+exist has nothing to preserve, and `in_training` or `never_certified` is the honest thing
+for it to say.

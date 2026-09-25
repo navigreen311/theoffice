@@ -89,6 +89,46 @@ VERDICT_TO_STATE = {
     "REVOKED": REVOKED,
 }
 
+#: The verdicts that are NOT an answer. Ruled 24 September 2026, entry 184.
+#:
+#: *"Any verdict that is not an answer replaces nothing. TIMEOUT and IN_PROGRESS alike.
+#: Entry 183 named TIMEOUT because TIMEOUT was what I had measured; the rule was the
+#: absence of an answer, not the word."*
+#:
+#: Each of these three says the exam did not produce a result, and each says it
+#: differently:
+#:
+#:     TIMEOUT      The Office's own deadline passed. `verdict_ingest` synthesised it;
+#:                  SimForge said nothing.
+#:     IN_PROGRESS  SimForge has the run and it is still going.
+#:     NOT_RUN      SimForge has the run and no battery has been put to it.
+#:
+#: **What they share is the only thing that matters here: nothing was learned about the
+#: agent or the department.** A certification records what an examination found, and
+#: none of these is a finding.
+#:
+#: PROVISIONAL AND REVOKED ARE ANSWERS AND ARE DELIBERATELY ABSENT FROM THIS SET.
+#:
+#:     The ruling's second sentence says "only PASS or FAIL supersedes", and this set
+#:     is narrower than that - it lets PROVISIONAL and REVOKED through. The reason is
+#:     the ruling's FIRST sentence, and a measurement.
+#:
+#:     A PROVISIONAL is a battery that ran, scored, and WITHHELD the certification
+#:     (entry 173's `withheld_because`). It happened today: `buyer_match`/Ronan Valek
+#:     went `certified` -> `provisional` at 18:25 carrying
+#:     `the_competence_half_did_not_run`. Blocking that write would have left the row
+#:     reading `certified` while SimForge had withheld it - a certification standing on
+#:     an examination that declined to grant it.
+#:
+#:     A REVOKED is a withdrawal. Blocking it would leave authority in place that
+#:     SimForge has taken away.
+#:
+#:     Both REDUCE standing, and a guard against erasure must not become a guard
+#:     against demotion. Flagged to Ivan on 24 September rather than resolved quietly:
+#:     if the literal reading is meant, this set gains two members and a
+#:     `certified` row can outlive the verdict that withheld it.
+NOT_AN_ANSWER = frozenset({"TIMEOUT", "IN_PROGRESS", "NOT_RUN"})
+
 # Ordered weakest to strongest, for capping.
 TIER_RANK = {"suggest": 1, "propose": 2, "auto_execute": 3}
 
@@ -550,13 +590,22 @@ async def record_result(
         else "(department, forge_id) WHERE unit = 'B'"
     )
 
-    # ================================================================ entry 183
+    # ========================================================== entries 183, 184
     #
-    # A TIMEOUT REPLACES NOTHING.
+    # A VERDICT THAT IS NOT AN ANSWER REPLACES NOTHING.
     #
-    # Ruled 23 September 2026: *"A TIMEOUT replaces nothing. It is the absence of an
-    # answer, not an answer. Ingest records it without overwriting a certification's
-    # basis, state or references. A PASS or FAIL still supersedes, per entry 167."*
+    # Ruled 23 September 2026 (183): *"A TIMEOUT replaces nothing. It is the absence of
+    # an answer, not an answer."* WIDENED 24 September 2026 (184): *"Any verdict that is
+    # not an answer replaces nothing. TIMEOUT and IN_PROGRESS alike. Entry 183 named
+    # TIMEOUT because TIMEOUT was what I had measured; the rule was the absence of an
+    # answer, not the word."*
+    #
+    # 183 guarded the word and 184 guards the rule. The cost of the narrower version was
+    # measured within the hour: Gate 8 on run `844a5b01` opened three department runs,
+    # they reported IN_PROGRESS while they waited, the sweep ingested that every three
+    # minutes, and both simulation certifications were gone by 18:31. Gate 9 went from
+    # five blockers to ten. The guard built the day before did not fire, because the
+    # verdict said IN_PROGRESS and the guard said TIMEOUT.
     #
     # WHAT IT DID. `verdict_ingest` synthesises a TIMEOUT for a submission past The
     # Office's own deadline, and the upsert below replaced everything: `basis`, `state`,
@@ -570,12 +619,12 @@ async def record_result(
     # new answer is the new basis."* A PASS or a FAIL is an answer and supersedes
     # whatever stood before it, simulation basis included.
     #
-    # A TIMEOUT is not an answer. It is this sweep saying nobody replied - and this sweep
-    # already knows that about itself: it refuses to stamp the submission on a TIMEOUT
-    # ("a stamp on a TIMEOUT would close the..."), and entry 142's staleness check
-    # refuses a TIMEOUT because *"a submission set from withdrawn text has nothing to say
-    # about an agent - not even that it did not answer."* The same sentence applies to
-    # the certification, one table over.
+    # None of the three in `NOT_AN_ANSWER` is an answer - see the constant for what each
+    # one means and why PROVISIONAL and REVOKED are not among them. This sweep already
+    # knew it about TIMEOUT: it refuses to stamp the submission on one, and entry 142's
+    # staleness check refuses one because *"a submission set from withdrawn text has
+    # nothing to say about an agent - not even that it did not answer."* The same
+    # sentence is true of a run still running and of one nobody has put a battery to.
     #
     # BOTH UNITS. The ruling names a certification, not a unit, and the argument does not
     # change: a `certified` agent whose re-exam timed out has not been shown to have got
@@ -585,7 +634,7 @@ async def record_result(
     # A FIRST CERTIFICATION IS STILL WRITTEN. A department or agent with no row at all,
     # whose run timed out, IS `in_training` - there is nothing to preserve and the row
     # says the honest thing. This guard is about replacement, not about recording.
-    if verdict == "TIMEOUT":
+    if verdict in NOT_AN_ANSWER:
         # The same natural key the upsert conflicts on, so this asks about exactly the
         # row the INSERT below would have replaced.
         if unit == "A":
@@ -605,9 +654,9 @@ async def record_result(
             )
             standing = await cur.fetchone()
         if standing is not None:
-            # Nothing is written. The submission stays open - the sweep does not stamp
-            # it on a TIMEOUT - so the question is still being asked, and the answer,
-            # when it comes, supersedes through the path below.
+            # Nothing is written. The submission stays open, so the question is still
+            # being asked - and the answer, when it comes, supersedes through the path
+            # below exactly as entry 167 says it should.
             return CertState(
                 standing["cert_id"], standing["unit"], standing["state"],
                 standing["certified_tier"],
