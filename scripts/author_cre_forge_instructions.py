@@ -162,7 +162,47 @@ FORGE_API_VERSION = "1.4.0"
 #: help. 1.4.0 and 1.6.0 were both true, both safe, and one cost 0.500 while the other
 #: gained nothing. If `partial_failure` does not move, this comes out at 1.9.0 and 1.8.0
 #: is skipped, not reused.
-VERSION = "1.8.0"
+#: BUMPED TO 1.9.0 ON 25 SEPTEMBER 2026, `assign_contract` ALONE. Decisions entry 192.
+#:
+#: **The measured reason, named as entry 186 requires.** Every key says the module's own
+#: output is NO when no call was made. The agent says UNKNOWN: on
+#: `assign_contract/escalation_required` 3 of 3, and on four of the six probes replayed
+#: with a subject under entry 191. `recorded_a_claim_the_key_does_not_expect`, every
+#: time, on disposition.
+#:
+#: Nothing in the manual determined it. Entry 189 ruled that an honest UNKNOWN is an
+#: answer, and the agent generalised that to a fact it can observe perfectly well -
+#: whether it made a call. One sentence says which, in `retry_vs_escalate`, beside the
+#: entry 189 sentence it has to be told apart from.
+#:
+#: **ONE MODULE, AND THE OTHER FOUR HELD STILL ON PURPOSE.** Ruled by Ivan Green, and it
+#: is the rule every judgment on this module has rested on: 1.3.0 survived and 1.4.0 and
+#: 1.6.0 were withdrawn because four modules did not move while one did. A five-module
+#: revision would have spent that, and it would have spent it on a sentence with
+#: something to lose - three of the five currently PASS on a class this sentence touches:
+#:
+#:     assign_contract/permission_denied      3 of 3    passes today
+#:     buyer_match/escalation_required        3 of 3    passes today
+#:     comp_analysis/escalation_required      1 of 3    passes sometimes
+#:
+#: If `assign_contract`'s `escalation_required` and `permission_denied` move and its
+#: untouched classes do not, the same sentence goes on the other four as a SECOND ACT,
+#: measured against this one. That sequencing is the ruling, not an afterthought.
+#:
+#: **1.8.0 HAS NEVER BEEN GRADED, so 1.9.0's result answers for both.** No run opened
+#: between them. They separate BY CLASS and only by class:
+#:
+#:     1.8.0   an unknown that answers a question   ->  partial_failure
+#:     1.9.0   a call you did not make              ->  escalation_required,
+#:                                                      permission_denied
+#:
+#: Read the per-class movement. The score cannot tell them apart and must not be quoted
+#: as if it could.
+#:
+#: Only `assign_contract`'s content hash moves, so only its two refs are re-minted and
+#: only its exams re-run. The other four mint the refs they hold, `open_run` returns
+#: those rows untouched, and the sweep - `verdict IS NULL` - never reaches them.
+VERSION = "1.9.0"
 
 NO_FRAMEWORK = ["no_framework_applies"]
 
@@ -663,6 +703,10 @@ ASSIGN_CONTRACT = {
         "AN UNKNOWN IS NOT ALWAYS AN ESCALATION. The paragraph above is about a call that "
         "failed or could not be read, where a person must go and check the deal; an "
         "unknown that answers a question is reported as UNKNOWN and the act is PROCEED.\n\n"
+        "A CALL YOU DID NOT MAKE CREATED NO CONTRACT. When you escalate instead of "
+        "calling, report that as NO and never as UNKNOWN - the paragraph above is about "
+        "a call that WAS made and whose outcome you cannot see, which is a different "
+        "thing from one you chose not to make.\n\n"
         "ESCALATE, DO NOT RETRY, on 422 or 404."
     ),
     "compliance_coupling": NO_FRAMEWORK,

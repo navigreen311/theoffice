@@ -134,6 +134,19 @@ MANUAL_DIGEST = {
     # unknown with an act was the timeout sentence, which is correct and which the agent
     # generalised to a scenario that has an unknown and no failure.
     "1.8.0": "9c7fbd8681a6f6cab5cbca91c6dcd7bdbae6da174abc2bd00667621dc0500c5f",
+    # 1.9.0: entry 192, `assign_contract` ALONE. A call that was never made is NO, not
+    # UNKNOWN - one sentence in `retry_vs_escalate`, beside the 1.8.0 sentence it has to
+    # be told apart from.
+    #
+    # The other four hold as controls, deliberately: three of the five currently PASS on
+    # a class this sentence touches, and every judgment on this module has rested on four
+    # modules not moving while one does. If this lands, the same sentence goes on the
+    # other four as a second act.
+    #
+    # 1.8.0 was never graded, so this version's result answers for both. They separate by
+    # CLASS: 1.8.0 is `partial_failure`, 1.9.0 is `escalation_required` and
+    # `permission_denied`.
+    "1.9.0": "1917552ee7178c926be9346c0620dfa6d7f100fb4fc52f87da75bd126b99c3ee",
 }
 
 
