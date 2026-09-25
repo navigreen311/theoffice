@@ -123,10 +123,10 @@ VERDICT_TO_STATE = {
 #:     A REVOKED is a withdrawal. Blocking it would leave authority in place that
 #:     SimForge has taken away.
 #:
-#:     Both REDUCE standing, and a guard against erasure must not become a guard
-#:     against demotion. Flagged to Ivan on 24 September rather than resolved quietly:
-#:     if the literal reading is meant, this set gains two members and a
-#:     `certified` row can outlive the verdict that withheld it.
+#:     Both REDUCE standing, and **a guard against erasure must not become a guard
+#:     against demotion** - Ivan's words, settling the scope on 24 September when the
+#:     gap between the ruling's two sentences was put to him. Three members, and the
+#:     two answers that demote are not among them.
 NOT_AN_ANSWER = frozenset({"TIMEOUT", "IN_PROGRESS", "NOT_RUN"})
 
 # Ordered weakest to strongest, for capping.

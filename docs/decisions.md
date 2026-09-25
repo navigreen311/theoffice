@@ -15945,11 +15945,16 @@ finding.
 `NOT_RUN` is in the set although nobody has seen it erase anything. It is the same
 statement as the other two and leaving it out would be guarding two words instead of one.
 
-### PROVISIONAL and REVOKED are answers, and this set is narrower than the ruling's words
+### PROVISIONAL and REVOKED are answers, and the scope is settled
 
-**Flagged rather than resolved quietly.** The ruling's second sentence says *"only PASS
-or FAIL supersedes"*; `NOT_AN_ANSWER` lets PROVISIONAL and REVOKED through. The reason is
-the ruling's first sentence, and a measurement from the same afternoon.
+The ruling as first written said *"only PASS or FAIL supersedes"*. Asked about the gap,
+Ivan settled it the same day, and this is the scope:
+
+> *"Take #230 as built, including provisional and revoked. A guard against erasure must
+> not become a guard against demotion."*
+
+So `NOT_AN_ANSWER` holds three members and the two answers that reduce standing are not
+among them. The reasoning, and the measurement that produced the question:
 
 A PROVISIONAL is a battery that **ran, scored, and withheld**. It happened at 18:25:
 `buyer_match` / Ronan Valek went `certified` → `provisional` carrying
@@ -15963,8 +15968,9 @@ away.
 Both **reduce** standing. A guard against erasure must not become a guard against
 demotion, and that is the only reading under which the two sentences of the ruling agree.
 
-> **If the literal reading is meant, this set gains two members** and a `certified` row
-> can outlive the verdict that withheld it. One line, and it is Ivan's.
+**Both REDUCE standing.** A guard against erasure must not become a guard against
+demotion — Ivan's words, settling it — and that is the only reading under which the
+ruling's two sentences agree.
 
 ### Unchanged from 183
 
