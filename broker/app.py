@@ -2071,6 +2071,11 @@ async def provisioning_directory(conn: DB, _me: ME) -> dict[str, Any]:
     gate stopped the run, what happened there, or what is still ahead.
     """
     result = await provisioning.directory(conn)
+    # ENTRY 185. Per venture, because the partition is per venture - one deployment-wide
+    # sentence was exactly the claim that went stale. A venture whose read fails carries
+    # `read: false` and the page says it could not ask about that one.
+    for card in result.get("ventures", []):
+        card["held_out"] = await provisioning.held_out_reading(conn, card["venture_id"])
     return {"as_of": datetime.now(UTC).isoformat(), **result}
 
 
@@ -2101,7 +2106,12 @@ async def provisioning_run(run_id: uuid.UUID, conn: DB, _me: ME) -> dict[str, An
     # The same builder the index uses. Gate 9.5 read `not run` here and `blocked -
     # ceiling` there, because two screens each described the ladder in their own terms;
     # one gate cannot mean two things depending on which page you opened.
-    ladder = provisioning.ladder_for(results, state.current_gate, state.status)
+    # ENTRY 185. Asked, not assumed - and asked HERE rather than inside `ladder_for`,
+    # which is a pure function over rows and must stay one.
+    held_out = await provisioning.held_out_reading(conn, state.venture_id)
+    ladder = provisioning.ladder_for(
+        results, state.current_gate, state.status, held_out=held_out
+    )
 
     blocking = next(
         (
@@ -2131,6 +2141,9 @@ async def provisioning_run(run_id: uuid.UUID, conn: DB, _me: ME) -> dict[str, An
         "current_gate_name": provisioning.GATE_NAMES[state.current_gate],
         "artifacts_hash": state.artifacts_hash,
         "ladder": ladder,
+        # ENTRY 185. What the console draws the ceiling block from. Three shapes:
+        # `read: false` with a reason, `partition_exists: false`, or a verdict.
+        "held_out": held_out,
         "history": results,
     }
 

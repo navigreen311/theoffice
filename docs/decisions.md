@@ -15978,3 +15978,83 @@ The guard sits before the upsert, on the same natural key it conflicts on. It do
 read `basis`. Both units. A first certification is still written — a row that does not
 exist has nothing to preserve, and `in_training` or `never_certified` is the honest thing
 for it to say.
+
+
+## 185. A surface states what it read
+
+**Ruling by Ivan Green, 24 September 2026:**
+
+> *"A surface states what it read, never what was true when it was written. The Gate 9.5
+> ceiling block on both provisioning pages is static prose from ~15 September, asserting
+> the partition does not exist while the endpoint returns PASS. Read the gate or say
+> nothing."*
+
+### The block confessed what it was, in its own subtitle
+
+    Ceiling in this deployment: gate 9.5
+    Stated here rather than discovered at the gate.
+
+    SimForge's held-out adversarial partition does not exist yet, so no run started
+    from this console can pass gate 9.5 and no venture can reach gate 12.
+
+True when it was written. Still on the page on 24 September, while
+`gate_9_5_verdict` answered `partition_exists: true, verdict: PASS` and `_gate_9_5`
+returned **passed** when called directly.
+
+### Not cached, and not stale data. It was never asking.
+
+Measured: **Gate 9.5 has never run.** Zero rows in `provisioning_gate_result` for that
+gate, on any run, ever. Every run has blocked at Gate 9 or earlier and `advance` stops at
+the first blocking gate, so there was nothing to cache and nothing to go stale. The page
+asserted; the gate was never reached; nothing connected the two.
+
+`is_ceiling` was `gate == CEILING_GATE` — a constant comparison, on both screens.
+
+### Three answers, and none may borrow another
+
+    read: false                      nobody could ask. Entry 177's rule.
+    partition_exists: false          the deployment ceiling.
+    partition_exists: true, verdict  the gate answered. PASS clears it.
+
+**A FAIL is not a ceiling.** `CEILING_GATE`'s own comment has required that distinction
+since it was written — *"a held-out verdict of FAIL is a real failure at the same gate,
+and reading the two the same way would report a venture that failed adversarial testing
+as merely waiting for infrastructure."* Nothing read it, because nothing read anything.
+
+**And an unreadable Forge is not a ceiling either.** A lock drawn on a failed read is the
+same assertion this entry removes, arriving from the other direction.
+
+### Where the reading happens
+
+`held_out_reading(conn, venture_id)` asks `SimForgeHeldOut` and never raises — a page must
+render even when a Forge cannot be reached, which is `_forge_build`'s rule one surface
+over. The routes call it; `ladder_for` takes the answer and stays a pure function over
+rows.
+
+**Per venture, not per deployment.** The partition is per venture, and one
+deployment-wide sentence is exactly the claim that went stale. A venture whose read fails
+says so on its own card.
+
+`is_ceiling` defaults to **false** when the caller passed nothing: a surface that did not
+ask has nothing to assert.
+
+### The gate description carried the same claim
+
+    was   "Runs the held-out adversarial set. No deployment can pass this yet."
+    now   "Runs the held-out adversarial set that SimForge owns and The Office cannot
+           see. The Office learns whether, never why."
+
+A description says what the gate *does*. Whether it can be passed is a reading, and the
+two had been living in one string.
+
+### What the tests now say instead
+
+`test_the_ceiling_gate_is_marked_in_every_ladder` and the API's ladder test both asserted
+`is_ceiling is True` unconditionally. In a test environment with no SimForge the read
+fails — so they now assert that **nothing is marked and the card says why**, which is the
+ruling rather than its opposite.
+
+> **Still open: `ceiling_gate` remains a constant in the directory payload, and should.**
+> It names *which* gate can be a ceiling, which is a fact about the ladder. Whether it
+> *is* one is the reading. Two different claims that were one string until today, and the
+> second is the only one that moves.

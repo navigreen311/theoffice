@@ -50,6 +50,77 @@ const ORDINALS = [
   "sixteenth",
 ];
 
+/**
+ * What gate 9.5 reads, per venture. Entry 185.
+ *
+ * **This block used to be prose.** It asserted that SimForge's held-out partition did
+ * not exist - true when it was written around 15 September, and still on the page on 24
+ * September while the endpoint answered PASS. Its own subtitle was the confession: it
+ * said the claim was written on the page rather than discovered at the gate.
+ *
+ * So it is discovered at the gate now. Three shapes and each says a different thing; a
+ * venture nobody could ask about says so, rather than borrowing either of the other two.
+ */
+function HeldOutCeiling({ ventures }: { ventures: ProvisioningCard[] }) {
+  const read = ventures.filter((v) => v.held_out);
+  if (!read.length) {
+    return null;
+  }
+  const blocked = read.filter(
+    (v) => v.held_out?.read && v.held_out.partition_exists === false,
+  );
+  const answered = read.filter(
+    (v) => v.held_out?.read && v.held_out.partition_exists === true,
+  );
+  const unreadable = read.filter((v) => v.held_out?.read === false);
+
+  return (
+    <div className="flex items-start gap-2">
+      <Lock className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
+      <div>
+        <h2 className="text-section font-medium text-warn">Gate 9.5, as read now</h2>
+        <p className="mt-0.5 text-desc text-ink-secondary">
+          Asked of SimForge on this request, not stated here.
+        </p>
+        {blocked.length ? (
+          <p className="mt-2 max-w-3xl text-desc text-ink-secondary">
+            No sealed held-out partition for{" "}
+            <strong className="font-medium">
+              {blocked.map((v) => v.display_name).join(", ")}
+            </strong>
+            , so no run for {blocked.length > 1 ? "those ventures" : "that venture"} can
+            pass gate 9.5 or reach gate 12. That is{" "}
+            <strong className="font-medium">blocked</strong>, not skipped: a run that
+            skipped certification would produce a venture reading as fully provisioned
+            that has been certified for nothing. There is no override, deliberately.
+          </p>
+        ) : null}
+        {answered.map((v) => (
+          <p
+            key={v.venture_id}
+            className="mt-2 max-w-3xl text-desc text-ink-secondary"
+          >
+            <strong className="font-medium">{v.display_name}</strong> has a sealed
+            partition and gate 9.5 reads{" "}
+            <strong className="font-medium">{v.held_out?.verdict}</strong>. Only PASS
+            clears the gate; anything else is a failure at it, not a ceiling.
+          </p>
+        ))}
+        {unreadable.map((v) => (
+          <p
+            key={v.venture_id}
+            className="mt-2 max-w-3xl text-desc text-ink-secondary"
+          >
+            <strong className="font-medium">{v.display_name}</strong>: gate 9.5 could
+            not be read. Nobody asked SimForge successfully, which is not the same as a
+            partition being absent. {v.held_out?.reason}
+          </p>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** Colour encodes state only; the icon carries the meaning for anyone who cannot see it. */
 function GateIcon({ row }: { row: LadderRow }) {
   const className = "h-3.5 w-3.5 shrink-0";
@@ -365,25 +436,7 @@ export default async function ProvisioningPage() {
         a footnote.
       */}
       <section className="rounded-xl border border-warn-line bg-warn-bg px-5 py-4">
-        <div className="flex items-start gap-2">
-          <Lock className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
-          <div>
-            <h2 className="text-section font-medium text-warn">
-              Ceiling in this deployment: gate 9.5
-            </h2>
-            <p className="mt-0.5 text-desc text-ink-secondary">
-              Stated here rather than discovered at the gate.
-            </p>
-            <p className="mt-2 max-w-3xl text-desc text-ink-secondary">
-              SimForge&rsquo;s held-out adversarial partition does not exist yet, so no
-              run started from this console can pass gate 9.5 and no venture can reach
-              gate 12. That is <strong className="font-medium">blocked</strong>, not
-              skipped: a run that skipped certification would produce a venture reading
-              as fully provisioned that has been certified for nothing. There is no
-              override, deliberately.
-            </p>
-          </div>
-        </div>
+        <HeldOutCeiling ventures={directory.ventures} />
       </section>
 
       {directory.ventures.length ? (

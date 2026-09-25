@@ -777,12 +777,14 @@ if [ -n "$RUN_ID" ]; then
     fail "pending gates render as bare names - the ladder documents nothing"
   fi
 
-  # The same gate cannot mean two things on two screens.
-  if grep -qF "blocked — ceiling" "$WORK"/ladder-text.html \
-     || grep -qF "blocked - ceiling" "$WORK"/ladder-text.html; then
-    say "gate 9.5 reads as the ceiling here, as it does on the index"
+  # ENTRY 185. A ceiling is now a READING, not a constant, so this smoke run cannot
+  # assert one is drawn: whether SimForge answers here depends on whether SimForge is
+  # up. What it CAN assert is the ruling - the page never claims the partition is
+  # absent unless it read that, and the two screens still agree with each other.
+  if grep -qF "does not exist yet" "$WORK"/ladder-text.html; then
+    fail "the venture ladder asserts the partition is absent instead of reading it"
   else
-    fail "gate 9.5 reads as an ordinary pending gate here and as a hard ceiling on the index"
+    say "the venture ladder makes no claim it did not read"
   fi
 
   if grep -qi 'What did you review' "$WORK"/ladder.html; then
@@ -1294,19 +1296,28 @@ while IFS= read -r phrase; do
   grep -qF "$phrase" "$WORK"/prov-text.html || { fail "provisioning page lost: ${phrase:0:60}"; preserved=1; }
 done <<'PHRASES'
 Sixteen gates from a Business Pack to a live venture. A run stops at the first gate that blocks and says which.
-Ceiling in this deployment: gate 9.5
-Stated here rather than discovered at the gate.
-does not exist yet, so no run started from this console can pass gate 9.5 and no venture can reach gate 12.
-not skipped: a run that skipped certification would produce a venture reading as fully provisioned that has been certified for nothing. There is no override, deliberately.
+Gate 9.5, as read now
+Asked of SimForge on this request, not stated here.
 PHRASES
-[ "$preserved" -eq 0 ] && say "the ceiling notice is present verbatim"
+[ "$preserved" -eq 0 ] && say "the gate 9.5 block says it was read, not stated"
+
+# ENTRY 185. The four sentences that used to be checked here asserted the partition did
+# not exist. They were true around 15 September and still on the page on 24 September
+# while the endpoint answered PASS, so they are gone and this is what replaces them:
+# **the page must not carry the claim at all.** Whether a ceiling is drawn depends on
+# what SimForge answers, which is not something a smoke run can pin.
+if grep -qF "does not exist yet" "$WORK"/prov-text.html; then
+  fail "the provisioning index asserts the partition is absent instead of reading it"
+else
+  say "the index makes no claim it did not read"
+fi
 
 # The ceiling reads as a live constraint, not a paragraph. It was styled identically to
 # body copy, which is how the strongest sentence in the console came to read as an aside.
 if grep -q 'bg-warn-bg' "$WORK"/prov-index.html; then
-  say "the ceiling notice carries a warning treatment"
+  say "the gate 9.5 block carries a warning treatment"
 else
-  fail "the ceiling notice is styled as body copy again"
+  fail "the gate 9.5 block is styled as body copy again"
 fi
 
 # The gap the rebuild closed: sixteen gates were rendered as a fraction. Every gate has
@@ -1323,12 +1334,15 @@ for phrase in "Bridge operational" "Pack validated" "Human review" "Held-out set
 done
 say "gates carry plain-language names"
 
-# The ceiling gate is visible in every ladder, wherever the run stopped. Those are two
-# unrelated walls and the old page gave no way to tell them apart.
-if grep -qF "ceiling, not buildable yet" "$WORK"/prov-text.html; then
-  say "the ceiling gate is marked in the ladder itself"
+# ENTRY 185. This asserted the ceiling marker was in every ladder. It is drawn only
+# when the read says no partition exists, so a smoke run against a live SimForge that
+# answers PASS will correctly show none - and asserting it would be asserting the
+# constant this entry removed. What stays true either way: gate 9.5 is in the ladder,
+# and it never claims a ceiling it did not read.
+if grep -qE ">9\.5<" "$WORK"/prov-text.html; then
+  say "gate 9.5 is in the ladder wherever the run stopped"
 else
-  fail "the ladder does not distinguish the ceiling from wherever the run stopped"
+  fail "gate 9.5 is missing from the ladder"
 fi
 
 # The numbering contradiction, explained rather than left to be read as a bug.

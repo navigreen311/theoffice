@@ -332,10 +332,14 @@ function GateLadder({ ladder }: { ladder: LadderRow[] }) {
               {/* A pending gate showing only a name says nothing about what is ahead. */}
               {row.reason ?? row.description}
             </p>
+            {/* ENTRY 185. `is_ceiling` is a reading now, not a constant: the server
+                sets it only when it asked SimForge and was told no partition exists.
+                A gate that answered, or that could not be asked, draws no lock and
+                makes no claim here. */}
             {ceiling ? (
               <p className="mt-1 pl-[3.1rem] text-meta text-warn">
-                SimForge&rsquo;s held-out adversarial partition does not exist yet, so no
-                run started from this console can pass gate 9.5. Blocked, not skipped.
+                SimForge holds no sealed held-out partition for this venture, so no run
+                can pass gate 9.5. Blocked, not skipped.
               </p>
             ) : null}
           </li>
