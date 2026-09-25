@@ -491,10 +491,22 @@ async def _gate_6(ctx: _Context) -> GateOutcome:
     target_personas = set(ctx.pack.pack.market.target_personas)
 
     async with ctx.conn.cursor(row_factory=dict_row) as cur:
+        # `forge_id`, `instruction_version` and the author's ORIGIN are selected because
+        # this gate now asks a second question of the same rows - see
+        # `_stale_instructions` below. One query, because two would be two answers about
+        # one table.
+        #
+        # The join is LEFT: a row whose author is gone still proves an instruction
+        # exists, and this gate's first question is whether one exists at all. Only the
+        # version comparison cares who wrote it.
         await cur.execute(
-            "SELECT module_id FROM forge_operating_instruction WHERE superseded_at IS NULL"
+            "SELECT i.forge_id, i.module_id, i.instruction_version, h.origin "
+            "  FROM forge_operating_instruction i "
+            "  LEFT JOIN office_human h ON h.human_id = i.authored_by "
+            " WHERE i.superseded_at IS NULL"
         )
-        authored = {r["module_id"] for r in await cur.fetchall()}
+        live_rows = [dict(r) for r in await cur.fetchall()]
+        authored = {r["module_id"] for r in live_rows}
 
         # Scoped to this venture since migration 0039, and this is a TIGHTENING. The
         # query had no venture term while the table had no venture column, so any
@@ -565,6 +577,18 @@ async def _gate_6(ctx: _Context) -> GateOutcome:
 
     missing_instructions = sorted(modules - authored)
     unexplained_flags = sorted(flags - explained_flags)
+    # ONLY WHAT A PERSON AUTHORED, which is entry 151's distinction and the same one
+    # `instruction_sources.authored_forges` draws. A prepared test world inserts rows so
+    # the gates have something to read; they carry no authoring script and demanding one
+    # would be demanding a script to maintain fixtures. A row a person signed is a manual
+    # somebody is being certified against.
+    stale_instructions, uncheckable = await _stale_instructions(
+        ctx.conn,
+        [
+            r for r in live_rows
+            if r["module_id"] in modules and r.get("origin") == "human"
+        ],
+    )
 
     def coverage(covered: set[str], needed: set[str]) -> dict[str, Any]:
         return {
@@ -593,7 +617,15 @@ async def _gate_6(ctx: _Context) -> GateOutcome:
         "historical_records": {
             "records": int(history_row["records"]) if history_row else 0
         },
-        "blocking": ["forge_operating_instructions", "compliance_library"],
+        "instruction_versions": {
+            "stale": stale_instructions,
+            "not_compared": uncheckable,
+        },
+        "blocking": [
+            "forge_operating_instructions",
+            "compliance_library",
+            "instruction_versions",
+        ],
     }
 
     if missing_instructions:
@@ -610,6 +642,16 @@ async def _gate_6(ctx: _Context) -> GateOutcome:
             f"{len(unexplained_flags)} compliance flag(s) in use with no Compliance "
             f"Library entry: {', '.join(unexplained_flags)}. The agents carrying these "
             "have no behavioural implication and no escalation trigger to act on.",
+            evidence,
+        )
+    if stale_instructions:
+        return GateOutcome(
+            "6", BLOCKED,
+            f"{len(stale_instructions)} module(s) would be examined against instruction "
+            f"text older than this repository's: {'; '.join(stale_instructions)}. Author "
+            "them before advancing - a run that hands over a stale manual mints the refs "
+            "that text produces, and SimForge returns the rows already graded against "
+            "it.",
             evidence,
         )
 
@@ -647,6 +689,102 @@ async def _gate_6(ctx: _Context) -> GateOutcome:
         + deferral_note,
         evidence,
     )
+
+
+async def _stale_instructions(
+    conn: AsyncConnection, live_rows: list[dict[str, Any]]
+) -> tuple[list[str], list[str]]:
+    """Which live instructions are older than what this repository would author.
+
+    RULED 25 SEPTEMBER 2026 (decisions entry 193)
+    =============================================
+
+        *"A run refuses to hand over instruction text older than the repo's. Gate 6
+        compares each module's live instruction version against the authoring script's
+        VERSION and blocks on a mismatch, naming the modules."*
+
+    WHAT IT COST TO NOT HAVE THIS
+    =============================
+
+        Manual versions 1.8.0 and 1.9.0 were authored into the repository, merged, and
+        never written to `forge_operating_instruction`. The authoring script is a hand-run
+        step and no gate called it. So Gate 6 read v1.7.0, passed, Gate 8 minted the refs
+        THAT text produces, `open_run` returned the rows already graded against it, and
+        run a543ffa1 reported `5 of 5 module(s) accepted; 6 exam(s) opened` having
+        re-examined nothing at all.
+
+        **Every number in that run was true and the run was worthless.** Nothing failed.
+
+        It is entry 148 one layer up: there, an edit reached the script and never reached
+        a live row, and the control built for it was a TEST. A test says the repository
+        disagrees with itself. It cannot say that a run about to hand a manual to an
+        examiner is handing over the wrong one, because the database it would have to
+        read is not the repository's.
+
+    WHY VERSION AND NOT CONTENT
+    ===========================
+
+        `scripts/check_instructions_match.py` already compares content, in CI, and it is
+        the better check of the two - a version can be bumped over unchanged text, as
+        1.5.0 and 1.7.0 both were. This gate compares the VERSION because that is the
+        question a run has: is the text I am about to send the text this repository
+        currently stands behind. Two versions that differ answer it without reading a
+        word, and a run is not the place to re-derive eleven CapitalForge manuals from
+        documents to find out.
+
+    A FORGE WITH NO AUTHORING SOURCE IS NOT COMPARED, AND SAYS SO
+    =============================================================
+
+        A prepared test world inserts rows so the gates have something to read. They
+        carry no authoring script, there is nothing to compare them against, and two
+        things keep that from becoming a hole: the caller passes only rows a PERSON
+        authored (entry 151), and `scripts/instruction_sources.uncovered` fails CI on a
+        human-authored Forge with no deriver. What reaches here and still has no source
+        is reported under `not_compared` rather than silently skipped.
+    """
+    # Imported here rather than at module scope. `scripts.instruction_sources` imports
+    # both authoring scripts, one of which reads `docs/instructions/*.md` off disk, and
+    # `broker.provisioning` is imported by the health probes.
+    from scripts import instruction_sources
+
+    by_forge: dict[str, dict[str, str]] = {}
+    for row in live_rows:
+        by_forge.setdefault(row["forge_id"], {})[row["module_id"]] = (
+            row["instruction_version"] or ""
+        )
+
+    stale: list[str] = []
+    not_compared: list[str] = []
+    for forge_id, live in sorted(by_forge.items()):
+        deriver = instruction_sources.SOURCES.get(forge_id)
+        if deriver is None:
+            not_compared.append(
+                f"{forge_id}: no authoring source in scripts/instruction_sources.py"
+            )
+            continue
+        try:
+            authored = await deriver(conn)
+        except instruction_sources.DerivationStoppedError as stopped:
+            # A STOP IS A DIFFERENCE, the rule the comparator already follows. A module
+            # whose manual could not be derived is one whose live row cannot be checked
+            # against anything, and reporting that as current would be this gate
+            # agreeing with a derivation that did not happen.
+            stale.append(
+                f"{forge_id}: cannot derive what should be authored "
+                f"({len(stopped.stops)} module(s) stopped)"
+            )
+            continue
+        for module_id, live_version in sorted(live.items()):
+            expected = authored.get(module_id)
+            if expected is None:
+                not_compared.append(f"{forge_id}/{module_id}: not in the authoring source")
+                continue
+            if expected.version != live_version:
+                stale.append(
+                    f"{forge_id}/{module_id} live {live_version or '(none)'}, "
+                    f"repository {expected.version}"
+                )
+    return stale, not_compared
 
 
 async def _gate_7(ctx: _Context) -> GateOutcome:

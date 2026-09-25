@@ -203,9 +203,101 @@ async def test_gate_6_blocking_conditions_are_named_in_its_evidence(
         _run_id, outcomes = await _to_gate_6(conn, operator, held_out=HeldOutPasses())
 
     gate_6 = next(o for o in outcomes if o.gate == "6")
+    # `instruction_versions` joined the list on 25 September 2026, entry 193: a run
+    # refuses to hand over instruction text older than this repository's. It blocks for
+    # the same reason the other two do - an exam set against a stale manual is graded,
+    # recorded and worthless, and nothing else in the ladder can tell.
     assert gate_6.evidence["blocking"] == [
-        "forge_operating_instructions", "compliance_library"
+        "forge_operating_instructions", "compliance_library", "instruction_versions"
     ]
+    # Nothing is stale in the prepared world, and nothing is silently skipped either:
+    # the fixtures' rows carry no human author, so they are not compared at all and the
+    # gate says so rather than reporting them current.
+    assert gate_6.evidence["instruction_versions"]["stale"] == []
+
+
+
+# ------------------------------------------------- instruction text older than the repo
+
+async def test_gate_6_blocks_when_a_live_instruction_is_older_than_the_repository(
+    feasible_pack, operator, admin: psycopg.Connection
+):
+    """Entry 193, and the run it was written for cost a whole exam.
+
+    Manual versions 1.8.0 and 1.9.0 were merged and never authored. Gate 6 read v1.7.0,
+    passed, Gate 8 minted the refs that text produces, `open_run` returned the rows
+    already graded against it, and run a543ffa1 reported six exams opened having
+    re-examined nothing. Every number was true.
+
+    The row here is authored by a PERSON, because that is the distinction the gate
+    draws: a prepared world's fixtures have no authoring script and are not compared.
+    """
+    from scripts.author_cre_forge_instructions import VERSION
+
+    declare_author(admin, AUTHOR, "Stale Instruction Author")
+    # THE LIVE ROW IS EDITED IN PLACE, not replaced. `instruction_has_all_sections` and
+    # its siblings make a synthetic row a fight with four constraints that have nothing
+    # to do with what is being tested, and the two columns this gate reads are the two
+    # being set: the version, and an author the rule accepts.
+    with admin.cursor() as cur:
+        cur.execute(
+            "SELECT instruction_version, authored_by FROM forge_operating_instruction "
+            " WHERE forge_id = 'cre-forge' AND module_id = 'property_lookup' "
+            "   AND superseded_at IS NULL"
+        )
+        before = cur.fetchone()
+        cur.execute(
+            "UPDATE forge_operating_instruction "
+            "   SET instruction_version = '0.0.1-stale', authored_by = %s "
+            " WHERE forge_id = 'cre-forge' AND module_id = 'property_lookup' "
+            "   AND superseded_at IS NULL",
+            (AUTHOR,),
+        )
+    admin.commit()
+    try:
+        async with connection() as conn:
+            _run_id, outcomes = await _to_gate_6(
+                conn, operator, held_out=HeldOutPasses()
+            )
+        gate_6 = next(o for o in outcomes if o.gate == "6")
+        assert gate_6.verdict == "blocked", gate_6.reason
+        assert "older than this repository" in gate_6.reason
+        assert "cre-forge/property_lookup" in gate_6.reason
+        # THE VERSIONS ARE NAMED, both of them. "Stale" alone sends a reader to two
+        # files to find out which way round it is and by how far.
+        assert "0.0.1-stale" in gate_6.reason
+        assert VERSION in gate_6.reason
+        stale = gate_6.evidence["instruction_versions"]["stale"]
+        assert len(stale) == 1, stale
+    finally:
+        with admin.cursor() as cur:
+            cur.execute(
+                "UPDATE forge_operating_instruction "
+                "   SET instruction_version = %s, authored_by = %s "
+                " WHERE forge_id = 'cre-forge' AND module_id = 'property_lookup' "
+                "   AND superseded_at IS NULL",
+                (before[0], before[1]),
+            )
+        admin.commit()
+        undeclare_author(admin, AUTHOR)
+
+
+async def test_a_forge_with_no_authoring_source_is_reported_not_skipped(
+    feasible_pack, operator
+):
+    """The gap this check could have hidden in, named instead.
+
+    `scripts/instruction_sources.uncovered` fails CI on a human-authored Forge with no
+    deriver, and that is the control. This asserts the gate does not quietly agree that
+    an uncomparable row is current - whatever it could not compare is listed.
+    """
+    async with connection() as conn:
+        _run_id, outcomes = await _to_gate_6(conn, operator, held_out=HeldOutPasses())
+
+    gate_6 = next(o for o in outcomes if o.gate == "6")
+    versions = gate_6.evidence["instruction_versions"]
+    assert set(versions) == {"stale", "not_compared"}
+    assert isinstance(versions["not_compared"], list)
 
 
 # ------------------------------------------------------- the historical writer
