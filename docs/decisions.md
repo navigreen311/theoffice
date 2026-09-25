@@ -16766,3 +16766,95 @@ help, and a withdrawn version is skipped rather than reused.
 > reading fixes, and it exists because a revision landed and no run was started before the
 > next one. The per-class split is the whole of the remedy; a future pair should be graded
 > in sequence instead.
+
+
+## 193. A run refuses to hand over instruction text older than the repo's
+
+**Ruling by Ivan Green, 25 September 2026:**
+
+> *"A run refuses to hand over instruction text older than the repo's. Gate 6 compares
+> each module's live instruction version against the authoring script's VERSION and
+> blocks on a mismatch, naming the modules. Measured: 1.8.0 and 1.9.0 were merged and
+> never authored, Gate 6 sent 1.7.0, Gate 8 minted the refs that text produces, SimForge
+> returned the graded rows, and the run reported success on an exam nobody re-sat. Same
+> shape as entry 148, one layer up."*
+
+### What the run said, and what it did
+
+Run `a543ffa1`, Gate 8:
+
+    58 scenario(s) generated; 5 of 5 module(s) accepted by SimForge;
+    6 exam(s) opened; 3 of 3 department unit(s) opened
+
+**Every number in that line is true and the run was worthless.** All nine refs were
+identical to the previous run's. SimForge created **zero** `OperationRun` rows; all six
+calls returned rows already graded. `assign_contract`'s still read `FAIL 0.833`, ended
+18:21, from the 1.7.0 exam.
+
+The cause, in one table:
+
+    forge_operating_instruction, live, 25 September
+      assign_contract    v1.7.0   f99ec2e78347   authored 24 September 20:46
+      buyer_match        v1.7.0   9fdc2096d73a
+      comp_analysis      v1.7.0   d57e1d204bbb
+      property_lookup    v1.7.0   cb7fb9daa37a
+      underwrite_deal    v1.7.0   f06db69c8768
+
+`scripts/author_cre_forge_instructions.py` is a **hand-run step** and no gate calls it.
+1.8.0 (entry 189) and 1.9.0 (entry 192) were authored into the repository, reviewed,
+merged, and never written to a row. Gate 6 read what was there, found an instruction for
+every module, and passed - correctly, by its own rule.
+
+### Entry 148, one layer up, and why the test could not have caught it
+
+Entry 148 built `scripts/check_instructions_match.py` because `buyer_match` carried a
+correction nobody applied for a day. That control is a **test**: it says the repository
+disagrees with itself.
+
+It cannot say that a run about to hand a manual to an examiner is handing over the wrong
+one, because the database it would have to read is not the repository's. **A test knows
+what the repo says. Only a gate knows what the run is about to send.**
+
+    entry 148   an edit reached the script and never reached a live row
+    entry 193   a live row reached an exam and never reached the repo's version
+
+Same defect, opposite direction, and the second one costs a graded exam rather than a
+day.
+
+### What Gate 6 now does
+
+    for each live instruction on a module this venture needs, that a PERSON authored:
+        compare instruction_version against what the authoring source would write
+        block, naming forge/module, both versions
+
+`scripts/instruction_sources.SOURCES` is the registry it asks - the same one entry 152
+built and the same one `uncovered()` keeps honest against the database. Adding a Forge
+without adding its deriver already breaks CI; now it also reaches a gate.
+
+**Why version and not content.** `check_instructions_match` compares content and is the
+better of the two - a version can be bumped over unchanged text, as 1.5.0 and 1.7.0 both
+were. But the question a RUN has is narrower: *is the text I am about to send the text
+this repository stands behind*. Two versions that differ answer it without reading a
+word, and a gate is not the place to re-derive eleven CapitalForge manuals from documents.
+
+**Only what a person authored.** A prepared world inserts rows for `simforge` and
+`voiceforge` so the gates have something to read; they carry no authoring script, and
+demanding one would be demanding a script to maintain fixtures. That is entry 151's
+distinction, and it is the same one `instruction_sources.authored_forges` already draws.
+What the gate cannot compare is listed under `not_compared` rather than passed over -
+because the gap this check could hide in is the one it was written to close.
+
+**A stop is a difference.** If a deriver refuses - CapitalForge's does, when a manual and
+its registry flags disagree - the gate blocks rather than reporting the row current.
+Agreeing with a derivation that did not happen is the same error one level down.
+
+### What it does not do
+
+It does not author anything. A blocked run is a person's cue to run the script, and that
+stays a deliberate act: the whole reason these manuals are Python literals is that
+somebody wrote the prose (entry 39 on what a third copy costs).
+
+> **Still open: this is a version comparison, so a bumped version over unchanged text
+> passes it.** 1.5.0 and 1.7.0 were both exactly that, deliberately - a withdrawal is a
+> version bump over text that did not move. `check_instructions_match` is what catches
+> the reverse, in CI, and the two together are the control. Neither alone is.
