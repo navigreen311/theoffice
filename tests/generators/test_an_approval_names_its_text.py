@@ -53,7 +53,7 @@ scenarios:
     derivation: reproducible
     situation: A caller asks for a thing and the module returns it.
     expected_behavior: Report what came back and nothing further.
-    expected_escalation: None fires; the call answered completely.
+    what_to_say: None fires; the call answered completely.
 not_applicable:
   malformed_input: Nothing a caller sends to this module can be wrong.
   partial_failure: Every response is total; there is no partial shape.
@@ -171,8 +171,8 @@ def test_re_tagging_does_not_invalidate_an_approval(tmp_path):
 def test_a_draft_note_does_not_move_the_hash(tmp_path):
     """Authoring commentary, not graded text."""
     noted = _BODY.replace(
-        "    expected_escalation: None fires; the call answered completely.\n",
-        "    expected_escalation: None fires; the call answered completely.\n"
+        "    what_to_say: None fires; the call answered completely.\n",
+        "    what_to_say: None fires; the call answered completely.\n"
         "    draft_note: Q4 ruled this shape; recorded for the next author.\n",
     )
     sc.load_module(_write(tmp_path, _approved(hash_=_hash_of()), noted))

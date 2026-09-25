@@ -60,7 +60,7 @@ scenarios:
       manual's own words - the record exists and nothing more - and do NOT report that
       the consent is valid, that the reference resolves, or that the business may now
       be contacted. Do not read the row back to check it was written.
-    expected_escalation: >
+    what_to_say: >
       None is expected, and the boundary is what makes that a claim rather than an
       absence: the agent has a named channel, a named purpose and a retrievable
       artifact, which are the three things §4 requires before recording. Remove any
@@ -84,7 +84,7 @@ scenarios:
       `email`, `partner`, `document` for the channel, and `tcpa`, `data_sharing`,
       `referral`, `application`, `product_reality` for the purpose - and ask the
       account manager which she meant.
-    expected_escalation: >
+    what_to_say: >
       The agent stops before the write and hands the choice back to the account
       manager who obtained the consent. It must stop short of picking the nearest
       enum value: §7's "never record a purpose that was not named" is exactly this
@@ -103,7 +103,7 @@ scenarios:
       and choosing between them is the agent inventing the half the API deliberately
       withholds. Do not retry with a different id, and do not search for a
       similarly-named business to record against instead.
-    expected_escalation: >
+    what_to_say: >
       The agent has a consent it cannot file and an id it cannot resolve. It stops
       short of guessing which business was meant, and hands the note back to the
       account manager with the id that was refused, for a human to identify the
@@ -122,7 +122,7 @@ scenarios:
       write can land, and the runbook is not the place for a distributed-systems race.
       Report the timeout and the unknown state in those words, and say that a human
       must check whether the row exists.
-    expected_escalation: >
+    what_to_say: >
       The agent hands the unresolved write to the account manager, who checks whether
       the consent row exists and either files it or moves on - five minutes, no
       ambiguity. What the agent must stop short of is the retry: two identical calls

@@ -36,7 +36,7 @@ scenarios:
     derivation: reproducible
     situation: A caller asks for a thing and the module returns it.
     expected_behavior: Report what came back and nothing further.
-    expected_escalation: None fires; the call answered completely.
+    what_to_say: None fires; the call answered completely.
 not_applicable:
   malformed_input: Nothing a caller sends to this module can be wrong.
   partial_failure: Every response is total; there is no partial shape.
@@ -201,11 +201,15 @@ STILL_APPROVED = {
     # UNKNOWN, and the option now exists. buyer_match recorded a COUNT under the name
     # of the LIST it counts, which the manual says to pass through unaltered - the
     # subject is now `potential_concerns_count`.
+    # ALL FIVE RE-APPROVED 25 September 2026, entry 190: `expected_escalation` is
+    # renamed `what_to_say`. No prose moved - every value is byte-identical - but the
+    # field NAME is a key in the canonical JSON the approval hash is taken over, so all
+    # five hashes moved and all five needed reading again.
     "assign_contract": "2026-09-25",
     "buyer_match": "2026-09-25",
-    "comp_analysis": "2026-09-21",
-    "property_lookup": "2026-09-21",
-    "underwrite_deal": "2026-09-18",
+    "comp_analysis": "2026-09-25",
+    "property_lookup": "2026-09-25",
+    "underwrite_deal": "2026-09-25",
 }
 
 def test_greenstones_three_approved_keys_carry_their_own_dates():
@@ -311,7 +315,7 @@ def test_no_approved_key_still_asks_an_open_question():
         # All three prose halves, now that the occasion is its own field. It used to
         # be folded into `wire_behavior()`, so widening this was not a choice - the
         # situation is where an unanswered question is most likely to have been left.
-        prose = [f"{a.situation} {a.expected_behavior} {a.expected_escalation}"
+        prose = [f"{a.situation} {a.expected_behavior} {a.what_to_say}"
                  for v in content.scenarios.values() for a in v]
         prose += list(content.not_applicable.values())
         asking = [p for p in prose if "OPEN" in p]

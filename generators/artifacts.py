@@ -505,17 +505,17 @@ class CurriculumScenario:
     operation scenario it carries the precipitating situation, which is the half of a
     scenario no manual contains and which has no field of its own on either side."""
 
-    expected_escalation: str = ""
+    what_to_say: str = ""
     """Prose naming the escalation the scenario expects.
 
-    THE TRANSITIONAL WINDOW IS CLOSED. This field was `expected_escalation_prose` for
+    THE TRANSITIONAL WINDOW IS CLOSED. This field was `what_to_say_prose` for
     one package's duration, alongside a bool of the same name; the suffix existed only
     to avoid the collision while both were live, and P-05 deleted the bool and took
     the name back. The Office field and the wire name agree again, which is what
     docs/scenario-contract.md section 6 promised.
 
     A reader arriving from `generators/pack.py` should note that Scenario there still
-    carries `expected_escalation: bool`, and that it is a DIFFERENT CLASS. V23 reads
+    carries `what_to_say: bool`, and that it is a DIFFERENT CLASS. V23 reads
     that one. Two distinctions have worn this name for a while; only one of them
     changed.
 
@@ -550,7 +550,7 @@ class CurriculumScenario:
     sentence is mandatory rather than encouraged."""
 
     def omit_from_serialisation(self) -> tuple[str, ...]:
-        """`expected_escalation` does not appear at all on a DOMAIN scenario.
+        """`what_to_say` does not appear at all on a DOMAIN scenario.
 
         **Contract amendment A3, ruled 8 September 2026.** Not an empty string - the
         key is dropped. A1.4 removed the bool from domain scenarios and A1.3 step 4
@@ -570,7 +570,7 @@ class CurriculumScenario:
         uninformative - see docs/scenario-contract.md section 8, whose recommendation
         about those five is still open and is deliberately not implemented here.
         """
-        return ("expected_escalation",) if self.kind == "domain" else ()
+        return ("what_to_say",) if self.kind == "domain" else ()
 
 
 @dataclass(frozen=True, slots=True)

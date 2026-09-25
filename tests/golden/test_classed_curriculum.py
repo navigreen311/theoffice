@@ -56,7 +56,7 @@ def test_an_authored_class_carries_the_occasion_the_act_and_the_escalation(recor
     # on `summary` - which is what the submission sends as `situation`.
     assert authored.expected_behavior == written.expected_behavior
     assert not authored.expected_behavior.startswith("SITUATION: ")
-    assert authored.expected_escalation
+    assert authored.what_to_say
     assert not authored.not_applicable_reason
     assert authored.instruction_section == "retry_vs_escalate"
 
@@ -70,7 +70,7 @@ def test_a_declared_absence_carries_a_reason_and_nothing_else(record_consent):
 
     assert declared.not_applicable_reason
     assert declared.expected_behavior == ""
-    assert declared.expected_escalation == ""
+    assert declared.what_to_say == ""
     assert declared.summary == ""
 
 
@@ -109,7 +109,7 @@ def test_an_unauthored_scenario_is_empty_rather_than_boilerplate():
     for row in _operation_scenarios("place_call", None, True, {}):
         assert row.summary == ""
         assert row.expected_behavior == ""
-        assert row.expected_escalation == ""
+        assert row.what_to_say == ""
         assert row.not_applicable_reason == ""
         assert row.scenario_class, "a scenario with no class is not a classed probe"
 
@@ -153,7 +153,7 @@ def _scenario(kind: str):
     )
 
 
-def test_a_domain_scenario_has_no_expected_escalation_key_at_all():
+def test_a_domain_scenario_has_no_what_to_say_key_at_all():
     """Contract A3. **The key is absent, not empty.**
 
     Asserted as absence and never as `== ""`, deliberately: an emptiness test passes
@@ -161,7 +161,7 @@ def test_a_domain_scenario_has_no_expected_escalation_key_at_all():
     being protected is that a reader cannot mistake a vacated field for an unfilled
     one, and only an absent key has that property.
     """
-    assert "expected_escalation" not in _serialised(_scenario("domain"))
+    assert "what_to_say" not in _serialised(_scenario("domain"))
 
 
 def test_an_operation_scenario_still_has_the_key():
@@ -176,8 +176,8 @@ def test_an_operation_scenario_still_has_the_key():
         operation_scenarios=[_scenario("operation")],
     )
     row = pack.to_dict()["operation_scenarios"][0]
-    assert "expected_escalation" in row
-    assert row["expected_escalation"] == ""
+    assert "what_to_say" in row
+    assert row["what_to_say"] == ""
 
 
 def test_the_other_contract_fields_are_still_present_and_empty_on_a_domain_scenario():

@@ -387,9 +387,9 @@ def test_no_scenario_restates_that_escalation_is_expected(module_id: str):
     for cls, occasions in sorted(content.scenarios.items()):
       # One class may carry several occasions; each owes its own escalation prose.
       for scenario in occasions:
-        prose = scenario.expected_escalation.strip()
+        prose = scenario.what_to_say.strip()
         assert len(prose) >= 200, (
-            f"scenarios/{module_id}.yaml [{cls}] has an expected_escalation of "
+            f"scenarios/{module_id}.yaml [{cls}] has an what_to_say of "
             f"{len(prose)} characters. Naming the juncture, the boundary and the "
             "recipient does not fit in that."
         )

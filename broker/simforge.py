@@ -368,7 +368,18 @@ def operation_scenario_rows(scenarios: list[Any]) -> list[dict[str, Any]]:
             "module_id": s.module_id,
             **({"situation": s.summary} if s.summary else {}),
             "expected_behavior": s.expected_behavior,
-            "expected_escalation": s.expected_escalation,
+            # THE WIRE NAME, WHICH IS NOT THIS SIDE'S FIELD NAME.
+            # Entry 190 renamed the Office field to `what_to_say`; SimForge's
+            # `OperationScenarioSubmission` still requires `expected_escalation`
+            # and refuses a payload without it. scenario-contract.md section 6
+            # names this file as where Office fields map onto wire names, and
+            # section 3.1 is the precedent: the same asymmetry ran for one
+            # package while `expected_escalation_prose` was the Office name.
+            #
+            # DELETE THIS COMMENT AND THE MAPPING TOGETHER when SimForge renames
+            # its field. Until then this line is the whole of the disagreement,
+            # and it is one line on purpose.
+            "expected_escalation": s.what_to_say,
             **({"expected_answer": dict(s.expected_answer)} if s.expected_answer else {}),
         }
         for s in scenarios

@@ -613,7 +613,7 @@ async def test_authored_content_reaches_the_artifact_end_to_end(
                         "valuing it."
                     ),
                     expected_behavior="Run comp_analysis for the subject and report the comps.",
-                    expected_escalation="None; the boundary is a named recipient.",
+                    what_to_say="None; the boundary is a named recipient.",
                     expected_answer={"act": "PROCEED", "record_subject": "comps"},
                 ),
                 sc.AuthoredScenario(
@@ -623,7 +623,7 @@ async def test_authored_content_reaches_the_artifact_end_to_end(
                         "sales closed within the radius."
                     ),
                     expected_behavior="Re-run and report the radius and age window with the count.",
-                    expected_escalation="None; the parameters travel with the answer.",
+                    what_to_say="None; the parameters travel with the answer.",
                     expected_answer={"act": "PROCEED", "record_subject": "comps"},
                 ),
             ]
@@ -668,7 +668,7 @@ async def test_authored_content_reaches_the_artifact_end_to_end(
     assert rows["happy_path"][0].expected_answer == {
         "act": "PROCEED", "record_subject": "comps"
     }
-    assert rows["happy_path"][0].expected_escalation
+    assert rows["happy_path"][0].what_to_say
     # Two fields, not one packed field. `summary` carries the occasion and is what the
     # submission sends as `situation`; `expected_behavior` is the act alone.
     assert rows["happy_path"][0].summary
@@ -678,7 +678,7 @@ async def test_authored_content_reaches_the_artifact_end_to_end(
 
     # And the two mechanical classes nobody authored are still there, still empty.
     assert rows["permission_denied"][0].expected_behavior == ""
-    assert rows["escalation_required"][0].expected_escalation == ""
+    assert rows["escalation_required"][0].what_to_say == ""
 
     covered = {c.dimension: c for c in curriculum.coverage}
     assert covered["modules_with_authored_scenario_content"].covered == 1

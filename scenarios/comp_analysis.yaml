@@ -14,12 +14,24 @@
 # the five keys. `drafted_by` stays: who wrote it and who approved it are two facts and
 # the file records both. See docs/decisions.md.
 
+# RE-APPROVED by Ivan Green, 25 September 2026. Decisions entry 190: the field
+# `expected_escalation` is renamed `what_to_say`. It holds what the response must say,
+# never which act to take, and reading it as an act misled two readings - entry 187's
+# first finding and scenario 5's expected act.
+#
+# NO PROSE MOVED. Every value in this file is byte-identical to the text approved above;
+# what changed is the name over it. `approved_content_hash` moves anyway, because the
+# field NAME is a key in the canonical JSON the hash is taken over - which is the control
+# working, not a false alarm: entry 141 asks whether this approval is still about the
+# text in front of the reader, and the text in front of the reader now has a different
+# label on one field.
+
 module_id: comp_analysis
 forge_id: cre-forge
 status: approved
 approved_by: "Ivan Green"
-approved_on: "2026-09-21"
-approved_content_hash: "c5609ff4434844b7e3f52df83ac183758b3526aee1136946e030ea4c0ff974a5"
+approved_on: "2026-09-25"
+approved_content_hash: "f38c0b1d62f6db26123591ae10a83b4dcb96aa9307568339e1459e85cd456a69"
 drafted_by: "Claude"
 supersedes: "the approved 5-scenario key, 17 September 2026"
 
@@ -42,7 +54,7 @@ scenarios:
       figure: `never_do` entry 4 refuses it. Do not present them as support for anything
       `underwrite_deal` returned - `never_do` entry 1 is explicit that that module does not use
       them.
-    expected_escalation: >
+    what_to_say: >
       None fires. The call answered, the parameters are known, and your whole obligation is to hand
       over four records with the constraints that produced them attached. What you must stop short
       of is closing the gap helpfully - averaging, describing the property as priced in line with
@@ -75,7 +87,7 @@ scenarios:
       not do is pick a property out of a lookup that returned several and treat it as the one
       meant - result order is not relevance, so "the first match" is an arbitrary choice dressed as
       an obvious one.
-    expected_escalation: >
+    what_to_say: >
       If the lookup returns one unambiguous property you proceed; if it returns several, or none,
       stop and ask the analyst which property they mean. What you must stop short of is choosing,
       because the cost is not a visible error: comps for the wrong warehouse come back as a clean
@@ -107,7 +119,7 @@ scenarios:
       call again to produce a non-empty answer. The radius is uncapped at this boundary, so
       widening always eventually works, and the response carries no marker saying which parameters
       produced it.
-    expected_escalation: >
+    what_to_say: >
       Hand the zero back with its constraints and, if a decision is waiting on it, escalate rather
       than searching harder. `retry_vs_escalate`: "ESCALATE RATHER THAN WIDENING when a thin result
       is blocking a decision. Handing a human three out-of-market comps is worse than telling them
@@ -134,7 +146,7 @@ scenarios:
       participates. Do not report it as the property not existing - that is the 404 on the line
       above it. Do not report it as a missing grant: a grant refusal happens inside The Office,
       before any call is made, and never reaches the Forge.
-    expected_escalation: >
+    what_to_say: >
       Hand the failure to a human, naming the Forge and saying the refusal was the tenant
       credential rather than anything about the property. RULED 17 September 2026, the same on all
       five CRE Forge keys: it goes to the VENTURE OPERATOR as an INFRASTRUCTURE ALERT. Deal work in
@@ -164,7 +176,7 @@ scenarios:
       is not a decision you may defer until you see what comes back. Do not pick a radius yourself
       and report it in the footnote; a parameter the underwriter did not choose is one they will
       read past.
-    expected_escalation: >
+    what_to_say: >
       Go back to the underwriter before calling anything and ask them to name the radius and the
       age window they are willing to stand behind, with what each one means said plainly: a wider
       radius returns sales from a different market and the response does not mark them as such, and

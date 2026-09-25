@@ -70,7 +70,7 @@ scenarios:
   - scenario_class: happy_path
     situation: A caller asks for a thing and the module returns it.
     expected_behavior: Report what came back and nothing further.
-    expected_escalation: None fires; the call answered completely.
+    what_to_say: None fires; the call answered completely.
 not_applicable:
   malformed_input: Nothing a caller sends to this module can be wrong.
   partial_failure: Every response is total; there is no partial shape.

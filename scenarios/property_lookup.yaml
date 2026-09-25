@@ -54,12 +54,24 @@
 # precisely so two approvals could be told apart, and this is the first time it could not do
 # it unaided.
 
+# RE-APPROVED by Ivan Green, 25 September 2026. Decisions entry 190: the field
+# `expected_escalation` is renamed `what_to_say`. It holds what the response must say,
+# never which act to take, and reading it as an act misled two readings - entry 187's
+# first finding and scenario 5's expected act.
+#
+# NO PROSE MOVED. Every value in this file is byte-identical to the text approved above;
+# what changed is the name over it. `approved_content_hash` moves anyway, because the
+# field NAME is a key in the canonical JSON the hash is taken over - which is the control
+# working, not a false alarm: entry 141 asks whether this approval is still about the
+# text in front of the reader, and the text in front of the reader now has a different
+# label on one field.
+
 module_id: property_lookup
 forge_id: cre-forge
 status: approved
 approved_by: "Ivan Green"
-approved_on: "2026-09-21"
-approved_content_hash: "986ff243e72f26295ff971f2b86128bd443a7843ee09db0b41ccb44aa8115f77"
+approved_on: "2026-09-25"
+approved_content_hash: "58d52478a8c2d77081678ddcbcc133f6b282a5b065e18fd67147d4acab6a477c"
 drafted_by: "Claude"
 supersedes: "the approved 5-scenario key, 17 September 2026"
 
@@ -82,7 +94,7 @@ scenarios:
       and one page of 143 is not one. Say nothing about which property is the best fit - result
       order is whatever the query produced, and `never_do` entry 3 forbids reading it as ranking.
       And make no statement about the set as a whole, because you hold a page of it.
-    expected_escalation: >
+    what_to_say: >
       None fires. The call answered completely on the string sent. The gap is named in the answer
       rather than handed over, which is spec 11's rule: return the rows, label them as an answer
       to part of the request, and do no arithmetic on a partial set.
@@ -105,7 +117,7 @@ scenarios:
       for 500 and got 100, with no error, because the adapter caps it
       (`backend/app/api/forge.py:120-123`, `page_size=min(100, max(1, ...))`) and the manual's
       `inputs` section says the cap is silent and must be read back.
-    expected_escalation: >
+    what_to_say: >
       None fires. The call answered; what is owed is that the answer's limits travel with it.
     expected_answer:
       act: PROCEED
@@ -126,7 +138,7 @@ scenarios:
       two of the 143 (spec 14): 43 rows have not been seen and a bare "two have no price" claims
       the whole set. Say nothing about the prices of the set as a whole - no range, no "none of
       them", no "all of them".
-    expected_escalation: >
+    what_to_say: >
       None fires. The obligation is to report the absence as an absence, and to report it against
       the page it was counted over.
     expected_answer:
@@ -154,7 +166,7 @@ scenarios:
       Missing inputs render as NO DATA, never as a number. Report the one AS ONE OF THE HUNDRED
       YOU HOLD (spec 14): 43 rows are unseen, and under-counting a warning under-counts the risk
       it exists for.
-    expected_escalation: >
+    what_to_say: >
       None fires. The warning is part of the answer rather than a hand-off.
     expected_answer:
       act: PROCEED
@@ -180,7 +192,7 @@ scenarios:
       is not in this market." Do not report it as a failure: "THERE IS NO 404. A query matching
       nothing returns 200 with `total: 0` and an empty `results`. That is an answer, not a
       failure."
-    expected_escalation: >
+    what_to_say: >
       Nothing is escalated on the strength of the zero alone, because a zero is an answer and the
       manual says so. The hand-off fires one step later: if the underwriter needs 4120 Mill Street
       specifically and it is not on file, say that the record is absent from this tenant's data and
@@ -213,7 +225,7 @@ scenarios:
       query you composed. Report that the search term was empty and ask for the one the analyst
       meant. Report it as a refused parameter, not as properties being unavailable - `total: 0` and
       a 422 are different facts and only one of them is about the records.
-    expected_escalation: >
+    what_to_say: >
       Stop and ask the analyst what to search for. What you must stop short of is manufacturing the
       term, because the failure mode is not an error the analyst will see - it is a page of
       plausible properties from a search nobody asked for. Nothing about any property is unresolved
@@ -242,7 +254,7 @@ scenarios:
       Report the search as having run on the term you sent, not on the analyst's phrasing of the
       question. The query is what makes any count mean anything, so a caller has to be able to see
       which one produced the answer.
-    expected_escalation: >
+    what_to_say: >
       None fires. The call answered on the term given.
     expected_answer:
       act: PROCEED
@@ -266,7 +278,7 @@ scenarios:
       2026: a Forge credential failure is an INFRASTRUCTURE ALERT to the venture operator and not a
       deal escalation. Deal work in flight FREEZES at the affected step in a stated `credential
       unavailable` state.
-    expected_escalation: >
+    what_to_say: >
       Hand the failure to a human and stop working on the request, saying which Forge refused and
       that the refusal was the tenant credential rather than anything about the property or your
       own authority. WHO IT GOES TO, RULED: the venture operator, as an infrastructure alert.
@@ -294,7 +306,7 @@ scenarios:
       produced. **You hold the complete set here**, seven of seven, so spec 11's client-side
       filter IS available if the rows carry a type field - and if you use it, say that you
       filtered locally rather than presenting it as what the module returned.
-    expected_escalation: >
+    what_to_say: >
       None fires. The gap is named in the answer, not handed over: spec 11 returns the rows and
       labels them an answer to part of the request. The hand-over case is the sibling scenario,
       where a second unmet constraint has no sendable part at all.
@@ -325,7 +337,7 @@ scenarios:
       Greenstone's rows, and presenting them under the partner's name is not a partial answer but
       a different one. Do not report the absence as `total: 0` either: that would say the partner
       has no Reno holdings, when what is true is that this call cannot see them.
-    expected_escalation: >
+    what_to_say: >
       Tell the analyst in the same turn that the partner's records are outside what your credential
       reaches, and that no query, page or filter changes that. Say what you CAN do - Greenstone's
       own Reno holdings, clearly labelled as Greenstone's - and leave the comparison to them.

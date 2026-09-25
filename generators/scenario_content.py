@@ -31,7 +31,7 @@ WHAT IS NOT AUTHORED HERE
     instruction whether or not anybody authors a file, because their source sections
     are required and non-empty on every instruction (see MECHANICAL_SECTIONS). A
     content file **fills** those scenarios; it does not create them. A module with no
-    content file still emits them, with `expected_behavior` and `expected_escalation`
+    content file still emits them, with `expected_behavior` and `what_to_say`
     empty — and an empty required field is a violation on submission, not a pass, so
     SimForge refuses it and names it. **The absence shows up as a refusal rather than
     as a missing row**, which is the difference between "nobody has written this yet"
@@ -165,7 +165,7 @@ _ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 #: `draft_note` is absent for the same reason - it is authoring commentary. `status`,
 #: `approved_by` and `approved_on` are absent because they are the approval, not the text.
 _HASHED_SCENARIO_KEYS = (
-    "scenario_class", "situation", "expected_behavior", "expected_escalation",
+    "scenario_class", "situation", "expected_behavior", "what_to_say",
     "instruction_section", "expected_answer",
 )
 
@@ -226,7 +226,7 @@ def approved_content_hash(
 
 #: Per-scenario keys. Same rule.
 _SCENARIO_KEYS = frozenset({
-    "scenario_class", "situation", "expected_behavior", "expected_escalation",
+    "scenario_class", "situation", "expected_behavior", "what_to_say",
     "instruction_section", "expected_answer", "draft_note", "derivation",
 })
 
@@ -262,7 +262,7 @@ _ANSWER_KEYS = frozenset({
 })
 
 _REQUIRED_SCENARIO_KEYS = ("scenario_class", "situation", "expected_behavior",
-                           "expected_escalation")
+                           "what_to_say")
 
 
 class ScenarioContentError(Exception):
@@ -295,7 +295,7 @@ class AuthoredScenario:
     expected_behavior: str
     """What the agent does with the situation."""
 
-    expected_escalation: str
+    what_to_say: str
     """Prose naming the juncture: what the agent has in front of it, what it must stop
     short of doing, and to whom it hands the problem.
 
@@ -655,7 +655,7 @@ def _scenario(filename: str, entry: Any) -> AuthoredScenario:
         scenario_class=scenario_class,
         situation=entry["situation"].strip(),
         expected_behavior=entry["expected_behavior"].strip(),
-        expected_escalation=entry["expected_escalation"].strip(),
+        what_to_say=entry["what_to_say"].strip(),
         instruction_section=section,
         derivation=derivation,
         expected_answer=_answer(filename, scenario_class, entry.get("expected_answer")),
