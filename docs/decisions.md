@@ -16858,3 +16858,85 @@ somebody wrote the prose (entry 39 on what a third copy costs).
 > passes it.** 1.5.0 and 1.7.0 were both exactly that, deliberately - a withdrawal is a
 > version bump over text that did not move. `check_instructions_match` is what catches
 > the reverse, in CI, and the two together are the control. Neither alone is.
+
+
+## 194. No further instruction revision to assign_contract
+
+**Ruling by Ivan Green, 25 September 2026:**
+
+> *"No further instruction revision to `assign_contract`. Five attempts: 1.3.0 helped,
+> 1.4.0 cost 0.500, 1.6.0 regressed `permission_denied`, 1.8.0 and 1.9.0 inert. The
+> failing classes have not responded to instruction text in any attempt. Key and probe
+> corrections have moved results; manual text has not. Entry 186 is now unconditional for
+> this module."*
+
+### The five, in one place
+
+    1.3.0   correct_sequence, "after the call"   0.667 -> 0.833   KEPT
+    1.4.0   a prohibition outranks escalation    0.833 -> 0.333   withdrawn at 1.5.0
+    1.6.0   whose call, and who is asking        0.833 -> 0.833   withdrawn at 1.7.0
+            and permission_denied PASS -> FAIL on both agents
+    1.8.0   an unknown that answers a question   inert            withdrawn here
+    1.9.0   a call you did not make              inert            withdrawn here
+
+**One helped. Two cost. Two did nothing.** And 1.3.0's gain was on `happy_path` and
+`never_do_violation` - not on either of the two classes that have failed every sitting
+since 22 September.
+
+### What 1.8.0 and 1.9.0 measured
+
+Run `fc917584` graded them together, because both reached the live rows in one authoring.
+That is its own finding and entry 193 is the gate for it. They separated by class, which
+is the only reason this is readable at all:
+
+    Seraphine  0.833 -> 0.833        Ronan  0.833 -> 0.833
+
+    happy_path              PASS -> PASS     untouched by both
+    malformed_input         FAIL -> FAIL     untouched by both
+    partial_failure         FAIL -> FAIL     1.8.0's class
+    permission_denied       PASS -> PASS     1.9.0's class
+    escalation_required     FAIL -> FAIL     1.9.0's class
+    recovery_after_failure  PASS -> PASS     untouched by both
+
+Every rubric cell identical on both agents, three seeds at 1.0 each.
+
+**Neither cost anything, and that is only knowable because four modules held still.** The
+single-module rule is what made 1.4.0's 0.500 and 1.6.0's `permission_denied` regression
+attributable, and it is what lets this pair be called inert rather than merely unlucky.
+
+### 1.10.0 restores 1.7.0's text, byte for byte
+
+Four versions now carry one digest - 1.3.0, 1.5.0, 1.7.0 and 1.10.0 - and three of them
+are withdrawals. 1.8.0 and 1.9.0 are **skipped, not reused**: both were live and are now
+withdrawn, and a version that named one text must not later name another.
+
+    assign_contract    f99ec2e78347   back to the 1.7.0 hash
+    buyer_match        9fdc2096d73a   unchanged throughout
+    comp_analysis      d57e1d204bbb   unchanged throughout
+    property_lookup    cb7fb9daa37a   unchanged throughout
+    underwrite_deal    f06db69c8768   unchanged throughout
+
+`check_instructions_match` passes on all sixteen instructions across both Forges.
+
+### What HAS moved results, and it is not prose
+
+    entry 188   an option added to a key           partial_failure disposition FAIL -> PASS
+    entry 188   a subject renamed on a key         buyer_match happy_path FAIL -> PASS
+                                                   and Ronan's withhold cleared
+    entry 187   a premise corrected on a key       the class was never the agent's fault
+    ADR-0094    naming the record in the probe     20 of 37 keys had never shown their
+                (SimForge)                         subject; 0 of 25 their claim list
+
+Every movement on this Forge in four days came from a key or a probe. **None came from a
+manual**, except 1.3.0, once, on two classes that are not the two still failing.
+
+That asymmetry is the ruling's whole basis and it is worth naming plainly: the manual is
+what the agent reads, and it has been the wrong lever four times running. A key defect
+looks exactly like an agent defect from the score, and the instinct to fix it with prose
+cost five revisions to find out.
+
+> **Entry 186 is now unconditional for this module.** It previously read *no further
+> revision without a measured reason*. A measured reason has been produced four times and
+> acted on four times; twice it made things worse and twice it changed nothing. The rule
+> is now that there is no such thing as a sufficient reason here until something other
+> than the manual has been tried.
