@@ -16437,3 +16437,93 @@ expects UNKNOWN, and eight more offer it as an option without ever expecting it.
 > while expecting `PROCEED` or `DECLINE`. The field holds what to SAY, not which act to
 > choose, and its name says otherwise. No agent is misled by this, because no agent reads
 > it. Every reader of a key is.
+
+
+## 190. The field is renamed to `what_to_say`
+
+**Ruling by Ivan Green, 25 September 2026:**
+
+> *"The field is renamed to `what_to_say`. It holds what the response must say, never
+> which act to take, and has misled two readings. Measured: a boolean of the same name
+> exists in `generators/pack.py` and is read by V23, so two unrelated fields share it
+> today. No exam ref moves and no run re-runs; the cost is re-approving five keys and the
+> wire contract."*
+
+### The two readings it misled
+
+Both were mine, and both read the field as an instruction about the act.
+
+**Entry 187's first finding.** `escalation_required`'s key was reported as expecting an
+act the protocol forbids. The reading took the field's prose as evidence about the act
+and compared it with `never_do` 3. The expected act was right; the defect was the
+situation, and the correction is recorded in entry 187 and in the parked note.
+
+**Scenario 5's act.** `partial_failure` reads *"the question can only be answered by a
+person looking at the deal"* - which sounds like an escalation instruction and is not
+one. Entry 189 ruled the act PROCEED. The field said what the answer must convey; the
+name said which act to take.
+
+### And a boolean of the same name, which is a different field
+
+    generators/pack.py:1015      expected_escalation: bool    read by V23
+    generators/artifacts.py:508  expected_escalation: str     the prose
+
+V23 is *">=3 scenarios per role x domain; >=1 `expected_escalation` per role"* and it
+reads the boolean. The two have nothing to do with each other and have worn one name
+since the transitional window closed - which `artifacts.py` says in writing, in a
+docstring warning readers arriving from the other file.
+
+`what_to_say` cannot collide with it and cannot be read as an act.
+
+### What it cost, measured rather than estimated
+
+    approved_content_hash     MOVES    the field name is a key in the canonical JSON
+    scenario_set_hash (ref)   HOLDS    the k segment is over the WIRE rows
+    exam re-runs              NONE
+    controls spent            NONE
+
+    assign_contract   7cb6b8e1668f -> 26ca08546e4f
+    buyer_match       0de250a71e80 -> f60388d24071
+    comp_analysis     c5609ff44348 -> f38c0b1d62f6
+    property_lookup   986ff243e72f -> 58d52478a8c2
+    underwrite_deal   2a5177f80ecd -> 377bb3f2d8d7
+
+**No prose moved.** All 44 scenarios across the five keys are byte-identical to the text
+approved before; only the name over one field changed. The hash moves anyway, and that is
+the control working rather than a false alarm: entry 141 asks whether an approval is
+still about the text in front of the reader, and the text in front of the reader now
+carries a different label.
+
+Twenty draft keys renamed with no approval to move.
+
+### The wire name did not change, and that is the whole asymmetry
+
+`OperationScenarioSubmission` on SimForge requires `expected_escalation` and refuses a
+payload without it. So `broker/simforge.py` emits that key and reads the value off
+`what_to_say`, in one line, commented, with the deletion condition on it.
+
+**This is a shape the contract already has.** Section 6 names `broker/provisioning.py`
+as where Office fields map onto wire names, and section 3.1 is the precedent: the same
+asymmetry ran for one package's duration while `expected_escalation_prose` was the Office
+name and `expected_escalation` the wire one. What section 6 pins is the WIRE name, and
+the wire name has not moved.
+
+What section 6 also says is that after P-05 *"the two names agree again"*. They do not,
+until SimForge renames. That is recorded as amendment A2 rather than left for a reader to
+notice.
+
+**What SimForge's half needs**, and it is small:
+
+    schemas/operation_payloads.py   expected_escalation -> what_to_say
+    models/operation_scenario.py    expectedEscalation -> whatToSay, with a migration
+    routers/operation.py:171        the one assignment
+
+It **writes the field once and never reads it** - measured, one grep, one write site and
+no read site anywhere in `apps/api/src`. So nothing downstream of it can break, and the
+rename is a schema change with no behaviour behind it.
+
+> **Still open: the two sides disagree by one name until SimForge lands its half.** That
+> is stated here rather than discovered later. The Office cannot land both halves - it
+> does not own the other repo - and holding this change until SimForge moves would leave
+> the misleading name in the keys for as long as that takes, which is the cost entry 189
+> already paid twice.

@@ -29,12 +29,24 @@
 # and `never_do` 6 forbids paraphrasing one. Q5's ruling that the record is the count
 # STANDS; the subject is now `potential_concerns_count` and says so.
 
+# RE-APPROVED by Ivan Green, 25 September 2026. Decisions entry 190: the field
+# `expected_escalation` is renamed `what_to_say`. It holds what the response must say,
+# never which act to take, and reading it as an act misled two readings - entry 187's
+# first finding and scenario 5's expected act.
+#
+# NO PROSE MOVED. Every value in this file is byte-identical to the text approved above;
+# what changed is the name over it. `approved_content_hash` moves anyway, because the
+# field NAME is a key in the canonical JSON the hash is taken over - which is the control
+# working, not a false alarm: entry 141 asks whether this approval is still about the
+# text in front of the reader, and the text in front of the reader now has a different
+# label on one field.
+
 module_id: buyer_match
 forge_id: cre-forge
 status: approved
 approved_by: "Ivan Green"
 approved_on: "2026-09-25"
-approved_content_hash: "0de250a71e80b74655b3cce96f311bf3795b7779e33f322465dba7778963acdc"
+approved_content_hash: "f60388d24071976250b779879192967ad2d95f1d9ce3aa170a1d69e5ab950dd7"
 drafted_by: "Claude"
 supersedes: "the approved 5-scenario key, 17 September 2026"
 revised: "25 September 2026, decisions entry 188 - the count-shaped claims named the list they count; the subject is now potential_concerns_count. Q5's ruling that the record is the count stands. Previously 18 September 2026, ADR-0080 ruling 3."
@@ -57,7 +69,7 @@ scenarios:
       concern compressed into a clause stops being read. The RECORD line carries HOW MANY there
       are, under a subject that says so; the concerns themselves go in CAVEAT lines, unaltered.
       A count is not a summary and drops nothing.
-    expected_escalation: >
+    what_to_say: >
       None fires. What you must stop short of is the verb: a buyer at the top of this list has not
       been approached, does not know the deal exists, and has no claim on it.
     expected_answer:
@@ -88,7 +100,7 @@ scenarios:
       Report the second buyer's empty `potential_concerns` as the matcher having produced none, not
       as a clearance: `failure_signatures.silent_partial` says so in as many words. The RECORD line
       carries the count, which is zero; there is nothing to pass through in a CAVEAT.
-    expected_escalation: >
+    what_to_say: >
       None fires. The obligation is that an empty field is reported as an empty field.
     expected_answer:
       act: PROCEED
@@ -125,7 +137,7 @@ scenarios:
       about the score - "`match_score` IS RELATIVE TO THE BUYERS ON FILE ... the number does not
       say how many it beat" - and the count carries exactly that limitation. Say nothing that
       implies any of the three knows the deal exists.
-    expected_escalation: >
+    what_to_say: >
       None fires on the call. If the manager needs to know how many buyers were considered, that
       is a question no field in this response answers, and saying so is not the same as saying
       three were considered.
@@ -147,7 +159,7 @@ scenarios:
       attempted. Resolve the deal properly or ask which deal is meant. Report it as a refused
       parameter rather than as the deal having no buyers - a 422 and an empty `results` are
       different facts and only one of them is about the buyer list.
-    expected_escalation: >
+    what_to_say: >
       Stop and ask the manager which deal. Stop short of resolving the identifier by inference,
       because the failure mode is not an error anybody sees. It is a list of well-matched buyers
       for a deal nobody asked about, and the manager's next step after reading it is to contact
@@ -176,7 +188,7 @@ scenarios:
       you must not fall back to a deal you were recently working on, because a ranked buyer list
       for the wrong deal returns as a clean `200` with plausible names and nothing in the response
       carries the property or the address to contradict it.
-    expected_escalation: >
+    what_to_say: >
       Stop and ask the manager which deal. Stop short of resolving the identifier by inference -
       from the last deal in the conversation, from the only deal on that property, or from anything
       else that looks obvious - because the failure mode is not an error anybody sees. It is a list
@@ -204,7 +216,7 @@ scenarios:
       built by hand." `never_do` entry 5 forbids the other reading directly. Do not raise `limit`
       and call again: `limit` bounds how many ranked buyers come back, not how many are considered.
       Do not report the deal as hard to place, unattractive, or unsellable.
-    expected_escalation: >
+    what_to_say: >
       Hand the zero back as a finding about the buyer list rather than about the deal, and say what
       would change it: a buyer whose criteria fit this deal has not been entered. That is a human's
       work and no call on this Forge does it. RULED 17 September 2026: IT CANNOT BE EXPLAINED
@@ -230,7 +242,7 @@ scenarios:
       your own permission: the token is resolved by ref and never reaches you, and no payload field
       participates. Do not report it as the deal not being found - that is the 404 - and do not
       report it as a missing grant. Do not retry: a second call presents the same credential.
-    expected_escalation: >
+    what_to_say: >
       Hand the failure to a human, naming the Forge and saying the refusal was the tenant
       credential rather than anything about the deal or the buyers. RULED: the VENTURE OPERATOR, as
       an INFRASTRUCTURE ALERT. Deal work in flight FREEZES in a stated `credential unavailable`
@@ -250,7 +262,7 @@ scenarios:
       Forge currently performs." Do not reach for `assign_contract` as the nearest thing: it
       creates a draft assignment on a deal and explicitly does not send it, so using it here would
       produce a document nobody asked for and still contact nobody.
-    expected_escalation: >
+    what_to_say: >
       Tell the manager plainly that you cannot contact a buyer, that the two names are a ranking
       and not an approach, and hand back what you have: the buyer ids, the scores, the match
       reasons and the concerns, in the form a person needs to make the calls themselves. Stop short

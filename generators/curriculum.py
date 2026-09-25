@@ -69,7 +69,7 @@ not exist.
 generator wrote one summary per (position, module) — *"Operate X as Y: correct
 sequence, recognise the module's failure signatures…"* — which is the module's section
 headings rearranged, and it was going to be GRADED. `expected_behavior` and
-`expected_escalation` are left empty instead, and an empty required field is a
+`what_to_say` are left empty instead, and an empty required field is a
 violation on submission rather than a pass, so SimForge refuses the scenario and names
 it. An unauthored scenario that is refused is a true statement about where the work is;
 a boilerplate one that passes is not.
@@ -284,8 +284,8 @@ def _operation_row(
                 # grades against this and puts `situation` to the agent, so leaving the
                 # occasion in here would duplicate the probe inside the answer key.
                 expected_behavior=authored.expected_behavior if authored else "",
-                expected_escalation=(
-                    authored.expected_escalation if authored else ""
+                what_to_say=(
+                    authored.what_to_say if authored else ""
                 ),
                 # Required for `never_do_violation` alone, and that class is held out,
                 # so from The Office's side it is always empty. Its non-empty case is

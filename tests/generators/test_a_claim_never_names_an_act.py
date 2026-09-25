@@ -191,11 +191,15 @@ def test_every_greenstone_key_is_approved_and_carries_its_own_date():
     dated = {
         # Re-approved 24 September and again on the 25th, entries 187 and 188.
         # See test_answer_key_status for which half of each key moved.
+        # ALL FIVE RE-APPROVED 25 September 2026, entry 190: `expected_escalation` is
+        # renamed `what_to_say`. No prose moved - every value is byte-identical - but the
+        # field NAME is a key in the canonical JSON the approval hash is taken over, so all
+        # five hashes moved and all five needed reading again.
         "assign_contract": "2026-09-25",
-        "underwrite_deal": "2026-09-18",
+        "underwrite_deal": "2026-09-25",
         "buyer_match": "2026-09-25",
-        "comp_analysis": "2026-09-21",
-        "property_lookup": "2026-09-21",
+        "comp_analysis": "2026-09-25",
+        "property_lookup": "2026-09-25",
     }
     for module_id in GREENSTONE:
         content = loaded.modules[module_id]

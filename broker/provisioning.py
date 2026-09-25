@@ -1983,7 +1983,7 @@ def _curriculum_payload(
     never once executed against a real Office payload. Sending them moves the refusal
     from the schema to the validator. **That is one layer, not acceptance:** the
     validator will still refuse an unauthored scenario for an empty `expected_behavior`
-    or `expected_escalation`, and filling those is B4's authorship, not this file's.
+    or `what_to_say`, and filling those is B4's authorship, not this file's.
     """
     never_do = instruction.content.get("never_do") or []
     if isinstance(never_do, str):

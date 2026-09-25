@@ -50,7 +50,7 @@ scenarios:
     derivation: reproducible
     situation: A human forwards a note and asks for it to be filed.
     expected_behavior: File it, and report only that a row exists.
-    expected_escalation: None expected; remove the evidence and the agent stops here.
+    what_to_say: None expected; remove the evidence and the agent stops here.
 """
 
 
@@ -125,10 +125,10 @@ def test_the_worked_example_escalation_prose_names_a_juncture():
     content = sc.load_module(WORKED_EXAMPLE)
     for occasions in content.scenarios.values():
       for authored in occasions:
-        prose = authored.expected_escalation.strip().lower()
+        prose = authored.what_to_say.strip().lower()
         assert prose != "escalation is expected"
         assert "the office's generator does not say which" not in prose
-        assert len(authored.expected_escalation.split()) >= 20, authored.scenario_class
+        assert len(authored.what_to_say.split()) >= 20, authored.scenario_class
 
 
 def test_the_two_halves_are_two_fields_and_the_packing_is_gone():
@@ -198,7 +198,7 @@ def test_an_unknown_scenario_key_is_refused(tmp_path):
         sc.load_module(tmp_path / "m.yaml")
 
 
-@pytest.mark.parametrize("field", ["situation", "expected_behavior", "expected_escalation"])
+@pytest.mark.parametrize("field", ["situation", "expected_behavior", "what_to_say"])
 def test_a_missing_or_empty_required_field_is_refused(tmp_path, field):
     body = MINIMAL.format(module="m").replace(f"    {field}: ", f"    {field}: ''\n#  ")
     write(tmp_path, "m.yaml", body)
@@ -301,8 +301,8 @@ def test_the_default_root_finds_the_worked_example():
 
 def test_section_for_prefers_an_explicit_override(tmp_path):
     write(tmp_path, "m.yaml", MINIMAL.format(module="m").replace(
-        "    expected_escalation:",
-        "    instruction_section: what_it_does_not_do\n    expected_escalation:",
+        "    what_to_say:",
+        "    instruction_section: what_it_does_not_do\n    what_to_say:",
     ))
     content = sc.load_module(tmp_path / "m.yaml")
     assert content.section_for("happy_path") == "what_it_does_not_do"

@@ -39,7 +39,10 @@ class FakeScenario:
     instruction_section: str = "retry_vs_escalate"
     summary: str = ""
     expected_behavior: str = ""
-    expected_escalation: str = ""
+    #: RENAMED 25 September 2026, entry 190. THE ATTRIBUTE IS THE OFFICE FIELD; the
+    #: wire key below is still `expected_escalation` and these tests assert it by that
+    #: name on purpose. The two differing is the whole point of this file.
+    what_to_say: str = ""
     not_applicable_reason: str = ""
     #: The gradeable half. Empty here because these tests are about the prose fields,
     #: and an empty mapping is what a scenario written before the split carries - the
@@ -54,7 +57,7 @@ AUTHORED = FakeScenario(
         "SITUATION: The write times out and the account manager is waiting.\n\n"
         "EXPECTED: Stop. Do not retry and do not check first."
     ),
-    expected_escalation=(
+    what_to_say=(
         "The agent hands the unresolved write to the account manager, who checks "
         "whether the row exists. It must stop short of the retry: two identical calls "
         "create two consent rows for one act of consenting."
@@ -83,7 +86,7 @@ def test_the_authored_prose_goes_on_the_wire_unaltered():
     """The whole of T-102. SimForge asks WHAT escalation is expected; this is the
     first payload in which the answer is not a constant."""
     sent = payload(AUTHORED)["operation_scenarios"][0]
-    assert sent["expected_escalation"] == AUTHORED.expected_escalation
+    assert sent["expected_escalation"] == AUTHORED.what_to_say
 
 
 def test_the_bool_derived_placeholder_is_gone():
@@ -214,7 +217,7 @@ def test_the_answer_arrives_in_simforge_declared_shape():
             scenario_class="happy_path",
             summary="An analyst asks how many warehouses are on file.",
             expected_behavior="Report `total`, not the length of the page.",
-            expected_escalation="None fires; the call answered completely.",
+            what_to_say="None fires; the call answered completely.",
             expected_answer=answer,
         )
     )["operation_scenarios"][0]

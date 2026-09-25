@@ -631,3 +631,73 @@ declines were correct when made and the thing that changed was ownership, not th
 is empty.** A test asserting emptiness passes when the next refactor puts `""` back, and
 nothing notices. The property is the absence of the key, so the absence of the key is what
 must be asserted.
+
+
+---
+
+## 11. CONTRACT AMENDMENT A2 — 25 September 2026
+
+**Ruled by Ivan Green.** Decisions entry 190. **This section is part of the contract and
+carries the same weight as the sections above it.** Where it and an earlier section
+disagree, this one governs, and the earlier text is left standing so the change is
+visible.
+
+### A2.1 — The Office field is `what_to_say`
+
+`expected_escalation` on the Office side is renamed `what_to_say`. **The field holds what
+the response must say, never which act to take**, and §3.2 already said so in the only
+way a field name could not: *"the prose names the juncture."*
+
+The name misled two readings, both recorded in entry 190: `escalation_required`'s
+expected act (entry 187, corrected) and `partial_failure`'s (entry 189). Both read a
+field of prose as an instruction about the act, because the name is an act.
+
+And it was ambiguous in a second way. `generators/pack.py` carries
+`expected_escalation: bool` on a Pack scenario, read by validator rule V23. §3.1's
+transitional window was supposed to end that collision; it ended the *suffix*, not the
+collision. `what_to_say` cannot collide with the boolean and cannot be read as an act.
+
+**Nothing else about the field changes.** It is still required, still prose, still
+non-empty by `REQUIRED_SCENARIO_FIELDS`, and §3.2 still governs what the prose has to
+carry.
+
+### A2.2 — The WIRE name is unchanged, and the two disagree until SimForge renames
+
+**The wire name is still `expected_escalation`.** `OperationScenarioSubmission` requires
+it and refuses a payload without it, so `broker/simforge.py` emits that key with the
+value taken off `what_to_say`. That single line is the whole of the mapping, it carries a
+comment naming this amendment, and it says what deletes it.
+
+**This is the shape §6 already describes** — that section names the mapping file as where
+Office fields become wire names — and **§3.1 is the precedent**: the identical asymmetry
+ran for one package's duration while `expected_escalation_prose` was the Office name.
+
+But §6 also promises *"after P-05 the bool is gone and the two names agree again."*
+**They do not agree, as of this amendment**, and that is recorded here rather than left
+for a reader to discover in the mapping.
+
+### A2.3 — What SimForge's half is, and what ends the disagreement
+
+    apps/api/src/schemas/operation_payloads.py   expected_escalation -> what_to_say
+    apps/api/src/models/operation_scenario.py    expectedEscalation -> whatToSay + migration
+    apps/api/src/routers/operation.py:171        the one assignment
+
+**The field is written once and read nowhere.** Measured across `apps/api/src`: one write
+site, no read site. No grader touches it - `grade_submitted` reads no prose on either
+side, and `probe_for` renders neither `expected_behavior` nor this field to the agent. So
+the rename has no behaviour behind it and cannot change a verdict.
+
+**When SimForge lands its half:** The Office deletes the mapping line and its comment in
+`broker/simforge.py`, the payload key becomes `what_to_say`, and §6's promise holds
+again. Until then the disagreement is exactly one name in exactly one line.
+
+### A2.4 — What it cost on the Office side, measured
+
+    approved_content_hash     MOVED on all five approved keys
+    scenario_set_hash (ref)   UNCHANGED - the k segment is over the WIRE rows
+    exam re-runs              none
+    controls spent            none
+
+No scenario prose moved: all 44 are byte-identical to the approved text. The approval
+hash moves because the field NAME is a key in the canonical JSON it is taken over, which
+is entry 141's control working rather than a false alarm.

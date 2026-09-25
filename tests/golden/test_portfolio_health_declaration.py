@@ -201,7 +201,7 @@ def test_the_row_reports_declared_absent_rather_than_untested(rows):
         "declared absent with nothing said is the state ADR-0049 refuses"
     )
     assert row.expected_behavior == ""
-    assert row.expected_escalation == ""
+    assert row.what_to_say == ""
     assert row.summary == ""
     assert row.instruction_section == "retry_vs_escalate", (
         "the section is still named: the declaration is ABOUT that section reading "
