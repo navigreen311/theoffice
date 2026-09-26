@@ -17896,3 +17896,71 @@ looks exactly like the code that does not.
 > directory. `scripts/` and `generators/` are not walked here, and
 > `load_compliance_library.py` reads the table correctly today by inspection rather than
 > by control.
+
+
+## 208. The grant plan lists retired grants and does not mark them
+
+**Ruling by Ivan Green, 26 September 2026:**
+
+> *"The grant plan is built from the Pack, not the grants table, so it lists planned
+> grants including retired ones. It does not mark which are live. Measured: six rows in
+> the artifacts, four live at propose, two retired and uncertifiable. Worth naming so the
+> next reader does not read six as six."*
+
+### Why six
+
+`generators/runtime_config.py` `generate()` is pure by design - *"so the config can be
+reviewed at Gate 4 before anything touches the database."* It plans one grant for every
+module each appointed agent's position operates (entry 145: the grant is the exam
+ticket), and the `grant_id` is UUIDv5 over (venture, agent, forge, module).
+
+It never reads `agent_forge_grant`. Retirement lives only there, in `superseded_at`.
+Pack 1.11.0 still lists `assign_contract` under Buyer Network Manager, and
+`forge_module_exclusion` holds no row for it - so the plan names the same two ids entry
+201 retired.
+
+### What was measured
+
+Run `7fb4c288`, Pack 1.11.0, at Gate 10. Artifacts regenerated read-only on `bf98abf`
+and hashed to the value Gate 10 recorded, `0c00cade05e6...`.
+
+    Victor Serath     property_lookup   propose   live
+    Victor Serath     comp_analysis     propose   live
+    Ronan Valek       buyer_match       propose   live
+    Seraphine Valek   buyer_match       propose   live
+    Ronan Valek       assign_contract   (none)    retired 25 Sep 21:09, entry 201
+    Seraphine Valek   assign_contract   (none)    retired 25 Sep 21:09, entry 201
+
+Both retired grants rest on a failed Unit A: 0.833 against a threshold of 1.000.
+
+### Gate 11 refuses them twice over
+
+    AND g.superseded_at IS NULL                  retired
+    AND EXISTS (... unit = 'A' ... certified)    failed
+
+Nothing clears a grant's `superseded_at`, and `apply()`'s `ON CONFLICT` does not touch
+it. So a later run re-plans the same two ids and Gate 11 refuses them the same way.
+
+### Why nothing changes
+
+Excluding them from the plan moves the artifacts hash. A Pack edit would not reach this
+run at all, which regenerates from 1.11.0; a generator edit would, but the Gate 4 review
+is recorded against `0c00cade...` and a run at Gate 10 cannot re-run Gate 4. Either way
+it costs a fresh run, and the grants it would remove can already never activate.
+
+### THE READING THIS ENTRY EXISTS TO STOP
+
+Six read as six, twice in one day. The Gate 10 brief I produced called the two rows
+uncertified grants the agents hold, and called the Gate 4 note's "four" a mismatch. The
+note was right - *"All four live grants carry propose"* and *"assign_contract's two
+grants stay retired under entry 201"* - and the plan was the thing that did not say
+which was which.
+
+Gate 5 shares the reading: it reports *"6 grant(s) issued INACTIVE"* because `apply()`
+rewrote both retired rows on conflict. Gate 7, which filters `superseded_at`, reports 4.
+
+> **Still open: the plan does not say which grants are live.** Every reader of the
+> artifacts - Gate 4, the Gate 10 signer, the bill of materials - has to join
+> `agent_forge_grant` to learn it. Marking retirement in the plan would move the hash
+> of every run whose venture holds a retired grant, so it wants a ruling before it is
+> built.
