@@ -221,6 +221,16 @@ def artifacts_hash(artifacts: GeneratedArtifacts) -> str:
     return hashlib.sha256(artifacts.to_json().encode("utf-8")).hexdigest()
 
 
+def ctx_policy(pack: Any) -> str:
+    """The venture's `gate_signoff_policy`, off its own Pack. Entry 204.
+
+    A function rather than an inline attribute read, because `StoredPack` wraps the
+    parsed Pack and the two are easy to confuse - and because a default here would put
+    the assumption back that this entry removed.
+    """
+    return str(pack.pack.separation_of_duties.gate_signoff_policy)
+
+
 # ------------------------------------------------------------------------ the gates
 
 async def _gate_0(ctx: _Context) -> GateOutcome:
@@ -3665,9 +3675,18 @@ async def sign_off_run(
             f"now {current[:12]}…). Reload the run and review it again."
         )
 
+    # THE POLICY IS READ FROM THE PACK, NOT ASSUMED. Entry 204.
+    #
+    # `sign_off` defaults `distinct_humans=True` and this call passed nothing, so the
+    # Pack's `gate_signoff_policy` and the behaviour agreed by coincidence of defaults.
+    # A Pack declaring `single_human_permitted` - which V15 permits, with a justification
+    # - would have been enforced as though it said the opposite, and the validator would
+    # have reported a policy the code was not applying.
+    policy = ctx_policy(pack)
     signoff_id = await humans.sign_off(
         conn, gate="gate_10", venture_id=state.venture_id, human=human,
-        artifact_kind="provisioning_artifacts", artifact_hash_value=current, note=note,
+        artifact_kind="provisioning_artifacts", artifact_hash_value=current,
+        distinct_humans=policy == "distinct_humans", run_id=run_id, note=note,
     )
     await audit.write_event(
         event_type="provisioning_gate_10_signed",

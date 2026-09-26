@@ -17626,3 +17626,73 @@ the `silent_failure` shape - stating what the call did not say - arriving on a
 > sentence a model composes is a test nothing passes) - and a fabricated response field
 > lives exactly there. Three seeds invented the same number here and the battery saw
 > only a wrong token.
+
+
+## 204. A gate signature is refused to anyone who recorded a review on the same run
+
+**Ruling by Ivan Green, 26 September 2026:**
+
+> *"A gate signature is refused to anyone who recorded a review on the same run.
+> Measured: `distinct_humans` reads `signoff_record` only, so the Gate 4 reviewer may
+> sign Gate 10, and on this run that is me. And `sign_off` hardcodes the policy instead
+> of reading `gate_signoff_policy` from the Pack - they agree by coincidence."*
+
+### The rule was right and the query looked in one place
+
+    SELECT gate FROM signoff_record
+     WHERE venture_id = %s AND human_id = %s AND gate <> %s
+
+Signatures, and nothing else. **A Gate 4 review is not a signature**: it is written to
+`provisioning_gate_result` with the reviewer's id in its `evidence`, and a correction to
+one goes to `gate_review_correction`. Neither table was read.
+
+So the person who reviewed the artifacts at Gate 4 could sign for them at Gate 10, and
+on run `78c8b5ae` that person was the only one who had. Two acts, one run, one human,
+and the separation the policy names was not there.
+
+### Why a review counts
+
+Entry 170 already settled the part that makes this obvious: *"Gate 10's signature binds
+to the note plus its corrections."* A Gate 10 signature therefore covers the reviewer's
+own words. A person signing over their own note is not reviewing it; they are repeating
+it.
+
+`gate_review_correction` is included for the same reason and by the same sentence.
+
+### Scoped to the run, deliberately
+
+A person who reviewed a run that was abandoned last week has authored no part of THIS
+run's artifacts. Refusing them would be a rule about people rather than about the
+separation of two acts over one thing, and the ruling says *on the same run*.
+
+`run_id` is optional on `sign_off`, because it serves gates that are not part of a
+provisioning run; `sign_off_run` always passes it.
+
+### The second half: the policy was never read
+
+    sign_off(..., distinct_humans: bool = True)      the default
+    sign_off_run(...)                                passed nothing
+    greenstone's Pack: gate_signoff_policy: distinct_humans
+
+**They agreed by coincidence.** V15 permits `single_human_permitted` with a written
+justification, and a Pack declaring it would have been enforced as though it said the
+opposite - the validator reporting a policy the code was not applying.
+
+`access_overview` read the policy, for a report. The enforcement path did not read it at
+all. That is the same shape as entry 193 and entry 148: a fact recorded in one place and
+consumed in another that was not looking.
+
+### What this does to run 78c8b5ae
+
+Nothing is signed, and now cannot be by me. Ivan Green is the recorded Gate 4 reviewer
+on that run - `evidence -> human_id` on its Gate 4 row - so Gate 10 needs a second
+`venture_operator` or stronger who did not review it.
+
+That is the rule working on the first run it could apply to, which is the only reason to
+have believed it was there.
+
+> **Still open: nothing refuses a reviewer who is also the only eligible signer.** A
+> venture with one operator now cannot pass Gate 10 at all, and the refusal will say
+> "separation of duties" rather than "this venture has one person". That is the correct
+> outcome and an unhelpful message, and `human_capacity` in the Pack is where a venture
+> already declares how many people it has.

@@ -21,7 +21,7 @@ import yaml
 
 from broker import account_origin, humans, packs, provisioning, revocation
 from broker.db import connection
-from broker.errors import GrantNotActivated
+from broker.errors import GrantNotActivated, NotAuthorized
 from broker.grants import resolve_grant
 from tests.conftest import requires_db
 
@@ -56,6 +56,127 @@ async def _drive(conn, run_id, actor, *, held_out=None, passes=1):
             )
         )
     return outcomes
+
+
+
+# ----------------------------------------------- entry 204: a reviewer may not sign
+
+async def _to_gate_10_unsigned(conn, operator, reviewer=None):
+    """Up to Gate 10 with the review recorded and NOTHING signed.
+
+    `reviewer` defaults to `operator`, which is the case entry 204 is about: on run
+    78c8b5ae one human reviewed Gate 4, and nothing stopped that human signing Gate 10.
+    """
+    from tests.provisioning.test_simforge_handover import SimForgeAccepts
+
+    run_id = await provisioning.start_run(
+        conn, venture_id=VENTURE, started_by=operator.human_id
+    )
+    await provisioning.advance(conn, run_id=run_id, actor=operator.human_id)
+    await provisioning.record_human_review(
+        conn, run_id=run_id, human=reviewer or operator,
+        note="reviewed the BOM and the gap report",
+    )
+    outcomes = await provisioning.advance(
+        conn, run_id=run_id, actor=operator.human_id,
+        held_out=HeldOutPasses(), simforge=SimForgeAccepts(),
+    )
+    gate_10 = next(o for o in outcomes if o.gate == "10")
+    return run_id, gate_10.evidence["artifacts_hash"]
+
+
+async def test_the_gate_4_reviewer_may_not_sign_gate_10_on_the_same_run(
+    feasible_pack, operator, signer, clean_audit
+):
+    """Entry 204, and it is the state run 78c8b5ae was in when the ruling was made.
+
+    `distinct_humans` read `signoff_record` and nothing else. A Gate 4 review is not a
+    signature - it goes to `provisioning_gate_result` with the reviewer's id in its
+    evidence - so the person who reviewed the artifacts could sign for them, and on that
+    run that person was the only one who had.
+    """
+    async with connection() as conn:
+        run_id, artifacts_hash = await _to_gate_10_unsigned(conn, operator)
+
+        with pytest.raises(NotAuthorized) as exc:
+            await provisioning.sign_off_run(
+                conn, run_id=run_id, human=operator,
+                displayed_artifacts_hash=artifacts_hash, note="signing my own review",
+            )
+    assert "recorded a review on this run" in str(exc.value)
+    assert exc.value.context["reviewed_gate"] == "4"
+
+
+async def test_a_human_who_reviewed_nothing_may_still_sign(
+    feasible_pack, operator, signer, clean_audit
+):
+    """The rule refuses reviewers, not everybody. Without this the entry could be
+    satisfied by a check that refuses every signature."""
+    async with connection() as conn:
+        run_id, artifacts_hash = await _to_gate_10_unsigned(conn, operator)
+        signoff_id, signed_hash = await provisioning.sign_off_run(
+            conn, run_id=run_id, human=signer,
+            displayed_artifacts_hash=artifacts_hash, note="reviewed and signed",
+        )
+    assert signoff_id is not None
+    assert signed_hash == artifacts_hash
+
+
+async def test_a_review_on_a_different_run_does_not_refuse_the_signature(
+    feasible_pack, operator, signer, clean_audit
+):
+    """Scoped to the run, which is what the ruling says.
+
+    A person who reviewed last week's abandoned run has authored no part of THIS run's
+    artifacts, and refusing them would be a rule about people rather than about the
+    separation of two acts over one thing.
+    """
+    async with connection() as conn:
+        # `signer` reviews an earlier run, which is then left where it is.
+        earlier = await provisioning.start_run(
+            conn, venture_id=VENTURE, started_by=operator.human_id
+        )
+        await provisioning.advance(conn, run_id=earlier, actor=operator.human_id)
+        await provisioning.record_human_review(
+            conn, run_id=earlier, human=signer, note="reviewed the earlier run"
+        )
+        await provisioning.abort_run(
+            conn, run_id=earlier, human=operator, reason="superseded by the next run"
+        )
+
+        run_id, artifacts_hash = await _to_gate_10_unsigned(conn, operator)
+        signoff_id, _ = await provisioning.sign_off_run(
+            conn, run_id=run_id, human=signer,
+            displayed_artifacts_hash=artifacts_hash, note="different run, so eligible",
+        )
+    assert signoff_id is not None
+
+
+async def test_the_policy_is_read_from_the_pack_not_assumed(
+    feasible_pack, operator, signer, clean_audit, admin
+):
+    """Entry 204's second half. `sign_off` hardcoded `distinct_humans=True`.
+
+    The Pack and the behaviour agreed by coincidence of defaults. A Pack declaring
+    `single_human_permitted` - which V15 permits, with a justification - would have been
+    enforced as though it said the opposite.
+    """
+    async with connection() as conn:
+        run_id, artifacts_hash = await _to_gate_10_unsigned(conn, operator)
+        stored = await packs.live(conn, VENTURE)
+        assert stored is not None
+        assert provisioning.ctx_policy(stored) == "distinct_humans", (
+            "the Pack under test must declare the strict policy, or this asserts nothing"
+        )
+
+        # The same signature the strict policy refuses, permitted when the Pack says so.
+        signoff_id = await humans.sign_off(
+            conn, gate="gate_10", venture_id=VENTURE, human=operator,
+            artifact_kind="provisioning_artifacts", artifact_hash_value=artifacts_hash,
+            distinct_humans=False, run_id=run_id,
+            note="single_human_permitted",
+        )
+    assert signoff_id is not None
 
 
 def _verdicts(outcomes) -> dict[str, str]:

@@ -976,14 +976,32 @@ async def sign_off(
     artifact_hash_value: str,
     required_role: str = "venture_operator",
     distinct_humans: bool = True,
+    run_id: uuid.UUID | None = None,
     note: str | None = None,
 ) -> uuid.UUID:
     """Record a gate sign-off bound to an artifact hash.
 
     `distinct_humans` implements the Pack's `gate_signoff_policy`. When set, a human who
-    has already signed another gate for this venture cannot sign this one - which is the
-    entire content of separation of duties, and is checked here rather than trusted to
-    process.
+    has already signed another gate for this venture cannot sign this one - which is
+    checked here rather than trusted to process.
+
+    RULED 26 SEPTEMBER 2026 (decisions entry 204)
+    =============================================
+
+        *"A gate signature is refused to anyone who recorded a review on the same run."*
+
+        `distinct_humans` read `signoff_record` and nothing else, so it saw signatures
+        and not reviews. **A Gate 4 review is not a signature** - it is written to
+        `provisioning_gate_result` with the reviewer's id in its evidence - so the
+        person who reviewed the artifacts at Gate 4 could sign for them at Gate 10, and
+        on run 78c8b5ae that person was the only one who had.
+
+        Two acts, one run, one human, and the separation the policy names was not there.
+        The rule was right and the query was looking in one place.
+
+        `run_id` is optional because `sign_off` serves gates that are not part of a
+        provisioning run. When it is given, the review check runs; when it is not, there
+        is no run whose reviews could conflict. `sign_off_run` always passes it.
     """
     role_signed_as = authorize(human, required_role=required_role, venture_id=venture_id)
 
@@ -1003,6 +1021,36 @@ async def sign_off(
                 gate=gate,
                 policy="distinct_humans",
             )
+
+        if run_id is not None:
+            # A REVIEW COUNTS, AND SO DOES A CORRECTION TO ONE. Entry 170 already rules
+            # that a Gate 10 signature binds to the review note PLUS its corrections, so
+            # a person who wrote either has an authored part of what they would be
+            # signing over.
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "SELECT gate FROM provisioning_gate_result "
+                    " WHERE run_id = %(run)s AND evidence ->> 'human_id' = %(human)s "
+                    " UNION ALL "
+                    "SELECT gate FROM gate_review_correction "
+                    " WHERE run_id = %(run)s AND corrected_by = %(human_uuid)s "
+                    " LIMIT 1",
+                    {
+                        "run": run_id,
+                        "human": str(human.human_id),
+                        "human_uuid": human.human_id,
+                    },
+                )
+                reviewed = await cur.fetchone()
+            if reviewed is not None:
+                raise NotAuthorized(
+                    "separation of duties: this human recorded a review on this run and "
+                    "may not also sign for it",
+                    reviewed_gate=reviewed[0],
+                    gate=gate,
+                    run_id=str(run_id),
+                    policy="distinct_humans",
+                )
 
     signoff_id = uuid.uuid4()
     async with conn.cursor() as cur:
