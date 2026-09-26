@@ -20,6 +20,7 @@ not at all, loses something specific:
    5. budget ladder       per-task | per-agent daily | soft | hard
    6. effective tier      grant tier, downgraded engagement-wide if soft-capped
    7. trust tier gate     below auto_execute -> proposal, and no Forge call
+                          UNLESS a human already approved THIS act (entry 195)
    8. rate limit          per-agent AND per-Forge; both must admit
    9. idempotency key     derived, so a retry is recognisable as a retry
   10. at_most_once guard  these are never auto-retried; escalate instead
@@ -45,6 +46,25 @@ Why this order and not another:
     where the venture had already crossed its soft cap.
   - Rate limiting is last of the gates, so refusals that cost nothing to detect
     happen before the one that mutates a bucket.
+
+AN APPROVED PROPOSAL EXECUTES ON THE AGENT'S OWN RE-CALL (entry 195)
+====================================================================
+
+    There is no runner. The agent calls, is refused with `RequiresApproval`, a human
+    decides, and the agent calls again with the same arguments. `idempotency_key` is
+    derived from `task_id`, `module_id` and `payload`, so re-deriving it is how the
+    agent proves it is asking for the same act - there is no approval token to present
+    and therefore none to present for the wrong payload.
+
+    **Exactly one step is skipped, and it is step 7.** Every other gate re-runs on the
+    second call, against the world as it is then rather than as it was when the human
+    looked: revocation, the shift boundary, the manifest, the budget, and `resolve_grant`
+    itself, which is re-resolved before any of this. A human approving at 09:00 does not
+    authorise a call by an agent revoked at 09:05.
+
+    **A refusal at any of those is terminal.** The proposal goes to `failed` with the
+    reason, and nothing retries it: the human approved an act in a world that has since
+    changed, and what that needs is a new decision rather than another attempt.
 """
 
 from __future__ import annotations
@@ -92,6 +112,20 @@ class AgentContext:
 
 
 @dataclass(frozen=True, slots=True)
+class Governed:
+    """What steps 3-8 concluded. Entry 195 added the second field.
+
+    `approved_proposal_id` is the approval this call is acting on, or `None` on an
+    ordinary call. It is carried out of `_govern` rather than looked up again later
+    because two lookups could disagree, and the one that matters is the one the tier
+    gate actually consulted.
+    """
+
+    manifest_match: str
+    approved_proposal_id: uuid.UUID | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class CallResult:
     call_id: uuid.UUID
     trace_id: uuid.UUID
@@ -100,6 +134,10 @@ class CallResult:
     latency_ms: int
     idempotency_key: str
     manifest_match: str
+    #: The approval this call acted on, or `None` when the agent acted on its own
+    #: authority. Entry 195. Last, and defaulted, so every existing caller that
+    #: constructs a `CallResult` positionally keeps working.
+    approved_proposal_id: uuid.UUID | None = None
 
 
 class OfficeClient:
@@ -147,16 +185,22 @@ class OfficeClient:
             await self._audit_refusal(exc, agent_ctx, trace_id, forge_id, module_id)
             raise
 
+        # 9, MOVED UP. Derived, so the same task+module+payload always yields the same
+        # key - which is what lets the second call find the approval given for the
+        # first. It is computed here rather than after `_govern` because both the tier
+        # gate and every refusal handler below now need it, and deriving it twice would
+        # be two spellings of the identity of an act.
+        idem_key = ledger.idempotency_key(agent_ctx.task_id, module_id, payload)
+
         # 3-8. Governance. Every refusal below is audited by its own handler and
         # raises a named type, so an operator sees which gate stopped the call.
         try:
-            manifest_match = await self._govern(grant, agent_ctx, trace_id, payload)
+            governed = await self._govern(grant, agent_ctx, trace_id, payload, idem_key)
         except OfficeError as exc:
             await self._audit_refusal(exc, agent_ctx, trace_id, forge_id, module_id)
+            await self._fail_approved(agent_ctx, idem_key, forge_id, module_id, exc)
             raise
-
-        # 9. Derived, so the same task+module+payload always yields the same key.
-        idem_key = ledger.idempotency_key(agent_ctx.task_id, module_id, payload)
+        manifest_match = governed.manifest_match
 
         # 4. at_most_once endpoints are never auto-retried. Master prompt Part 16.
         if grant.idempotency_support == "at_most_once" and await ledger.has_prior_call(
@@ -172,10 +216,20 @@ class OfficeClient:
                 idempotency_key=idem_key,
             )
             await self._audit_refusal(escalation, agent_ctx, trace_id, forge_id, module_id)
+            await self._fail_approved(
+                agent_ctx, idem_key, forge_id, module_id, escalation
+            )
             raise escalation
 
         # 5. Intent is recorded before the Forge is touched.
-        await self._audit_intent(grant, agent_ctx, trace_id, call_id, idem_key)
+        try:
+            await self._audit_intent(
+                grant, agent_ctx, trace_id, call_id, idem_key,
+                governed.approved_proposal_id,
+            )
+        except OfficeError as exc:
+            await self._fail_approved(agent_ctx, idem_key, forge_id, module_id, exc)
+            raise
 
         # 6/7. Execute, then ledger the outcome whatever it was.
         ts_start = datetime.now(UTC)
@@ -203,6 +257,12 @@ class OfficeClient:
                 manifest_match=manifest_match,
             )
             await self._audit_refusal(exc, agent_ctx, trace_id, forge_id, module_id)
+            # NOT `_fail_approved`. THE FORGE WAS REACHED, or reaching it was attempted
+            # with the credential presented - `ForgeUnreachable` is raised from inside
+            # `execute`, past the point where this call is indistinguishable from one
+            # that landed. Marking the proposal `failed` would say the act did not
+            # happen, and this path cannot know that. The proposal stays `approved` and
+            # the ledger row carries what is actually known.
             raise
 
         await self._write_ledger(
@@ -217,9 +277,18 @@ class OfficeClient:
             manifest_match=manifest_match,
         )
 
+        # 14. The approval is spent, AFTER the call. Entry 195: `mark_executed` moves
+        # the row only from `approved`, so a third call finds nothing to act on and is
+        # refused with a fresh `RequiresApproval` rather than repeating the act.
+        if governed.approved_proposal_id is not None:
+            await self._spend_approval(
+                governed.approved_proposal_id, call_id, agent_ctx, trace_id, grant
+            )
+
         return CallResult(
             call_id=call_id,
             trace_id=trace_id,
+            approved_proposal_id=governed.approved_proposal_id,
             status_code=response.status_code,
             body=response.body,
             latency_ms=response.latency_ms,
@@ -235,8 +304,9 @@ class OfficeClient:
         agent_ctx: AgentContext,
         trace_id: uuid.UUID,
         payload: Any,
-    ) -> str:
-        """Steps 3-8. Returns the ledger `manifest_match` verdict.
+        idem_key: str,
+    ) -> Governed:
+        """Steps 3-8. Returns the ledger verdict and the approval being acted on.
 
         Raises the specific gate's error when a gate refuses. `RequiresApproval`
         is raised rather than returned so that a caller cannot mistake an absent
@@ -285,7 +355,28 @@ class OfficeClient:
             soft_capped = bool(budget_state and budget_state.soft_capped)
             tier = proposals.effective_tier(grant.trust_tier, soft_capped=soft_capped)
 
+            approved: dict[str, Any] | None = None
             if tier != proposals.AUTO_EXECUTE:
+                # ENTRY 195. THE ONLY GATE AN APPROVAL SKIPS, AND ONLY THIS ONE.
+                #
+                # Looked up HERE rather than at the top of the call, so everything
+                # above has already refused if it was going to. An approval does not
+                # excuse a revocation, an ended shift, an undeclared module or a spent
+                # budget; it answers one question - may this agent act at this tier -
+                # and it is asked at the point that question is put.
+                #
+                # `approved_for` matches on the derived idempotency key, so the agent
+                # asking again for the same act is what identifies the approval. There
+                # is no token to present and nothing to present for a different payload.
+                approved = await proposals.approved_for(
+                    conn,
+                    office_agent_id=agent_ctx.office_agent_id,
+                    idempotency_key=idem_key,
+                    forge_id=grant.forge_id,
+                    module_id=grant.module_id,
+                )
+
+            if tier != proposals.AUTO_EXECUTE and approved is None:
                 proposal_id = await proposals.submit(
                     conn,
                     office_agent_id=agent_ctx.office_agent_id,
@@ -321,10 +412,11 @@ class OfficeClient:
                 # read the payload and do it by hand. What changes is that the
                 # refusal says what will and will not happen next.
                 raise RequiresApproval(
-                    f"trust tier {tier!r} requires human approval, and APPROVAL DOES "
-                    "NOT EXECUTE: no path exists from an approved proposal to a Forge "
-                    "call. The proposal records the intent and a human must carry the "
-                    "act out themselves. Nothing below auto_execute reaches a Forge.",
+                    f"trust tier {tier!r} requires human approval. A proposal was "
+                    "created; when a human approves it, CALL AGAIN with the same task, "
+                    "module and payload and the act will be carried out. Nothing else "
+                    "executes it - there is no runner, and every other gate re-runs on "
+                    "that second call.",
                     proposal_id,
                     forge_id=grant.forge_id,
                     module_id=grant.module_id,
@@ -334,11 +426,15 @@ class OfficeClient:
                 )
 
         # 8. Rate limit last of the gates: it mutates a bucket, and the refusals
-        # above cost nothing to detect.
+        # above cost nothing to detect. Outside the `async with`, as it always was -
+        # `limits` holds its own store.
         await limits.acquire(
             office_agent_id=agent_ctx.office_agent_id, forge_id=grant.forge_id
         )
-        return manifest_result.match
+        return Governed(
+            manifest_match=manifest_result.match,
+            approved_proposal_id=approved["proposal_id"] if approved else None,
+        )
 
     async def _audit_intent(
         self,
@@ -347,6 +443,7 @@ class OfficeClient:
         trace_id: uuid.UUID,
         call_id: uuid.UUID,
         idem_key: str,
+        approved_proposal_id: uuid.UUID | None = None,
     ) -> None:
         """Write the pre-call entry, failing closed on a MUTATING call.
 
@@ -386,6 +483,14 @@ class OfficeClient:
                     "unit_b_simulation_only": grant.unit_b_simulation_only,
                     "idempotency_key": idem_key,
                     "task_id": agent_ctx.task_id,
+                    # ENTRY 195. WHICH APPROVAL THIS CALL IS ACTING ON, on the entry
+                    # that is written before the Forge is touched. `None` on an
+                    # auto_execute call, and the difference between a call an agent
+                    # made on its own authority and one a human authorised is the
+                    # first thing anybody asks afterwards.
+                    "approved_proposal_id": (
+                        str(approved_proposal_id) if approved_proposal_id else None
+                    ),
                 },
             )
         except Exception as exc:
@@ -401,6 +506,78 @@ class OfficeClient:
             # Read-only: proceed. Phase 1 replaces this with a durable queue;
             # until then the failure is visible only in broker logs, which is a
             # known gap rather than a design.
+
+    async def _spend_approval(
+        self,
+        proposal_id: uuid.UUID,
+        call_id: uuid.UUID,
+        agent_ctx: AgentContext,
+        trace_id: uuid.UUID,
+        grant: ResolvedGrant,
+    ) -> None:
+        """Mark the approval executed and say so in the audit log. Entry 195.
+
+        **Two writes, and the audit one is not best-effort.** `mark_executed` is what
+        makes "once" true - it moves the row only from `approved` - and the event is
+        what links a human's decision to the act that followed it. A call that happened
+        with no record of which approval permitted it is the thing this whole path
+        exists to avoid, so a failure here is raised rather than swallowed.
+
+        The call has already happened by this point and the ledger row is already
+        written, so raising does not un-make anything: it reports that the act is done
+        and its authorisation could not be recorded, which is exactly what has occurred.
+        """
+        async with connection() as conn:
+            await proposals.mark_executed(conn, proposal_id=proposal_id, call_id=call_id)
+        await audit.write_event(
+            event_type="proposal_executed",
+            actor_type="agent",
+            actor_id=agent_ctx.office_agent_id,
+            venture_id=agent_ctx.venture_id,
+            trace_id=trace_id,
+            subject={
+                "proposal_id": str(proposal_id),
+                "call_id": str(call_id),
+                "forge_id": grant.forge_id,
+                "module_id": grant.module_id,
+                "task_id": agent_ctx.task_id,
+            },
+        )
+
+    async def _fail_approved(
+        self,
+        agent_ctx: AgentContext,
+        idem_key: str,
+        forge_id: str,
+        module_id: str,
+        exc: OfficeError,
+    ) -> None:
+        """A gate refused an act a human had approved. Terminal. Entry 195.
+
+        **Best-effort, and deliberately so.** The refusal is already raised and already
+        audited; this is bookkeeping on top of it. Failing here would replace a specific
+        gate error - which is what the operator needs - with a database one.
+
+        Ordinary on a first-pass call: there is no approved proposal and nothing moves.
+        `mark_failed` reports that as `False` rather than raising, because "no approval
+        to fail" is the common case rather than an error.
+        """
+        with contextlib.suppress(Exception):
+            async with connection() as conn:
+                approved = await proposals.approved_for(
+                    conn,
+                    office_agent_id=agent_ctx.office_agent_id,
+                    idempotency_key=idem_key,
+                    forge_id=forge_id,
+                    module_id=module_id,
+                )
+                if approved is None:
+                    return
+                await proposals.mark_failed(
+                    conn,
+                    proposal_id=approved["proposal_id"],
+                    error=f"{type(exc).__name__}: {exc}",
+                )
 
     async def _audit_refusal(
         self,

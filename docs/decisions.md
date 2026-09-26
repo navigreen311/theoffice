@@ -16940,3 +16940,113 @@ cost five revisions to find out.
 > acted on four times; twice it made things worse and twice it changed nothing. The rule
 > is now that there is no such thing as a sufficient reason here until something other
 > than the manual has been tried.
+
+
+## 195. An approved proposal executes, once, on the agent's own re-call
+
+**Ruling by Ivan Green, 25 September 2026:**
+
+> *"An approved proposal executes, once, on the agent's own re-call. No server-side
+> runner: the agent re-calls with the same idempotency key, the client recognises an
+> approved proposal and proceeds. The tier gate is skipped only with an approved proposal
+> id in hand, and nothing else in the thirteen steps is skipped. Every other gate re-runs
+> at execution: revocation, shift, manifest, budget, grant.*
+>
+> *And: a proposal carries its outcome. Add `failed`, with an attempt count and last
+> error. A refusal before the Forge sets failed and does not retry. Execution writes an
+> audit event naming the approval it acted on.*
+>
+> *Prove it on `buyer_match` first - a pure read, where a crash costs nothing.
+> `assign_contract` waits until the mark-before-or-after question is ruled."*
+
+### What was there, and what the row said about it
+
+`mark_executed` was written, tested, and called by nothing. `decide` knew: it appended
+*"APPROVAL DOES NOT EXECUTE - no path exists from an approved proposal to a Forge call"*
+to the reason of every approval, so the record would not read as a queue. That note is
+now gone rather than reworded - a reason column is the human's words, and the moment it
+stops being true it is worse than empty.
+
+### The agent re-calls, and the key is what identifies the act
+
+    call 1   tier propose        -> proposal written, RequiresApproval raised
+    human    POST .../decide     -> approved
+    call 2   same task, module   -> approved_for() finds it, step 7 skipped, Forge called
+             and payload            -> mark_executed, audit, done
+    call 3   same arguments      -> nothing approved. RequiresApproval again.
+
+`idempotency_key` is `ledger.idempotency_key(task_id, module_id, payload)` - **derived,
+not assigned**. So the agent re-deriving it is the agent proving it is asking for the
+same act, and there is no approval token to present, which is why there is nothing to
+present for a different payload. `approved_for` matches agent, key, forge and module, and
+only `status = 'approved'`.
+
+**Once is a property of the table.** `mark_executed` moves a row only from `approved`, so
+a third call finds nothing to act on.
+
+### Exactly one step is skipped
+
+The lookup sits at step 7 and nowhere else, so everything before it has already refused
+if it was going to:
+
+    2   resolve_grant     re-resolved. identity, grant live, both certs, not void
+    3   revocation        re-run
+    3a  shift boundary    re-run
+    4   manifest          re-run
+    5   budget            re-run
+    6/7 tier gate         SKIPPED, and only with an approval in hand
+    8   rate limit        re-run
+    10  at_most_once      re-run
+    11  audit intent      re-run, still fails closed on a mutating call
+
+A human approving at 09:00 does not authorise a call by an agent revoked at 09:05. That
+is the whole reason the lookup is late rather than early.
+
+### A refusal before the Forge is terminal
+
+`failed`, with `attempt_count` and `last_error`. The human approved an act in a world
+that has since changed; what that needs is a new decision, not another attempt.
+
+**`attempt_count` is a control for a rule that should never fire.** The ruling allows one
+execution, so it should read 0 or 1 and never more. A boolean would hide the difference
+between the rule holding and the rule being broken once.
+
+**One case deliberately does NOT fail the proposal.** `ForgeUnreachable` is raised from
+inside `execute`, past the point where a call that landed and a call that did not are
+indistinguishable. Marking `failed` there would assert the act did not happen, and that
+path cannot know it. The proposal stays `approved` and the ledger row carries what is
+actually known.
+
+### The audit trail now joins up
+
+    console_proposal_decided   the human, the proposal, the decision
+    forge_call_intent          + approved_proposal_id, BEFORE the Forge is touched
+    proposal_executed          the proposal, the call, the module
+    agent_call_ledger          always, success or refusal
+
+`forge_call_intent` is the one that matters most: it is written before the call and
+survives a call that never came back, so the approval is on the record even when the
+outcome is not. `None` on an ordinary `auto_execute` call, and the difference between an
+agent acting on its own authority and on a human's is the first thing anybody asks
+afterwards.
+
+`_spend_approval` raises rather than swallowing. The call has already happened by then,
+so raising un-makes nothing - it reports that the act is done and its authorisation could
+not be recorded, which is exactly what occurred.
+
+### `buyer_match` first, and why `assign_contract` waits
+
+`mark_executed` runs **after** the call. On a pure read a crash in that window costs a
+duplicate read. On `assign_contract` it costs a duplicate assignment draft, on the one
+module declared `at_most_once`, whose manual says *"NOTHING DE-DUPLICATES THIS."*
+
+Marking before would trade that for the opposite failure: a crash leaves the row reading
+`executed` over an act that never happened. Neither is right in general and the choice is
+a ruling, not an implementation detail. It is not made here.
+
+> **Still open, and it is not a small remainder.** Every Unit A certification tops out at
+> `propose`, because SimForge's `BATTERY_TIER_CEILING` is the constant `propose` and its
+> own docstring says *"raising it needs a different battery."* So this path is not the
+> short way to `auto_execute` - it is the way an agent does real work **without** it, one
+> human decision per call. That is the shape this ruling chose, and it works at exactly
+> the tier the exam can justify.
