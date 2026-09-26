@@ -339,9 +339,15 @@ async def agent_state(agent_id: str) -> Answer:
     return await _get(f"/api/agents/{agent_id}/overview")
 
 
-async def shifts() -> Answer:
-    """Who is on shift now, by department. The Village owns the shift calendar."""
-    return await _get("/api/objectives/shifts")
+async def shifts(*, degrade: bool = True) -> Answer:
+    """Who is on shift now, by department. The Village owns the shift calendar.
+
+    `degrade=False` for the same reason `roster` has it, and the hazard is sharper:
+    a cached or absent calendar reads as NOBODY being on shift, and a reconciler that
+    believed it would end every assignment and refuse every call in the system.
+    `sync_shifts` is the caller that passes it.
+    """
+    return await _get("/api/objectives/shifts", degrade=degrade)
 
 
 async def deputies() -> Answer:

@@ -17124,3 +17124,149 @@ that makes `operations` ambiguous.
 > may serve two ventures with the agent-level split declared somewhere, or whether the
 > split means two departments, is not decided here and the Pack schema cannot be written
 > until it is.
+
+
+## 197. A department may serve more than one venture; an agent may not, in a quarter
+
+**Ruling by Ivan Green, 25 September 2026:**
+
+> *"A department may serve more than one venture; an agent may not, in a quarter. The
+> Pack declares which departments a venture draws on, not which venture owns a
+> department. An agent's venture for a quarter comes from its shift assignment, a
+> deliberate act, never inferred from a department. Measured: `operations` holds 24
+> `burkham-wickmont` grants and 4 `greenstone`, and the Village's feed names no venture
+> at all."*
+
+### This settles what entry 196 left open, and narrows it
+
+Entry 196 recorded the measurement and named the open question: whether one department
+may serve two ventures, or whether the split means two departments. **It may serve two.**
+The validator rule 196 contemplated - refuse a department claimed twice - is ruled out by
+this entry, because it would refuse the board as it stands.
+
+What 196 got right stands: the venture is an authored fact, not an inferred one. What
+this adds is *where* it is authored, and it is not where 196 assumed. Not on the
+department. On the **agent's shift assignment**, one at a time, by a person.
+
+### Both halves already hold, and neither needed building
+
+    Pack declares the departments a venture draws on
+      -> Position.source_department, on every position, already authored
+      -> greenstone: research, operations.  Nothing new.
+
+    an agent may not serve two ventures in a quarter
+      -> one_venture_per_agent_quarter, an EXCLUDE constraint since the schema
+      -> (office_agent_id =, quarter =, venture_id <>)
+
+So the ruling is mostly a reading of what is already true, and the thing it changes is
+what may be *built on top*: nothing may derive an agent's venture from its department,
+now or later.
+
+### Why that prohibition is the load-bearing part
+
+The obvious next feature was a shift reconciler, and the obvious way to write it was to
+map department to venture. That mapping is a function on five of six departments today
+and on `operations` it is not - 24 grants one way, 4 the other. An inference correct
+five times out of six is a coincidence with an exception nobody declared, and it would
+fail on the largest department in the system.
+
+Inference from grants also inverts the dependency. A grant is issued **because** an agent
+works for a venture; deriving the venture from the grant makes the conclusion its own
+premise, and answers nothing at all for a venture that has issued none - which is the
+state every venture starts in.
+
+### So `sync-shifts` reconciles and assigns nobody
+
+`sync-roster` applies in both directions because both sides name one entity: an agent, by
+`village_agent_ref`. The shift calendar has no such property. The Village answers
+
+    departments -> { Operations: { shifts: { MORNING | EVENING | NIGHT: [refs] } } }
+
+and carries **no venture**. It does not have the concept.
+
+    to_end          applied. Ending needs no venture - the agent is already on one.
+    unassigned      REPORTED. A person picks the venture, with `assign-shift`.
+    stale_quarter   reported. Assignments name a quarter the Village has left.
+    off_pack        reported. The venture's Pack draws on no such department.
+    blocked         reported. The previous shift has no verified flush.
+
+One of five is automatic. That ratio is the ruling, not a shortfall: the four that are
+not are the ones that need a decision, and a command that made them would be making it
+silently.
+
+**It refuses a silent Village.** `village.shifts(degrade=False)`, and an empty
+`departments` map is refused rather than believed. `sync-roster` refuses a cached roster
+because a stale one reads as mass departure; here a stale one reads as *nobody is on
+shift*, `to_end` would close every assignment, and the client's shift check would then
+refuse every call in the system. The sharper hazard gets the same guard.
+
+**The flush is not run here.** `sweep_flush_ended_shifts` owns it and runs on its own. A
+second path that flushed would be a second place to get Part 7.5's ordering wrong, which
+is the reason `assign_shift` is the only function that creates an assignment.
+
+> **Still open: the board is three quarters out of date.** The Village is in 2033Q3; the
+> three `shift_assignment` rows say 2030Q3 and all ended on 17 September. Nobody is on
+> shift, so no agent can make a call whatever else is true. This command reports that
+> state - it is what `stale_quarter` and `unassigned` are for - and it cannot fix it,
+> because fixing it is three decisions about who works for which venture.
+
+
+## 198. `mark_executed` runs after the call
+
+**Ruling by Ivan Green, 25 September 2026:**
+
+> *"`mark_executed` runs after the call. A row reading `executed` over an act that never
+> happened is a false record nothing can detect; a duplicate is detectable and, on
+> `assign_contract`, survivable by its own manual. A call started and not completed is
+> recorded as such, and a human checks. Never silently retried."*
+
+### The question entry 195 left open, answered
+
+195 built the path and named the choice it was not making: mark before the call or after.
+It shipped `after`, proved on a pure read, and said `assign_contract` waits for this.
+
+**After.** The reasoning is asymmetry of detection, not of probability:
+
+    mark BEFORE   crash -> the row says `executed`, the act never happened.
+                  Nothing downstream can tell. No ledger row, no Forge side effect,
+                  and a proposal that reads done. It is a false record and it is
+                  silent.
+
+    mark AFTER    crash -> the row says `approved`, the act may have happened.
+                  The `forge_call_intent` audit entry exists, written before the
+                  Forge was touched, and there is no ledger row beside it. That
+                  pair IS the record of a call started and not completed.
+
+And on the module this was waiting for, the manual already rules the cost:
+*"A DUPLICATE DRAFT IS SURVIVABLE AND MUST BE REPORTED. Somebody sees it and deletes
+it."* A duplicate is a visible untidiness with a named remedy. A false `executed` is
+neither visible nor remediable.
+
+### Never silently retried, and that is already true
+
+`approved_for` matches `status = 'approved'` only, so a crashed attempt leaves a row the
+next call *can* find - and the ruling is that nothing may do so automatically. There is
+no runner, by entry 195, so nothing retries on its own. An agent that calls again reaches
+step 10, `at_most_once` with a prior call under the same idempotency key, and gets
+`EscalateToHuman` rather than a second draft.
+
+### What is NOT built, and this entry is where it is recorded
+
+**Nothing surfaces a call started and not completed.** The evidence exists - a
+`forge_call_intent` event with no `agent_call_ledger` row sharing its `call_id` - and no
+sweep looks for it, no page shows it, and no incident is raised. "A human checks" has no
+implementation.
+
+    what exists    the intent event, written before the Forge, fail-closed on a
+                   mutating call; the ledger row, written after, always
+    what is absent the query that pairs them, and the thing that tells somebody
+
+It is a sweep beside the others in `broker/sweeps.py`: intents older than a threshold
+with no matching ledger row, raised as an incident. The threshold is the only judgement
+in it and it is not a hard one - a call in flight is not an orphan, and `forge_timeout_seconds`
+already names how long one may take.
+
+> **This is the second control in two days whose evidence exists and whose reader does
+> not.** Entry 193 was the first: the instruction version was on the row all along and
+> nothing compared it. Recording a fact and noticing it are different pieces of work, and
+> the second one keeps being the one that is missing.

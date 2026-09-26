@@ -296,6 +296,91 @@ async def _bootstrap_phase0(
     return 0
 
 
+async def _sync_shifts(confirm: bool, operator: str | None) -> int:
+    """Diff the Village's shift calendar, and end finished shifts only when told to.
+
+    The asymmetry with `sync-roster` is the point and is stated in the output: this
+    command ends shifts and assigns none, because entry 197 puts the venture in the
+    assignment and makes that a deliberate act. `unassigned` is a list of people
+    somebody has to decide about, not a queue this will work through.
+    """
+    from broker import shifts, sync_shifts
+    from broker.db import connection
+
+    async with connection() as conn:
+        try:
+            changes = await sync_shifts.diff(conn)
+        except (sync_shifts.SyncError, shifts.QuarterUnknown) as exc:
+            # Two named refusals and no bare `except`. A quarter this command cannot
+            # resolve is `shifts.QuarterUnknown`, raised by `current_quarter`, and it
+            # means the same thing here as it does for an assignment: the Village did
+            # not answer, so nothing is compared.
+            print(f"sync-shifts: {exc}")
+            return 1
+
+        print(
+            f"Village {changes.village_phase} · {changes.village_on_shift} on shift · "
+            f"Office {changes.office_on_shift} assigned · quarter {changes.quarter}"
+        )
+        if changes.empty:
+            print("No change.")
+            return 0
+
+        for kind, heading in (
+            ("to_end", "Shift over in the Village (this command ends these)"),
+            ("unassigned", "On shift, unassigned - A PERSON PICKS THE VENTURE"),
+            ("blocked", "On shift, blocked by an unflushed previous shift"),
+            ("stale_quarter", "Assigned under a quarter the Village has left"),
+            ("off_pack", "Assigned to a venture whose Pack omits their department"),
+        ):
+            rows = changes.of(kind)
+            if not rows:
+                continue
+            print(f"\n{heading} ({len(rows)})")
+            for change in rows[:40]:
+                print(f"  {change.agent_name:28} {change.detail}")
+            if len(rows) > 40:
+                print(f"  ... and {len(rows) - 40} more")
+
+        if not confirm:
+            print(
+                "\nNothing was written. Re-run with --confirm --operator <email> to "
+                "end the finished shifts. Assignments are made with `assign-shift`."
+            )
+            return 0
+
+        if not operator:
+            print("sync-shifts: --confirm needs --operator <email>.")
+            return 1
+        # The same lookup `staffing._operator` makes, and the same two refusals: an
+        # account that does not exist, and one that is not a person. A shift record
+        # names who ended it for the same reason it names who started it.
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "SELECT human_id, origin FROM office_human "
+                " WHERE lower(email) = lower(%s)",
+                (operator.strip(),),
+            )
+            row = await cur.fetchone()
+        if row is None:
+            print(f"sync-shifts: no account with email {operator!r}.")
+            return 1
+        if row[1] != "human":
+            print(
+                f"sync-shifts: {operator!r} is a {row[1]} account. Ending a shift is "
+                "an act a person is accountable for."
+            )
+            return 1
+        try:
+            result = await sync_shifts.apply(conn, actor=row[0], confirmed=True)
+        except sync_shifts.SyncError as exc:
+            print(f"sync-shifts: {exc}")
+            return 1
+
+    print(f"\nEnded {result['ended']} shift(s). Assigned none.")
+    return 0
+
+
 async def _sync_roster(confirm: bool) -> int:
     """Diff the Village roster against The Office, and apply only when told to.
 
@@ -437,6 +522,24 @@ def main() -> int:
         help="Apply the diff. Without this the command only reports what would change.",
     )
 
+    ss = sub.add_parser(
+        "sync-shifts",
+        help=(
+            "Diff the Village shift calendar against The Office. Ends finished shifts "
+            "with --confirm; NEVER assigns one - the venture is a person's decision "
+            "(entry 197)."
+        ),
+    )
+    ss.add_argument(
+        "--confirm",
+        action="store_true",
+        help="End the shifts the Village says are over. Assigns nobody.",
+    )
+    ss.add_argument(
+        "--operator",
+        help="Email of the venture_operator ending them. Required with --confirm.",
+    )
+
     # Imported here rather than at module scope, matching `_bootstrap_phase0` below: the
     # defaults are read from the module so the CLI help and the function cannot drift apart.
     from broker import bootstrap_phase0
@@ -515,6 +618,8 @@ def main() -> int:
         return asyncio.run(_expire_deadlines())
     if args.command == "sync-roster":
         return asyncio.run(_sync_roster(args.confirm))
+    if args.command == "sync-shifts":
+        return asyncio.run(_sync_shifts(args.confirm, args.operator))
     if args.command == "bootstrap-phase0":
         return asyncio.run(
             _bootstrap_phase0(
