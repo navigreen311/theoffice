@@ -169,7 +169,8 @@ async def operator(admin: psycopg.Connection):
     async with connection() as conn:
         human_id, _ = await humans.create_human(
             conn,
-            origin=account_origin.TEST_FIXTURE,
+            # A HUMAN ACCOUNT, because this grants `ivan`. Entry 206.
+            origin=account_origin.HUMAN,
             display_name="Departure operator",
             email="dep@x.departure.invalid",
         )

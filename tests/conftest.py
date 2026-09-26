@@ -22,6 +22,7 @@ import psycopg.types.json
 import pytest
 import pytest_asyncio
 
+from broker import account_origin
 from broker.db import close_pool
 
 # The suite runs against its OWN database when one is configured.
@@ -263,6 +264,43 @@ def app(app_dsn: str) -> Iterator[psycopg.Connection]:
     with psycopg.connect(app_dsn) as conn:
         yield conn
         conn.rollback()
+
+
+async def force_role(
+    conn, human_id, role: str, venture_id: str | None = None
+) -> None:
+    """Write a role row `grant_role` would refuse. Entry 206.
+
+    **Only for the suites that test the DETECTION of a state the grant path forbids.**
+    `grant_role` refuses `ivan` to a non-human account, and four controls exist to find
+    that state anyway: the access-overview concentration banner, `staffing`'s refusal,
+    `sync-roster`'s refusal, and the audit view's fixture tag. The state did not stop
+    being possible - 128 rows held it on the day of the ruling and a direct write still
+    can - so a detector with no way to be exercised is a detector nobody can trust.
+
+    Raw SQL on purpose: going through `grant_role` would be going through the check.
+    """
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "INSERT INTO office_human_role (human_id, role, venture_id, granted_by) "
+            "VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING",
+            (human_id, role, venture_id, human_id),
+        )
+    await conn.commit()
+
+
+def origin_for(role: str | None) -> str:
+    """The account origin a role requires. Entry 206.
+
+    `ivan` is refused to anything but a human account, so a suite that needs founder
+    authority declares one - the same move `declare_author` makes for entry 162, and for
+    the same reason: the account's nature is visible in the test rather than inferred
+    from a display name.
+
+    Every other role stays a fixture. `assert_named_human` is what guards the acts that
+    name a signer, and it is unchanged.
+    """
+    return account_origin.HUMAN if role == "ivan" else account_origin.TEST_FIXTURE
 
 
 def declare_author(

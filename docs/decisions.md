@@ -17774,3 +17774,125 @@ that rule prevents, and a run that certified a module late is not a reason to we
 > reports the grant as withheld AFTER the signature - so the first notice is past the
 > point where a fresh run is cheap. A Gate 4 advisory naming every planned grant with no
 > tier would have caught this before the run that spent two exams on it.
+
+
+## 206. A test fixture is never granted ivan
+
+**Ruling by Ivan Green, 26 September 2026:**
+
+> *"A test fixture is never granted `ivan`. `grant_role` refuses the role to an account
+> whose origin is not human, and the 128 live fixture `ivan` rows are revoked. Measured:
+> 128 fixture accounts hold a live `ivan` role and only `assert_named_human` stands
+> between them and founder authority."*
+
+### What 130 accounts held
+
+    human          Ira Green
+    human          Ivan Green
+    test_fixture   128   117 smoke-*, 5 ui-*, 2 browse-*, and six named for
+                         the test that made them - including `A real person`,
+                         which is not one
+
+`ivan` declares a venture in simulation, certifies a department on that declaration,
+retires a grant, and rotates anybody's token. **What stood between those rows and all of
+it was `assert_named_human`** - a second check, applied per act, on the acts that
+remembered to call it.
+
+Entry 148 is what that costs when it is the only one: four proposals were decided by
+smoke fixtures holding perfectly good roles, and they are the only proposal decisions
+this system has ever made.
+
+### Refused at the grant, not caught at the act
+
+`grant_role` now reads the account's origin and refuses `ivan` to anything that is not
+`human`. Not `test_fixture` specifically - `origin <> 'human'`, because `service` is a
+third declared origin and no argument for fixtures spares it.
+
+**Every other role is untouched.** A fixture may still hold `venture_operator` and
+`compliance_officer`; the suites need them and `assert_named_human` still guards every
+act that names a signer. `ivan` is the one role no test needs, because no test should be
+able to do what it permits.
+
+0065 revokes the 128 - `revoked_at` and `revoked_by`, never a delete. The rows are the
+evidence for the rule, and `revoked_by` is the account itself because no person did
+this: a migration did, and putting a human's id on it would name somebody for an act
+they did not perform.
+
+### What it cost in the suites, and what that exposed
+
+Forty-four tests failed on the first run. Thirty-one makers created a fixture and granted
+it a role, and the fix is entry 162's, applied to a second role: **a test that must
+exercise founder authority declares a human account.** `tests.conftest.origin_for(role)`
+is that, in one place.
+
+**Four suites could not be fixed that way, and they are the interesting ones.** The
+access-overview concentration banner, `staffing`'s refusal, `sync-roster`'s refusal and
+the audit view's fixture tag all exist to DETECT a fixture holding `ivan`. Closing the
+grant path would leave four controls with no way to be exercised.
+
+So `tests.conftest.force_role` writes the row directly, and says in its docstring why
+that is not a way around the rule: **the state did not stop being possible.** 128 rows
+held it this morning and a direct write still can. A detector nobody can exercise is a
+detector nobody can trust.
+
+> **Still open: nothing stops a direct write.** `grant_role` is the only guarded path and
+> the table has no trigger. That is deliberate for now - `force_role` needs it, and so
+> does any repair - but it means this rule is a door rather than a wall, and the four
+> detectors above are what make the difference visible.
+
+
+## 207. A role read filters revoked_at
+
+**Ruling by Ivan Green, 26 September 2026:**
+
+> *"A role read filters `revoked_at`. Measured: you read a revoked `ivan` as live and
+> reported a fixture held founder authority; entry 200 was the same defect on
+> `superseded_at`. Sweep every read of `office_human_role` and report any that does
+> not."*
+
+### The sweep: none
+
+Every read in `broker/` filters it.
+
+    access_overview.py:93     LEFT JOIN ... AND r.revoked_at IS NULL
+    humans.py:278             authenticate, same
+    humans.py:463             count_active_administrators, same
+    humans.py:486             assert_not_the_last_administrator, same
+    humans.py:713             get_human, same
+    humans.py:890             attributable_actor, same - fixed by entry 150
+    humans.py:941             the roster read, same
+    scripts/load_compliance_library.py:191   same
+
+Two writes - `grant_role`'s INSERT and `revoke_role`'s UPDATE - touch the column rather
+than filtering it, which is correct. `attestation.py:58` names the table in a comment.
+
+**Entry 150 already did this work**, on 21 September, and fixed the three that did not
+filter. Nothing has regressed.
+
+### So the defect was mine, and that is the finding
+
+The claim that a fixture held founder authority came from an ad-hoc query written in a
+session, which joined `office_human_role` without `revoked_at` and read a role revoked
+on 21 September as live. It produced a list of 130 accounts and a statement about the
+`OFFICE_OPERATOR_TOKEN` account that was false - the route refused that token minutes
+later, which is how it was caught.
+
+`/api/me` had already said `roles: []` for that account, an hour earlier, and I did not
+reconcile the two readings.
+
+### Pinned rather than re-fixed
+
+`test_every_read_of_a_role_filters_revocation` walks `broker/*.py` and asserts every
+non-write mention of the table has `revoked_at` within reach. Entry 150 fixed three and
+nothing stopped a fourth; this is what stops a fourth.
+
+It is the third scanner of this shape - entry 171's audit-event class, entry 190's
+`client/` directory, and now this - and they share a premise: **a column that must be
+consulted is worth a test that everybody consults it**, because the code that forgets
+looks exactly like the code that does not.
+
+> **Still open: this scans `broker/` only.** Entry 190 widened the audit scanner to
+> `client/` after `forge_call_intent` sat unpublished since the beginning, for want of a
+> directory. `scripts/` and `generators/` are not walked here, and
+> `load_compliance_library.py` reads the table correctly today by inspection rather than
+> by control.

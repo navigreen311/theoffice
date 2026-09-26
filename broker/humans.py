@@ -233,7 +233,57 @@ async def grant_role(
     NOTHING IS CLAIMED WHEN NOTHING CHANGED. `ON CONFLICT DO NOTHING` makes a re-grant a
     no-op, and an event saying a role was granted when the human already held it is a
     false entry in a chain whose value is that it contains none.
+
+    RULED 26 SEPTEMBER 2026 (decisions entry 206)
+    =============================================
+
+        *"A test fixture is never granted `ivan`."*
+
+        Measured that day: **128 accounts held a live `ivan` role and every one of them
+        was a fixture** - 117 `smoke-*`, 5 `ui-*`, and a handful named for the test that
+        made them. Founder authority is what declares a venture in simulation, certifies
+        a department on that declaration, retires a grant and rotates anybody's token.
+
+        What stood between those rows and all of it was `assert_named_human`, a SECOND
+        check, applied per act. Entry 148 is what that costs when it is the only one:
+        four proposals were decided by smoke fixtures holding perfectly good roles, and
+        they are the only proposal decisions this system has ever made.
+
+        So the role is refused at the grant rather than caught at the act. A fixture may
+        still hold `venture_operator` or `compliance_officer` - the suites need them, and
+        `assert_named_human` remains the guard on acts that name a signer. `ivan` is the
+        one role no test needs, because no test should be able to do what it permits.
+
+    **A TEST THAT MUST EXERCISE FOUNDER AUTHORITY DECLARES A HUMAN.** `tests.conftest`
+    already has `declare_author`, built for entry 162 and the same argument: *"a test
+    that has to exercise a rule about people needs an account the rule accepts, and
+    declaring it is what makes the account's nature visible in the test rather than
+    inferred from a display name."*
     """
+    if role == "ivan":
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "SELECT origin, display_name FROM office_human WHERE human_id = %s",
+                (human_id,),
+            )
+            row = await cur.fetchone()
+        if row is None:
+            raise NotAuthorized(
+                "no such account", human_id=str(human_id), role=role
+            )
+        if row[0] != "human":
+            raise NotAuthorized(
+                f"{role!r} is refused to a {row[0]!r} account. Entry 206: founder "
+                "authority declares simulation, certifies on a declaration, retires "
+                "grants and rotates tokens, and a test fixture is never granted it. "
+                "A test that must exercise it declares a human account first - see "
+                "`tests.conftest.declare_author`.",
+                human_id=str(human_id),
+                display_name=row[1],
+                origin=row[0],
+                role=role,
+            )
+
     async with conn.cursor() as cur:
         await cur.execute(
             "INSERT INTO office_human_role (human_id, role, venture_id, granted_by) "

@@ -20,10 +20,10 @@ import httpx
 import psycopg
 import pytest
 
-from broker import account_origin, humans
+from broker import humans
 from broker.app import app
 from broker.db import connection
-from tests.conftest import requires_db
+from tests.conftest import origin_for, requires_db
 
 pytestmark = [requires_db, pytest.mark.db]
 
@@ -68,7 +68,7 @@ async def make_human(
     async with connection() as conn:
         human_id, token = await humans.create_human(
             conn,
-            origin=account_origin.TEST_FIXTURE,
+            origin=origin_for(role),
             display_name=name,
             email=f"{name.lower()}@example.invalid",
         )

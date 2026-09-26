@@ -13,7 +13,7 @@ import pytest
 from broker import account_origin, audit_events, audit_view, humans
 from broker.app import app
 from broker.db import connection
-from tests.conftest import requires_db, wipe_venture
+from tests.conftest import force_role, requires_db, wipe_venture
 from tests.world import build_world
 
 pytestmark = [requires_db, pytest.mark.db]
@@ -73,9 +73,15 @@ async def make(
         human_id, token = await humans.create_human(
             conn, origin=origin, display_name=name, email=email
         )
-        await humans.grant_role(
-            conn, human_id=human_id, role=role, venture_id=None, granted_by=SEED
-        )
+        # ENTRY 206. `grant_role` refuses `ivan` to a fixture, and this suite tests
+        # the DETECTION of that exact state - so when it is asked for, the row is
+        # written directly. `force_role` says why that is not a way round the rule.
+        if role == "ivan" and origin != account_origin.HUMAN:
+            await force_role(conn, human_id, role)
+        else:
+            await humans.grant_role(
+                conn, human_id=human_id, role=role, venture_id=None, granted_by=SEED
+            )
     return human_id, token
 
 
