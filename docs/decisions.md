@@ -17050,3 +17050,77 @@ a ruling, not an implementation detail. It is not made here.
 > short way to `auto_execute` - it is the way an agent does real work **without** it, one
 > human decision per call. That is the shape this ruling chose, and it works at exactly
 > the tier the exam can justify.
+
+
+## 196. A department's venture is declared in the Pack, not inferred from grants
+
+**Ruling by Ivan Green, 25 September 2026:**
+
+> *"A department's venture is declared in the Pack, not inferred from grants. Measured:
+> `operations` holds live grants in both `greenstone` and `burkham-wickmont`, so no feed
+> or grant set can answer which venture an agent serves. Authored fact, with a validator
+> rule."*
+
+### The measurement
+
+Live grants, grouped by the department of the agent holding them:
+
+    administration -> burkham-wickmont    9
+    banking        -> burkham-wickmont   12
+    engineering    -> burkham-wickmont    4
+    operations     -> burkham-wickmont   24
+    operations     -> greenstone          4
+    research       -> greenstone          2
+
+Five departments resolve to one venture. **`operations` resolves to two**, and it is the
+largest department on the board. An inference that works on five rows and fails on the
+sixth is not a rule; it is a coincidence with an exception nobody declared.
+
+### Why this came up, and what it decides
+
+`village.shifts()` exists and nothing calls it. The Village owns the shift calendar and
+The Office assigns shifts by hand, so a reconciler was the obvious next thing to write -
+`sync-roster` for shifts.
+
+**It cannot be written.** `sync-roster` works because both sides name one entity: an
+agent, by `village_agent_ref`. The shift feed is shaped
+
+    departments -> { Operations: { shifts: { MORNING | EVENING | NIGHT: [refs] } } }
+
+and carries **no venture at all**. The Village does not have the concept. It answers
+*who is working, in which department, in which phase*; The Office needs *which venture
+this agent may serve this quarter*, and `one_venture_per_agent_quarter` makes that a
+single answer per agent.
+
+So the missing piece is not code. It is a fact nobody has written down.
+
+### Declared, and the alternatives that were rejected
+
+**Inferred from grants** is what the measurement rules out. It also inverts the
+dependency: a grant is issued *because* an agent works for a venture, so deriving the
+venture from the grant makes the conclusion its own premise. On a venture that has issued
+no grants yet - the state every venture starts in - it answers nothing at all.
+
+**Inferred per agent** was the near miss. Most individuals hold grants in one venture
+only, so it resolves more cases than the department rule. It fails on exactly the agents
+who matter, has the same circularity, and produces a mapping that changes when a grant is
+retired - which entry 182 has already done once.
+
+**Declared in the Pack** puts it where the venture's other structural facts live, beside
+the positions that already name their departments. It is an authored fact, it exists
+before any grant does, and it is reviewable at Gate 1 rather than discoverable at Gate 11.
+
+### The validator rule
+
+A Pack declaring a department claims that department's agents serve this venture. Two
+ventures claiming one department is the collision the measurement found, and the rule has
+to catch it across Packs rather than within one - a single Pack cannot see the conflict
+that makes `operations` ambiguous.
+
+> **Still open: what the rule does about the state that exists today.** `operations` is
+> already claimed by two live ventures in fact if not in writing, and 24 grants against
+> burkham-wickmont and 4 against greenstone are not a mistake to be validated away. A
+> rule that simply refuses would refuse the board as it stands. Whether one department
+> may serve two ventures with the agent-level split declared somewhere, or whether the
+> split means two departments, is not decided here and the Pack schema cannot be written
+> until it is.
