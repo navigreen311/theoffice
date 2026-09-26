@@ -17696,3 +17696,81 @@ have believed it was there.
 > "separation of duties" rather than "this venture has one person". That is the correct
 > outcome and an unhelpful message, and `human_capacity` in the Pack is where a venture
 > already declares how many people it has.
+
+
+## 205. The grant plan is generated before the exams that certify
+
+**Ruling by Ivan Green, 26 September 2026:**
+
+> *"The grant plan is generated at Gate 3, before the exams that certify at Gate 8. A
+> module certified during a run carries no planned tier in that run's plan and cannot
+> activate at Gate 11. Measured: Victor's `property_lookup` was provisional at Gate 3 and
+> certified hours later in the same run. Worth naming so a later reader does not repeat
+> my Pack-gap reading."*
+
+### The line that decides it
+
+`generators/runtime_config.py`, planning one grant:
+
+    declared   = overrides.get(title, {}).get(f"{forge}/{module}", ceiling)
+    earned     = agent.certified_tiers.get(f"{forge}/{module}")
+    trust_tier = _lower(declared, earned) if earned is not None else None
+
+**`earned` is read at Gate 3.** A module the agent is not yet certified on contributes
+nothing to the map, so the grant is planned with a NULL tier - which is correct and
+deliberate: *"a plan that claims authority nothing earned reads as authority."*
+
+Gate 11 then refuses to activate a tierless grant, which is also correct. Neither is the
+defect. **The ordering is:**
+
+    Gate 3    the plan is written, against certifications as they are NOW
+    Gate 8    the exams are sat
+    Gate 9    the verdicts are ingested and certifications change
+    Gate 11   activates against a plan written two gates before any of that
+
+### What was measured
+
+Run `78c8b5ae`. Victor's `property_lookup` was `provisional` when Gate 3 ran, so
+`earned` was None and the grant was planned NULL. It certified at `propose` hours later
+in that same run, when Gate 9's ingest landed. The plan was already written and a run at
+Gate 10 cannot re-run Gate 3.
+
+So a module that goes from provisional to certified **inside a run** is certified and
+unusable in the same run. The first run after it is the one that can grant it.
+
+### THE READING THIS ENTRY EXISTS TO STOP
+
+I told Ivan this was a Pack gap - that the Acquisition Analyst position "declares a tier
+for one of its two modules and not the other". **It declares neither.** The position has
+no `module_trust_tiers` block at all and both its modules take the position ceiling.
+
+The proposed remedy followed from the wrong cause and would have done nothing:
+
+    adding `cre-forge/comp_analysis: propose`   changes `declared`, and `earned` was
+                                                already propose, so `_lower` picks the
+                                                same value. No effect.
+    adding nothing for property_lookup          leaves the NULL exactly as it was,
+                                                because the NULL came from `earned`.
+
+It would also have lowered that position's declared ceiling for `comp_analysis`
+permanently - a scope decision nobody asked for - and moved `pack_hash`, voiding any
+signature.
+
+The fix is a fresh run and no Pack change. Measured before starting it: the plan
+regenerated against today's certifications gives all four live grants `propose`.
+
+**The error was inferring a cause from a symptom.** Two grants differed, one had an
+override-shaped explanation, and I did not open `runtime_config.py` before naming it.
+That is the same failure entry 187 recorded - reading a key's prose instead of the
+adapter - and it is now twice.
+
+### What this does not change
+
+`_lower(declared, earned)` stays. Planning a tier an agent has not earned is the thing
+that rule prevents, and a run that certified a module late is not a reason to weaken it.
+
+> **Still open: nothing tells an operator that a grant will not activate.** The NULL is
+> visible in the plan at Gate 4, in the bill of materials, and nothing reads it. Gate 11
+> reports the grant as withheld AFTER the signature - so the first notice is past the
+> point where a fresh run is cheap. A Gate 4 advisory naming every planned grant with no
+> tier would have caught this before the run that spent two exams on it.
