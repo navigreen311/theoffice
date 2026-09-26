@@ -118,6 +118,7 @@ export const COMPLIANCE_FLAG: Vocabulary = {
 export const CONTROL: Vocabulary = {
   audit_chain: "Audit log integrity",
   certification_staleness: "Out-of-date certifications",
+  incomplete_calls: "Calls started and not completed",
   manifest_reconciliation: "Software actually being used",
   restore_drill: "Backup restore test",
 };

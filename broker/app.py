@@ -92,7 +92,7 @@ from generators.validator import validate as validate_pack
 # actually reports, so a container cannot serve traffic against a schema its code was
 # never written for. Bump it in the same commit as the migration - the two disagreeing
 # is the condition this exists to detect.
-EXPECTED_SCHEMA_REVISION = "0063"
+EXPECTED_SCHEMA_REVISION = "0064"
 
 # `live_grants` means "a grant no live revocation covers". The four-scope rule that
 # decides that has exactly one copy - `revocation._covers`, the same text
@@ -3824,6 +3824,19 @@ CONTROL_COPY: dict[str, dict[str, str]] = {
         "consequence": "agents may hold grants they no longer qualify for",
         "blocking": "true",
     },
+    "incomplete_calls": {
+        "name": "Calls started and not completed",
+        "cadence": "Expected hourly",
+        "checks": (
+            "Finds calls with an intent written and no ledger row beside it, or a "
+            "ledger row that never got an outcome. The intent is written before the "
+            "Forge is touched and the ledger row after, so a gap between them is a "
+            "call that may have changed a Forge with nobody able to say whether it "
+            "did. It reports; it never retries and never closes the row."
+        ),
+        "consequence": "a write may have landed with no record of it",
+        "blocking": "false",
+    },
     "manifest_reconciliation": {
         "name": "Forge manifest reconciliation",
         "cadence": "Expected monthly",
@@ -3873,6 +3886,10 @@ CONTROL_COPY: dict[str, dict[str, str]] = {
 RUNNABLE_FROM_THE_API = (
     "audit_chain",
     "certification_staleness",
+    # `incomplete_calls` reads two tables this process already reads and writes an
+    # incident. Nothing about it needs a Village, a Forge or a file on disk, which is
+    # the property that decides this tuple.
+    "incomplete_calls",
     "manifest_reconciliation",
     "verdict_ingest",
 )
