@@ -203,7 +203,38 @@ FORGE_API_VERSION = "1.4.0"
 #: Only `assign_contract`'s content hash moves, so only its two refs are re-minted and
 #: only its exams re-run. The other four mint the refs they hold, `open_run` returns
 #: those rows untouched, and the sweep - `verdict IS NULL` - never reaches them.
-VERSION = "1.9.0"
+#: BUMPED TO 1.10.0 ON 25 SEPTEMBER 2026, TO WITHDRAW BOTH 1.8.0 AND 1.9.0.
+#: Decisions entry 194, and it closes this module to instruction revision.
+#:
+#: **Both were inert.** Run fc917584 graded them together - they reached the agent in
+#: one authoring, which is its own finding - and moved nothing at all:
+#:
+#:     Seraphine   0.833 -> 0.833      Ronan   0.833 -> 0.833
+#:
+#:     happy_path              PASS -> PASS     untouched by both
+#:     malformed_input         FAIL -> FAIL     untouched by both
+#:     partial_failure         FAIL -> FAIL     1.8.0's class
+#:     permission_denied       PASS -> PASS     1.9.0's class
+#:     escalation_required     FAIL -> FAIL     1.9.0's class
+#:     recovery_after_failure  PASS -> PASS     untouched by both
+#:
+#: Every rubric cell identical, both agents, three seeds at 1.0 each.
+#:
+#: **Neither cost anything either, and that is only knowable because four modules held
+#: still.** 1.4.0 cost 0.500 and 1.6.0 took `permission_denied` from PASS to FAIL; this
+#: pair did neither. Entry 180 is unchanged and decides it: a revision is kept only if
+#: measured to help, and inert is not help.
+#:
+#: **THE TEXT HERE RETURNS TO 1.7.0'S, BYTE FOR BYTE** - which is 1.5.0's, which is
+#: 1.3.0's. Four versions now carry one digest, three of them withdrawals. 1.8.0 and
+#: 1.9.0 are SKIPPED, NOT REUSED: both were live and are now withdrawn, and a version
+#: that named one text must not later name another.
+#:
+#: **FIVE ATTEMPTS, ONE HELPED.** 1.3.0 gained 0.667 -> 0.833. Nothing since has moved a
+#: class on this module. Entry 194 makes entry 186 unconditional here: no further
+#: instruction revision to `assign_contract`, with or without a measured reason, because
+#: the measured reason has now been tested five times and the answer has not changed.
+VERSION = "1.10.0"
 
 NO_FRAMEWORK = ["no_framework_applies"]
 
@@ -701,13 +732,6 @@ ASSIGN_CONTRACT = {
         "deal, with which signers, and that it is unknown whether a draft was created. A "
         "human reading the deal can see in one look; an agent guessing produces either a "
         "duplicate or a missing contract, and both are worse than the question.\n\n"
-        "AN UNKNOWN IS NOT ALWAYS AN ESCALATION. The paragraph above is about a call that "
-        "failed or could not be read, where a person must go and check the deal; an "
-        "unknown that answers a question is reported as UNKNOWN and the act is PROCEED.\n\n"
-        "A CALL YOU DID NOT MAKE CREATED NO CONTRACT. When you escalate instead of "
-        "calling, report that as NO and never as UNKNOWN - the paragraph above is about "
-        "a call that WAS made and whose outcome you cannot see, which is a different "
-        "thing from one you chose not to make.\n\n"
         "ESCALATE, DO NOT RETRY, on 422 or 404."
     ),
     "compliance_coupling": NO_FRAMEWORK,

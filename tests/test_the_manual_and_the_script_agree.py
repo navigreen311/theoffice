@@ -147,6 +147,15 @@ MANUAL_DIGEST = {
     # CLASS: 1.8.0 is `partial_failure`, 1.9.0 is `escalation_required` and
     # `permission_denied`.
     "1.9.0": "1917552ee7178c926be9346c0620dfa6d7f100fb4fc52f87da75bd126b99c3ee",
+    # 1.10.0 WITHDRAWS BOTH 1.8.0 AND 1.9.0, so its digest is 1.7.0's byte for byte -
+    # and 1.7.0's was 1.5.0's, and 1.5.0's was 1.3.0's. FOUR versions now share one
+    # digest and three of them are withdrawals.
+    #
+    # Entry 194. Both were graded together by run fc917584 and both were inert: no score
+    # moved, no class moved, no rubric cell moved. Entry 180 decides it - kept only if
+    # measured to help - and this is the fifth attempt on this module, of which one
+    # helped. 1.8.0 and 1.9.0 are skipped, not reused.
+    "1.10.0": "361036700ca289499000daa4ec23308eeaa714e1b2be3517bb71c48c3729e892",
 }
 
 
