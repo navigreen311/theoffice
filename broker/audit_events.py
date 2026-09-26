@@ -357,6 +357,36 @@ EVENTS: tuple[Event, ...] = (
           "rows a ladder grant replaced, and says in its own comment that nothing else "
           "is retired on a guess.",
           "broker.grants", CONSOLE),
+    Event("forge_call_intent", "Forge call intended",
+          "Written by the client library BEFORE a Forge is touched, and on a mutating "
+          "module the call is refused if this write fails - entry 105. It carries the "
+          "`call_id` the ledger row will carry, the trust tier, the credential mode, "
+          "whether the department's Unit B rests on a simulation declaration, and "
+          "`approved_proposal_id` when a human authorised the act. **An intent with no "
+          "ledger row beside it is a call started and not completed** (entry 198); "
+          "nothing yet looks for that pair.\n\n"
+          "Unpublished until 25 September 2026, and it is the oldest event in the "
+          "system: the glossary scanner read `broker/*.py` and this is written from "
+          "`client/`, so it rendered on /audit as a raw identifier for as long as it "
+          "has existed.",
+          "client.office_client", CONSOLE),
+    Event("shift_calendar_reconciled", "Shift calendar reconciled",
+          "A named human ran `sync-shifts`: the Village's calendar was compared against "
+          "this Office's assignments, and the shifts the Village says are over were "
+          "ended. **It assigns nobody.** Entry 197 puts an agent's venture on its shift "
+          "assignment and makes that a deliberate act, so an agent the Village shows on "
+          "shift with no assignment here is reported and left - `left_for_a_human` on "
+          "the subject is how many were, by kind. An event naming only the ended shifts "
+          "would read as a full reconciliation.",
+          "broker.sync_shifts", CONSOLE),
+    Event("proposal_executed", "Proposal executed",
+          "An approved proposal was carried out by the agent's own re-call, and this "
+          "names the approval the call acted on. Entry 195: there is no runner, the "
+          "agent re-calls with the same derived idempotency key, and the only gate "
+          "skipped is the trust tier. Written AFTER the Forge answered; the pre-call "
+          "`forge_call_intent` carries the same `approved_proposal_id` and is the one "
+          "that survives a call that never came back.",
+          "client.office_client", CONSOLE),
     Event("office_identity_reinstated", "Office identity reinstated",
           "A named human returned a suspended identity to active, with a reason. It is the "
           "inverse of the suspension half of a departure cascade and NOT of the revocation "

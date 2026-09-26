@@ -88,9 +88,16 @@ async def test_every_audit_event_written_in_the_source_is_published():
     filter asked the reader to type one. A published list fixes that only while it
     matches the code, so the source is walked.
     """
-    root = Path(__file__).resolve().parents[2] / "broker"
+    # `client` AS WELL AS `broker`, from 25 September 2026. The scanner read
+    # `broker/*.py` only, and `client/office_client.py` writes events too - which is how
+    # `proposal_executed` shipped in entry 195 with CI green and no glossary entry. It
+    # rendered on /audit as a raw identifier, which is the exact defect entry 171
+    # widened the character class for. The blind spot was a directory rather than a
+    # regex, and it was blind for the same reason: nothing said what the scanner covered.
+    repo = Path(__file__).resolve().parents[2]
     written: set[str] = set()
-    for source in root.glob("*.py"):
+    sources = [*(repo / "broker").glob("*.py"), *(repo / "client").glob("*.py")]
+    for source in sources:
         if source.name == "audit_events.py":
             continue
         text = source.read_text(encoding="utf-8")
@@ -127,7 +134,14 @@ async def test_the_glossary_says_what_each_event_means_and_what_writes_it(api):
             f"{event['event_type']} has no plain-language label"
         )
         assert event["meaning"].strip(), f"{event['event_type']} explains nothing"
-        assert event["written_by"].startswith("broker."), event["event_type"]
+        # `client.` as well as `broker.` from 25 September 2026. The client library
+        # writes events too, and it is not the broker - `proposal_executed` is the
+        # first, and pretending it came from `broker.` to satisfy this would send a
+        # reader to the wrong file. The check still exists to stop a blank or a prose
+        # sentence landing in the column.
+        assert event["written_by"].startswith(("broker.", "client.")), (
+            event["event_type"]
+        )
 
 
 async def test_an_identifier_inside_a_meaning_is_marked_as_one(api):
