@@ -255,7 +255,15 @@ async def main():
             email=f"smoke-{suffix}@example.invalid",
             origin=account_origin.TEST_FIXTURE,
         )
-        await humans.grant_role(conn, human_id=hid, role="ivan", granted_by=hid)
+        # NOT `ivan`, AND NOT A PERSON EITHER (entry 206). This account is a fixture
+        # on purpose - the proposal check below needs one to be refused, and the Access
+        # page needs one to hide - and `grant_role` now refuses `ivan` to any account
+        # whose origin is not human. `compliance_officer` is what the routes this
+        # script actually calls require; the founder acts belong to `$PERSON_TOKEN`,
+        # which is a person and holds `ivan`.
+        await humans.grant_role(
+            conn, human_id=hid, role="compliance_officer", granted_by=hid
+        )
         print(token)
 
 asyncio.run(main())
@@ -1001,7 +1009,9 @@ else
   fail "the access screen did not render its controls"
 fi
 
-# The smoke operator holds `ivan`, so they are the administrator the screen counts.
+# `$PERSON_TOKEN`'s account holds `ivan`, so there is an administrator for the
+# screen to count. The operator this script signs in as no longer does: entry 206
+# refuses the role to a fixture, and this one is a fixture on purpose.
 if grep -q "active" "$WORK"/access.html; then
   say "the administrator count rendered"
 else
