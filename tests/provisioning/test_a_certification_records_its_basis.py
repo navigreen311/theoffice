@@ -83,7 +83,9 @@ async def founder(world) -> humans.Human:
     """
     async with connection() as conn:
         human_id, token = await humans.create_human(
-            conn, origin=account_origin.TEST_FIXTURE, display_name="Founder Under Test",
+            # A HUMAN ACCOUNT, because this grants `ivan`. Entry 206, and the
+            # comment nine lines below already said a person was needed.
+            conn, origin=account_origin.HUMAN, display_name="Founder Under Test",
             email="founder.under.test@provisioning.invalid",
         )
         await humans.grant_role(

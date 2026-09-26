@@ -25,7 +25,7 @@ from broker import account_origin, humans, village
 from broker.db import connection
 from broker.shifts import OffShift
 from client.office_client import AgentContext
-from tests.conftest import requires_db
+from tests.conftest import force_role, requires_db
 
 pytestmark = [requires_db, pytest.mark.db]
 
@@ -69,9 +69,16 @@ async def make_operator(admin: psycopg.Connection):
                 conn, origin=origin, display_name=f"Operator {email[3:9]}", email=email
             )
             if role:
-                await humans.grant_role(
-                    conn, human_id=human_id, role=role, venture_id=venture, granted_by=SEED
-                )
+                # ENTRY 206. This suite tests the REFUSAL of a fixture holding
+                # `ivan`, which grant_role now blocks - so the row is written
+                # directly. `force_role` says why that is not a way round it.
+                if role == "ivan" and origin != account_origin.HUMAN:
+                    await force_role(conn, human_id, role, venture)
+                else:
+                    await humans.grant_role(
+                        conn, human_id=human_id, role=role, venture_id=venture,
+                        granted_by=SEED,
+                    )
         made.append(human_id)
         return email, human_id
 

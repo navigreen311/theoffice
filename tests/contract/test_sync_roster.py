@@ -32,6 +32,7 @@ from psycopg.rows import dict_row
 
 from broker import account_origin, humans, sync_roster, village
 from broker.db import connection
+from tests.conftest import force_role
 
 pytestmark = pytest.mark.asyncio
 
@@ -73,7 +74,13 @@ def clean(admin: psycopg.Connection):
 
 
 async def _make(display_name: str, local: str, role: str = "ivan") -> uuid.UUID:
-    """An account this test owns. The domain is what `_wipe` keys on."""
+    """An account this test owns. The domain is what `_wipe` keys on.
+
+    **A FIXTURE, always.** This whole suite is about what a fixture may not do, and
+    `_mark_real` promotes the one account that needs to be a person. Deriving the origin
+    from the role here would make every `ivan` holder real and leave the two tests named
+    for the opposite with nothing to test.
+    """
     async with connection() as conn:
         human_id, _ = await humans.create_human(
             conn,
@@ -81,9 +88,15 @@ async def _make(display_name: str, local: str, role: str = "ivan") -> uuid.UUID:
             display_name=display_name,
             email=f"{local}@x.sync-test.invalid",
         )
-        await humans.grant_role(
-            conn, human_id=human_id, role=role, venture_id=None, granted_by=human_id
-        )
+        # ENTRY 206. `grant_role` refuses `ivan` to a fixture, and this suite has a test
+        # named for that state - so the row is written directly. `force_role` says why
+        # that is not a way round the rule.
+        if role == "ivan":
+            await force_role(conn, human_id, role)
+        else:
+            await humans.grant_role(
+                conn, human_id=human_id, role=role, venture_id=None, granted_by=human_id
+            )
     return human_id
 
 

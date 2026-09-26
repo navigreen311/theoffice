@@ -8,10 +8,10 @@ import httpx
 import psycopg
 import pytest
 
-from broker import account_origin, humans, revocation
+from broker import humans, revocation
 from broker.app import app
 from broker.db import connection
-from tests.conftest import requires_db, wipe_venture
+from tests.conftest import origin_for, requires_db, wipe_venture
 from tests.world import build_world
 
 pytestmark = [requires_db, pytest.mark.db]
@@ -66,7 +66,7 @@ async def make_human(name: str, role: str) -> tuple[uuid.UUID, str]:
     async with connection() as conn:
         human_id, token = await humans.create_human(
             conn,
-            origin=account_origin.TEST_FIXTURE,
+            origin=origin_for(role),
             display_name=name,
             email=f"{name.lower()}@revocation.invalid",
         )
