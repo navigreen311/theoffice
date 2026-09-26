@@ -282,6 +282,177 @@ async def test_approving_a_proposal_records_the_decision(
     assert row["decided_by"] == IVAN
 
 
+
+# ------------------------------------------------- entry 195: the approval executes
+#
+# Proved on a module the fixtures treat as a pure read. The ruling picks `buyer_match`
+# for the same reason: a crash between the Forge call and `mark_executed` costs a
+# duplicate read there, and a duplicate WRITE on `assign_contract`, which waits for the
+# mark-before-or-after question to be ruled.
+
+async def _approved(office, agent_ctx, granted_agent, declare_module, admin, payload):
+    """First call, refused; a human approves; returns the proposal id."""
+    agent_id, forge_id, module_id = granted_agent
+    declare_module(required=True)
+    with admin.cursor() as cur:
+        cur.execute(
+            "UPDATE agent_forge_grant SET trust_tier = 'propose' "
+            " WHERE office_agent_id = %s",
+            (agent_id,),
+        )
+    admin.commit()
+
+    with pytest.raises(RequiresApproval) as exc:
+        await office.call(forge_id, module_id, payload, agent_ctx=agent_ctx)
+    proposal_id = uuid.UUID(str(exc.value.proposal_id))
+
+    async with connection() as conn:
+        await proposals.decide(
+            conn, proposal_id=proposal_id, approve=True, decided_by=IVAN,
+            reason="read-only lookup, the deal is ours",
+        )
+    return proposal_id
+
+
+async def test_an_approved_proposal_executes_on_the_agents_re_call(
+    office, stub_forge, agent_ctx, granted_agent, declare_module, admin
+):
+    """Entry 195. The same arguments, a second time, and the act happens."""
+    _agent_id, forge_id, module_id = granted_agent
+    payload = {"deal_id": "d-1"}
+    proposal_id = await _approved(
+        office, agent_ctx, granted_agent, declare_module, admin, payload
+    )
+    assert stub_forge.call_count == 0, "approval alone must not call anything"
+
+    result = await office.call(forge_id, module_id, payload, agent_ctx=agent_ctx)
+
+    assert stub_forge.call_count == 1
+    assert result.approved_proposal_id == proposal_id
+    async with connection() as conn:
+        row = await proposals.get(conn, proposal_id)
+    assert row is not None
+    assert row["status"] == "executed"
+    assert row["executed_call_id"] == result.call_id
+    assert row["attempt_count"] == 1
+
+
+async def test_it_executes_once_and_the_third_call_needs_a_new_approval(
+    office, stub_forge, agent_ctx, granted_agent, declare_module, admin
+):
+    """ONCE. The second call spends the approval; the third finds none."""
+    _agent_id, forge_id, module_id = granted_agent
+    payload = {"deal_id": "d-1"}
+    await _approved(office, agent_ctx, granted_agent, declare_module, admin, payload)
+
+    await office.call(forge_id, module_id, payload, agent_ctx=agent_ctx)
+    assert stub_forge.call_count == 1
+
+    with pytest.raises(RequiresApproval):
+        await office.call(forge_id, module_id, payload, agent_ctx=agent_ctx)
+    assert stub_forge.call_count == 1, "a spent approval must not authorise a second act"
+
+
+async def test_an_approval_does_not_carry_to_a_different_payload(
+    office, stub_forge, agent_ctx, granted_agent, declare_module, admin
+):
+    """The idempotency key IS the identification, so a different act is a different key.
+
+    There is no token to present, which is why there is nothing to present for the
+    wrong payload.
+    """
+    _agent_id, forge_id, module_id = granted_agent
+    await _approved(
+        office, agent_ctx, granted_agent, declare_module, admin, {"deal_id": "d-1"}
+    )
+
+    with pytest.raises(RequiresApproval):
+        await office.call(
+            forge_id, module_id, {"deal_id": "SOMETHING-ELSE"}, agent_ctx=agent_ctx
+        )
+    assert stub_forge.call_count == 0
+
+
+async def test_a_revocation_after_approval_fails_the_proposal_and_does_not_retry(
+    office, stub_forge, agent_ctx, granted_agent, declare_module, admin
+):
+    """Every other gate re-runs, and a refusal is terminal.
+
+    The human approved an act in a world that has since changed. What that needs is a
+    new decision, not another attempt - so the row goes to `failed` and stays there.
+    """
+    agent_id, forge_id, module_id = granted_agent
+    payload = {"deal_id": "d-1"}
+    proposal_id = await _approved(
+        office, agent_ctx, granted_agent, declare_module, admin, payload
+    )
+
+    async with connection() as conn:
+        await revocation.revoke(
+            conn, scope="agent_module", reason="entry 195: the world moved",
+            revoked_by=IVAN, revoked_by_role="ivan",
+            office_agent_id=agent_id, forge_id=forge_id, module_id=module_id,
+        )
+
+    with pytest.raises(Revoked):
+        await office.call(forge_id, module_id, payload, agent_ctx=agent_ctx)
+
+    assert stub_forge.call_count == 0
+    async with connection() as conn:
+        row = await proposals.get(conn, proposal_id)
+    assert row is not None
+    assert row["status"] == "failed"
+    assert row["attempt_count"] == 1
+    assert row["last_error"], "the row says which gate refused, without a join"
+
+
+async def test_execution_audits_the_approval_it_acted_on(
+    office, stub_forge, agent_ctx, granted_agent, declare_module, admin
+):
+    """A call that happened with no record of what permitted it is the whole problem."""
+    _agent_id, forge_id, module_id = granted_agent
+    payload = {"deal_id": "d-1"}
+    proposal_id = await _approved(
+        office, agent_ctx, granted_agent, declare_module, admin, payload
+    )
+    result = await office.call(forge_id, module_id, payload, agent_ctx=agent_ctx)
+
+    with admin.cursor() as cur:
+        cur.execute(
+            "SELECT event_type, subject FROM audit_log "
+            " WHERE trace_id = %s ORDER BY ts",
+            (result.trace_id,),
+        )
+        events = {r[0]: r[1] for r in cur.fetchall()}
+
+    assert "proposal_executed" in events
+    assert events["proposal_executed"]["proposal_id"] == str(proposal_id)
+    assert events["proposal_executed"]["call_id"] == str(result.call_id)
+    # AND ON THE PRE-CALL ENTRY TOO, which is the one written before the Forge is
+    # touched and therefore the one that survives a call that never came back.
+    assert events["forge_call_intent"]["approved_proposal_id"] == str(proposal_id)
+
+
+async def test_an_ordinary_auto_execute_call_names_no_approval(
+    office, stub_forge, agent_ctx, granted_agent, declare_module, admin
+):
+    """The difference between acting on one's own authority and on a human's."""
+    _agent_id, forge_id, module_id = granted_agent
+    declare_module(required=True)
+
+    result = await office.call(forge_id, module_id, {"n": 1}, agent_ctx=agent_ctx)
+
+    assert result.approved_proposal_id is None
+    with admin.cursor() as cur:
+        cur.execute(
+            "SELECT subject FROM audit_log "
+            " WHERE trace_id = %s AND event_type = 'forge_call_intent'",
+            (result.trace_id,),
+        )
+        subject = cur.fetchone()[0]
+    assert subject["approved_proposal_id"] is None
+
+
 async def test_rejected_proposal_cannot_be_marked_executed(
     office, agent_ctx, granted_agent, declare_module, admin
 ):

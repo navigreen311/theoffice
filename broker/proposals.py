@@ -129,23 +129,19 @@ async def decide(
     `queue_to_decision_seconds` is computed from `created_at` in the database rather than
     passed in, so a caller cannot report a review time it did not take.
     """
-    # APPROVING DOES NOT EXECUTE, and the record says so.
+    # APPROVAL AUTHORISES; THE AGENT'S RE-CALL EXECUTES. Entry 195.
     #
-    # `mark_executed` exists and has no production caller: nothing reads an
-    # approved proposal and makes the call it describes. Approval therefore sets a
-    # status and stops, which is indistinguishable from a queue that has not got to
-    # it yet - so the decision reason carries the fact.
+    # This used to append "APPROVAL DOES NOT EXECUTE" to every approval reason,
+    # because nothing read an approved proposal and `mark_executed` had no production
+    # caller. That is no longer true and the note is gone rather than reworded: a
+    # reason column is the human's words, and the moment it stops being accurate it
+    # is worse than empty.
     #
-    # Recorded here rather than refused, because rejecting IS complete and an
-    # approval is still a real decision worth having on the record. What is missing
-    # is the execution, and the reason column is where a reader looks.
+    # What approval does NOT do is act by itself. There is no runner. The agent
+    # re-calls with the same idempotency key, `approved_for` finds this row, and the
+    # only gate skipped is the tier gate - every other one re-runs against the world
+    # as it is then, not as it was when the human looked.
     status = "approved" if approve else "rejected"
-    if approve:
-        note = (
-            "APPROVAL DOES NOT EXECUTE - no path exists from an approved proposal "
-            "to a Forge call. The act must be carried out by a person."
-        )
-        reason = f"{reason} [{note}]" if reason else note
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
             """
@@ -188,23 +184,117 @@ async def decide(
     )
 
 
+async def approved_for(
+    conn: AsyncConnection,
+    *,
+    office_agent_id: uuid.UUID,
+    idempotency_key: str,
+    forge_id: str,
+    module_id: str,
+) -> dict[str, Any] | None:
+    """The approved proposal authorising THIS act, if a human approved one.
+
+    RULED 25 SEPTEMBER 2026 (decisions entry 195)
+    =============================================
+
+        *"An approved proposal executes, once, on the agent's own re-call. No
+        server-side runner: the agent re-calls with the same idempotency key, the client
+        recognises an approved proposal and proceeds."*
+
+    THE KEY IS THE WHOLE IDENTIFICATION, AND THAT IS DELIBERATE
+    ===========================================================
+
+        `idempotency_key` is `ledger.idempotency_key(task_id, module_id, payload)` -
+        derived, not assigned, so the agent re-deriving it is the agent proving it is
+        asking for the same act. A proposal id passed by the caller would let an agent
+        present an approval for one payload and send another; there is nothing to
+        present here.
+
+        `forge_id` and `module_id` are matched as well even though the key already
+        carries the module. Two of the three identifiers agreeing and the third not is a
+        state nothing should proceed on, and asking for all three costs one index.
+
+    `status = 'approved'` ONLY
+    ==========================
+
+        Not `executed` - that act is done, and the ruling is once. Not `failed` - a
+        refusal is terminal and does not retry. Not `rejected` or `expired`, which are
+        answers. The partial index is on exactly this predicate.
+    """
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            """
+            SELECT proposal_id, trust_tier, attempt_count, decided_by, decided_at
+              FROM proposal
+             WHERE office_agent_id = %s
+               AND idempotency_key = %s
+               AND forge_id = %s
+               AND module_id = %s
+               AND status = 'approved'
+             ORDER BY decided_at DESC
+             LIMIT 1
+            """,
+            (office_agent_id, idempotency_key, forge_id, module_id),
+        )
+        row = await cur.fetchone()
+    return dict(row) if row else None
+
+
 async def mark_executed(
     conn: AsyncConnection, *, proposal_id: uuid.UUID, call_id: uuid.UUID
 ) -> None:
     """Link an approved proposal to the call that carried it out.
 
     Only an approved proposal can become executed, so a rejected one cannot be
-    quietly run by a second code path.
+    quietly run by a second code path - and nor can one that already executed, which
+    is what makes "once" a property of the table rather than of the caller.
+
+    **After the call, not before.** Entry 195 leaves the mark-before-or-after question
+    open for `at_most_once` modules and this path is proved on `buyer_match`, a pure
+    read where a crash between the call and this write costs a duplicate read. On an
+    `at_most_once` module the same crash would cost a duplicate write, which is why
+    that module waits for a ruling rather than for an implementation.
     """
     async with conn.cursor() as cur:
         await cur.execute(
-            "UPDATE proposal SET status = 'executed', executed_call_id = %s "
-            "WHERE proposal_id = %s AND status = 'approved'",
+            "UPDATE proposal "
+            "   SET status = 'executed', executed_call_id = %s, "
+            "       attempt_count = attempt_count + 1 "
+            " WHERE proposal_id = %s AND status = 'approved'",
             (call_id, proposal_id),
         )
         if cur.rowcount == 0:
             raise LookupError(f"proposal {proposal_id} is not approved")
     await conn.commit()
+
+
+async def mark_failed(
+    conn: AsyncConnection, *, proposal_id: uuid.UUID, error: str
+) -> bool:
+    """A refusal before the Forge. Terminal, and it does not retry.
+
+    Entry 195: *"A refusal before the Forge sets failed and does not retry."* Between a
+    human approving and the agent re-calling, a revocation can fire, a shift can end, a
+    budget can cross, a grant can be superseded and a certification can be withdrawn.
+    Any of those refuses the execution, and none of them is a reason to try again -
+    the human approved an act in a world that has since changed, and the next attempt
+    needs a new approval rather than a retry of the old one.
+
+    Returns whether a row moved. `False` means there was no approved proposal to fail,
+    which is the ordinary case: every refusal on a first-pass call reaches here and
+    there is nothing to mark.
+    """
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "UPDATE proposal "
+            "   SET status = 'failed', last_error = %s, "
+            "       attempt_count = attempt_count + 1 "
+            " WHERE proposal_id = %s AND status = 'approved'",
+            (error[:1000], proposal_id),
+        )
+        moved = cur.rowcount > 0
+    await conn.commit()
+    return moved
 
 
 async def get(conn: AsyncConnection, proposal_id: uuid.UUID) -> dict[str, Any] | None:
