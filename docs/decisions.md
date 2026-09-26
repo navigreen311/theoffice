@@ -17367,3 +17367,65 @@ query; those send them to the deal.
 > append-only and that is correct. What a human does after checking is append: a
 > compensating entry, a note, a second draft deleted. None of that is modelled, and the
 > incident's resolution is currently the only record that anybody looked.
+
+
+## 200. A retired grant is not an active grant
+
+**Ruling by Ivan Green, 25 September 2026:**
+
+> *"A retired grant is not an active grant. `staffing.py`'s venture check counts
+> superseded rows, so greenstone passes with three retired bootstrap grants and no live
+> activated grant anywhere. Exclude `superseded_at IS NOT NULL`. Measured: the check
+> passes for the wrong reason today and the refusal only arrives per-agent."*
+
+### The query, and the one predicate missing from it
+
+    SELECT grant_id, activated_at IS NOT NULL FROM agent_forge_grant
+     WHERE venture_id = %s
+
+Two of the three predicates `resolve_grant` applies on every call: activated, and - via
+`covered_grants` - not revoked. **Not superseded.**
+
+So a grant a named human retired under entry 182, or one the ladder replaced, still
+counted as authority the venture holds.
+
+### Measured, on greenstone, the day of the ruling
+
+    greenstone "active" grants, by this check:  3
+    greenstone grants activated AND not superseded: 0
+
+All three are superseded bootstrap rows - `buyer_match` twice and `property_lookup`
+once. There is no live activated grant anywhere in the venture, and there cannot be:
+Gate 11 activates grants and greenstone is blocked at Gate 9.
+
+### Why it did not show
+
+The assignment was refused anyway, one check later, per agent:
+
+    venture: greenstone has 3 active grants        PASSED, wrongly
+    agent:   Ronan holds 2 grants and none resolves REFUSED, correctly
+
+The per-agent check saved it, and what it said was true. **On a venture whose agents all
+resolved it would have said nothing at all** - and the venture check would have reported
+a staffed venture holding nothing but retired paper.
+
+That is the shape this repository keeps finding: a control that is right by accident,
+because a later control happens to catch the same case. Entry 193 was the same and so
+was entry 148.
+
+### The fix, and what it is not
+
+One clause. `activated_at IS NOT NULL AND superseded_at IS NULL`, and the refusal now
+says *"0 activated, un-superseded and un-revoked"* so a reader learns which predicate
+failed rather than which count came out zero.
+
+It is **not** a new definition of active. It is the definition `resolve_grant` has always
+used, applied in the one place that had two thirds of it. A venture-level count answering
+a different question from the call path, under the same name, is the defect - not the
+number it produced.
+
+> **The consequence is immediate and correct: greenstone can no longer be staffed at
+> all.** Before this, an assignment there failed per agent; now it fails on the venture,
+> which is the true statement. Nothing in greenstone is activated and nothing will be
+> until Gate 11, and Gate 11 waits on two `assign_contract` units that have failed every
+> sitting since 22 September.

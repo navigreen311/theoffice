@@ -206,6 +206,38 @@ async def test_a_venture_with_no_active_grants_is_refused(
     assert shifts_of(admin, agent_id) == []
 
 
+async def test_a_superseded_grant_does_not_count_as_active(
+    granted_agent, make_operator, admin, capsys
+):
+    """Entry 200, and it passed for the wrong reason until the day of that ruling.
+
+    Measured on greenstone, 25 September 2026: its three "active" grants were all
+    superseded bootstrap rows and it held no live activated grant anywhere. The venture
+    check passed, and what refused the assignment was the per-agent check one step
+    later - which happened to say something true, and on a venture whose agents all
+    resolved would have said nothing.
+
+    `resolve_grant` has always applied all three predicates on every call. This one
+    applied two and reported the answer under the same name.
+    """
+    agent_id, _, _ = granted_agent
+    with admin.cursor() as cur:
+        cur.execute(
+            "UPDATE agent_forge_grant SET superseded_at = now() "
+            " WHERE office_agent_id = %s",
+            (agent_id,),
+        )
+    admin.commit()
+    email, _ = await make_operator("venture_operator")
+
+    assert await assign(agent_id, email, confirm=True) == 1
+    out = capsys.readouterr().out
+    assert "has no active grants" in out
+    assert "un-superseded" in out, "the refusal names which predicate failed"
+    assert "Nothing was written" in out
+    assert shifts_of(admin, agent_id) == []
+
+
 async def test_a_revoked_grant_does_not_count_as_active(
     granted_agent, make_operator, admin, capsys
 ):

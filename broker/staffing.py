@@ -12,7 +12,9 @@ WHAT IT REFUSES, BEFORE ANYTHING IS WRITTEN
     operator    unknown, not a real account, inactive, or without venture_operator+
     agent       unknown, or its identity is not active
     window      naive, empty, already over, or starting in the past
-    venture     has no active grants - a shift there staffs nothing
+    venture     has no active grants - a shift there staffs nothing. ACTIVE means
+                activated, not superseded and not revoked: the same three predicates
+                `resolve_grant` applies on every call (entry 200).
     agent       holds no grant that resolves for the venture
     shifts      overlaps one this agent already holds, or follows an unflushed one
     quarter     the Village cannot say what it is, or the agent works another venture in it
@@ -210,10 +212,25 @@ def _window(plan: Plan, now: datetime) -> None:
 async def _authority(conn: AsyncConnection, plan: Plan) -> None:
     covered = await revocation.covered_grants(conn, venture_id=plan.venture_id)
 
+    # A RETIRED GRANT IS NOT AN ACTIVE GRANT. Ruled 25 September 2026, entry 200.
+    #
+    # `superseded_at` was not in this query, so a grant a named human retired under
+    # entry 182, or one the ladder replaced, still counted as authority the venture
+    # holds. Measured the day of the ruling: greenstone's three "active" grants were
+    # ALL superseded bootstrap rows, and the venture had no live activated grant
+    # anywhere. The check passed, and the refusal that saved it arrived one check later
+    # and per agent - which happened to say something true, and on a venture whose
+    # agents all resolved would have said nothing at all.
+    #
+    # The three predicates are the same three `resolve_grant` applies on every call:
+    # activated, not superseded, not covered by a live revocation. A venture-level
+    # count that used two of them was answering a different question from the call
+    # path and reporting it under the same name.
     async with conn.cursor() as cur:
         await cur.execute(
-            "SELECT grant_id, activated_at IS NOT NULL FROM agent_forge_grant "
-            "WHERE venture_id = %s",
+            "SELECT grant_id, "
+            "       activated_at IS NOT NULL AND superseded_at IS NULL "
+            "  FROM agent_forge_grant WHERE venture_id = %s",
             (plan.venture_id,),
         )
         rows = await cur.fetchall()
@@ -222,8 +239,8 @@ async def _authority(conn: AsyncConnection, plan: Plan) -> None:
     if plan.venture_active_grants == 0:
         plan.refusals.append(
             f"venture: {plan.venture_id} has no active grants ({plan.venture_grants} issued, "
-            "0 activated and un-revoked). A shift here would put an agent on duty with "
-            "nothing it may call. Grants are activated at Gate 11."
+            "0 activated, un-superseded and un-revoked). A shift here would put an agent "
+            "on duty with nothing it may call. Grants are activated at Gate 11."
         )
 
     if plan.agent_id is None:
