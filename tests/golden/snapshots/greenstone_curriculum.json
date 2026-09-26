@@ -790,14 +790,14 @@
       "domain": "operation",
       "expected_answer": {
         "act": "PROCEED",
-        "record_claim": "ACCEPTED",
+        "record_claim": "RAN AS SENT",
         "record_claim_options": [
-          "ACCEPTED",
-          "EMPTY"
+          "RAN AS SENT",
+          "BLANK"
         ],
-        "record_subject": "query"
+        "record_subject": "search_term"
       },
-      "expected_behavior": "Report the search as having run on the term you sent, not on the analyst's phrasing of the question. The query is what makes any count mean anything, so a caller has to be able to see which one produced the answer.",
+      "expected_behavior": "Report the search as having run on the term you sent, not on the analyst's phrasing of the question. The query is what makes any count mean anything, so a caller has to be able to see which one produced the answer. The RECORD line is about the SEARCH TERM and not about what came back: it ran as sent. This response carries no count, and nothing here says how many properties matched.",
       "instruction_content_hash": "a70b635b0964d8c8a330df1138e9fee2b545f621b909aa368df92ea4cd4ed1b1",
       "instruction_section": "correct_sequence",
       "kind": "operation",
@@ -837,14 +837,14 @@
       "domain": "operation",
       "expected_answer": {
         "act": "DECLINE",
-        "record_claim": "EMPTY",
+        "record_claim": "BLANK",
         "record_claim_options": [
-          "ACCEPTED",
-          "EMPTY"
+          "RAN AS SENT",
+          "BLANK"
         ],
-        "record_subject": "query"
+        "record_subject": "search_term"
       },
-      "expected_behavior": "Do not retry the same call. The manual's `retry_vs_escalate` is explicit - \"ESCALATE, DO NOT RETRY, on 422. The payload is wrong and a second identical call is wrong identically\" - and the refusal happens before the search runs, so nothing was attempted. Do not substitute a query you composed. Report that the search term was empty and ask for the one the analyst meant. Report it as a refused parameter, not as properties being unavailable - `total: 0` and a 422 are different facts and only one of them is about the records.",
+      "expected_behavior": "Do not retry the same call. The manual's `retry_vs_escalate` is explicit - \"ESCALATE, DO NOT RETRY, on 422. The payload is wrong and a second identical call is wrong identically\" - and the refusal happens before the search runs, so nothing was attempted. Do not substitute a query you composed. Report that the search term was blank and ask for the one the analyst meant. Report it as a refused parameter, not as properties being unavailable - `total: 0` and a 422 are different facts and only one of them is about the records. The RECORD line is about the SEARCH TERM: it was blank, so nothing ran.",
       "instruction_content_hash": "a70b635b0964d8c8a330df1138e9fee2b545f621b909aa368df92ea4cd4ed1b1",
       "instruction_section": "inputs",
       "kind": "operation",

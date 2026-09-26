@@ -148,10 +148,15 @@ def test_no_situation_names_an_act():
          ["ACCEPTED", "NOT A UUID", "NO SUCH DEAL"]),
         ("comp_analysis", "malformed_input", 0, "NOT A UUID",
          ["ACCEPTED", "NOT A UUID"]),
-        ("property_lookup", "happy_path", 1, "ACCEPTED",
-         ["ACCEPTED", "EMPTY"]),
-        ("property_lookup", "malformed_input", 0, "EMPTY",
-         ["ACCEPTED", "EMPTY"]),
+        # RENAMED 25 September 2026, entry 203. The entry 133 correction these two
+        # carry is UNCHANGED - neither token named an act then and neither does now.
+        # What moved is which THING the token describes: `query = EMPTY` meant the
+        # blank request to the author and the empty response to the agent, which
+        # wrote it 3 of 3 and cited a `total` the situation never showed.
+        ("property_lookup", "happy_path", 1, "RAN AS SENT",
+         ["RAN AS SENT", "BLANK"]),
+        ("property_lookup", "malformed_input", 0, "BLANK",
+         ["RAN AS SENT", "BLANK"]),
     ],
 )
 def test_the_five_corrected_keys_carry_exactly_this(

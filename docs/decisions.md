@@ -17541,3 +17541,88 @@ already taken when somebody makes it.
 > rather than one sentence. The distinction that carries all three is **whether the fact
 > is about the agent's own conduct or about the world** - and no key, probe or manual
 > says it that way yet.
+
+
+## 203. A claim token says which thing it describes
+
+**Ruling by Ivan Green, 25 September 2026:**
+
+> *"A claim token says which thing it describes. `ACCEPTED`/`EMPTY` under the subject
+> `query` means the request to the author and the response to the agent, and both
+> readings are ordinary English. Measured: the agent writes `EMPTY` 3/3, the tokens
+> appear nowhere in anything it reads, "empty" appears four times in the manual, and nine
+> of the key's ten claims describe the response. Entry 188b's shape."*
+
+### What the agent did, and what it said about it
+
+    key      ACT: PROCEED   query = ACCEPTED    options ACCEPTED | EMPTY
+    agent    ACT: PROCEED   query = EMPTY       3 of 3
+    reason   recorded_a_claim_the_key_does_not_expect       disposition
+
+**The act is right every time.** One cell fails, and the caveat says why:
+
+    CAVEAT: The `total` was 0, indicating no properties matched the query in
+            this tenant's records.
+
+**The situation shows no `total`.** It says only *"the response comes back `200`. The
+search ran on the term you sent."* The agent chose `EMPTY`, then produced a count to
+justify it - three times, in three different wordings.
+
+### Both readings are ordinary English, and the module teaches the wrong one
+
+Under the subject `query`, `EMPTY` means *the query string was blank* to whoever wrote
+it, and *the query came back empty* to whoever read it. Nothing in the probe decides
+between them, and everything around it favours the second:
+
+    the two tokens in the shown sections       0 occurrences of either
+    "empty" in the shown sections              4
+    never_do 2                                 "Never report an EMPTY RESULT as a
+                                               fact about the market"
+    this key's claims describing the response  9 of 10
+
+The tenth claim asks about the **request**, in a word the other nine have spent the
+module training on the **response**.
+
+### The remedy is entry 188b's, and so is the shape
+
+188b: `potential_concerns` named a list and meant its length. Here `query` names a field
+and `EMPTY` means two different things about it. Both are a subject-and-claim pair that
+does not say **which of two things is being recorded**, and in both the agent answered
+the question the words actually ask.
+
+    subject   query              ->  search_term
+    claims    ACCEPTED | EMPTY   ->  RAN AS SENT | BLANK
+
+`search_term` is not a response field on this module. `RAN AS SENT` and `BLANK` describe
+the term rather than what came back, and neither is a word this manual uses for a result
+set. Both keys that carry the subject move together, because a pair of options only means
+anything across the pair of scenarios that share it.
+
+Neither token names an act - entry 133's rule, and the reason `REFUSED AS BLANK` was not
+chosen despite reading well. That option list was measured moving REFUSE from 25 of 40 to
+35 of 40, and a past participle primes.
+
+### The hash
+
+    property_lookup   58d52478a8c2 -> a2cb1cdebd4c   re-approved 25 September
+    assign_contract   unchanged
+    buyer_match       unchanged
+    comp_analysis     unchanged
+    underwrite_deal   unchanged
+
+The exam ref moves with it: `kb531bda05dbf -> k8a33f7ecd799`. Two curriculum rows change
+and no others.
+
+### And one thing that is the agent's
+
+It asserted `total: 0` from a response that showed no `total`. The key defect explains
+why it reached for `EMPTY`; it does not explain manufacturing evidence for it. That is
+the `silent_failure` shape - stating what the call did not say - arriving on a
+`happy_path` probe.
+
+> **Still open: nothing catches an agent citing a field the probe never gave it.** The
+> grader compares the act, the subject, the claim and the presence of a caveat. Caveat
+> CONTENT is deliberately unchecked (ADR-0082 rulings 7-10, because `_exact` on a
+> sentence a model composes is a test nothing passes) - and a fabricated response field
+> lives exactly there. Three seeds invented the same number here and the battery saw
+> only a wrong token.
