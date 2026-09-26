@@ -37,10 +37,12 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from broker import certification, incidents, shifts, simforge
+from broker.config import get_settings
 from broker.db import connection
 from broker.simforge import RouteMissingError, SimForgeError
 
 AUDIT_CHAIN = "audit_chain"
+INCOMPLETE_CALLS = "incomplete_calls"
 CERTIFICATION_STALENESS = "certification_staleness"
 MANIFEST_RECONCILIATION = "manifest_reconciliation"
 RESTORE_DRILL = "restore_drill"
@@ -62,6 +64,12 @@ VERDICT_INGEST = "verdict_ingest"
 # rather than the monthly reconciliation's.
 MAX_AGE = {
     AUDIT_CHAIN: timedelta(days=1),
+    # Entry 199, and it is the shortest interval here on purpose. The other four answer
+    # questions about state that stays wrong until somebody fixes it; this one asks
+    # whether a call that may have CHANGED A FORGE finished, and the answer is only
+    # useful while somebody can still go and look. A daily interval on
+    # `assign_contract` means a possible duplicate draft sits unreported for a day.
+    INCOMPLETE_CALLS: timedelta(hours=1),
     CERTIFICATION_STALENESS: timedelta(days=1),
     MANIFEST_RECONCILIATION: timedelta(days=31),
     RESTORE_DRILL: timedelta(days=92),
@@ -183,6 +191,197 @@ async def sweep_audit_chain(conn: AsyncConnection) -> SweepResult:
         denominator=findings["checked_count"], findings=findings, incident_id=incident_id,
     )
     return SweepResult(run_id, AUDIT_CHAIN, status, findings["checked_count"], findings)
+
+
+# ------------------------------------------------------------- incomplete calls
+
+#: How long after a call starts it stops being "in flight" and starts being unfinished.
+#:
+#: **A multiple of the Forge timeout, not a number of minutes.** `forge_timeout_seconds`
+#: is what bounds a call's honest duration; anything derived from it moves when that
+#: moves, and anything else has to be remembered separately. Ten times it, so a call
+#: slowed by a retry, a busy Forge or a paused process is not reported as lost.
+#:
+#: Being late is the cheap direction. A false report sends a person to look at a call
+#: that finished; a missed one leaves a possible duplicate draft that nobody knows about.
+INCOMPLETE_AFTER_TIMEOUTS = 10
+
+
+async def sweep_incomplete_calls(conn: AsyncConnection) -> SweepResult:
+    """Calls that started and never finished, reported to a person.
+
+    RULED 25 SEPTEMBER 2026 (decisions entry 199)
+    =============================================
+
+        *"A call started and not completed is surfaced. An intent written with no ledger
+        row, or a ledger row with no outcome, is reported to a named human with what was
+        attempted. Entry 198 rules the human checks; nothing shows them."*
+
+    TWO SHAPES, AND THEY FAIL AT DIFFERENT MOMENTS
+    ==============================================
+
+        `forge_call_intent` is written BEFORE the Forge is touched and the ledger row
+        AFTER, always - success, Forge error or unreachable. So:
+
+            intent, no ledger row     the process died between the two. The call may
+                                      have reached the Forge and may have changed it.
+            ledger row, no ts_end     the row was written and never completed. Rarer,
+                                      and it means the same thing one step later.
+
+        Both say: something was attempted and nobody can say what came of it. That is
+        the sentence entry 198 requires a human to receive.
+
+    WHY THIS IS A SWEEP AND NOT A CHECK ON THE CALL PATH
+    ====================================================
+
+        The call path cannot report it. The failure IS the call path not finishing - a
+        process that died between two writes does not get to make a third. Only
+        something looking afterwards can see the gap, which is why the evidence has
+        existed since the first call and no reader has.
+
+    WHAT IT DOES NOT DO
+    ===================
+
+        **It never retries.** Entry 198: *"Never silently retried."* `assign_contract`
+        is `at_most_once` and its manual says nothing de-duplicates it, so a sweep that
+        re-sent an unfinished call would be manufacturing the exact duplicate the
+        declaration exists to prevent. It reports; a person decides.
+
+        **It never closes the row.** Writing a `ts_end` over a call whose outcome nobody
+        knows would be inventing the fact this sweep exists to say is missing - the same
+        error mark-before-the-call would have made (entry 198).
+    """
+    run_id = await _start(conn, INCOMPLETE_CALLS)
+    cutoff_seconds = get_settings().forge_timeout_seconds * INCOMPLETE_AFTER_TIMEOUTS
+
+    async with conn.cursor(row_factory=dict_row) as cur:
+        # AN INTENT WITH NO LEDGER ROW. Joined on `call_id`, which `_audit_intent` puts
+        # in the subject and `_write_ledger` uses as the primary key - the same id, so
+        # this is a join rather than a correlation.
+        await cur.execute(
+            """
+            SELECT a.subject ->> 'call_id'   AS call_id,
+                   a.subject ->> 'forge_id'  AS forge_id,
+                   a.subject ->> 'module_id' AS module_id,
+                   a.subject ->> 'task_id'   AS task_id,
+                   a.subject ->> 'approved_proposal_id' AS approved_proposal_id,
+                   a.actor_id                AS office_agent_id,
+                   a.venture_id, a.trace_id, a.ts
+              FROM audit_log a
+             WHERE a.event_type = 'forge_call_intent'
+               AND a.ts < now() - make_interval(secs => %(cutoff)s)
+               AND NOT EXISTS (
+                     SELECT 1 FROM agent_call_ledger l
+                      WHERE l.call_id = (a.subject ->> 'call_id')::uuid)
+             ORDER BY a.ts
+            """,
+            {"cutoff": cutoff_seconds},
+        )
+        no_ledger = [dict(r) for r in await cur.fetchall()]
+
+        # A LEDGER ROW WITH NO OUTCOME. `_write_ledger` always sets `ts_end`, so a NULL
+        # one is a row that was begun and not finished.
+        await cur.execute(
+            """
+            SELECT call_id, forge_id, module_id, task_id, office_agent_id,
+                   venture_id, trace_id, ts_start AS ts
+              FROM agent_call_ledger
+             WHERE ts_end IS NULL
+               AND ts_start < now() - make_interval(secs => %(cutoff)s)
+             ORDER BY ts_start
+            """,
+            {"cutoff": cutoff_seconds},
+        )
+        no_outcome = [dict(r) for r in await cur.fetchall()]
+
+        await cur.execute("SELECT count(*) AS n FROM agent_call_ledger")
+        row = await cur.fetchone()
+        denominator = int((row or {}).get("n") or 0) + len(no_ledger)
+
+    def _described(rows: list[dict[str, Any]], shape: str) -> list[dict[str, Any]]:
+        return [
+            {
+                "shape": shape,
+                "call_id": str(r["call_id"]),
+                "forge_id": r["forge_id"],
+                "module_id": r["module_id"],
+                "task_id": r["task_id"],
+                "venture_id": r["venture_id"],
+                "office_agent_id": str(r["office_agent_id"]),
+                "trace_id": str(r["trace_id"]) if r["trace_id"] else None,
+                "started_at": r["ts"].isoformat(),
+                "approved_proposal_id": r.get("approved_proposal_id"),
+            }
+            for r in rows
+        ]
+
+    found = (
+        _described(no_ledger, "intent_without_ledger_row")
+        + _described(no_outcome, "ledger_row_without_outcome")
+    )
+
+    # REPORTED ONCE, AND THE APPEND-ONLY LEDGER IS WHY.
+    #
+    # `ledger_append_only_guard` refuses UPDATE and DELETE on `agent_call_ledger`, and
+    # `audit_log` is the same: *"correct a bad entry by appending a compensating entry,
+    # never by editing history."* So an incomplete call is PERMANENT. There is no write
+    # that resolves it, and nothing a human does can make this query stop matching.
+    #
+    # A sweep that re-raised every hour for ever would be the tail-gap mistake with no
+    # ceiling on it: an incident nobody can close teaches people to close the page. So
+    # the condition is reported the first time it is seen and counted thereafter, and
+    # the incident is the thing a person acts on rather than the query.
+    #
+    # Deduplicated on `call_id` out of the incidents already raised, not out of a new
+    # column. A second place recording which calls had been reported would be a second
+    # answer to "has anybody been told", and the incident IS the telling.
+    async with conn.cursor(row_factory=dict_row) as cur:
+        await cur.execute(
+            """
+            SELECT jsonb_array_elements(detail -> 'attempted') ->> 'call_id' AS call_id
+              FROM incident
+             WHERE kind = 'call_started_and_not_completed'
+            """
+        )
+        already = {r["call_id"] for r in await cur.fetchall()}
+
+    attempted = [a for a in found if a["call_id"] not in already]
+    findings: dict[str, Any] = {
+        "cutoff_seconds": cutoff_seconds,
+        "intent_without_ledger_row": len(no_ledger),
+        "ledger_row_without_outcome": len(no_outcome),
+        # HOW MANY OF THOSE ARE OLD NEWS. Without it the two counts above read as new
+        # every hour, and a reader cannot tell a system with one ancient orphan from
+        # one losing a call an hour.
+        "already_reported": len(found) - len(attempted),
+        # WHAT WAS ATTEMPTED, which is the ruling's wording, for the ones not yet
+        # reported. A count sends a person to a query; the module, the task and the
+        # agent send them to the deal.
+        "attempted": attempted,
+    }
+
+    incident_id = None
+    if attempted:
+        # HIGH, and the same severity whether the module mutates or not. A read that
+        # may not have finished is a gap in the record; a write that may not have
+        # finished is a gap in the world. This sweep cannot always tell which it has -
+        # an intent with no ledger row carries the module but the sweep does not judge
+        # it - so it reports both at the severity the worse one needs.
+        incident_id = await incidents.raise_incident(
+            severity="HIGH",
+            kind="call_started_and_not_completed",
+            detail=findings,
+        )
+
+    # `passed` when nothing NEW was found, even with old orphans still matching. The
+    # alternative is a control that is red for ever after one incident, which is a
+    # control that stops being read.
+    status = "passed" if not attempted else "failed"
+    await _finish(
+        conn, run_id, status=status,
+        denominator=denominator, findings=findings, incident_id=incident_id,
+    )
+    return SweepResult(run_id, INCOMPLETE_CALLS, status, denominator, findings)
 
 
 # --------------------------------------------------------- certification staleness
@@ -1002,6 +1201,7 @@ async def freshness(conn: AsyncConnection) -> dict[str, dict[str, Any]]:
 #: background runner; a sweep added to one is added to both.
 _SWEEPS = {
     AUDIT_CHAIN: sweep_audit_chain,
+    INCOMPLETE_CALLS: sweep_incomplete_calls,
     CERTIFICATION_STALENESS: sweep_certification_staleness,
     MANIFEST_RECONCILIATION: sweep_manifest_reconciliation,
     VERDICT_INGEST: sweep_verdict_ingest,

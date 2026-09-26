@@ -17270,3 +17270,100 @@ already names how long one may take.
 > not.** Entry 193 was the first: the instruction version was on the row all along and
 > nothing compared it. Recording a fact and noticing it are different pieces of work, and
 > the second one keeps being the one that is missing.
+
+
+## 199. A call started and not completed is surfaced
+
+**Ruling by Ivan Green, 25 September 2026:**
+
+> *"A call started and not completed is surfaced. An intent written with no ledger row,
+> or a ledger row with no outcome, is reported to a named human with what was attempted.
+> Entry 198 rules the human checks; nothing shows them. Measured: `forge_call_intent` has
+> been written since the beginning and no reader exists."*
+
+### The evidence was always there
+
+`_audit_intent` writes `forge_call_intent` **before** the Forge is touched, failing closed
+on a mutating call. `_write_ledger` writes the row **after**, always - success, Forge
+error or unreachable. Both carry the same `call_id`.
+
+So a gap between them has always been legible:
+
+    intent, no ledger row     the process died between the two. The call may have
+                              reached the Forge and may have changed it.
+    ledger row, no ts_end     the row was begun and never completed. The same thing,
+                              one step later.
+
+Nothing looked. Entry 198 ruled that a human checks; this is the thing that tells them.
+
+### Why a sweep, and not the call path
+
+**The call path cannot report it.** The failure *is* the call path not finishing: a
+process that died between two writes does not get to make a third. Only something looking
+afterwards can see the gap. That is why the evidence has existed since the first call and
+the reader has not.
+
+`sweep_incomplete_calls`, hourly - the shortest interval of the five. The other four ask
+about state that stays wrong until somebody fixes it; this one asks whether a call that
+may have **changed a Forge** finished, and the answer is only useful while somebody can
+still go and look.
+
+The cutoff is **ten times `forge_timeout_seconds`**, derived rather than chosen: anything
+else is a number remembered separately that stops agreeing with the timeout. Being late
+is the cheap direction - a false report sends a person to look at a call that finished; a
+missed one leaves a possible duplicate draft nobody knows about.
+
+### The append-only ledger changed the design
+
+`ledger_append_only_guard` refuses UPDATE **and** DELETE on `agent_call_ledger`, and
+`audit_log` is the same: *"correct a bad entry by appending a compensating entry, never by
+editing history."*
+
+**So an incomplete call is permanent.** There is no write that resolves it. Nothing a
+human does makes the query stop matching.
+
+The first version of this sweep re-raised on every run, which would have been an incident
+nobody can close - and an alert nobody can close is one people learn to close the page on.
+That is the `tail_gap` lesson with no ceiling on it.
+
+So: **reported once, counted afterwards.**
+
+    attempted          the ones not yet reported. An incident is raised for these.
+    already_reported   how many matched and had been. Without it the counts read as
+                       new every hour, and a reader cannot tell a system with one old
+                       orphan from one losing a call an hour.
+    status             `passed` when nothing NEW was found, even with old ones still
+                       matching. A control red for ever after one incident stops
+                       being read.
+
+Deduplicated out of the incidents already raised, not out of a new column. A second place
+recording which calls had been reported would be a second answer to *has anybody been
+told*, and the incident **is** the telling.
+
+### What it does not do
+
+**It never retries.** Entry 198: *"Never silently retried."* `assign_contract` is
+`at_most_once` and its manual says `NOTHING DE-DUPLICATES THIS`, so a sweep that re-sent
+an unfinished call would manufacture the exact duplicate the declaration exists to
+prevent.
+
+**It never closes the row.** Writing a `ts_end` over a call whose outcome nobody knows
+would invent the fact this sweep exists to say is missing - the same error that
+mark-before-the-call would have made, and entry 198 refused for the same reason.
+
+### What it reports
+
+`HIGH`, and the same severity whether the module mutates or not. A read that may not have
+finished is a gap in the record; a write that may not have finished is a gap in the world.
+The sweep cannot always tell which it has, so it reports both at the severity the worse
+one needs.
+
+The incident carries the module, the task, the agent, the venture, the trace and the
+`approved_proposal_id` where a human authorised the act. A count sends a person to a
+query; those send them to the deal.
+
+> **Still open: nothing resolves one.** The incident can be closed by a person, and the
+> condition it names cannot - the row stays incomplete for ever, because the ledger is
+> append-only and that is correct. What a human does after checking is append: a
+> compensating entry, a note, a second draft deleted. None of that is modelled, and the
+> incident's resolution is currently the only record that anybody looked.

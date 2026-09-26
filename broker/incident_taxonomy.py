@@ -141,6 +141,22 @@ AUTOMATIC: tuple[Kind, ...] = (
         raised_by="broker.sweeps",
     ),
     Kind(
+        kind="call_started_and_not_completed",
+        label="Call started and not completed",
+        source="automatic",
+        meaning=(
+            "An intent was written and no ledger row followed it, or a ledger row got "
+            "no outcome. The call may have reached the Forge and may have changed it, "
+            "and nothing here can say which. Entry 199: it is reported, never retried "
+            "and never closed - `assign_contract` is at_most_once and nothing "
+            "de-duplicates it, so re-sending would manufacture the duplicate the "
+            "declaration exists to prevent. Reported ONCE per call: the ledger is "
+            "append-only, so the condition never clears and an hourly re-raise would "
+            "be an incident nobody can close."
+        ),
+        raised_by="broker.sweeps",
+    ),
+    Kind(
         kind="rubber_stamp_approval",
         label="Rubber-stamp approval",
         source="automatic",
